@@ -8,6 +8,7 @@ import redis
 
 from app.models.usage_record import UsageRecord, ResourceType
 from app.models.subscription import Subscription
+from app.models.plan import PlanType
 from app.services.plan_service import PlanService
 
 
@@ -44,6 +45,16 @@ class UsageTrackerService:
         self.db = db
         self.redis_client = redis_client
         self.plan_service = PlanService(db)
+
+    def _get_plan_for_user(self, user_id: int):
+        """Get the plan for a user, falling back to free plan or None."""
+        subscription = self._get_user_subscription(user_id)
+        if subscription:
+            try:
+                return subscription.plan
+            except Exception:
+                pass
+        return self.plan_service.get_plan_by_type(PlanType.FREE)
     
     def increment_usage(
         self,
@@ -72,9 +83,8 @@ class UsageTrackerService:
         usage_record = self._get_or_create_usage_record(user_id, resource_type)
         
         # Get quota limit from user's plan
-        subscription = self._get_user_subscription(user_id)
-        plan = subscription.plan if subscription else self.plan_service.get_plan_by_type("free")
-        quota_limit = plan.get_quota(resource_type.value)
+        plan = self._get_plan_for_user(user_id)
+        quota_limit = plan.get_quota(resource_type.value) if plan else -1
         
         # Check if increment would exceed quota
         new_count = usage_record.count + amount
@@ -134,9 +144,8 @@ class UsageTrackerService:
         usage_record = self._get_or_create_usage_record(user_id, resource_type)
         
         # Get quota limit
-        subscription = self._get_user_subscription(user_id)
-        plan = subscription.plan if subscription else self.plan_service.get_plan_by_type("free")
-        quota_limit = plan.get_quota(resource_type.value)
+        plan = self._get_plan_for_user(user_id)
+        quota_limit = plan.get_quota(resource_type.value) if plan else -1
         
         return {
             "resource_type": resource_type.value,
@@ -170,9 +179,8 @@ class UsageTrackerService:
         usage_record = self._get_or_create_usage_record(user_id, resource_type)
         
         # Get quota limit
-        subscription = self._get_user_subscription(user_id)
-        plan = subscription.plan if subscription else self.plan_service.get_plan_by_type("free")
-        quota_limit = plan.get_quota(resource_type.value)
+        plan = self._get_plan_for_user(user_id)
+        quota_limit = plan.get_quota(resource_type.value) if plan else -1
         
         # Unlimited quota
         if quota_limit == -1:

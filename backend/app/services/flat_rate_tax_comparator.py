@@ -39,7 +39,7 @@ class FlatRateTaxComparator:
     def __init__(self, db: Session):
         self.db = db
         self.tax_engine = TaxCalculationEngine(db)
-        self.income_tax_calc = IncomeTaxCalculator(db)
+        self.income_tax_calc = self.tax_engine.income_tax_calculator
 
     def compare_methods(
         self, user_id: int, tax_year: int

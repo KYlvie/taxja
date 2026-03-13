@@ -99,8 +99,24 @@ class EmployeeRefundCalculator:
     after applying all available deductions.
     """
 
-    def __init__(self):
-        self.income_tax_calculator = IncomeTaxCalculator()
+    # Hardcoded 2026 fallback config for when no DB config is available
+    _DEFAULT_TAX_CONFIG = {
+        "tax_year": 2026,
+        "tax_brackets": [
+            {"min": 0, "max": 12816, "rate": 0},
+            {"min": 12816, "max": 20818, "rate": 20},
+            {"min": 20818, "max": 34513, "rate": 30},
+            {"min": 34513, "max": 66612, "rate": 40},
+            {"min": 66612, "max": 99266, "rate": 48},
+            {"min": 99266, "max": 1000000, "rate": 50},
+            {"min": 1000000, "max": None, "rate": 55},
+        ],
+        "exemption_amount": 12816,
+    }
+
+    def __init__(self, tax_config: Optional[Dict] = None):
+        config = tax_config or self._DEFAULT_TAX_CONFIG
+        self.income_tax_calculator = IncomeTaxCalculator(config)
         self.deduction_calculator = DeductionCalculator()
 
     def calculate_refund(
@@ -310,7 +326,6 @@ class EmployeeRefundCalculator:
         """
         # Estimate withheld tax (rough approximation)
         # Assume employer withholds based on gross income without deductions
-        tax_config = TaxConfiguration.get_by_year(tax_year)
         estimated_withheld_result = self.income_tax_calculator.calculate_progressive_tax(
             taxable_income=estimated_gross_income, tax_year=tax_year
         )

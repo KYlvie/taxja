@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore } from '../../stores/documentStore';
-import { Document } from '../../types/document';
+import { Document, DocumentType } from '../../types/document';
 import './DocumentList.css';
 
 interface DocumentListProps {

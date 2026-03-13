@@ -178,7 +178,28 @@ def estimate_refund_potential(
                     "suggestions": ["Upload your Lohnzettel or add employment income to calculate refund"],
                     "message": "No income data available for estimation",
                 }
-        estimate = calculator.estimate_refund_potential(current_user, tax_year, Decimal(str(estimated_gross_income)))
+
+        # Wrap user with UserLike-compatible attributes
+        class _UserAdapter:
+            def __init__(self, user):
+                self.id = user.id
+                self.email = user.email
+                ci = getattr(user, "commuting_info", None) or {}
+                self.commuting_distance = ci.get("distance_km") if isinstance(ci, dict) else None
+                self.public_transport_available = ci.get("public_transport_available") if isinstance(ci, dict) else None
+                fi = getattr(user, "family_info", None) or {}
+                if isinstance(fi, dict) and fi:
+                    from app.services.employee_refund_calculator import FamilyInfo
+                    self.family_info = FamilyInfo(
+                        num_children=fi.get("num_children", 0),
+                        is_single_parent=fi.get("is_single_parent", False),
+                    )
+                else:
+                    self.family_info = None
+
+        estimate = calculator.estimate_refund_potential(
+            _UserAdapter(current_user), tax_year, Decimal(str(estimated_gross_income))
+        )
         return estimate
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -327,6 +327,52 @@ def get_documents(
     )
 
 
+@router.get("/archived", response_model=DocumentList)
+def get_archived_documents(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all archived documents for the current user"""
+    from app.services.document_archival_service import DocumentArchivalService
+    
+    archival_service = DocumentArchivalService(db)
+    
+    # Get archived documents
+    offset = (page - 1) * page_size
+    query = (
+        db.query(Document)
+        .filter(Document.user_id == current_user.id)
+        .filter(Document.is_archived == True)
+        .order_by(Document.archived_at.desc())
+    )
+    
+    total = query.count()
+    documents = query.offset(offset).limit(page_size).all()
+    
+    return DocumentList(
+        documents=[DocumentDetail.from_orm(doc) for doc in documents],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/retention-stats")
+def get_retention_statistics(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get document retention statistics for the current user"""
+    from app.services.document_archival_service import DocumentArchivalService
+    
+    archival_service = DocumentArchivalService(db)
+    stats = archival_service.get_retention_statistics(user_id=current_user.id)
+    
+    return stats
+
+
 @router.get("/{document_id}", response_model=DocumentDetail)
 def get_document(
     document_id: int,
@@ -759,50 +805,7 @@ def restore_document(
     return {"message": "Document restored successfully"}
 
 
-@router.get("/archived", response_model=DocumentList)
-def get_archived_documents(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get all archived documents for the current user"""
-    from app.services.document_archival_service import DocumentArchivalService
-    
-    archival_service = DocumentArchivalService(db)
-    
-    # Get archived documents
-    offset = (page - 1) * page_size
-    query = (
-        db.query(Document)
-        .filter(Document.user_id == current_user.id)
-        .filter(Document.is_archived == True)
-        .order_by(Document.archived_at.desc())
-    )
-    
-    total = query.count()
-    documents = query.offset(offset).limit(page_size).all()
-    
-    return DocumentList(
-        documents=[DocumentDetail.from_orm(doc) for doc in documents],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
-
-
-@router.get("/retention-stats")
-def get_retention_statistics(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Get document retention statistics for the current user"""
-    from app.services.document_archival_service import DocumentArchivalService
-    
-    archival_service = DocumentArchivalService(db)
-    stats = archival_service.get_retention_statistics(user_id=current_user.id)
-    
-    return stats
+# NOTE: /archived and /retention-stats moved before /{document_id} to avoid path conflict
 
 
 
