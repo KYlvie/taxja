@@ -6,7 +6,7 @@ import os
 import logging
 import httpx
 from typing import List, Dict, Optional
-from openai import OpenAI, DefaultHttpxClient
+from openai import OpenAI
 
 from app.core.config import settings
 

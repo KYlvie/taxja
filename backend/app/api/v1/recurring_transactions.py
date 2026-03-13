@@ -13,6 +13,7 @@ from app.schemas.recurring_transaction import (
     RecurringTransactionListResponse,
     RentalIncomeRecurringCreate,
     LoanInterestRecurringCreate,
+    TemplateRecurringCreate,
 )
 from app.services.recurring_transaction_service import RecurringTransactionService
 

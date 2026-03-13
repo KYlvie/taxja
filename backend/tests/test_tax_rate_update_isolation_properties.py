@@ -329,45 +329,37 @@ class TestTaxRateUpdateIsolation:
         config = TaxConfiguration(
             tax_year=year,
             exemption_amount=exemption,
-            vat_standard_rate=Decimal('0.20'),
-            vat_residential_rate=Decimal('0.10'),
-            vat_small_business_threshold=Decimal('55000'),
-            vat_tolerance_threshold=Decimal('60500'),
-            svs_pension_rate=Decimal('0.185'),
-            svs_health_rate=Decimal('0.068'),
-            svs_accident_fixed=Decimal('12.95'),
-            svs_supplementary_rate=Decimal('0.0153'),
-            svs_gsvg_min_base_monthly=Decimal('551.10'),
-            svs_gsvg_min_income_yearly=Decimal('6613.20'),
-            svs_neue_min_monthly=Decimal('160.81'),
-            svs_max_base_monthly=Decimal('8085.00'),
-            home_office_deduction=Decimal('300.00'),
-            child_deduction_monthly=Decimal('58.40'),
-            single_parent_deduction=Decimal('494.00'),
+            tax_brackets=[
+                {"lower": 0, "upper": 13539, "rate": 0.00},
+                {"lower": 13539, "upper": 21992, "rate": 0.20},
+                {"lower": 21992, "upper": 36458, "rate": 0.30},
+                {"lower": 36458, "upper": 999999999, "rate": 0.40},
+            ],
+            vat_rates={
+                "standard": 0.20,
+                "residential": 0.10,
+                "small_business_threshold": 55000.00,
+                "tolerance_threshold": 60500.00,
+            },
+            svs_rates={
+                "pension": 0.185,
+                "health": 0.068,
+                "accident_fixed": 12.95,
+                "supplementary_pension": 0.0153,
+                "gsvg_min_base_monthly": 551.10,
+                "gsvg_min_income_yearly": 6613.20,
+                "neue_min_monthly": 160.81,
+                "max_base_monthly": 8085.00,
+            },
+            deduction_config={
+                "home_office": 300.00,
+                "child_deduction_monthly": 58.40,
+                "single_parent_deduction": 494.00,
+            },
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
         db.add(config)
-        db.flush()
-        
-        # Add tax brackets
-        brackets = [
-            (Decimal('0'), Decimal('13539'), Decimal('0')),
-            (Decimal('13539'), Decimal('21992'), Decimal('0.20')),
-            (Decimal('21992'), Decimal('36458'), Decimal('0.30')),
-            (Decimal('36458'), Decimal('999999999'), Decimal('0.40'))
-        ]
-        
-        for idx, (lower, upper, rate) in enumerate(brackets):
-            bracket = TaxBracket(
-                tax_configuration_id=config.id,
-                lower_limit=lower,
-                upper_limit=upper,
-                rate=rate,
-                order=idx
-            )
-            db.add(bracket)
-        
         db.commit()
         db.refresh(config)
         return config
