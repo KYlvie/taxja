@@ -19,8 +19,18 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 
-# KöSt rate: 23% since 2024 (was 25% until 2022, 24% in 2023)
-KOEST_RATE = Decimal("0.23")
+# KöSt rates by year (KStG §22):
+# - 2022 and earlier: 25%
+# - 2023: 24% (Öko-soziale Steuerreform 2022, BGBl I Nr. 10/2022)
+# - 2024+: 23%
+KOEST_RATES_BY_YEAR = {
+    2022: Decimal("0.25"),
+    2023: Decimal("0.24"),
+    2024: Decimal("0.23"),
+    2025: Decimal("0.23"),
+    2026: Decimal("0.23"),
+}
+KOEST_RATE = Decimal("0.23")  # Default / current rate
 
 # KESt on dividends: 27.5%
 KEST_RATE = Decimal("0.275")
@@ -31,8 +41,16 @@ MINDEST_KOEST_ANNUAL = Decimal("2000.00")
 MINDEST_KOEST_QUARTERLY = Decimal("500.00")
 
 # Reduced Mindestkörperschaftsteuer for first years:
-# Year 1-4 after incorporation: €500/year (was previously tiered)
+# Year 1-5 after incorporation: €500/year (since 2024; was previously tiered)
+# Pre-2024: Year 1-5: €500/year, Year 6-10: €1,000/year
 MINDEST_KOEST_FIRST_YEARS = Decimal("500.00")
+
+
+def get_koest_rate(tax_year: int) -> Decimal:
+    """Get the KöSt rate for a given tax year."""
+    if tax_year <= 2022:
+        return Decimal("0.25")
+    return KOEST_RATES_BY_YEAR.get(tax_year, KOEST_RATE)
 
 
 @dataclass
@@ -71,6 +89,7 @@ class KoEstCalculator:
         profit: Decimal,
         dividend_pct: Decimal = Decimal("1.0"),
         years_since_incorporation: int = 10,
+        tax_year: int = 2026,
     ) -> KoEstResult:
         """
         Calculate KöSt and optional KESt on dividends.
@@ -79,6 +98,7 @@ class KoEstCalculator:
             profit: Corporate profit (Gewinn) before KöSt
             dividend_pct: Fraction of after-tax profit distributed as dividend (0.0-1.0)
             years_since_incorporation: Years since GmbH was founded (affects Mindestkörperschaftsteuer)
+            tax_year: Tax year for rate determination (25% ≤2022, 24% 2023, 23% 2024+)
 
         Returns:
             KoEstResult with full breakdown
@@ -88,8 +108,9 @@ class KoEstCalculator:
         if not isinstance(dividend_pct, Decimal):
             dividend_pct = Decimal(str(dividend_pct))
 
-        # 1. KöSt on profit
-        koest_amount = max(profit * KOEST_RATE, Decimal("0")).quantize(Decimal("0.01"))
+        # 1. KöSt on profit (year-specific rate)
+        rate = get_koest_rate(tax_year)
+        koest_amount = max(profit * rate, Decimal("0")).quantize(Decimal("0.01"))
 
         # 2. Mindestkörperschaftsteuer
         if years_since_incorporation <= 4:
@@ -120,7 +141,7 @@ class KoEstCalculator:
         return KoEstResult(
             corporate_profit=profit,
             koest_amount=koest_amount,
-            koest_rate=KOEST_RATE,
+            koest_rate=rate,
             mindest_koest=mindest_koest,
             effective_koest=effective_koest,
             profit_after_koest=profit_after_koest,

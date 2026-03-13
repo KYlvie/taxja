@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Fallback list used when DB is unavailable (e.g. in tests without DB).
 # In production the authoritative list comes from the tax_configurations table.
-SUPPORTED_TAX_YEARS = [2023, 2024, 2025, 2026]
+SUPPORTED_TAX_YEARS = [2022, 2023, 2024, 2025, 2026]
 
 
 def get_supported_years_from_db(db) -> list[int]:

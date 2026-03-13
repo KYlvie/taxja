@@ -57,6 +57,20 @@ class DeductionCalculator:
     _DEFAULT_FAMILIENBONUS_18_24 = Decimal('700.08')  # since 2024
     _DEFAULT_ALLEINVERDIENER_BASE = Decimal('612.00')  # 2026: €612 (2025: €601)
     _DEFAULT_ALLEINVERDIENER_PER_CHILD = Decimal('273.00')  # 2026: €273 per additional child
+    # Zuschlag zum Verkehrsabsetzbetrag for low-income earners (§33 Abs 5 EStG)
+    # Full Zuschlag if income ≤ €16,832 (2026), phases out to €0 at €28,326 (2026)
+    _DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG = Decimal('752.00')  # 2026: €752
+    _DEFAULT_ZUSCHLAG_INCOME_LOWER = Decimal('16832.00')  # Full Zuschlag up to this income
+    _DEFAULT_ZUSCHLAG_INCOME_UPPER = Decimal('28326.00')  # Zuschlag phases out above this
+    # Pensionistenabsetzbetrag (§33 Abs 6 EStG) — tax credit for pensioners
+    _DEFAULT_PENSIONISTEN_ABSETZBETRAG = Decimal('954.00')  # 2026: €954
+    _DEFAULT_PENSIONISTEN_INCOME_LOWER = Decimal('20233.00')  # Full amount up to this
+    _DEFAULT_PENSIONISTEN_INCOME_UPPER = Decimal('30981.00')  # Phases out above this
+    # Erhöhter Pensionistenabsetzbetrag (for single pensioners)
+    _DEFAULT_ERHOEHTER_PENSIONISTEN = Decimal('1405.00')  # 2026: €1,405
+    _DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER = Decimal('25774.00')  # Phases out up to this
+    # Sonderausgabenpauschale (§18 Abs 2 EStG) — automatic special expenses flat-rate
+    _DEFAULT_SONDERAUSGABENPAUSCHALE = Decimal('60.00')  # €60/year (unchanged for years)
 
     def __init__(self, deduction_config: Optional[Dict] = None):
         """
@@ -97,6 +111,33 @@ class DeductionCalculator:
             self.ALLEINVERDIENER_PER_CHILD = Decimal(str(
                 deduction_config.get('alleinverdiener_per_child', self._DEFAULT_ALLEINVERDIENER_PER_CHILD)
             ))
+            self.ZUSCHLAG_VERKEHRSABSETZBETRAG = Decimal(str(
+                deduction_config.get('zuschlag_verkehrsabsetzbetrag', self._DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG)
+            ))
+            self.ZUSCHLAG_INCOME_LOWER = Decimal(str(
+                deduction_config.get('zuschlag_income_lower', self._DEFAULT_ZUSCHLAG_INCOME_LOWER)
+            ))
+            self.ZUSCHLAG_INCOME_UPPER = Decimal(str(
+                deduction_config.get('zuschlag_income_upper', self._DEFAULT_ZUSCHLAG_INCOME_UPPER)
+            ))
+            self.PENSIONISTEN_ABSETZBETRAG = Decimal(str(
+                deduction_config.get('pensionisten_absetzbetrag', self._DEFAULT_PENSIONISTEN_ABSETZBETRAG)
+            ))
+            self.PENSIONISTEN_INCOME_LOWER = Decimal(str(
+                deduction_config.get('pensionisten_income_lower', self._DEFAULT_PENSIONISTEN_INCOME_LOWER)
+            ))
+            self.PENSIONISTEN_INCOME_UPPER = Decimal(str(
+                deduction_config.get('pensionisten_income_upper', self._DEFAULT_PENSIONISTEN_INCOME_UPPER)
+            ))
+            self.ERHOEHTER_PENSIONISTEN = Decimal(str(
+                deduction_config.get('erhoehter_pensionisten', self._DEFAULT_ERHOEHTER_PENSIONISTEN)
+            ))
+            self.ERHOEHTER_PENSIONISTEN_UPPER = Decimal(str(
+                deduction_config.get('erhoehter_pensionisten_upper', self._DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER)
+            ))
+            self.SONDERAUSGABENPAUSCHALE = Decimal(str(
+                deduction_config.get('sonderausgabenpauschale', self._DEFAULT_SONDERAUSGABENPAUSCHALE)
+            ))
 
             # Commuting brackets from config
             commuting = deduction_config.get('commuting_brackets', {})
@@ -125,6 +166,15 @@ class DeductionCalculator:
             self.FAMILIENBONUS_18_24 = self._DEFAULT_FAMILIENBONUS_18_24
             self.ALLEINVERDIENER_BASE = self._DEFAULT_ALLEINVERDIENER_BASE
             self.ALLEINVERDIENER_PER_CHILD = self._DEFAULT_ALLEINVERDIENER_PER_CHILD
+            self.ZUSCHLAG_VERKEHRSABSETZBETRAG = self._DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG
+            self.ZUSCHLAG_INCOME_LOWER = self._DEFAULT_ZUSCHLAG_INCOME_LOWER
+            self.ZUSCHLAG_INCOME_UPPER = self._DEFAULT_ZUSCHLAG_INCOME_UPPER
+            self.PENSIONISTEN_ABSETZBETRAG = self._DEFAULT_PENSIONISTEN_ABSETZBETRAG
+            self.PENSIONISTEN_INCOME_LOWER = self._DEFAULT_PENSIONISTEN_INCOME_LOWER
+            self.PENSIONISTEN_INCOME_UPPER = self._DEFAULT_PENSIONISTEN_INCOME_UPPER
+            self.ERHOEHTER_PENSIONISTEN = self._DEFAULT_ERHOEHTER_PENSIONISTEN
+            self.ERHOEHTER_PENSIONISTEN_UPPER = self._DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER
+            self.SONDERAUSGABENPAUSCHALE = self._DEFAULT_SONDERAUSGABENPAUSCHALE
     
     def calculate_commuting_allowance(
         self,
@@ -364,6 +414,135 @@ class DeductionCalculator:
                 'additional_total': additional.quantize(Decimal('0.01')),
             },
             note=f"{label}: €{base} + {max(0, family_info.num_children - 1)}×€{self.ALLEINVERDIENER_PER_CHILD} = €{total}"
+        )
+
+    def calculate_zuschlag_verkehrsabsetzbetrag(
+        self,
+        annual_income: Decimal,
+    ) -> DeductionResult:
+        """
+        Calculate Zuschlag zum Verkehrsabsetzbetrag for low-income employees.
+
+        The Zuschlag is a tax credit (Absetzbetrag) that phases out linearly
+        between a lower and upper income threshold. It applies to employees
+        with low income to compensate for commuting costs.
+
+        Since 2023 (cold-progression adjustment), the thresholds are adjusted
+        annually. For 2026: full €752 up to €16,832, phases out to €0 at €28,326.
+
+        Args:
+            annual_income: Annual gross income (before deductions)
+
+        Returns:
+            DeductionResult with Zuschlag amount
+        """
+        if not isinstance(annual_income, Decimal):
+            annual_income = Decimal(str(annual_income))
+
+        if annual_income <= self.ZUSCHLAG_INCOME_LOWER:
+            amount = self.ZUSCHLAG_VERKEHRSABSETZBETRAG
+        elif annual_income >= self.ZUSCHLAG_INCOME_UPPER:
+            amount = Decimal('0.00')
+        else:
+            # Linear phase-out
+            income_range = self.ZUSCHLAG_INCOME_UPPER - self.ZUSCHLAG_INCOME_LOWER
+            excess = annual_income - self.ZUSCHLAG_INCOME_LOWER
+            reduction = (excess / income_range) * self.ZUSCHLAG_VERKEHRSABSETZBETRAG
+            amount = (self.ZUSCHLAG_VERKEHRSABSETZBETRAG - reduction).quantize(Decimal('0.01'))
+
+        return DeductionResult(
+            amount=amount,
+            breakdown={
+                'type': 'Zuschlag zum Verkehrsabsetzbetrag',
+                'full_amount': self.ZUSCHLAG_VERKEHRSABSETZBETRAG,
+                'income': annual_income,
+                'lower_threshold': self.ZUSCHLAG_INCOME_LOWER,
+                'upper_threshold': self.ZUSCHLAG_INCOME_UPPER,
+            },
+            note=f"Zuschlag zum Verkehrsabsetzbetrag: €{amount}"
+        )
+
+    def calculate_pensionisten_absetzbetrag(
+        self,
+        pension_income: Decimal,
+        is_single: bool = False,
+    ) -> DeductionResult:
+        """
+        Calculate Pensionistenabsetzbetrag (tax credit for pensioners).
+
+        §33 Abs 6 EStG. Phases out linearly between lower and upper thresholds.
+        An increased amount (Erhöhter Pensionistenabsetzbetrag) applies to
+        single pensioners without a partner earning > €2,455/year.
+
+        Args:
+            pension_income: Annual pension income
+            is_single: Whether the pensioner is single (for increased amount)
+
+        Returns:
+            DeductionResult with Pensionistenabsetzbetrag amount
+        """
+        if not isinstance(pension_income, Decimal):
+            pension_income = Decimal(str(pension_income))
+
+        if is_single:
+            full_amount = self.ERHOEHTER_PENSIONISTEN
+            upper = self.ERHOEHTER_PENSIONISTEN_UPPER
+        else:
+            full_amount = self.PENSIONISTEN_ABSETZBETRAG
+            upper = self.PENSIONISTEN_INCOME_UPPER
+
+        lower = self.PENSIONISTEN_INCOME_LOWER
+
+        if pension_income <= lower:
+            amount = full_amount
+        elif pension_income >= upper:
+            amount = Decimal('0.00')
+        else:
+            income_range = upper - lower
+            excess = pension_income - lower
+            reduction = (excess / income_range) * full_amount
+            amount = (full_amount - reduction).quantize(Decimal('0.01'))
+
+        label = (
+            "Erhöhter Pensionistenabsetzbetrag" if is_single
+            else "Pensionistenabsetzbetrag"
+        )
+
+        return DeductionResult(
+            amount=amount,
+            breakdown={
+                'type': label,
+                'full_amount': full_amount,
+                'pension_income': pension_income,
+                'lower_threshold': lower,
+                'upper_threshold': upper,
+                'is_single': is_single,
+            },
+            note=f"{label}: €{amount}"
+        )
+
+    def calculate_sonderausgabenpauschale(self) -> DeductionResult:
+        """
+        Calculate Sonderausgabenpauschale (§18 Abs 2 EStG).
+
+        A fixed €60/year flat-rate deduction for special expenses (Sonderausgaben)
+        that is automatically applied to all taxpayers without documentation.
+
+        Note: The old Topfsonderausgaben (insurance premiums, building savings,
+        etc.) were phased out from 2021. Only contracts from before 2016 may
+        still claim them during the transition period (until 2020 was the last
+        year for new contracts).
+
+        Returns:
+            DeductionResult with €60 annual deduction
+        """
+        return DeductionResult(
+            amount=self.SONDERAUSGABENPAUSCHALE,
+            breakdown={
+                'type': 'Sonderausgabenpauschale',
+                'annual_amount': self.SONDERAUSGABENPAUSCHALE,
+            },
+            note="Sonderausgabenpauschale: €60/Jahr (automatisch für alle Steuerpflichtigen)"
         )
 
     def calculate_employee_deductions(

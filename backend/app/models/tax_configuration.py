@@ -167,7 +167,17 @@ def get_2026_tax_config() -> dict:
                 "kleinunternehmer_threshold": 55000.00,
                 "kleinunternehmer_tolerance": 60500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
-            }
+            },
+            # 2026: cold-progression adjusted
+            "zuschlag_verkehrsabsetzbetrag": 752.00,
+            "zuschlag_income_lower": 16832.00,
+            "zuschlag_income_upper": 28326.00,
+            "pensionisten_absetzbetrag": 954.00,
+            "pensionisten_income_lower": 20233.00,
+            "pensionisten_income_upper": 30981.00,
+            "erhoehter_pensionisten": 1405.00,
+            "erhoehter_pensionisten_upper": 25774.00,
+            "sonderausgabenpauschale": 60.00
         }
     }
 
@@ -250,7 +260,17 @@ def get_2025_tax_config() -> dict:
                 "kleinunternehmer_threshold": 55000.00,
                 "kleinunternehmer_tolerance": 60500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
-            }
+            },
+            # 2025: cold-progression adjusted
+            "zuschlag_verkehrsabsetzbetrag": 725.00,
+            "zuschlag_income_lower": 16293.00,
+            "zuschlag_income_upper": 27420.00,
+            "pensionisten_absetzbetrag": 924.00,
+            "pensionisten_income_lower": 19583.00,
+            "pensionisten_income_upper": 29987.00,
+            "erhoehter_pensionisten": 1361.00,
+            "erhoehter_pensionisten_upper": 24953.00,
+            "sonderausgabenpauschale": 60.00
         }
     }
 
@@ -338,7 +358,111 @@ def get_2024_tax_config() -> dict:
                 "kleinunternehmer_threshold": 35000.00,
                 "kleinunternehmer_tolerance": 38500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
-            }
+            },
+            # 2024: cold-progression adjusted
+            "zuschlag_verkehrsabsetzbetrag": 684.00,
+            "zuschlag_income_lower": 16293.00,
+            "zuschlag_income_upper": 27420.00,
+            "pensionisten_absetzbetrag": 868.00,
+            "pensionisten_income_lower": 19413.00,
+            "pensionisten_income_upper": 28956.00,
+            "erhoehter_pensionisten": 1278.00,
+            "erhoehter_pensionisten_upper": 24480.00,
+            "sonderausgabenpauschale": 60.00
+        }
+    }
+
+
+def get_2022_tax_config() -> dict:
+    """
+    Get the 2022 tax configuration.
+
+    Steuerjahr 2022 / Veranlagung 2023.
+    Second bracket rate reduced from 35% to 30% (Öko-soziale Steuerreform).
+    Third bracket rate: 42% (reduced to 41% in 2023, then 40% in 2024).
+    Familienbonus Plus raised to €2,000.16.
+    Kleinunternehmer threshold: €35,000 net.
+
+    Returns:
+        Dictionary with 2022 tax configuration
+    """
+    return {
+        "tax_year": 2022,
+        "tax_brackets": [
+            {"lower": 0, "upper": 11000, "rate": 0.00},
+            {"lower": 11000, "upper": 18000, "rate": 0.20},
+            {"lower": 18000, "upper": 31000, "rate": 0.35},
+            {"lower": 31000, "upper": 60000, "rate": 0.42},
+            {"lower": 60000, "upper": 90000, "rate": 0.48},
+            {"lower": 90000, "upper": 1000000, "rate": 0.50},
+            {"lower": 1000000, "upper": None, "rate": 0.55}
+        ],
+        "exemption_amount": 11000.00,
+        "vat_rates": {
+            "standard": 0.20,
+            "residential": 0.10,
+            "small_business_threshold": 35000.00,
+            "tolerance_threshold": 38500.00
+        },
+        # SVS rates – Beitragsjahr 2022
+        "svs_rates": {
+            "pension": 0.185,
+            "health": 0.068,
+            "accident_fixed": 10.09,
+            "supplementary_pension": 0.0153,
+            "gsvg_min_base_monthly": 485.85,
+            "gsvg_min_income_yearly": 5830.20,
+            "neue_min_monthly": 141.79,
+            "max_base_monthly": 6615.00
+        },
+        "deduction_config": {
+            "home_office": 300.00,
+            "child_deduction_monthly": 58.40,
+            "single_parent_deduction": 494.00,
+            "verkehrsabsetzbetrag": 400.00,
+            "werbungskostenpauschale": 132.00,
+            "familienbonus_under_18": 2000.16,
+            "familienbonus_18_24": 650.16,
+            "alleinverdiener_base": 494.00,
+            "alleinverdiener_per_child": 220.00,
+            "commuting_brackets": {
+                "small": {
+                    "20": 58.00,
+                    "40": 113.00,
+                    "60": 168.00
+                },
+                "large": {
+                    "2": 31.00,
+                    "20": 123.00,
+                    "40": 214.00,
+                    "60": 306.00
+                }
+            },
+            "pendler_euro_per_km": 2.00,
+            "basic_exemption_rate": 0.15,
+            "basic_exemption_max": 4950.00,
+            "self_employed": {
+                "grundfreibetrag_profit_limit": 33000.00,
+                "grundfreibetrag_rate": 0.15,
+                "grundfreibetrag_max": 4950.00,
+                "max_total_freibetrag": 46400.00,
+                "flat_rate_turnover_limit": 220000.00,
+                "flat_rate_general": 0.12,
+                "flat_rate_consulting": 0.06,
+                "kleinunternehmer_threshold": 35000.00,
+                "kleinunternehmer_tolerance": 38500.00,
+                "ust_voranmeldung_monthly_threshold": 100000.00
+            },
+            # 2022: Zuschlag and Pensionistenabsetzbetrag (pre cold-progression)
+            "zuschlag_verkehrsabsetzbetrag": 684.00,
+            "zuschlag_income_lower": 15500.00,
+            "zuschlag_income_upper": 24500.00,
+            "pensionisten_absetzbetrag": 868.00,
+            "pensionisten_income_lower": 17000.00,
+            "pensionisten_income_upper": 25000.00,
+            "erhoehter_pensionisten": 1278.00,
+            "erhoehter_pensionisten_upper": 22500.00,
+            "sonderausgabenpauschale": 60.00
         }
     }
 
@@ -423,6 +547,16 @@ def get_2023_tax_config() -> dict:
                 "kleinunternehmer_threshold": 35000.00,
                 "kleinunternehmer_tolerance": 38500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
-            }
+            },
+            # 2023: First year of cold-progression adjustment for these credits
+            "zuschlag_verkehrsabsetzbetrag": 684.00,
+            "zuschlag_income_lower": 16499.00,
+            "zuschlag_income_upper": 26532.00,
+            "pensionisten_absetzbetrag": 868.00,
+            "pensionisten_income_lower": 18410.00,
+            "pensionisten_income_upper": 27460.00,
+            "erhoehter_pensionisten": 1278.00,
+            "erhoehter_pensionisten_upper": 23580.00,
+            "sonderausgabenpauschale": 60.00
         }
     }
