@@ -630,4 +630,4 @@ class SubscriptionService:
         )
         
         self.db.add(audit_log)
-        # Note: commit is handled by the calling method
+        self.db.commit()

@@ -24,6 +24,26 @@ for _key, _value in _test_env_defaults.items():
     if _key not in os.environ:
         os.environ[_key] = _value
 
+# Register SQLite type compilers for PostgreSQL-specific types (UUID, JSONB, ARRAY)
+# This allows tests using SQLite to work with models that use these types.
+try:
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+
+    @compiles(UUID, "sqlite")
+    def compile_uuid_sqlite(type_, compiler, **kw):
+        return "VARCHAR(36)"
+
+    @compiles(JSONB, "sqlite")
+    def compile_jsonb_sqlite(type_, compiler, **kw):
+        return "JSON"
+
+    @compiles(ARRAY, "sqlite")
+    def compile_array_sqlite(type_, compiler, **kw):
+        return "JSON"
+except Exception:
+    pass
+
 # Import shared fixtures from fixtures package
 # These are automatically discovered by pytest
 # Only load fixture plugins when the app module is available
@@ -45,7 +65,7 @@ if _app_available:
 if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
     try:
         from fastapi.testclient import TestClient
-        from sqlalchemy import create_engine
+        from sqlalchemy import create_engine, event, text as sa_text
         from sqlalchemy.orm import sessionmaker
         from app.main import app as fastapi_app
         from app.db.base import Base, get_db
@@ -59,6 +79,39 @@ if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
         TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+        def _create_sqlite_tables(engine, metadata):
+            """Create tables in SQLite, stripping PostgreSQL-specific features."""
+            # Exclude tables that use PostgreSQL ARRAY type
+            excluded_tables = {
+                'historical_import_sessions',
+                'historical_import_uploads',
+                'import_conflicts',
+                'import_metrics',
+            }
+
+            tables_to_create = [
+                t for t in metadata.sorted_tables
+                if t.name not in excluded_tables
+            ]
+
+            # Temporarily remove server_default for columns using gen_random_uuid()
+            patched = []
+            for table in tables_to_create:
+                for col in table.columns:
+                    if col.server_default is not None:
+                        default_text = str(col.server_default.arg) if hasattr(col.server_default, 'arg') else str(col.server_default)
+                        if 'gen_random_uuid' in default_text:
+                            patched.append((col, col.server_default))
+                            col.server_default = None
+            try:
+                for table in tables_to_create:
+                    table.create(bind=engine, checkfirst=True)
+            finally:
+                # Restore server defaults
+                for col, server_default in patched:
+                    col.server_default = server_default
+
+
         @pytest.fixture(scope="function")
         def db():
             """
@@ -67,13 +120,20 @@ if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
             Note: For E2E tests requiring PostgreSQL features (enums, UUID),
             use the db_session fixture from tests.fixtures.database instead.
             """
-            Base.metadata.create_all(bind=engine)
+            _create_sqlite_tables(engine, Base.metadata)
             db = TestingSessionLocal()
             try:
                 yield db
             finally:
                 db.close()
-                Base.metadata.drop_all(bind=engine)
+                # Drop only the tables that were created (excluding PostgreSQL ARRAY tables)
+                excluded = {
+                    'historical_import_sessions', 'historical_import_uploads',
+                    'import_conflicts', 'import_metrics',
+                }
+                for t in reversed(Base.metadata.sorted_tables):
+                    if t.name not in excluded:
+                        t.drop(bind=engine, checkfirst=True)
 
 
         @pytest.fixture(scope="function")

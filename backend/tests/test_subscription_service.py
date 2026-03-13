@@ -2,7 +2,7 @@
 import pytest
 from datetime import datetime, timedelta
 from decimal import Decimal
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session  # noqa: F401
 
 from app.services.subscription_service import SubscriptionService
 from app.services.plan_service import PlanService
@@ -13,7 +13,7 @@ from app.models.audit_log import AuditLog, AuditOperationType
 
 
 @pytest.fixture
-def test_user(db_session: Session):
+def test_user(db):
     """Create a test user"""
     user = User(
         email="test@example.com",
@@ -22,14 +22,14 @@ def test_user(db_session: Session):
         user_type=UserType.EMPLOYEE,
         language="de",
     )
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 
 @pytest.fixture
-def test_plans(db_session: Session):
+def test_plans(db):
     """Create test plans"""
     plans = {
         "free": Plan(
@@ -59,27 +59,27 @@ def test_plans(db_session: Session):
     }
     
     for plan in plans.values():
-        db_session.add(plan)
+        db.add(plan)
     
-    db_session.commit()
+    db.commit()
     
     for plan in plans.values():
-        db_session.refresh(plan)
+        db.refresh(plan)
     
     return plans
 
 
 @pytest.fixture
-def subscription_service(db_session: Session):
+def subscription_service(db):
     """Create a SubscriptionService instance"""
-    return SubscriptionService(db_session)
+    return SubscriptionService(db)
 
 
 class TestCreateSubscription:
     """Tests for create_subscription method"""
     
     def test_create_subscription_success(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test successful subscription creation"""
         plan = test_plans["plus"]
@@ -101,7 +101,7 @@ class TestCreateSubscription:
         assert subscription.current_period_end is not None
         
         # Verify audit log was created
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.CREATE,
         ).first()
@@ -199,7 +199,7 @@ class TestUpgradeSubscription:
     """Tests for upgrade_subscription method"""
     
     def test_upgrade_subscription_success(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test successful subscription upgrade"""
         plus_plan = test_plans["plus"]
@@ -224,7 +224,7 @@ class TestUpgradeSubscription:
         assert "proration_amount" in result
         
         # Verify audit log
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.UPDATE,
         ).first()
@@ -300,7 +300,7 @@ class TestDowngradeSubscription:
     """Tests for downgrade_subscription method"""
     
     def test_downgrade_subscription_success(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test successful subscription downgrade"""
         pro_plan = test_plans["pro"]
@@ -324,7 +324,7 @@ class TestDowngradeSubscription:
         assert result["effective_date"] is not None
         
         # Verify audit log
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.UPDATE,
         ).first()
@@ -357,7 +357,7 @@ class TestCancelSubscription:
     """Tests for cancel_subscription method"""
     
     def test_cancel_subscription_at_period_end(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test canceling subscription at period end"""
         plan = test_plans["plus"]
@@ -377,7 +377,7 @@ class TestCancelSubscription:
         assert result["access_until"] is not None
         
         # Verify audit log
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.UPDATE,
         ).first()
@@ -432,7 +432,7 @@ class TestReactivateSubscription:
     """Tests for reactivate_subscription method"""
     
     def test_reactivate_subscription_success(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test successful subscription reactivation"""
         plan = test_plans["plus"]
@@ -455,7 +455,7 @@ class TestReactivateSubscription:
         assert subscription.cancel_at_period_end is False
         
         # Verify audit log
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.UPDATE,
         ).order_by(AuditLog.created_at.desc()).first()
@@ -538,7 +538,7 @@ class TestHandleTrialExpiration:
     """Tests for handle_trial_expiration method"""
     
     def test_handle_trial_expiration_success(
-        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db_session: Session
+        self, subscription_service: SubscriptionService, test_user: User, test_plans: dict, db
     ):
         """Test handling expired trial"""
         pro_plan = test_plans["pro"]
@@ -561,7 +561,7 @@ class TestHandleTrialExpiration:
         assert subscription.status == SubscriptionStatus.ACTIVE
         
         # Verify audit log
-        audit_log = db_session.query(AuditLog).filter(
+        audit_log = db.query(AuditLog).filter(
             AuditLog.user_id == test_user.id,
             AuditLog.operation_type == AuditOperationType.UPDATE,
         ).first()

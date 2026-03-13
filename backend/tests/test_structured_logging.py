@@ -15,25 +15,25 @@ from app.services.property_service import PropertyService
 from app.services.historical_depreciation_service import HistoricalDepreciationService
 from app.services.annual_depreciation_service import AnnualDepreciationService
 from app.models.property import Property, PropertyType, PropertyStatus
-from app.models.user import User
+from app.models.user import User, UserType
 from app.schemas.property import PropertyCreate
 
 
-class LogCapture:
-    """Helper class to capture log records"""
-    
+class LogCaptureHandler(logging.Handler):
+    """Handler that captures log records for testing"""
+
     def __init__(self):
+        super().__init__()
         self.records = []
-    
-    def __call__(self, record):
+
+    def emit(self, record):
         self.records.append(record)
-        return True
 
 
 @pytest.fixture
 def log_capture():
     """Fixture to capture log records"""
-    return LogCapture()
+    return LogCaptureHandler()
 
 
 @pytest.fixture
@@ -42,8 +42,8 @@ def sample_user(db):
     user = User(
         email="test@example.com",
         name="Test User",
-        hashed_password="hashed_password_here",
-        user_type="landlord"
+        password_hash="hashed_password_here",
+        user_type=UserType.LANDLORD
     )
     db.add(user)
     db.commit()
@@ -80,9 +80,7 @@ def test_property_creation_logging(db, sample_user, log_capture):
     """Test that property creation logs structured data"""
     # Set up logger
     logger = logging.getLogger("app.services.property_service")
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
-    logger.addHandler(handler)
+    logger.addHandler(log_capture)
     logger.setLevel(logging.INFO)
     
     try:
@@ -129,15 +127,13 @@ def test_property_creation_logging(db, sample_user, log_capture):
         assert log_record.depreciation_rate == 0.02
         
     finally:
-        logger.removeHandler(handler)
+        logger.removeHandler(log_capture)
 
 
 def test_historical_depreciation_preview_logging(db, sample_property, log_capture):
     """Test that historical depreciation preview logs structured data"""
     logger = logging.getLogger("app.services.historical_depreciation_service")
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
-    logger.addHandler(handler)
+    logger.addHandler(log_capture)
     logger.setLevel(logging.INFO)
     
     try:
@@ -163,15 +159,13 @@ def test_historical_depreciation_preview_logging(db, sample_property, log_captur
         assert hasattr(log_record, 'total_amount')
         
     finally:
-        logger.removeHandler(handler)
+        logger.removeHandler(log_capture)
 
 
 def test_historical_depreciation_backfill_logging(db, sample_property, log_capture):
     """Test that historical depreciation backfill logs structured data"""
     logger = logging.getLogger("app.services.historical_depreciation_service")
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
-    logger.addHandler(handler)
+    logger.addHandler(log_capture)
     logger.setLevel(logging.INFO)
     
     try:
@@ -207,15 +201,13 @@ def test_historical_depreciation_backfill_logging(db, sample_property, log_captu
         assert hasattr(log_record, 'transaction_ids')
         
     finally:
-        logger.removeHandler(handler)
+        logger.removeHandler(log_capture)
 
 
 def test_annual_depreciation_generation_logging(db, sample_property, log_capture):
     """Test that annual depreciation generation logs structured data with counts"""
     logger = logging.getLogger("app.services.annual_depreciation_service")
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
-    logger.addHandler(handler)
+    logger.addHandler(log_capture)
     logger.setLevel(logging.INFO)
     
     try:
@@ -256,14 +248,13 @@ def test_annual_depreciation_generation_logging(db, sample_property, log_capture
         assert 'errors' in log_record.skip_reasons
         
     finally:
-        logger.removeHandler(handler)
+        logger.removeHandler(log_capture)
 
 
 def test_annual_depreciation_individual_property_logging(db, sample_property, log_capture):
     """Test that individual property depreciation creation is logged"""
     logger = logging.getLogger("app.services.annual_depreciation_service")
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
+    logger.addHandler(log_capture)
     logger.setLevel(logging.INFO)
     
     try:
@@ -282,7 +273,7 @@ def test_annual_depreciation_individual_property_logging(db, sample_property, lo
         assert len(property_logs) == result.transactions_created
         
     finally:
-        logger.removeHandler(handler)
+        logger.removeHandler(log_capture)
 
 
 def test_logging_format_consistency(db, sample_user, sample_property, log_capture):
@@ -294,11 +285,8 @@ def test_logging_format_consistency(db, sample_user, sample_property, log_captur
         logging.getLogger("app.services.annual_depreciation_service")
     ]
     
-    handler = logging.Handler()
-    handler.addFilter(log_capture)
-    
     for logger in loggers:
-        logger.addHandler(handler)
+        logger.addHandler(log_capture)
         logger.setLevel(logging.INFO)
     
     try:
@@ -348,4 +336,4 @@ def test_logging_format_consistency(db, sample_user, sample_property, log_captur
         
     finally:
         for logger in loggers:
-            logger.removeHandler(handler)
+            logger.removeHandler(log_capture)
