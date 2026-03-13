@@ -84,7 +84,8 @@ _INTENT_PATTERNS: Dict[UserIntent, List[tuple]] = {
         (r"(berechn|calculat|计算).*(ust|umsatzsteuer|vat|mehrwertsteuer|增值税)", 0.95),
         (r"增值税.*(计算|算)", 0.95),
         (r"计算.*增值税", 0.95),
-        (r"(kleinunternehmer|small business|小企业).*(grenze|limit|threshold|阈值|regelung|exemption|免税)", 0.85),
+        (r"(kleinunternehmer|small business|小企业)", 0.90),
+        (r"(vorsteuer|input.?vat|umsatzsteuer)", 0.85),
     ],
     UserIntent.CALCULATE_SVS: [
         (r"(svs|sozialversicherung).*(berechn|calculat|beitr)", 0.95),
@@ -99,25 +100,30 @@ _INTENT_PATTERNS: Dict[UserIntent, List[tuple]] = {
         (r"(kest|kapitalertragsteuer).*(berechn|calculat)", 0.95),
         (r"(berechn|calculat).*(kest|kapitalertrag)", 0.95),
         (r"(计算|算).*(kest|资本利得税|资本.*税)", 0.95),
-        (r"capital gains tax", 0.90),
-        (r"(dividende|dividend|股息).*(steuer|tax|税)", 0.85),
-        (r"(steuer|tax|税).*(dividende|dividend|股息)", 0.85),
-        (r"资本利得税", 0.90),
+        (r"capital gains? tax", 0.95),
+        (r"(dividende|dividend|股息).*(steuer|tax|税)", 0.90),
+        (r"(steuer|tax|税).*(dividende|dividend|股息)", 0.90),
+        (r"资本利得税", 0.95),
         (r"\bkest\b", 0.90),
     ],
     UserIntent.CALCULATE_IMMOEST: [
-        (r"(immoest|immobilienertragsteuer|real estate.*tax|房产.*税)", 0.90),
+        (r"(immoest|immobilienertragsteuer)", 0.95),
+        (r"real estate.*(tax|gain)", 0.95),
+        (r"房产.*税", 0.95),
         (r"(grundstück|immobilie|property|房产|不动产).*(verkauf|sale|sell|卖|出售).*(steuer|tax|税)", 0.90),
-        (r"(verkauf|sale|卖).*(wohnung|haus|house|apartment|房)", 0.80),
+        (r"(verkauf|sale|卖).*(wohnung|haus|house|apartment|房).*(steuer|tax|steuerpflicht)", 0.85),
+        (r"property.*(sale|sell).*(tax|gain)", 0.90),
     ],
     UserIntent.CLASSIFY_TRANSACTION: [
-        (r"(kategori|classif|einordnen|zuordnen).*(transaktion|transaction|buchung)", 0.90),
+        (r"(kategori|classif|einordnen|zuordnen).*(transaktion|transaction|buchung|rechnung|expense)", 0.90),
         (r"(分类|归类).*(交易|buchung|transaction)", 0.90),
         (r"(welche kategorie|which category|什么类别)", 0.85),
+        (r"classif.*(this|diese|expense|rechnung)", 0.90),
+        (r"(klassifizier|kategorisier).*(rechnung|ausgabe|beleg)", 0.90),
     ],
     UserIntent.CHECK_DEDUCTIBILITY: [
         (r"(absetzbar|deductible|absetzen|abzugsfähig)", 0.90),
-        (r"(可以抵扣|能抵税|可以扣除|能抵扣)", 0.90),
+        (r"(可以抵扣|能抵税|可以扣除|能抵扣|可以抵税|抵税)", 0.90),
         (r"(kann ich|can i|darf ich).*(absetz|deduct|abzieh)", 0.90),
         (r"(能不能|可不可以).*(抵扣|扣除)", 0.90),
         (r"(werbungskosten|sonderausgaben|außergewöhnliche belastung)", 0.80),
@@ -215,6 +221,34 @@ def detect_intent(message: str, user_context: Optional[Dict] = None) -> IntentRe
     return best
 
 
+def _normalize_number(raw: str) -> str:
+    """Normalize a number string that may use German (50.000,50) or English (50,000.50) format."""
+    has_dot = "." in raw
+    has_comma = "," in raw
+    if has_dot and has_comma:
+        # Both present: last separator is decimal
+        last_dot = raw.rfind(".")
+        last_comma = raw.rfind(",")
+        if last_dot > last_comma:
+            # English: 50,000.50
+            return raw.replace(",", "")
+        else:
+            # German: 50.000,50
+            return raw.replace(".", "").replace(",", ".")
+    elif has_dot:
+        # Dot only: German thousands (50.000) or English decimal (50.5)
+        # If dot is followed by exactly 3 digits at end, treat as thousands separator
+        if re.search(r"\.\d{3}$", raw):
+            return raw.replace(".", "")
+        return raw  # decimal point
+    elif has_comma:
+        # Comma only: English thousands (80,000) or German decimal (50,50)
+        if re.search(r",\d{3}$", raw):
+            return raw.replace(",", "")
+        return raw.replace(",", ".")  # decimal comma
+    return raw
+
+
 def _extract_numeric_params(message: str) -> Dict[str, Any]:
     """Extract monetary amounts and year from message text."""
     params: Dict[str, Any] = {}
@@ -230,7 +264,7 @@ def _extract_numeric_params(message: str) -> Dict[str, Any]:
     for pat in amount_patterns:
         for m in re.finditer(pat, message, re.IGNORECASE):
             raw = m.group(1) if m.group(1) else m.group(0)
-            raw = raw.replace(".", "").replace(",", ".")  # German number format
+            raw = _normalize_number(raw)
             try:
                 amounts.append(float(raw))
             except ValueError:
