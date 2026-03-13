@@ -1,10 +1,20 @@
-"""Deductibility checker for expense categorization by user type"""
-from typing import Tuple, Optional
+"""Deductibility checker for expense categorization by user type.
+
+Two-tier approach:
+1. Rule engine: clear-cut cases get an immediate yes/no
+2. AI analysis: ambiguous cases (e.g. groceries for self-employed) are sent
+   to the LLM which examines the actual invoice items, merchant, and user's
+   business type to produce a definitive judgment + actionable tax tip.
+"""
+import json
+import logging
+from typing import Optional
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class UserType(str, Enum):
-    """User types for tax purposes"""
     EMPLOYEE = "employee"
     SELF_EMPLOYED = "self_employed"
     LANDLORD = "landlord"
@@ -13,32 +23,20 @@ class UserType(str, Enum):
 
 
 class ExpenseCategory(str, Enum):
-    """Expense categories"""
-    # General categories
     GROCERIES = "groceries"
     OTHER = "other"
-    
-    # Employee categories
     COMMUTING = "commuting"
     HOME_OFFICE = "home_office"
-    
-    # Self-employed categories
     OFFICE_SUPPLIES = "office_supplies"
     EQUIPMENT = "equipment"
     TRAVEL = "travel"
     MARKETING = "marketing"
     PROFESSIONAL_SERVICES = "professional_services"
-    
-    # Landlord categories
     MAINTENANCE = "maintenance"
     PROPERTY_TAX = "property_tax"
     LOAN_INTEREST = "loan_interest"
-    
-    # Shared categories
     INSURANCE = "insurance"
     UTILITIES = "utilities"
-
-    # New categories (aligned with Austrian Kontenrahmen)
     VEHICLE = "vehicle"
     TELECOM = "telecom"
     RENT = "rent"
@@ -49,552 +47,362 @@ class ExpenseCategory(str, Enum):
 
 class DeductibilityResult:
     """Result of deductibility check"""
-    
+
     def __init__(
         self,
         is_deductible: bool,
         reason: str,
+        tax_tip: Optional[str] = None,
         requires_review: bool = False,
-        max_amount: Optional[float] = None
+        max_amount: Optional[float] = None,
     ):
         self.is_deductible = is_deductible
         self.reason = reason
+        self.tax_tip = tax_tip  # AI-generated actionable advice for the user
         self.requires_review = requires_review
         self.max_amount = max_amount
-    
+
     def __repr__(self):
         return f"<DeductibilityResult(deductible={self.is_deductible}, reason={self.reason})>"
 
 
+# ---------------------------------------------------------------------------
+# Rule tables: (is_deductible, reason, max_amount | None)
+#
+# "NEEDS_AI" sentinel — the category is *potentially* deductible for this
+# user type but the final call depends on what's actually on the invoice.
+# ---------------------------------------------------------------------------
+_NEEDS_AI = "NEEDS_AI"
+
+_EMPLOYEE = {
+    ExpenseCategory.COMMUTING: (True, "Pendlerpauschale – commuting allowance for employees", None),
+    ExpenseCategory.HOME_OFFICE: (True, "Home-office-Pauschale up to €300/year", 300.0),
+    ExpenseCategory.GROCERIES: (False, "Private Lebensführung – not deductible for employees", None),
+    ExpenseCategory.OFFICE_SUPPLIES: (False, "Employer responsibility", None),
+    ExpenseCategory.EQUIPMENT: (False, "Employer responsibility", None),
+    ExpenseCategory.TRAVEL: (False, "Use Pendlerpauschale", None),
+    ExpenseCategory.INSURANCE: (False, "Not deductible for employees", None),
+    ExpenseCategory.UTILITIES: (False, "Not deductible for employees", None),
+    ExpenseCategory.OTHER: (False, "Not deductible for employees", None),
+    ExpenseCategory.VEHICLE: (False, "Use Pendlerpauschale", None),
+    ExpenseCategory.TELECOM: (False, "Not deductible for employees", None),
+    ExpenseCategory.RENT: (False, "Not deductible for employees", None),
+    ExpenseCategory.BANK_FEES: (False, "Not deductible for employees", None),
+    ExpenseCategory.SVS_CONTRIBUTIONS: (False, "Handled by employer", None),
+    ExpenseCategory.MARKETING: (False, "Not deductible for employees", None),
+    ExpenseCategory.PROFESSIONAL_SERVICES: (False, "Not deductible for employees", None),
+    ExpenseCategory.MAINTENANCE: (False, "Not deductible for employees", None),
+    ExpenseCategory.PROPERTY_TAX: (False, "Not deductible for employees", None),
+    ExpenseCategory.LOAN_INTEREST: (False, "Not deductible for employees", None),
+    ExpenseCategory.DEPRECIATION: (False, "Not deductible for employees", None),
+}
+
+# Self-employed: almost everything is a Betriebsausgabe, but groceries/other
+# need AI to decide whether it's genuinely business-related.
+_SELF_EMPLOYED = {
+    ExpenseCategory.OFFICE_SUPPLIES: (True, "Betriebsausgabe", None),
+    ExpenseCategory.EQUIPMENT: (True, "Betriebsausgabe (AfA for items >€1,000)", None),
+    ExpenseCategory.TRAVEL: (True, "Betriebsausgabe – business travel", None),
+    ExpenseCategory.MARKETING: (True, "Betriebsausgabe – marketing", None),
+    ExpenseCategory.PROFESSIONAL_SERVICES: (True, "Betriebsausgabe – Steuerberater/Rechtsanwalt", None),
+    ExpenseCategory.INSURANCE: (True, "Betriebsausgabe – business insurance", None),
+    ExpenseCategory.UTILITIES: (True, "Betriebsausgabe – business utilities", None),
+    ExpenseCategory.HOME_OFFICE: (True, "Betriebsausgabe – home office", None),
+    ExpenseCategory.VEHICLE: (True, "Betriebsausgabe – KFZ-Aufwand", None),
+    ExpenseCategory.TELECOM: (True, "Betriebsausgabe – Nachrichtenaufwand", None),
+    ExpenseCategory.RENT: (True, "Betriebsausgabe – Mietaufwand", None),
+    ExpenseCategory.BANK_FEES: (True, "Betriebsausgabe – Spesen des Geldverkehrs", None),
+    ExpenseCategory.SVS_CONTRIBUTIONS: (True, "SVS/SVA Pflichtbeiträge", None),
+    ExpenseCategory.DEPRECIATION: (True, "AfA", None),
+    ExpenseCategory.COMMUTING: (True, "Betriebsausgabe – Fahrtkosten", None),
+    ExpenseCategory.MAINTENANCE: (True, "Betriebsausgabe – Instandhaltung", None),
+    ExpenseCategory.PROPERTY_TAX: (True, "Betriebsausgabe – Grundsteuer", None),
+    ExpenseCategory.LOAN_INTEREST: (True, "Betriebsausgabe – Zinsen", None),
+    ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
+    ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
+}
+
+_LANDLORD = {
+    ExpenseCategory.MAINTENANCE: (True, "Werbungskosten – Instandhaltung", None),
+    ExpenseCategory.PROPERTY_TAX: (True, "Werbungskosten – Grundsteuer", None),
+    ExpenseCategory.LOAN_INTEREST: (True, "Werbungskosten – Kreditzinsen", None),
+    ExpenseCategory.INSURANCE: (True, "Werbungskosten – Gebäudeversicherung", None),
+    ExpenseCategory.UTILITIES: (True, "Werbungskosten – Betriebskosten", None),
+    ExpenseCategory.PROFESSIONAL_SERVICES: (True, "Werbungskosten – Hausverwaltung/Rechtsanwalt", None),
+    ExpenseCategory.OFFICE_SUPPLIES: (True, "Werbungskosten – Büromaterial", None),
+    ExpenseCategory.TELECOM: (True, "Werbungskosten – Nachrichtenaufwand", None),
+    ExpenseCategory.BANK_FEES: (True, "Werbungskosten – Bankspesen", None),
+    ExpenseCategory.SVS_CONTRIBUTIONS: (True, "SVS/SVA Pflichtbeiträge", None),
+    ExpenseCategory.DEPRECIATION: (True, "AfA – Gebäudeabschreibung", None),
+    ExpenseCategory.VEHICLE: (True, "Werbungskosten – KFZ für Objektbetreuung", None),
+    ExpenseCategory.EQUIPMENT: (True, "Werbungskosten – Ausstattung", None),
+    ExpenseCategory.TRAVEL: (True, "Werbungskosten – Fahrtkosten Objektbetreuung", None),
+    ExpenseCategory.MARKETING: (True, "Werbungskosten – Inserate", None),
+    ExpenseCategory.GROCERIES: (False, "Private Lebensführung", None),
+    ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on property relevance – AI will analyze", None),
+    ExpenseCategory.RENT: (False, "Not deductible for landlords", None),
+    ExpenseCategory.COMMUTING: (False, "Not deductible for landlords", None),
+    ExpenseCategory.HOME_OFFICE: (False, "Not deductible for landlords", None),
+}
+
+# Mixed = employee + self-employed/landlord activity.
+# Business-related categories are deductible; personal ones are not.
+# Groceries and other ambiguous items → AI decides.
+_MIXED = {
+    ExpenseCategory.COMMUTING: (True, "Pendlerpauschale", None),
+    ExpenseCategory.HOME_OFFICE: (True, "Home-office-Pauschale / Betriebsausgabe", None),
+    ExpenseCategory.OFFICE_SUPPLIES: (True, "Betriebsausgabe / Werbungskosten", None),
+    ExpenseCategory.EQUIPMENT: (True, "Betriebsausgabe (AfA for items >€1,000)", None),
+    ExpenseCategory.TRAVEL: (True, "Betriebsausgabe – business travel", None),
+    ExpenseCategory.MARKETING: (True, "Betriebsausgabe – marketing", None),
+    ExpenseCategory.PROFESSIONAL_SERVICES: (True, "Betriebsausgabe – Steuerberater/Rechtsanwalt", None),
+    ExpenseCategory.INSURANCE: (True, "Betriebsausgabe / Werbungskosten", None),
+    ExpenseCategory.UTILITIES: (True, "Betriebsausgabe / Werbungskosten", None),
+    ExpenseCategory.MAINTENANCE: (True, "Werbungskosten – Instandhaltung", None),
+    ExpenseCategory.PROPERTY_TAX: (True, "Werbungskosten – Grundsteuer", None),
+    ExpenseCategory.LOAN_INTEREST: (True, "Werbungskosten / Betriebsausgabe – Zinsen", None),
+    ExpenseCategory.VEHICLE: (True, "Betriebsausgabe – KFZ-Aufwand", None),
+    ExpenseCategory.TELECOM: (True, "Betriebsausgabe – Nachrichtenaufwand", None),
+    ExpenseCategory.RENT: (True, "Betriebsausgabe – Mietaufwand", None),
+    ExpenseCategory.BANK_FEES: (True, "Betriebsausgabe – Bankspesen", None),
+    ExpenseCategory.SVS_CONTRIBUTIONS: (True, "SVS/SVA Pflichtbeiträge", None),
+    ExpenseCategory.DEPRECIATION: (True, "AfA", None),
+    ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
+    ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
+}
+
+_GMBH = {
+    ExpenseCategory.OFFICE_SUPPLIES: (True, "Betriebsausgabe", None),
+    ExpenseCategory.EQUIPMENT: (True, "Betriebsausgabe (AfA for items >€1,000)", None),
+    ExpenseCategory.TRAVEL: (True, "Betriebsausgabe – Reisekosten", None),
+    ExpenseCategory.MARKETING: (True, "Betriebsausgabe – Werbung", None),
+    ExpenseCategory.PROFESSIONAL_SERVICES: (True, "Betriebsausgabe", None),
+    ExpenseCategory.INSURANCE: (True, "Betriebsausgabe", None),
+    ExpenseCategory.UTILITIES: (True, "Betriebsausgabe", None),
+    ExpenseCategory.MAINTENANCE: (True, "Betriebsausgabe – Instandhaltung", None),
+    ExpenseCategory.PROPERTY_TAX: (True, "Betriebsausgabe – Grundsteuer", None),
+    ExpenseCategory.LOAN_INTEREST: (True, "Betriebsausgabe – Zinsen", None),
+    ExpenseCategory.VEHICLE: (True, "Betriebsausgabe – KFZ-Aufwand", None),
+    ExpenseCategory.TELECOM: (True, "Betriebsausgabe – Nachrichtenaufwand", None),
+    ExpenseCategory.RENT: (True, "Betriebsausgabe – Mietaufwand", None),
+    ExpenseCategory.BANK_FEES: (True, "Betriebsausgabe – Bankspesen", None),
+    ExpenseCategory.SVS_CONTRIBUTIONS: (True, "SVS/SVA Pflichtbeiträge", None),
+    ExpenseCategory.DEPRECIATION: (True, "AfA", None),
+    ExpenseCategory.HOME_OFFICE: (True, "Betriebsausgabe – Home Office", None),
+    ExpenseCategory.COMMUTING: (False, "Personal commuting – not a GmbH expense", None),
+    ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
+    ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
+}
+
+_RULES = {
+    UserType.EMPLOYEE: _EMPLOYEE,
+    UserType.SELF_EMPLOYED: _SELF_EMPLOYED,
+    UserType.LANDLORD: _LANDLORD,
+    UserType.MIXED: _MIXED,
+    UserType.GMBH: _GMBH,
+}
+
+
 class DeductibilityChecker:
     """
-    Check if expenses are deductible based on user type and expense category.
-    
-    Implements Austrian tax law rules for different user types:
-    - Employees: Limited deductions (commuting, home office)
-    - Self-employed: Business expenses fully deductible
-    - Landlords: Rental property expenses deductible
+    Two-tier deductibility checker:
+    1. Rule engine for clear-cut cases
+    2. LLM analysis for ambiguous cases (NEEDS_AI)
     """
-    
-    # Deduction rules by user type and expense category
-    DEDUCTION_RULES = {
-        UserType.EMPLOYEE: {
-            ExpenseCategory.COMMUTING: {
-                'deductible': True,
-                'reason': 'Pendlerpauschale (commuting allowance) applies for employees',
-                'condition': 'distance >= 20km'
-            },
-            ExpenseCategory.HOME_OFFICE: {
-                'deductible': True,
-                'reason': 'Home office flat-rate deduction ?300/year for employees',
-                'max_amount': 300.00
-            },
-            ExpenseCategory.GROCERIES: {
-                'deductible': False,
-                'reason': 'Personal living expenses are not deductible for employees'
-            },
-            ExpenseCategory.OFFICE_SUPPLIES: {
-                'deductible': False,
-                'reason': 'Office supplies are not deductible for employees (employer responsibility)'
-            },
-            ExpenseCategory.EQUIPMENT: {
-                'deductible': False,
-                'reason': 'Equipment is not deductible for employees (employer responsibility)'
-            },
-            ExpenseCategory.TRAVEL: {
-                'deductible': False,
-                'reason': 'Travel expenses are not deductible for employees (use commuting allowance instead)'
-            },
-            ExpenseCategory.INSURANCE: {
-                'deductible': False,
-                'reason': 'Insurance is generally not deductible for employees (except specific cases)'
-            },
-            ExpenseCategory.OTHER: {
-                'deductible': False,
-                'reason': 'Other expenses are generally not deductible for employees'
-            },
-            ExpenseCategory.VEHICLE: {
-                'deductible': False,
-                'reason': 'Vehicle expenses are not deductible for employees (use Pendlerpauschale)'
-            },
-            ExpenseCategory.TELECOM: {
-                'deductible': False,
-                'reason': 'Telecom expenses are not deductible for employees'
-            },
-            ExpenseCategory.RENT: {
-                'deductible': False,
-                'reason': 'Rent is not deductible for employees'
-            },
-            ExpenseCategory.BANK_FEES: {
-                'deductible': False,
-                'reason': 'Bank fees are not deductible for employees'
-            },
-            ExpenseCategory.SVS_CONTRIBUTIONS: {
-                'deductible': False,
-                'reason': 'SVS contributions are handled by employer for employees'
-            }
-        },
-        
-        UserType.SELF_EMPLOYED: {
-            ExpenseCategory.OFFICE_SUPPLIES: {
-                'deductible': True,
-                'reason': 'Business office supplies are fully deductible for self-employed'
-            },
-            ExpenseCategory.EQUIPMENT: {
-                'deductible': True,
-                'reason': 'Business equipment is deductible for self-employed (may require depreciation for high-value items)'
-            },
-            ExpenseCategory.TRAVEL: {
-                'deductible': True,
-                'reason': 'Business travel expenses are fully deductible for self-employed',
-                'condition': 'business_purpose'
-            },
-            ExpenseCategory.MARKETING: {
-                'deductible': True,
-                'reason': 'Marketing and advertising expenses are fully deductible for self-employed'
-            },
-            ExpenseCategory.PROFESSIONAL_SERVICES: {
-                'deductible': True,
-                'reason': 'Professional services (accountant, lawyer) are fully deductible for self-employed'
-            },
-            ExpenseCategory.INSURANCE: {
-                'deductible': True,
-                'reason': 'Business insurance is deductible for self-employed',
-                'condition': 'business_related'
-            },
-            ExpenseCategory.UTILITIES: {
-                'deductible': True,
-                'reason': 'Business utilities (internet, phone) are deductible for self-employed',
-                'condition': 'business_use_percentage'
-            },
-            ExpenseCategory.HOME_OFFICE: {
-                'deductible': True,
-                'reason': 'Home office expenses are deductible for self-employed based on usage percentage'
-            },
-            ExpenseCategory.GROCERIES: {
-                'deductible': 'partial',
-                'reason': 'Groceries may be deductible if used for business purposes (e.g., client entertainment)',
-                'requires_review': True
-            },
-            ExpenseCategory.OTHER: {
-                'deductible': 'partial',
-                'reason': 'Other expenses may be deductible if business-related',
-                'requires_review': True
-            },
-            ExpenseCategory.VEHICLE: {
-                'deductible': True,
-                'reason': 'Business vehicle expenses (fuel, maintenance, insurance) are deductible for self-employed'
-            },
-            ExpenseCategory.TELECOM: {
-                'deductible': True,
-                'reason': 'Telephone, internet and postage are deductible for self-employed'
-            },
-            ExpenseCategory.RENT: {
-                'deductible': True,
-                'reason': 'Business premises rent is fully deductible for self-employed'
-            },
-            ExpenseCategory.BANK_FEES: {
-                'deductible': True,
-                'reason': 'Business bank fees are deductible for self-employed'
-            },
-            ExpenseCategory.SVS_CONTRIBUTIONS: {
-                'deductible': True,
-                'reason': 'SVS/SVA social insurance contributions are deductible for self-employed'
-            },
-            ExpenseCategory.DEPRECIATION: {
-                'deductible': True,
-                'reason': 'Depreciation (AfA) is deductible for self-employed'
-            }
-        },
-        
-        UserType.LANDLORD: {
-            ExpenseCategory.MAINTENANCE: {
-                'deductible': True,
-                'reason': 'Property maintenance and repair costs are fully deductible for landlords'
-            },
-            ExpenseCategory.PROPERTY_TAX: {
-                'deductible': True,
-                'reason': 'Property tax (Grundsteuer) is fully deductible for landlords'
-            },
-            ExpenseCategory.LOAN_INTEREST: {
-                'deductible': True,
-                'reason': 'Mortgage interest on rental property is fully deductible for landlords'
-            },
-            ExpenseCategory.INSURANCE: {
-                'deductible': True,
-                'reason': 'Property insurance is fully deductible for landlords',
-                'condition': 'property_related'
-            },
-            ExpenseCategory.UTILITIES: {
-                'deductible': True,
-                'reason': 'Utilities for rental property are deductible for landlords (if paid by landlord)'
-            },
-            ExpenseCategory.PROFESSIONAL_SERVICES: {
-                'deductible': True,
-                'reason': 'Property management and legal services are deductible for landlords'
-            },
-            ExpenseCategory.GROCERIES: {
-                'deductible': False,
-                'reason': 'Groceries are not deductible for landlords (personal expense)'
-            },
-            ExpenseCategory.OFFICE_SUPPLIES: {
-                'deductible': True,
-                'reason': 'Office supplies for property management are deductible for landlords'
-            },
-            ExpenseCategory.OTHER: {
-                'deductible': 'partial',
-                'reason': 'Other expenses may be deductible if property-related',
-                'requires_review': True
-            },
-            ExpenseCategory.VEHICLE: {
-                'deductible': 'partial',
-                'reason': 'Vehicle expenses may be deductible if used for property management',
-                'requires_review': True
-            },
-            ExpenseCategory.TELECOM: {
-                'deductible': True,
-                'reason': 'Telephone and internet for property management are deductible'
-            },
-            ExpenseCategory.RENT: {
-                'deductible': False,
-                'reason': 'Rent expenses are not typically deductible for landlords'
-            },
-            ExpenseCategory.BANK_FEES: {
-                'deductible': True,
-                'reason': 'Bank fees related to rental property are deductible'
-            },
-            ExpenseCategory.SVS_CONTRIBUTIONS: {
-                'deductible': True,
-                'reason': 'SVS/SVA contributions are deductible'
-            },
-            ExpenseCategory.DEPRECIATION: {
-                'deductible': True,
-                'reason': 'Depreciation (AfA) on rental property is deductible for landlords'
-            }
-        },
 
-        # Mixed user type: employee + landlord/self-employed
-        # Personal items (pure groceries/food) are NOT deductible
-        # Business/property items are deductible (user has business/rental activity)
-        UserType.MIXED: {
-            ExpenseCategory.COMMUTING: {
-                'deductible': True,
-                'reason': 'Pendlerpauschale (commuting allowance) applies',
-                'condition': 'distance >= 20km'
-            },
-            ExpenseCategory.HOME_OFFICE: {
-                'deductible': True,
-                'reason': 'Home office expenses are deductible based on usage percentage'
-            },
-            ExpenseCategory.OFFICE_SUPPLIES: {
-                'deductible': True,
-                'reason': 'Office supplies are deductible for business/rental property management',
-                'requires_review': True
-            },
-            ExpenseCategory.EQUIPMENT: {
-                'deductible': True,
-                'reason': 'Equipment for business or rental property is deductible (may require depreciation for items over €1,000)',
-                'requires_review': True
-            },
-            ExpenseCategory.TRAVEL: {
-                'deductible': True,
-                'reason': 'Travel expenses are deductible if business-related',
-                'requires_review': True,
-                'condition': 'business_purpose'
-            },
-            ExpenseCategory.MARKETING: {
-                'deductible': True,
-                'reason': 'Marketing and advertising expenses are deductible'
-            },
-            ExpenseCategory.PROFESSIONAL_SERVICES: {
-                'deductible': True,
-                'reason': 'Professional services (accountant, lawyer) are deductible'
-            },
-            ExpenseCategory.INSURANCE: {
-                'deductible': True,
-                'reason': 'Business or property insurance is deductible',
-                'requires_review': True
-            },
-            ExpenseCategory.UTILITIES: {
-                'deductible': True,
-                'reason': 'Utilities for business or rental property are deductible',
-                'requires_review': True
-            },
-            ExpenseCategory.MAINTENANCE: {
-                'deductible': True,
-                'reason': 'Maintenance and repair costs for rental property or business are fully deductible',
-                'requires_review': True
-            },
-            ExpenseCategory.PROPERTY_TAX: {
-                'deductible': True,
-                'reason': 'Property tax (Grundsteuer) is deductible for rental property'
-            },
-            ExpenseCategory.LOAN_INTEREST: {
-                'deductible': True,
-                'reason': 'Mortgage/business loan interest is deductible'
-            },
-            ExpenseCategory.GROCERIES: {
-                'deductible': 'partial',
-                'reason': 'Groceries may be partially deductible as Betriebsausgaben if business-related (e.g., client entertainment, business meals)',
-                'requires_review': True
-            },
-            ExpenseCategory.OTHER: {
-                'deductible': 'partial',
-                'reason': 'Other expenses may be deductible if business-related',
-                'requires_review': True
-            },
-            ExpenseCategory.VEHICLE: {
-                'deductible': True,
-                'reason': 'Vehicle expenses (fuel, maintenance) are deductible for business/rental activity',
-                'requires_review': True
-            },
-            ExpenseCategory.TELECOM: {
-                'deductible': True,
-                'reason': 'Telephone, internet and postage are deductible for business/rental activity'
-            },
-            ExpenseCategory.RENT: {
-                'deductible': True,
-                'reason': 'Business premises rent is deductible'
-            },
-            ExpenseCategory.BANK_FEES: {
-                'deductible': True,
-                'reason': 'Business bank fees are deductible'
-            },
-            ExpenseCategory.SVS_CONTRIBUTIONS: {
-                'deductible': True,
-                'reason': 'SVS/SVA social insurance contributions are deductible'
-            },
-            ExpenseCategory.DEPRECIATION: {
-                'deductible': True,
-                'reason': 'Depreciation (AfA) is deductible for business/rental assets'
-            }
-        },
-        UserType.GMBH: {
-            ExpenseCategory.OFFICE_SUPPLIES: {
-                'deductible': True,
-                'reason': 'Office supplies are deductible business expenses for GmbH'
-            },
-            ExpenseCategory.EQUIPMENT: {
-                'deductible': True,
-                'reason': 'Equipment is deductible (depreciation for items over €1,000)',
-                'requires_review': True
-            },
-            ExpenseCategory.TRAVEL: {
-                'deductible': True,
-                'reason': 'Business travel expenses are fully deductible for GmbH'
-            },
-            ExpenseCategory.MARKETING: {
-                'deductible': True,
-                'reason': 'Marketing and advertising expenses are deductible'
-            },
-            ExpenseCategory.PROFESSIONAL_SERVICES: {
-                'deductible': True,
-                'reason': 'Professional services (accountant, lawyer, notary) are deductible'
-            },
-            ExpenseCategory.INSURANCE: {
-                'deductible': True,
-                'reason': 'Business insurance is deductible'
-            },
-            ExpenseCategory.UTILITIES: {
-                'deductible': True,
-                'reason': 'Business utilities are deductible'
-            },
-            ExpenseCategory.MAINTENANCE: {
-                'deductible': True,
-                'reason': 'Maintenance and repair costs are deductible business expenses'
-            },
-            ExpenseCategory.PROPERTY_TAX: {
-                'deductible': True,
-                'reason': 'Property tax on business premises is deductible'
-            },
-            ExpenseCategory.LOAN_INTEREST: {
-                'deductible': True,
-                'reason': 'Business loan interest is deductible'
-            },
-            ExpenseCategory.GROCERIES: {
-                'deductible': False,
-                'reason': 'Personal purchases are not deductible for GmbH'
-            },
-            ExpenseCategory.COMMUTING: {
-                'deductible': False,
-                'reason': 'Personal commuting is not a GmbH expense (use KFZ-Aufwand for business vehicles)'
-            },
-            ExpenseCategory.HOME_OFFICE: {
-                'deductible': True,
-                'reason': 'Home office costs can be deductible if properly documented',
-                'requires_review': True
-            },
-            ExpenseCategory.OTHER: {
-                'deductible': False,
-                'reason': 'Unclassified expenses are not deductible by default',
-                'requires_review': True
-            },
-            ExpenseCategory.VEHICLE: {
-                'deductible': True,
-                'reason': 'Company vehicle expenses (KFZ-Aufwand) are fully deductible'
-            },
-            ExpenseCategory.TELECOM: {
-                'deductible': True,
-                'reason': 'Telecommunications expenses are deductible'
-            },
-            ExpenseCategory.RENT: {
-                'deductible': True,
-                'reason': 'Business premises rent is deductible'
-            },
-            ExpenseCategory.BANK_FEES: {
-                'deductible': True,
-                'reason': 'Bank fees are deductible business expenses'
-            },
-            ExpenseCategory.SVS_CONTRIBUTIONS: {
-                'deductible': True,
-                'reason': 'Social insurance contributions are deductible'
-            },
-            ExpenseCategory.DEPRECIATION: {
-                'deductible': True,
-                'reason': 'Depreciation (AfA) is deductible for GmbH'
-            }
-        }
-    }
-    
     def check(
         self,
         expense_category: str,
-        user_type: str
+        user_type: str,
+        ocr_data: Optional[dict] = None,
+        description: str = "",
     ) -> DeductibilityResult:
         """
-        Check if an expense category is deductible for a given user type.
-        
+        Check deductibility. For ambiguous cases, if ocr_data is provided,
+        calls AI for a smart judgment; otherwise falls back to a conservative
+        rule-based default.
+
         Args:
-            expense_category: The expense category (string)
-            user_type: The user type (string)
-        
-        Returns:
-            DeductibilityResult with deductibility status and reason
+            expense_category: e.g. "groceries"
+            user_type: e.g. "self_employed", "mixed"
+            ocr_data: OCR extracted data (merchant, line_items, amount, etc.)
+            description: transaction description text
         """
-        # Convert strings to enums
         try:
-            user_type_enum = UserType(user_type.lower())
+            ut = UserType(user_type.lower())
+        except ValueError:
+            return DeductibilityResult(False, f"Unknown user type: {user_type}")
+
+        try:
+            cat = ExpenseCategory(expense_category.lower())
         except ValueError:
             return DeductibilityResult(
-                is_deductible=False,
-                reason=f"Unknown user type: {user_type}"
+                False, f"Unknown category: {expense_category}", requires_review=True
             )
-        
-        try:
-            category_enum = ExpenseCategory(expense_category.lower())
-        except ValueError:
-            # Unknown category - default to not deductible
-            return DeductibilityResult(
-                is_deductible=False,
-                reason=f"Unknown expense category: {expense_category}",
-                requires_review=True
-            )
-        
-        # Get rules for user type
-        rules = self.DEDUCTION_RULES.get(user_type_enum, {})
-        rule = rules.get(category_enum)
-        
+
+        rules = _RULES.get(ut, {})
+        rule = rules.get(cat)
+
         if not rule:
-            # No specific rule - default to not deductible
             return DeductibilityResult(
-                is_deductible=False,
-                reason=f"{expense_category} is not in the deductible list for {user_type}",
-                requires_review=True
+                False, f"{expense_category} not in rules for {user_type}", requires_review=True
             )
-        
-        # Check deductibility
-        deductible = rule['deductible']
-        reason = rule['reason']
-        requires_review = rule.get('requires_review', False)
-        max_amount = rule.get('max_amount')
-        
-        if deductible == 'partial':
-            # Partial deductibility - requires user review
+
+        deductible, reason, max_amount = rule
+
+        # Clear-cut yes
+        if deductible is True:
+            return DeductibilityResult(True, reason, max_amount=max_amount)
+
+        # Clear-cut no
+        if deductible is False:
+            return DeductibilityResult(False, reason)
+
+        # NEEDS_AI — ambiguous case
+        if ocr_data or description:
+            ai_result = self._ai_analyze(ut, cat, ocr_data or {}, description)
+            if ai_result:
+                return ai_result
+
+        # Fallback when AI is unavailable: for business user types, default to
+        # deductible with a generic tip; for employees, default to not deductible.
+        if ut in (UserType.SELF_EMPLOYED, UserType.MIXED, UserType.GMBH):
             return DeductibilityResult(
-                is_deductible=True,
-                reason=f"?? {reason}",
-                requires_review=True
+                True,
+                "Betriebsausgabe (AI unavailable – default for business user)",
+                tax_tip="Bitte Belege und Geschäftszweck dokumentieren.",
             )
-        elif deductible is False:
-            return DeductibilityResult(
-                is_deductible=False,
-                reason=reason,
-                requires_review=False
-            )
-        else:
-            # Fully deductible
-            return DeductibilityResult(
-                is_deductible=True,
-                reason=reason,
-                requires_review=requires_review,
-                max_amount=max_amount
-            )
-    
-    def is_deductible(
+        return DeductibilityResult(False, "Not deductible (default)")
+
+    def _ai_analyze(
         self,
-        expense_category: str,
-        user_type: str
-    ) -> bool:
-        """
-        Simple boolean check if expense is deductible.
-        
-        Args:
-            expense_category: The expense category
-            user_type: The user type
-        
-        Returns:
-            True if deductible, False otherwise
-        """
-        result = self.check(expense_category, user_type)
-        return result.is_deductible
-    
-    def get_deduction_rules(
-        self,
-        user_type: str
-    ) -> dict:
-        """
-        Get all deduction rules for a user type.
-        
-        Args:
-            user_type: The user type
-        
-        Returns:
-            Dictionary of deduction rules
-        """
+        user_type: UserType,
+        category: ExpenseCategory,
+        ocr_data: dict,
+        description: str,
+    ) -> Optional[DeductibilityResult]:
+        """Call LLM to analyze whether this specific expense is deductible."""
         try:
-            user_type_enum = UserType(user_type.lower())
-            return self.DEDUCTION_RULES.get(user_type_enum, {})
+            from app.services.llm_service import get_llm_service
+
+            llm = get_llm_service()
+            if not llm.is_available:
+                return None
+
+            # Build context for the AI
+            merchant = ocr_data.get("merchant", "unknown")
+            amount = ocr_data.get("amount", "unknown")
+            line_items = ocr_data.get("line_items", [])
+            date = ocr_data.get("date", "")
+
+            items_text = ""
+            if line_items and isinstance(line_items, list):
+                items_text = "\n".join(
+                    f"- {it.get('name', '?')} x{it.get('quantity', 1)} = €{it.get('total_price', '?')}"
+                    for it in line_items[:15]  # limit to 15 items
+                )
+
+            user_type_labels = {
+                UserType.SELF_EMPLOYED: "Selbständig/Einzelunternehmer",
+                UserType.MIXED: "Angestellt + selbständige Nebentätigkeit",
+                UserType.GMBH: "GmbH-Geschäftsführer",
+                UserType.LANDLORD: "Vermieter",
+                UserType.EMPLOYEE: "Angestellter",
+            }
+
+            system_prompt = (
+                "You are an Austrian tax expert (Steuerberater). "
+                "Analyze this expense for a business user and determine tax deductibility.\n\n"
+                "IMPORTANT rules for business users (Selbständige/GmbH/Mixed):\n"
+                "- Purchases at wholesale stores (METRO, etc.) are typically business supplies\n"
+                "- Coffee, drinks, snacks for office/clients = Bewirtungsaufwand (deductible)\n"
+                "- Cleaning supplies, paper goods = Betriebsausgabe (deductible)\n"
+                "- Catering/event supplies in bulk = Bewirtungsaufwand (deductible)\n"
+                "- Pure personal groceries (daily food for private meals) = not deductible\n"
+                "- Mixed purchases: if business items dominate, mark deductible with tip to separate\n\n"
+                "Reply ONLY with JSON: "
+                '{"deductible": true/false, "reason": "short reason in German", '
+                '"tax_tip": "actionable advice in German for the user"}'
+            )
+
+            user_prompt = (
+                f"User type: {user_type_labels.get(user_type, str(user_type.value))}\n"
+                f"Merchant: {merchant}\n"
+                f"Amount: €{amount}\n"
+                f"Date: {date}\n"
+                f"Description: {description[:200]}\n"
+            )
+            if items_text:
+                user_prompt += f"Line items:\n{items_text}\n"
+
+            user_prompt += "\nIs this expense deductible for this business user?"
+
+            response = llm.generate_simple(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+                max_tokens=300,
+            )
+
+            return self._parse_ai_response(response)
+
+        except Exception as e:
+            logger.warning("AI deductibility analysis failed: %s", e)
+            return None
+
+    def _parse_ai_response(self, response: str) -> Optional[DeductibilityResult]:
+        """Parse the JSON response from the AI."""
+        try:
+            # Strip markdown code fences if present
+            text = response.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[-1]
+            if text.endswith("```"):
+                text = text.rsplit("```", 1)[0]
+            text = text.strip()
+
+            # Find JSON object
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start < 0 or end <= start:
+                return None
+
+            data = json.loads(text[start:end])
+            is_deductible = bool(data.get("deductible", False))
+            reason = data.get("reason", "AI analysis")
+            tax_tip = data.get("tax_tip", "")
+
+            return DeductibilityResult(
+                is_deductible=is_deductible,
+                reason=reason,
+                tax_tip=tax_tip,
+            )
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.warning("Failed to parse AI deductibility response: %s", e)
+            return None
+
+    # ---- Convenience methods (backward compat) ----
+
+    def is_deductible(self, expense_category: str, user_type: str) -> bool:
+        return self.check(expense_category, user_type).is_deductible
+
+    def get_deduction_rules(self, user_type: str) -> dict:
+        try:
+            ut = UserType(user_type.lower())
+            return _RULES.get(ut, {})
         except ValueError:
             return {}
-    
-    def explain_deductibility(
-        self,
-        expense_category: str,
-        user_type: str
-    ) -> str:
-        """
-        Get a human-readable explanation of deductibility.
-        
-        Args:
-            expense_category: The expense category
-            user_type: The user type
-        
-        Returns:
-            Explanation string
-        """
+
+    def explain_deductibility(self, expense_category: str, user_type: str) -> str:
         result = self.check(expense_category, user_type)
-        
-        explanation = f"Category: {expense_category}\n"
-        explanation += f"User Type: {user_type}\n"
-        explanation += f"Deductible: {'Yes' if result.is_deductible else 'No'}\n"
-        explanation += f"Reason: {result.reason}\n"
-        
-        if result.requires_review:
-            explanation += "?? This expense requires manual review\n"
-        
+        lines = [
+            f"Category: {expense_category}",
+            f"User Type: {user_type}",
+            f"Deductible: {'Yes' if result.is_deductible else 'No'}",
+            f"Reason: {result.reason}",
+        ]
+        if result.tax_tip:
+            lines.append(f"Tip: {result.tax_tip}")
         if result.max_amount:
-            explanation += f"Maximum deductible amount: ?{result.max_amount:.2f}\n"
-        
-        return explanation
-
-
+            lines.append(f"Max amount: €{result.max_amount:.2f}")
+        return "\n".join(lines)

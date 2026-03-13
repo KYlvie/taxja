@@ -252,3 +252,38 @@
     width: 100%;
   }
 }
+
+/* AI Tax Advice / Deduction Reason */
+.deduction-info {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 4px;
+}
+
+.deduction-reason-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-primary);
+  width: 100%;
+  margin-top: 4px;
+}
+
+.reason-main {
+  display: block;
+  color: var(--color-text);
+}
+
+.reason-tip {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-warning, #e67e22);
+  font-style: italic;
+}
+
+.tip-icon {
+  font-style: normal;
+}

@@ -41,6 +41,7 @@ export interface Transaction {
   description: string;
   category: IncomeCategory | ExpenseCategory;
   is_deductible: boolean;
+  deduction_reason?: string;
   is_system_generated?: boolean;
   property_id?: string;
   vat_rate?: number;

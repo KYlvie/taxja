@@ -228,6 +228,7 @@
     "deductible": "Abzugsfähig",
     "deductibleYes": "Ja, abzugsfähig",
     "notDeductible": "Nicht abzugsfähig",
+    "taxAdvice": "Steuerhinweis",
     "hasDocument": "Hat Beleg",
     "systemGenerated": "Systemgeneriert (automatische AfA)",
     "linkedDocument": "Verknüpftes Dokument",

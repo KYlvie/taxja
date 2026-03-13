@@ -228,6 +228,7 @@
     "deductible": "Tax Deductible",
     "deductibleYes": "Yes, deductible",
     "notDeductible": "Not deductible",
+    "taxAdvice": "Tax Advice",
     "hasDocument": "Has supporting document",
     "systemGenerated": "System-generated (automatic depreciation)",
     "linkedDocument": "Linked Document",

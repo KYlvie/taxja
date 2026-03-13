@@ -378,9 +378,17 @@ class OCRTransactionService:
                 
                 if category:
                     user_type_val = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type or "employee")
-                    deduct_result = self.deductibility_checker.check(category, user_type_val)
+                    # Pass OCR data + description so AI can analyze ambiguous cases
+                    ocr_data = document.ocr_result if document.ocr_result else {}
+                    deduct_result = self.deductibility_checker.check(
+                        category, user_type_val,
+                        ocr_data=ocr_data,
+                        description=description,
+                    )
                     is_deductible = deduct_result.is_deductible
                     deduction_reason = deduct_result.reason
+                    if deduct_result.tax_tip:
+                        deduction_reason = f"{deduct_result.reason} | {deduct_result.tax_tip}"
                     deduct_requires_review = deduct_result.requires_review
                 else:
                     is_deductible = False

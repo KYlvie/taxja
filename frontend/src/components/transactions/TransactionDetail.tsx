@@ -105,6 +105,23 @@ const TransactionDetail = ({
               )}
             </div>
 
+            {transaction.deduction_reason && (
+              <div className="detail-row deduction-info">
+                <span className="detail-label">{t('transactions.taxAdvice')}:</span>
+                <span className="deduction-reason-text">
+                  {transaction.deduction_reason.includes(' | ')
+                    ? transaction.deduction_reason.split(' | ').map((part, i) => (
+                        <span key={i} className={i === 0 ? 'reason-main' : 'reason-tip'}>
+                          {i === 1 && <span className="tip-icon">💡 </span>}
+                          {part}
+                          {i === 0 && <br />}
+                        </span>
+                      ))
+                    : transaction.deduction_reason}
+                </span>
+              </div>
+            )}
+
             {transaction.vat_rate && (
               <>
                 <div className="detail-row">
