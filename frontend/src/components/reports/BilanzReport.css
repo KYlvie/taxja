@@ -1,0 +1,126 @@
+.bilanz-report { max-width: 1100px; margin: 0 auto; }
+.bilanz-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+.bilanz-controls .form-group { display: flex; flex-direction: column; gap: 4px; }
+.bilanz-controls select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+
+.bilanz-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 32px; }
+
+/* ═══ GuV Page ═══ */
+.guv-page { margin-bottom: 40px; }
+.guv-page-header { text-align: right; margin-bottom: 24px; }
+.guv-page-title { margin-bottom: 4px; }
+.guv-title-underline { font-size: 1.3rem; font-weight: 700; text-decoration: underline; }
+.guv-company { font-size: 1rem; font-weight: 600; margin-bottom: 2px; }
+.guv-period { font-size: 0.85rem; color: #6b7280; }
+
+/* GuV Table */
+.guv-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-bottom: 16px; }
+.guv-table thead th { text-align: right; padding: 8px 12px; border-bottom: 2px solid #1f2937; font-weight: 600; font-size: 0.82rem; color: #374151; }
+.guv-table thead th.guv-col-label { text-align: left; }
+.guv-col-amount { width: 130px; text-align: right; }
+
+/* Section row (bold, numbered: "1. Umsatzerlöse") */
+.guv-section-row td { padding: 8px 12px; font-weight: 700; border-top: 1px solid #e5e7eb; }
+.guv-section-amount { text-align: right; font-weight: 700; }
+.guv-section-amount.prior { color: #6b7280; }
+.guv-nr { display: inline-block; min-width: 24px; }
+
+/* Detail row (indented sub-items) */
+.guv-detail-row td { padding: 4px 12px 4px 32px; font-weight: 400; color: #374151; }
+.guv-detail-amount { text-align: right; }
+.guv-detail-amount.prior { color: #9ca3af; }
+.guv-detail-label { padding-left: 32px; }
+
+/* Summary lines (Z6–Z13) */
+.guv-summary-lines { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 8px; }
+.guv-summary-lines td { padding: 8px 12px; }
+.guv-summary-lines .guv-col-amount { width: 130px; text-align: right; }
+.guv-summary-lines .guv-col-amount.prior { color: #6b7280; }
+.guv-zwischensumme td { font-weight: 700; border-top: 1px solid #d1d5db; }
+.guv-final td { font-weight: 700; font-size: 1rem; border-top: 3px double #1f2937; border-bottom: 3px double #1f2937; padding-top: 10px; padding-bottom: 10px; }
+
+/* ═══ Bilanz Page ═══ */
+.bilanz-page { margin-top: 40px; }
+.bilanz-page-header { text-align: right; margin-bottom: 20px; }
+.bilanz-page-company { font-size: 1rem; font-weight: 600; }
+.bilanz-page-title { margin: 4px 0; }
+.bilanz-title-text { font-size: 1.3rem; font-weight: 700; font-style: italic; }
+.bilanz-page-date { font-size: 0.85rem; color: #6b7280; }
+
+/* Balance Sheet Grid — T-Konto layout */
+.balance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 2px solid #1f2937;
+  border-radius: 4px;
+  overflow: hidden;
+  min-height: 280px;
+}
+.balance-side {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+}
+.balance-side:first-child {
+  border-right: 2px solid #1f2937;
+}
+.balance-side-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #1f2937;
+  margin-bottom: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.balance-side-header span:last-child { text-align: right; font-size: 0.78rem; font-weight: 600; color: #374151; }
+
+.balance-group { margin-bottom: 12px; }
+.balance-group-header { font-weight: 700; font-size: 0.88rem; color: #1f2937; padding: 4px 0; }
+.balance-item { display: flex; justify-content: space-between; padding: 3px 8px; font-size: 0.84rem; color: #374151; }
+.balance-group-total { display: flex; justify-content: space-between; padding: 4px 8px; font-size: 0.84rem; border-top: 1px solid #d1d5db; margin-top: 4px; font-weight: 600; }
+.balance-grand-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  border-top: 3px double #1f2937;
+  margin-top: auto;
+}
+
+/* VAT */
+.vat-summary-box { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 6px; padding: 14px; margin-top: 24px; }
+.vat-summary-box h4 { margin: 0 0 8px; font-size: 0.95rem; }
+.vat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 0.9rem; }
+.vat-balance { font-weight: 700; border-top: 1px solid #fbbf24; padding-top: 6px; margin-top: 4px; }
+
+.bilanz-disclaimer { margin-top: 20px; padding: 12px; background: #fffbeb; border: 1px solid #fbbf24; border-radius: 6px; font-size: 0.8rem; color: #92400e; }
+
+/* Bilanz threshold hint for self-employed */
+.bilanz-threshold-hint {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.84rem;
+  color: #1e40af;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .balance-grid { grid-template-columns: 1fr; }
+  .balance-side:first-child { border-right: none; border-bottom: 2px solid #1f2937; }
+  .guv-col-amount { width: 100px; }
+}
+
+@media print {
+  .bilanz-controls, .bilanz-disclaimer, .bilanz-threshold-hint { display: none; }
+  .bilanz-content { border: none; padding: 0; }
+  .guv-page, .bilanz-page { page-break-inside: avoid; }
+}

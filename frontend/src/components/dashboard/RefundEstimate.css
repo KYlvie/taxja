@@ -1,0 +1,197 @@
+.refund-estimate {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+  margin-bottom: 2rem;
+}
+
+.refund-estimate.positive {
+  border: 3px solid var(--color-success);
+  background: linear-gradient(135deg, var(--color-success-light) 0%, var(--color-surface) 100%);
+}
+
+.refund-estimate.negative {
+  border: 3px solid var(--color-warning);
+  background: linear-gradient(135deg, var(--color-warning-light) 0%, var(--color-surface) 100%);
+}
+
+.refund-estimate.neutral {
+  border: 3px solid var(--color-text-muted);
+  background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-surface) 100%);
+}
+
+.refund-estimate.no-data {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  border: 2px dashed var(--color-border);
+}
+
+.refund-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.refund-icon { font-size: 3rem; }
+
+.refund-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.refund-amount-box {
+  text-align: center;
+  padding: 1.5rem;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.refund-label {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.refund-amount {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.refund-amount.positive { color: var(--color-success); }
+.refund-amount.negative { color: var(--color-warning); }
+
+.refund-description {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.refund-breakdown {
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  font-size: 0.95rem;
+}
+
+.breakdown-row:not(:last-child) {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.breakdown-row.total {
+  padding-top: 1rem;
+  border-top: 2px solid var(--color-text);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.breakdown-row .amount {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.breakdown-row .amount.highlight { font-size: 1.3rem; }
+.breakdown-row .amount.highlight.positive { color: var(--color-success); }
+.breakdown-row .amount.highlight.negative { color: var(--color-warning); }
+
+.refund-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.primary-button,
+.secondary-button,
+.calculate-button {
+  padding: 0.875rem 1.5rem;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+  font-family: var(--font-sans);
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+  color: white;
+}
+
+.primary-button:hover {
+  background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.secondary-button {
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
+}
+
+.secondary-button:hover {
+  background: var(--color-border);
+}
+
+.calculate-button {
+  background: var(--color-success);
+  color: white;
+}
+
+.calculate-button:hover {
+  background: #047857;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.upload-reminder {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--color-info-light);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--color-info);
+  text-align: center;
+}
+
+.refund-estimate.no-data .refund-content { flex: 1; }
+
+.refund-estimate.no-data h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.refund-estimate.no-data .refund-description {
+  margin: 0 0 1rem 0;
+}
+
+@media (max-width: 768px) {
+  .refund-estimate.no-data { flex-direction: column; text-align: center; }
+  .refund-amount { font-size: 2.5rem; }
+  .refund-icon { font-size: 2.5rem; }
+  .refund-header { flex-direction: column; text-align: center; }
+}

@@ -1,0 +1,177 @@
+{
+  "pricing": {
+    "title": "选择您的套餐",
+    "subtitle": "从14天专业版试用开始，然后选择适合您需求的套餐",
+    "free": "免费",
+    "recommended": "推荐",
+    "per_month": "/月",
+    "per_month_billed_yearly": "/月，按年计费",
+    "billed_as": "按年计费 €{{amount}}",
+    "trial_info": "新用户可获得14天专业版试用。无需信用卡即可开始。",
+    "support": "有疑问？请联系 support@taxja.com",
+    "billing": {
+      "monthly": "按月",
+      "yearly": "按年",
+      "save": "节省 {{percent}}%"
+    },
+    "plans": {
+      "free": {
+        "name": "免费版"
+      },
+      "plus": {
+        "name": "增强版"
+      },
+      "pro": {
+        "name": "专业版"
+      }
+    },
+    "features": {
+      "transactions_limit": "50笔交易/月",
+      "basic_tax_calc": "基础税务计算",
+      "german_only": "仅德语",
+      "unlimited_transactions": "无限交易",
+      "ocr_limit": "20次OCR扫描/月",
+      "full_tax_calc": "完整税务计算",
+      "multi_language": "多语言（德、英、中）",
+      "vat_svs": "增值税和社保计算",
+      "everything_plus": "增强版所有功能",
+      "unlimited_ocr": "无限OCR扫描",
+      "ai_assistant": "AI税务助手",
+      "e1_generation": "E1表格生成",
+      "advanced_reports": "高级报表",
+      "priority_support": "优先支持",
+      "api_access": "API访问",
+      "ocr": "OCR扫描"
+    },
+    "buttons": {
+      "get_started": "开始使用",
+      "subscribe": "订阅",
+      "upgrade": "升级",
+      "start_trial": "开始14天专业版试用",
+      "loading": "加载中..."
+    },
+    "errors": {
+      "checkout_failed": "无法启动结账。请重试。"
+    }
+  },
+  "subscription": {
+    "loading": "加载订阅详情...",
+    "manage": "管理订阅",
+    "manage_title": "管理订阅",
+    "current_plan": "当前套餐",
+    "free": "免费",
+    "per_month": "/月",
+    "per_year": "/年",
+    "not_applicable": "不适用",
+    "trial_days_remaining": "还剩 {{days}} 天",
+    "trial_message": "专业版试用期。升级以保留所有功能！",
+    "trial_active": "您的免费试用期至 {{date}}",
+    "period_start": "周期开始",
+    "period_end": "周期结束",
+    "billing_cycle": "计费周期",
+    "next_billing": "下次计费日期",
+    "canceling": "取消中",
+    "ends_on": "结束于 {{date}}",
+    "cancel_notice": "您的订阅将在当前周期结束时取消",
+    "usage_title": "本周期使用情况",
+    "unlimited": "无限",
+    "quota_exceeded": "已超额",
+    "change_plan": "更改套餐",
+    "reactivate": "重新激活订阅",
+    "cancel": "取消订阅",
+    "payment_method": "支付方式",
+    "payment_managed": "支付方式通过Stripe管理。",
+    "manage_payment": "管理支付方式",
+    "billing_history": "账单历史",
+    "no_history": "暂无账单历史。",
+    "cancel_confirm_title": "取消订阅？",
+    "cancel_confirm_message": "您的订阅将保持活跃至 {{date}}。之后，您将降级为免费套餐。",
+    "confirm_cancel": "是的，取消",
+    "change_plan_title": "更改套餐",
+    "change_plan_message": "您将被重定向到价格页面以选择新套餐。",
+    "continue": "继续",
+    "cancel_success": "您的订阅将在当前周期结束时取消。",
+    "cancel_error": "无法取消订阅。请重试。",
+    "reactivate_success": "您的订阅已重新激活！",
+    "reactivate_error": "无法重新激活订阅。请重试。",
+    "status": {
+      "active": "活跃",
+      "trialing": "试用中",
+      "past_due": "逾期",
+      "canceled": "已取消"
+    },
+    "billing": {
+      "monthly": "按月",
+      "yearly": "按年"
+    },
+    "resources": {
+      "transactions": "交易",
+      "ocr_scans": "OCR扫描",
+      "ai_conversations": "AI对话"
+    }
+  },
+  "usage": {
+    "title": "资源使用情况",
+    "resets_on": "重置日期：{{date}}",
+    "unlimited": "无限",
+    "quota_exceeded": "配额已超",
+    "quota_warning": "接近限制（{{percent}}%）",
+    "transactions": "交易",
+    "ocr_scans": "OCR扫描",
+    "ai_conversations": "AI对话"
+  },
+  "upgrade": {
+    "title": "升级到{{plan}}",
+    "description": "{{feature}}在{{plan}}套餐中可用。立即升级以解锁此功能及更多！",
+    "benefits_title": "您将获得：",
+    "button": "立即升级",
+    "cancel": "稍后再说",
+    "trial_note": "✨ 从14天专业版免费试用开始",
+    "plans": {
+      "plus": "增强版",
+      "pro": "专业版"
+    },
+    "features": {
+      "ocr_scanning": "OCR扫描",
+      "unlimited_ocr": "无限OCR",
+      "ai_assistant": "AI税务助手",
+      "e1_generation": "E1表格生成",
+      "advanced_reports": "高级报表",
+      "api_access": "API访问",
+      "unlimited_transactions": "无限交易"
+    },
+    "benefits": {
+      "plus": {
+        "1": "无限交易",
+        "2": "每月20次OCR扫描",
+        "3": "完整税务计算",
+        "4": "多语言支持",
+        "5": "增值税和社保计算"
+      },
+      "pro": {
+        "1": "无限OCR扫描",
+        "2": "AI驱动的税务协助",
+        "3": "自动E1表格生成",
+        "4": "高级分析和报表",
+        "5": "优先客户支持"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "支付成功！",
+    "success_message": "感谢您的订阅！您的付款已成功处理。",
+    "plan_activated": "您的{{plan}}套餐现已激活！",
+    "detail_1": "完全访问所有功能",
+    "detail_2": "今天开始计费",
+    "detail_3": "随时可取消",
+    "session_id": "会话ID",
+    "continue_dashboard": "前往控制台",
+    "view_subscription": "查看订阅详情",
+    "support": "有疑问？请联系 support@taxja.com"
+  },
+  "common": {
+    "back": "返回",
+    "cancel": "取消",
+    "nevermind": "算了"
+  }
+}

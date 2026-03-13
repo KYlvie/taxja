@@ -1,0 +1,177 @@
+{
+  "pricing": {
+    "title": "Choose Your Plan",
+    "subtitle": "Start with a 14-day Pro trial, then choose the plan that fits your needs",
+    "free": "Free",
+    "recommended": "Recommended",
+    "per_month": "/month",
+    "per_month_billed_yearly": "/month, billed yearly",
+    "billed_as": "Billed as €{{amount}}/year",
+    "trial_info": "New users get a 14-day Pro trial. No credit card required to start.",
+    "support": "Questions? Contact us at support@taxja.com",
+    "billing": {
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "save": "Save {{percent}}%"
+    },
+    "plans": {
+      "free": {
+        "name": "Free"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "50 transactions/month",
+      "basic_tax_calc": "Basic tax calculation",
+      "german_only": "German language only",
+      "unlimited_transactions": "Unlimited transactions",
+      "ocr_limit": "20 OCR scans/month",
+      "full_tax_calc": "Full tax calculation",
+      "multi_language": "Multi-language (DE, EN, ZH)",
+      "vat_svs": "VAT & SVS calculations",
+      "everything_plus": "Everything in Plus",
+      "unlimited_ocr": "Unlimited OCR scanning",
+      "ai_assistant": "AI Tax Assistant",
+      "e1_generation": "E1 form generation",
+      "advanced_reports": "Advanced reports",
+      "priority_support": "Priority support",
+      "api_access": "API access",
+      "ocr": "OCR scanning"
+    },
+    "buttons": {
+      "get_started": "Get Started",
+      "subscribe": "Subscribe",
+      "upgrade": "Upgrade",
+      "start_trial": "Start 14-Day Pro Trial",
+      "loading": "Loading..."
+    },
+    "errors": {
+      "checkout_failed": "Failed to start checkout. Please try again."
+    }
+  },
+  "subscription": {
+    "loading": "Loading subscription details...",
+    "manage": "Manage Subscription",
+    "manage_title": "Manage Subscription",
+    "current_plan": "Current Plan",
+    "free": "Free",
+    "per_month": "/month",
+    "per_year": "/year",
+    "not_applicable": "N/A",
+    "trial_days_remaining": "{{days}} days remaining",
+    "trial_message": "in your Pro trial. Upgrade to keep all features!",
+    "trial_active": "You're on a free trial until {{date}}",
+    "period_start": "Period Start",
+    "period_end": "Period End",
+    "billing_cycle": "Billing Cycle",
+    "next_billing": "Next Billing Date",
+    "canceling": "Canceling",
+    "ends_on": "Ends {{date}}",
+    "cancel_notice": "Your subscription will be canceled at the end of the current period",
+    "usage_title": "Usage This Period",
+    "unlimited": "Unlimited",
+    "quota_exceeded": "Exceeded",
+    "change_plan": "Change Plan",
+    "reactivate": "Reactivate Subscription",
+    "cancel": "Cancel Subscription",
+    "payment_method": "Payment Method",
+    "payment_managed": "Payment method is managed through Stripe.",
+    "manage_payment": "Manage Payment Method",
+    "billing_history": "Billing History",
+    "no_history": "No billing history available yet.",
+    "cancel_confirm_title": "Cancel Subscription?",
+    "cancel_confirm_message": "Your subscription will remain active until {{date}}. After that, you'll be downgraded to the Free plan.",
+    "confirm_cancel": "Yes, Cancel",
+    "change_plan_title": "Change Plan",
+    "change_plan_message": "You'll be redirected to the pricing page to select a new plan.",
+    "continue": "Continue",
+    "cancel_success": "Your subscription will be canceled at the end of the current period.",
+    "cancel_error": "Failed to cancel subscription. Please try again.",
+    "reactivate_success": "Your subscription has been reactivated!",
+    "reactivate_error": "Failed to reactivate subscription. Please try again.",
+    "status": {
+      "active": "Active",
+      "trialing": "Trial",
+      "past_due": "Past Due",
+      "canceled": "Canceled"
+    },
+    "billing": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "resources": {
+      "transactions": "Transactions",
+      "ocr_scans": "OCR Scans",
+      "ai_conversations": "AI Conversations"
+    }
+  },
+  "usage": {
+    "title": "Resource Usage",
+    "resets_on": "Resets: {{date}}",
+    "unlimited": "Unlimited",
+    "quota_exceeded": "Quota exceeded",
+    "quota_warning": "Approaching limit ({{percent}}%)",
+    "transactions": "Transactions",
+    "ocr_scans": "OCR Scans",
+    "ai_conversations": "AI Conversations"
+  },
+  "upgrade": {
+    "title": "Upgrade to {{plan}}",
+    "description": "{{feature}} is available on the {{plan}} plan. Upgrade now to unlock this feature and more!",
+    "benefits_title": "What you'll get:",
+    "button": "Upgrade Now",
+    "cancel": "Maybe Later",
+    "trial_note": "✨ Start with a 14-day free trial of Pro plan",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "OCR Scanning",
+      "unlimited_ocr": "Unlimited OCR",
+      "ai_assistant": "AI Tax Assistant",
+      "e1_generation": "E1 Form Generation",
+      "advanced_reports": "Advanced Reports",
+      "api_access": "API Access",
+      "unlimited_transactions": "Unlimited Transactions"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Unlimited transactions",
+        "2": "20 OCR scans per month",
+        "3": "Full tax calculations",
+        "4": "Multi-language support",
+        "5": "VAT & SVS calculations"
+      },
+      "pro": {
+        "1": "Unlimited OCR scanning",
+        "2": "AI-powered tax assistance",
+        "3": "Automatic E1 form generation",
+        "4": "Advanced analytics and reports",
+        "5": "Priority customer support"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Payment Successful!",
+    "success_message": "Thank you for subscribing! Your payment has been processed successfully.",
+    "plan_activated": "Your {{plan}} plan is now active!",
+    "detail_1": "Full access to all features",
+    "detail_2": "Billing starts today",
+    "detail_3": "Cancel anytime",
+    "session_id": "Session ID",
+    "continue_dashboard": "Continue to Dashboard",
+    "view_subscription": "View Subscription Details",
+    "support": "Questions? Contact us at support@taxja.com"
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "nevermind": "Nevermind"
+  }
+}

@@ -1,0 +1,64 @@
+.periodensaldenliste-report { max-width: 100%; margin: 0 auto; }
+.periodensaldenliste-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+.periodensaldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; }
+.periodensaldenliste-controls select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+
+.periodensaldenliste-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.periodensaldenliste-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1f2937; padding-bottom: 16px; }
+.periodensaldenliste-header h2 { font-size: 1.4rem; margin: 0 0 8px; }
+.periodensaldenliste-header .periodensaldenliste-meta { display: flex; gap: 16px; justify-content: center; color: #6b7280; font-size: 0.85rem; }
+
+.periodensaldenliste-group { margin-bottom: 18px; }
+.periodensaldenliste-group-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: #f0f4ff; border-left: 4px solid #3b82f6;
+  border-radius: 4px; cursor: pointer; user-select: none; font-weight: 600; font-size: 0.92rem;
+}
+.periodensaldenliste-group-header:hover { background: #e0e7ff; }
+.periodensaldenliste-group-header .toggle-icon { font-size: 0.75rem; color: #6b7280; transition: transform 0.2s; }
+.periodensaldenliste-group-header .toggle-icon.collapsed { transform: rotate(-90deg); }
+
+.table-scroll-wrapper { overflow-x: auto; margin-top: 4px; }
+
+.periodensaldenliste-table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 0.78rem; }
+.periodensaldenliste-table th {
+  text-align: left; padding: 5px 6px; border-bottom: 1px solid #e5e7eb;
+  color: #6b7280; font-weight: 500; font-size: 0.73rem; white-space: nowrap;
+}
+.periodensaldenliste-table th.text-right,
+.periodensaldenliste-table td.text-right { text-align: right; }
+.periodensaldenliste-table td { padding: 4px 6px; border-bottom: 1px solid #f3f4f6; white-space: nowrap; }
+.periodensaldenliste-table .konto-nr { font-family: monospace; font-size: 0.76rem; color: #6b7280; }
+.periodensaldenliste-table .col-konto { width: 70px; }
+.periodensaldenliste-table .col-bezeichnung { min-width: 140px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.periodensaldenliste-table .col-month { width: 80px; }
+.periodensaldenliste-table .col-gesamt { width: 90px; font-weight: 600; }
+
+.periodensaldenliste-table .subtotal-row { background: #f9fafb; font-weight: 600; }
+.periodensaldenliste-table .subtotal-row td { border-top: 1px solid #d1d5db; border-bottom: 2px solid #e5e7eb; }
+
+.periodensaldenliste-report .summary-box {
+  background: #f8fafc; border: 2px solid #1e40af; border-radius: 8px;
+  padding: 16px; margin-top: 20px; overflow-x: auto;
+}
+.periodensaldenliste-report .summary-box h3 { margin: 0 0 12px; font-size: 1rem; color: #1e40af; }
+.periodensaldenliste-report .summary-row { display: flex; align-items: center; padding: 4px 0; font-size: 0.82rem; gap: 8px; }
+.periodensaldenliste-report .summary-row.total { font-weight: 700; font-size: 0.88rem; border-top: 2px solid #1e40af; padding-top: 10px; margin-top: 6px; }
+.periodensaldenliste-report .summary-label { min-width: 120px; flex-shrink: 0; font-weight: 600; }
+.periodensaldenliste-report .summary-months { display: flex; gap: 4px; flex-wrap: nowrap; }
+.periodensaldenliste-report .summary-month-val { min-width: 75px; text-align: right; font-size: 0.78rem; }
+.periodensaldenliste-report .summary-gesamt-val { min-width: 85px; text-align: right; font-weight: 700; font-size: 0.82rem; border-left: 1px solid #d1d5db; padding-left: 6px; }
+
+.positive { color: #059669; }
+.negative { color: #dc2626; }
+
+.periodensaldenliste-disclaimer {
+  margin-top: 16px; padding: 12px; background: #fffbeb;
+  border: 1px solid #fbbf24; border-radius: 6px; font-size: 0.8rem; color: #92400e;
+}
+
+@media print {
+  .periodensaldenliste-controls, .periodensaldenliste-disclaimer { display: none; }
+  .periodensaldenliste-content { border: none; padding: 0; }
+  .periodensaldenliste-table { font-size: 0.65rem; min-width: auto; }
+}

@@ -1,0 +1,194 @@
+.transaction-list {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.transaction-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+}
+
+.transaction-table thead {
+  background: var(--color-bg);
+}
+
+.transaction-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.transaction-table tbody tr {
+  border-bottom: 1px solid var(--color-border-light);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.transaction-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.transaction-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.transaction-table td {
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.transaction-row.income {
+  border-left: 3px solid var(--color-success);
+}
+
+.transaction-row.expense {
+  border-left: 3px solid var(--color-danger);
+}
+
+.description {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.has-document {
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.system-generated-badge {
+  margin-left: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.category-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.amount {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.amount.income {
+  color: var(--color-success);
+}
+
+.amount.expense {
+  color: var(--color-danger);
+}
+
+.type-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.type-badge.income {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.type-badge.expense {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.deductible-yes {
+  color: var(--color-success);
+  font-size: 16px;
+}
+
+.deductible-no {
+  color: var(--color-text-muted);
+  font-size: 16px;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  color: var(--color-text-muted);
+}
+
+.btn-icon:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.btn-icon.btn-danger:hover {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.transaction-list-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+}
+
+.transaction-list-empty p {
+  font-size: 15px;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .transaction-table th,
+  .transaction-table td {
+    padding: 10px 12px;
+  }
+  .description {
+    max-width: 150px;
+  }
+}
+
+/* Recurring badge */
+.recurring-badge {
+  margin-left: 6px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.recurring-badge.paused {
+  opacity: 0.4;
+  filter: grayscale(1);
+}

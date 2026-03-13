@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: minio-backup
+  namespace: taxja
+spec:
+  # Run daily at 3 AM UTC
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: minio-backup
+            image: minio/mc:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_DATE=$(date +%Y%m%d-%H%M%S)
+              echo "Starting MinIO backup at $BACKUP_DATE"
+              
+              # Configure MinIO client
+              mc alias set source http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
+              mc alias set backup http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
+              
+              # Mirror documents bucket to backup bucket
+              mc mirror source/taxja-documents backup/taxja-backups/documents-$BACKUP_DATE/
+              
+              if [ $? -eq 0 ]; then
+                echo "MinIO backup completed successfully"
+                
+                # Delete backups older than 30 days
+                mc rm --recursive --force --older-than 30d backup/taxja-backups/documents-*/
+                
+                echo "Old backups cleaned"
+              else
+                echo "MinIO backup failed"
+                exit 1
+              fi
+            env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: minio-secret-key
+          restartPolicy: OnFailure

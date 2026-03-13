@@ -1,0 +1,282 @@
+/* ── TaxFormPreview: Official BMF Form Style ─────────────────────── */
+.tax-form-preview { max-width: 900px; margin: 0 auto; }
+
+.tf-controls {
+  display: flex; gap: 12px; align-items: flex-end;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.tf-controls .form-group { display: flex; flex-direction: column; gap: 4px; }
+.tf-controls select {
+  padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+/* ── Form container ─────────────────────────────────────────────── */
+.tf-content {
+  background: #fff; border: 1.5px solid #b0b0b0; border-radius: 2px;
+  padding: 0; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* ── BMF Header (green bar) ─────────────────────────────────────── */
+.tf-bmf-header {
+  background: linear-gradient(135deg, #005a32 0%, #007a3d 100%);
+  color: #fff; padding: 14px 18px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.tf-bmf-header-left h2 {
+  font-size: 1.15rem; margin: 0 0 2px; font-weight: 700; letter-spacing: 0.3px;
+}
+.tf-bmf-header-left .tf-bmf-subtitle {
+  font-size: 0.78rem; opacity: 0.85; font-weight: 400;
+}
+.tf-form-code {
+  font-size: 1.8rem; font-weight: 800; letter-spacing: 2px;
+  background: rgba(255,255,255,0.15); padding: 4px 16px;
+  border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);
+}
+
+──────── */
+.tf-personal-info {
+  display: grid; grid-template-columns: 1fr 2fr 1fr;
+  border-bottom: 1px solid #ccc; font-size: 0.82rem;
+}
+.tf-personal-info .tf-info-cell {
+  padding: 6px 12px; border-right: 1px solid #ddd;
+}
+.tf-personal-info .tf-info-cell:last-child { border-right: none; }
+.tf-info-cell .tf-info-label {
+  font-size: 0.68rem; color: #888; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 1px;
+}
+────────────────── */
+@media (max-width: 640px) {
+  .tf-bmf-header { flex-direction: column; gap: 8px; text-align: center; }
+  .tf-personal-info { grid-template-columns: 1fr; }
+  .tf-personal-info .tf-info-cell { border-right: none; border-bottom: 1px solid #ddd; }
+  .tf-field { grid-template-columns: 48px 1fr 120px; }
+  .tf-kz { font-size: 0.6rem; }
+  .tf-label { font-size: 0.72rem; }
+}
+──────────────────────────────────── */
+.tf-disclaimer {
+  margin: 0; padding: 10px 16px;
+  background: #fffbeb; border-top: 1px solid #fbbf24;
+  font-size: 0.75rem; color: #92400e; line-height: 1.4;
+}
+
+/* ── Print styles ───────────────────────────────────────────────── */
+@media print {
+  .tf-controls, .tf-actions, .tf-disclaimer { display: none !important; }
+  .tf-content { border: none; box-shadow: none; }
+  .tf-input { border: none; background: transparent; }
+}
+
+/* ── Mobile responsive ──────────────────────────color: #444; }
+.tf-summary-value {
+  font-family: 'Courier New', monospace; font-weight: 600;
+  color: #1a1a1a;
+}
+.tf-summary-item.is-total .tf-summary-value { color: #005a32; }
+
+/* ── Actions & links ────────────────────────────────────────────── */
+.tf-actions {
+  display: flex; gap: 12px; padding: 16px;
+  justify-content: center; flex-wrap: wrap;
+  border-top: 1px solid #eee;
+}
+.tf-actions .btn {
+  text-decoration: none; display: inline-flex;
+  align-items: center; gap: 6px;
+}
+
+/* ── Disclaimer ───────────────.8rem; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.tf-summary-grid { display: flex; flex-direction: column; }
+.tf-summary-item {
+  display: flex; justify-content: space-between;
+  padding: 5px 12px; font-size: 0.82rem;
+  border-bottom: 1px solid #eee;
+}
+.tf-summary-item:nth-child(odd) { background: #fff; }
+.tf-summary-item:nth-child(even) { background: #f9faf9; }
+.tf-summary-item.is-total {
+  background: #eef5ee; font-weight: 700;
+  border-bottom: 2px solid #005a32;
+}
+.tf-summary-label { readonly {
+  font-weight: 700; font-size: 0.85rem; color: #1a1a1a;
+  font-family: 'Courier New', monospace;
+  padding: 5px 8px; background: #f0f0f0; border-radius: 2px;
+  display: inline-block; text-align: right; width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Summary section ────────────────────────────────────────────── */
+.tf-summary { border-top: 2px solid #005a32; }
+.tf-summary h3 {
+  background: linear-gradient(90deg, #005a32 0%, #007a3d 100%);
+  color: #fff; margin: 0; padding: 5px 12px;
+  font-size: 0rem; color: #999;
+  font-style: italic; margin-top: 1px;
+}
+
+/* Value cell */
+.tf-field-value {
+  padding: 3px 8px; text-align: right;
+  border-left: 1px solid #e8e8e8;
+}
+.tf-input {
+  width: 100%; padding: 5px 8px; border: 1px solid #ccc;
+  border-radius: 2px; text-align: right; font-size: 0.85rem;
+  font-family: 'Courier New', monospace; font-weight: 600;
+  background: #fffff0;
+}
+.tf-input:focus {
+  border-color: #005a32; outline: none;
+  box-shadow: 0 0 0 2px rgba(0,90,50,0.15);
+  background: #fff;
+}
+.tf-; }
+.tf-field:nth-child(even) { background: #f9faf9; }
+.tf-field:hover { background: #f0f7f0; }
+
+/* KZ box */
+.tf-kz {
+  background: #eef5ee; color: #005a32;
+  font-size: 0.68rem; font-weight: 700;
+  text-align: center; padding: 4px 2px;
+  border-right: 1px solid #dde5dd;
+  align-self: stretch; display: flex;
+  align-items: center; justify-content: center;
+}
+
+/* Label */
+.tf-label {
+  font-size: 0.78rem; color: #333; padding: 4px 10px;
+  line-height: 1.3;
+}
+.tf-label .tf-field-note {
+  display: block; font-size: 0.65r-right: 1px solid rgba(255,255,255,0.2);
+}
+.tf-section-title {
+  padding: 5px 12px; font-size: 0.8rem; font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* ── KZ Field rows ──────────────────────────────────────────────── */
+.tf-fields { display: flex; flex-direction: column; }
+
+.tf-field {
+  display: grid; grid-template-columns: 56px 1fr 150px;
+  border-bottom: 1px solid #e8e8e8; min-height: 36px;
+  align-items: center;
+}
+.tf-field:last-child { border-bottom: none; }
+.tf-field:nth-child(odd) { background: #fffd-note {
+  font-size: 0.68rem; color: #999; padding: 3px 12px 6px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ── Section header (green bar with Punkt number) ───────────────── */
+.tf-section { margin: 0; }
+.tf-section-header {
+  background: linear-gradient(90deg, #005a32 0%, #007a3d 100%);
+  color: #fff; display: flex; align-items: center;
+  padding: 0; margin: 0;
+}
+.tf-punkt-nr {
+  background: rgba(0,0,0,0.15); padding: 5px 10px;
+  font-weight: 700; font-size: 0.85rem; min-width: 52px;
+  text-align: center; borde.tf-info-cell .tf-info-value { font-weight: 600; color: #1a1a1a; }
+
+.tf-generate
+/* -- Property breakdown section -- */
+.tf-property-breakdown {
+  margin: 16px 12px;
+  padding: 12px;
+  background: #f8faf8;
+  border: 1px solid #d1e7dd;
+  border-radius: 4px;
+}
+
+.tf-property-breakdown h4 {
+  margin: 0 0 10px 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #005a32;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tf-property-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tf-property-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.tf-property-item.is-depreciation {
+  background: #eef5ee;
+  border-color: #005a32;
+  font-weight: 600;
+}
+
+.tf-property-address {
+  color: #333;
+  flex: 1;
+}
+
+.tf-property-category {
+  color: #555;
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.tf-property-label {
+  color: #005a32;
+  font-weight: 600;
+  flex: 1;
+}
+
+.tf-property-amount {
+  font-family: monospace;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: right;
+  min-width: 100px;
+}
+
+.tf-property-item.is-depreciation .tf-property-amount {
+  color: #005a32;
+}
+
+/* Mobile responsive for property breakdown */
+@media (max-width: 640px) {
+  .tf-property-breakdown {
+    margin: 12px 8px;
+    padding: 10px;
+  }
+  
+  .tf-property-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .tf-property-amount {
+    align-self: flex-end;
+    font-size: 0.85rem;
+  }
+}

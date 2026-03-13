@@ -1,0 +1,100 @@
+# Docker Compose configuration for Celery workers and beat scheduler
+# 
+# Usage:
+#   docker-compose -f docker-compose.celery.yml up -d
+#
+# This file extends the main docker-compose.yml and adds Celery services
+
+version: '3.8'
+
+services:
+  # Celery Worker - Processes background tasks
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-taxja}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-taxja_password}
+      - POSTGRES_DB=${POSTGRES_DB:-taxja}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - ./backend:/app
+    networks:
+      - taxja-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Beat - Scheduler for periodic tasks
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app beat --loglevel=info --scheduler=celery.beat:PersistentScheduler
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-taxja}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-taxja_password}
+      - POSTGRES_DB=${POSTGRES_DB:-taxja}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+      - celery-worker
+    volumes:
+      - ./backend:/app
+      - celery-beat-schedule:/app/celerybeat-schedule
+    networks:
+      - taxja-network
+    restart: unless-stopped
+
+  # Flower - Celery monitoring dashboard (optional)
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app flower --port=5555
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    depends_on:
+      - redis
+      - celery-worker
+    ports:
+      - "5555:5555"
+    networks:
+      - taxja-network
+    restart: unless-stopped
+
+volumes:
+  celery-beat-schedule:
+    driver: local
+
+networks:
+  taxja-network:
+    external: true

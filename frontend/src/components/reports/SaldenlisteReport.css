@@ -1,0 +1,54 @@
+.saldenliste-report { max-width: 960px; margin: 0 auto; }
+.saldenliste-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
+.saldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; }
+.saldenliste-controls select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+
+.saldenliste-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
+.saldenliste-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1f2937; padding-bottom: 16px; }
+.saldenliste-header h2 { font-size: 1.4rem; margin: 0 0 8px; }
+.saldenliste-header .saldenliste-meta { display: flex; gap: 16px; justify-content: center; color: #6b7280; font-size: 0.85rem; }
+
+.saldenliste-group { margin-bottom: 18px; }
+.saldenliste-group-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: #f0f4ff; border-left: 4px solid #3b82f6;
+  border-radius: 4px; cursor: pointer; user-select: none; font-weight: 600; font-size: 0.92rem;
+}
+.saldenliste-group-header:hover { background: #e0e7ff; }
+.saldenliste-group-header .toggle-icon { font-size: 0.75rem; color: #6b7280; transition: transform 0.2s; }
+.saldenliste-group-header .toggle-icon.collapsed { transform: rotate(-90deg); }
+
+.saldenliste-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 4px; }
+.saldenliste-table th {
+  text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb;
+  color: #6b7280; font-weight: 500; font-size: 0.78rem;
+}
+.saldenliste-table th.text-right, .saldenliste-table td.text-right { text-align: right; }
+.saldenliste-table td { padding: 5px 8px; border-bottom: 1px solid #f3f4f6; }
+.saldenliste-table .konto-nr { font-family: monospace; font-size: 0.8rem; color: #6b7280; }
+
+.subtotal-row { background: #f9fafb; font-weight: 600; }
+.subtotal-row td { border-top: 1px solid #d1d5db; border-bottom: 2px solid #e5e7eb; }
+
+.summary-box {
+  background: #f8fafc; border: 2px solid #1e40af; border-radius: 8px;
+  padding: 16px; margin-top: 20px;
+}
+.summary-box h3 { margin: 0 0 12px; font-size: 1rem; color: #1e40af; }
+.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.92rem; }
+.summary-row.total { font-weight: 700; font-size: 1.05rem; border-top: 2px solid #1e40af; padding-top: 10px; margin-top: 6px; }
+.summary-values { display: flex; gap: 24px; }
+.summary-label-sub { color: #6b7280; font-size: 0.78rem; }
+
+.positive { color: #059669; }
+.negative { color: #dc2626; }
+
+.saldenliste-disclaimer {
+  margin-top: 16px; padding: 12px; background: #fffbeb;
+  border: 1px solid #fbbf24; border-radius: 6px; font-size: 0.8rem; color: #92400e;
+}
+
+@media print {
+  .saldenliste-controls, .saldenliste-disclaimer { display: none; }
+  .saldenliste-content { border: none; padding: 0; }
+}

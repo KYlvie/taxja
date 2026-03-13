@@ -1,0 +1,274 @@
+"""Subscription management API endpoints"""
+from typing import List
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_db, get_current_user
+from app.models.user import User
+from app.models.plan import Plan, BillingCycle
+from app.models.subscription import Subscription, SubscriptionStatus
+from app.schemas.subscription import (
+    PlanResponse,
+    SubscriptionResponse,
+    CheckoutSessionRequest,
+    CheckoutSessionResponse,
+    UsageQuotaResponse
+)
+from app.services.plan_service import PlanService
+from app.services.subscription_service import SubscriptionService
+from app.services.usage_tracker_service import UsageTrackerService
+from app.services.feature_gate_service import FeatureGateService
+import logging
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+def _is_stripe_configured() -> bool:
+    """Check if Stripe API keys are properly configured (not placeholder values)."""
+    import stripe
+    key = stripe.api_key
+    if not key:
+        return False
+    if "your_" in key or key.startswith("sk_test_your"):
+        return False
+    return True
+
+
+@router.get("/plans", response_model=List[PlanResponse])
+def list_plans(
+    db: Session = Depends(get_db)
+):
+    """
+    List all available subscription plans with features and quotas.
+    
+    Per Requirement 6.1: Public endpoint to view plans.
+    """
+    plan_service = PlanService(db)
+    plans = plan_service.list_plans()
+    
+    return [
+        PlanResponse(
+            id=plan.id,
+            plan_type=plan.plan_type,
+            name=plan.name,
+            monthly_price=plan.monthly_price,
+            yearly_price=plan.yearly_price,
+            features=plan.features,
+            quotas=plan.quotas,
+            created_at=plan.created_at,
+            updated_at=plan.updated_at
+        )
+        for plan in plans
+    ]
+
+
+@router.get("/current", response_model=SubscriptionResponse)
+def get_current_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user's subscription details.
+    Auto-creates a Free plan subscription if none exists.
+    """
+    subscription_service = SubscriptionService(db)
+    subscription = subscription_service.get_user_subscription(current_user.id)
+    
+    if not subscription:
+        # Auto-create free subscription for the user
+        free_plan = db.query(Plan).filter(Plan.plan_type == "free").first()
+        if free_plan:
+            try:
+                subscription = subscription_service.create_subscription(
+                    user_id=current_user.id,
+                    plan_id=free_plan.id,
+                    status=SubscriptionStatus.ACTIVE,
+                )
+                logger.info(f"Auto-created free subscription for user {current_user.id}")
+            except ValueError:
+                pass
+    
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active subscription found"
+        )
+    
+    return subscription
+
+
+@router.post("/checkout", response_model=CheckoutSessionResponse)
+def create_checkout_session(
+    request: CheckoutSessionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create checkout session for subscription.
+    
+    In dev mode (Stripe not configured): directly activates the subscription
+    and returns a redirect URL to the success page.
+    
+    In production (Stripe configured): creates a real Stripe checkout session.
+    """
+    # Verify plan exists and is not free
+    plan = db.query(Plan).filter(Plan.id == request.plan_id).first()
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Plan {request.plan_id} not found"
+        )
+    if plan.plan_type == "free":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create checkout for free plan"
+        )
+
+    if not _is_stripe_configured():
+        # DEV MODE: directly activate subscription without Stripe
+        logger.info(
+            f"Dev mode checkout: activating {plan.plan_type} for user {current_user.id}"
+        )
+        subscription_service = SubscriptionService(db)
+
+        # Check for existing subscription
+        existing = subscription_service.get_user_subscription(current_user.id)
+        if existing:
+            # Update existing subscription
+            existing.plan_id = plan.id
+            existing.status = SubscriptionStatus.ACTIVE
+            existing.billing_cycle = request.billing_cycle
+            existing.current_period_start = datetime.utcnow()
+            if request.billing_cycle == BillingCycle.YEARLY:
+                existing.current_period_end = datetime.utcnow() + timedelta(days=365)
+            else:
+                existing.current_period_end = datetime.utcnow() + timedelta(days=30)
+            existing.cancel_at_period_end = False
+            db.commit()
+            db.refresh(existing)
+        else:
+            subscription_service.create_subscription(
+                user_id=current_user.id,
+                plan_id=plan.id,
+                billing_cycle=request.billing_cycle,
+                status=SubscriptionStatus.ACTIVE,
+            )
+
+        # Build success redirect URL
+        success_url = request.success_url
+        separator = "&" if "?" in success_url else "?"
+        redirect_url = f"{success_url}{separator}session_id=dev_mode_{current_user.id}"
+
+        return CheckoutSessionResponse(
+            session_id=f"dev_mode_{current_user.id}",
+            url=redirect_url,
+        )
+
+    # PRODUCTION MODE: use Stripe
+    from app.services.stripe_payment_service import StripePaymentService
+
+    stripe_service = StripePaymentService(db)
+    try:
+        session_data = stripe_service.create_checkout_session(
+            user_id=current_user.id,
+            plan_id=request.plan_id,
+            billing_cycle=request.billing_cycle,
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+        )
+        return CheckoutSessionResponse(
+            session_id=session_data["session_id"],
+            url=session_data["url"],
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post("/upgrade", response_model=SubscriptionResponse)
+def upgrade_subscription(
+    plan_id: int,
+    billing_cycle: BillingCycle,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upgrade subscription plan with proration."""
+    subscription_service = SubscriptionService(db)
+    feature_gate_service = FeatureGateService(db)
+    
+    try:
+        subscription = subscription_service.upgrade_subscription(
+            user_id=current_user.id,
+            new_plan_id=plan_id,
+            billing_cycle=billing_cycle
+        )
+        feature_gate_service.invalidate_user_plan_cache(current_user.id)
+        return subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/downgrade", response_model=SubscriptionResponse)
+def downgrade_subscription(
+    plan_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Downgrade subscription plan (effective at period end)."""
+    subscription_service = SubscriptionService(db)
+    
+    try:
+        subscription = subscription_service.downgrade_subscription(
+            user_id=current_user.id,
+            new_plan_id=plan_id
+        )
+        return subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/cancel", response_model=SubscriptionResponse)
+def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Cancel subscription (effective at period end)."""
+    subscription_service = SubscriptionService(db)
+    
+    try:
+        subscription = subscription_service.cancel_subscription(current_user.id)
+        return subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/reactivate", response_model=SubscriptionResponse)
+def reactivate_subscription(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Reactivate a canceled subscription."""
+    subscription_service = SubscriptionService(db)
+    
+    try:
+        subscription = subscription_service.reactivate_subscription(current_user.id)
+        return subscription
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

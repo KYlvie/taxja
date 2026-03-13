@@ -1,0 +1,134 @@
+.reports-page {
+  padding: var(--space-6);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 32px;
+  color: var(--color-text);
+}
+
+.page-subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--space-6);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.tab {
+  padding: 12px 24px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: -2px;
+  font-family: var(--font-sans);
+}
+
+.tab:hover {
+  color: var(--color-primary);
+  background: var(--color-primary-50);
+}
+
+.tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.tab-content {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.generate-tab .content-grid {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.generator-section {
+  position: sticky;
+  top: 24px;
+}
+
+.preview-section {
+  min-height: 600px;
+}
+
+.audit-tab .year-selector {
+  background: var(--color-surface);
+  padding: 16px 24px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.audit-tab .year-selector label {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.audit-tab .year-selector select {
+  padding: 10px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  cursor: pointer;
+  min-width: 120px;
+  transition: all var(--transition-fast);
+}
+
+.audit-tab .year-selector select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+@media (max-width: 1200px) {
+  .generate-tab .content-grid {
+    grid-template-columns: 1fr;
+  }
+  .generator-section { position: static; }
+}
+
+@media (max-width: 768px) {
+  .reports-page { padding: var(--space-4); }
+  .page-header h1 { font-size: 24px; }
+  .page-subtitle { font-size: 14px; }
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 10px 16px; font-size: 14px; white-space: nowrap; }
+  .audit-tab .year-selector { flex-direction: column; align-items: stretch; }
+  .audit-tab .year-selector select { width: 100%; }
+}
+
+@media print {
+  .tabs, .generator-section { display: none; }
+  .preview-section { width: 100%; }
+}

@@ -1,0 +1,251 @@
+{
+  "dashboard": {
+    "title": "Property Management - Celery Tasks",
+    "tags": ["celery", "property", "depreciation"],
+    "timezone": "Europe/Vienna",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Annual Depreciation - Success Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(depreciation_generated_total[5m])",
+            "legendFormat": "Depreciation Generated (per second)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Properties Created",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(property_created_total[5m])",
+            "legendFormat": "Properties Created (per second)",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rate"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Backfill Duration - P95",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(backfill_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95 Duration",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(backfill_duration_seconds_bucket[5m]))",
+            "legendFormat": "P50 Duration",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Backfill Duration - Average",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(backfill_duration_seconds_sum[5m]) / rate(backfill_duration_seconds_count[5m])",
+            "legendFormat": "Average Duration",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Celery Task Success Rate",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(celery_task_succeeded_total[5m]) / (rate(celery_task_succeeded_total[5m]) + rate(celery_task_failed_total[5m]))",
+            "legendFormat": "Success Rate",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Success Rate", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Celery Task Failures (24h)",
+        "type": "singlestat",
+        "gridPos": {"x": 12, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "increase(celery_task_failed_total[24h])",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "thresholds": "1,5",
+        "colors": ["#299c46", "#e5ac0e", "#bf1b00"]
+      },
+      {
+        "id": 7,
+        "title": "Annual Depreciation Last Run",
+        "type": "singlestat",
+        "gridPos": {"x": 18, "y": 16, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "time() - celery_task_last_success_timestamp{task_name=\"property.generate_annual_depreciation\"}",
+            "refId": "A"
+          }
+        ],
+        "format": "dtdurations",
+        "thresholds": "86400,604800",
+        "colors": ["#299c46", "#e5ac0e", "#bf1b00"]
+      },
+      {
+        "id": 8,
+        "title": "Total Properties Created",
+        "type": "singlestat",
+        "gridPos": {"x": 12, "y": 20, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(property_created_total)",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "colorBackground": false
+      },
+      {
+        "id": 9,
+        "title": "Total Depreciation Generated",
+        "type": "singlestat",
+        "gridPos": {"x": 18, "y": 20, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(depreciation_generated_total)",
+            "refId": "A"
+          }
+        ],
+        "format": "short",
+        "colorBackground": false
+      },
+      {
+        "id": 10,
+        "title": "Celery Worker Status",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "celery_worker_up",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "worker": "Worker Name",
+                "Value": "Status"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Depreciation by Year",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 32, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (year) (depreciation_generated_total)",
+            "legendFormat": "Year {{year}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Task Execution Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 40, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(celery_task_runtime_seconds_sum[5m]) / rate(celery_task_runtime_seconds_count[5m])",
+            "legendFormat": "{{task_name}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "text": "Prometheus",
+            "value": "Prometheus"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(celery_task_failed_total{task_name=\"property.generate_annual_depreciation\"}[5m]) > 0",
+          "name": "Annual Depreciation Failures",
+          "tagKeys": "task_name",
+          "textFormat": "Annual depreciation task failed",
+          "titleFormat": "Task Failure"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    }
+  }
+}

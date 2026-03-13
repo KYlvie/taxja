@@ -1,0 +1,27 @@
+
+EINKOMMENSTEUERERKLÄRUNG 2025
+E1 Formular
+
+Steuerpflichtige/r: Max Mustermann
+Steuernummer: 12-345/6789
+
+EINKÜNFTE:
+
+KZ 245 - Einkünfte aus nichtselbständiger Arbeit
+Betrag: 45.000,00 EUR
+
+KZ 350 - Einkünfte aus Vermietung und Verpachtung
+Betrag: 14.400,00 EUR
+
+Vermietungsdetails:
+Objekt: Hauptstraße 123, 1010 Wien
+Monatliche Miete: 1.200,00 EUR
+Jahresmiete: 14.400,00 EUR
+
+WERBUNGSKOSTEN:
+
+KZ 260 - Werbungskosten
+Betrag: 1.500,00 EUR
+
+Datum: 31.12.2025
+Unterschrift: Max Mustermann

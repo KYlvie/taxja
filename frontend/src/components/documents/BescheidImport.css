@@ -1,0 +1,139 @@
+.bescheid-import {
+  padding: 1.5rem;
+  max-width: 800px;
+}
+
+.bescheid-import h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.bescheid-desc {
+  color: var(--text-secondary, #666);
+  margin-bottom: 1.5rem;
+}
+
+.bescheid-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.bescheid-loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.bescheid-preview h4 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.bescheid-confidence {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  background: #e0f2fe;
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.bescheid-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bescheid-field {
+  background: var(--bg-secondary, #f8f9fa);
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.bescheid-field label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #666);
+  margin-bottom: 0.25rem;
+}
+
+.bescheid-field span {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.bescheid-field.highlight-green span {
+  color: #16a34a;
+}
+
+.bescheid-field.highlight-red span {
+  color: #dc2626;
+}
+
+.bescheid-section {
+  margin-bottom: 1.25rem;
+}
+
+.bescheid-section h5 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary, #555);
+}
+
+.bescheid-vv-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.bescheid-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.bescheid-success {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.bescheid-success h3 {
+  color: #16a34a;
+  margin-bottom: 0.5rem;
+}
+
+.bescheid-transactions {
+  margin: 1.5rem 0;
+  text-align: left;
+}
+
+.bescheid-txn-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary, #f8f9fa);
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+
+.bescheid-txn-row .txn-desc {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.bescheid-txn-row .txn-amount {
+  font-weight: 600;
+  font-size: 0.9rem;
+}

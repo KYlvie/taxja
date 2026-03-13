@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: taxja
+spec:
+  # Run daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: postgres-backup
+            image: postgres:15-alpine
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_FILE="/backups/taxja-$(date +%Y%m%d-%H%M%S).sql.gz"
+              echo "Starting backup to $BACKUP_FILE"
+              
+              # Create backup
+              pg_dump -h postgres -U $POSTGRES_USER -d $POSTGRES_DB | gzip > $BACKUP_FILE
+              
+              if [ $? -eq 0 ]; then
+                echo "Backup completed successfully"
+                
+                # Upload to S3/MinIO
+                mc alias set minio http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY
+                mc cp $BACKUP_FILE minio/taxja-backups/postgres/
+                
+                # Delete local backup
+                rm $BACKUP_FILE
+                
+                # Delete backups older than 30 days
+                find /backups -name "taxja-*.sql.gz" -mtime +30 -delete
+                
+                echo "Backup uploaded and old backups cleaned"
+              else
+                echo "Backup failed"
+                exit 1
+              fi
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: taxja
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: minio-access-key
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: taxja-secrets
+                  key: minio-secret-key
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: taxja
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi

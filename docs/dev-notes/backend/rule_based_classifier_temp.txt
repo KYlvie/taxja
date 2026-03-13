@@ -1,0 +1,211 @@
+"""Rule-based transaction classifier for Austrian merchants and patterns"""
+from decimal import Decimal
+from typing import Optional
+
+
+class ClassificationResult:
+    """Result of transaction classification"""
+    
+    def __init__(
+        self,
+        category: Optional[str],
+        confidence: Decimal,
+        category_type: Optional[str] = None
+    ):
+        self.category = category
+        self.confidence = confidence
+        self.category_type = category_type
+    
+    def __repr__(self):
+        return f"<ClassificationResult(category={self.category}, confidence={self.confidence})>"
+
+
+class RuleBasedClassifier:
+    """
+    Rule-based classifier for Austrian transactions.
+    
+    Uses pattern matching on transaction descriptions to classify transactions
+    based on common Austrian merchants and keywords.
+    """
+    
+    SUPERMARKETS = {
+        'billa': 'groceries',
+        'spar': 'groceries',
+        'hofer': 'groceries',
+        'lidl': 'groceries',
+        'merkur': 'groceries',
+        'penny': 'groceries',
+        'interspar': 'groceries',
+    }
+    
+    HARDWARE_STORES = {
+        'obi': 'maintenance',
+        'baumax': 'maintenance',
+        'bauhaus': 'maintenance',
+        'hornbach': 'maintenance',
+    }
+    
+    OFFICE_STORES = {
+        'libro': 'office_supplies',
+        'pagro': 'office_supplies',
+        'staples': 'office_supplies',
+    }
+    
+    ELECTRONICS_STORES = {
+        'mediamarkt': 'equipment',
+        'saturn': 'equipment',
+        'conrad': 'equipment',
+        'cyberport': 'equipment',
+    }
+    
+    INSURANCE_COMPANIES = {
+        'uniqa': 'insurance',
+        'wiener städtische': 'insurance',
+        'generali': 'insurance',
+        'allianz': 'insurance',
+        'wüstenrot': 'insurance',
+    }
+    
+    UTILITY_COMPANIES = {
+        'wien energie': 'utilities',
+        'evn': 'utilities',
+        'linz ag': 'utilities',
+        'salzburg ag': 'utilities',
+    }
+    
+    INCOME_KEYWORDS = {
+        'gehalt': 'employment',
+        'lohn': 'employment',
+        'salary': 'employment',
+        'miete': 'rental',
+        'rent': 'rental',
+        'honorar': 'self_employment',
+        'rechnung': 'self_employment',
+        'invoice': 'self_employment',
+        'dividende': 'capital_gains',
+        'zinsen': 'capital_gains',
+    }
+    
+    EXPENSE_KEYWORDS = {
+        'büro': 'office_supplies',
+        'office': 'office_supplies',
+        'reise': 'travel',
+        'travel': 'travel',
+        'hotel': 'travel',
+        'flug': 'travel',
+        'flight': 'travel',
+        'marketing': 'marketing',
+        'werbung': 'marketing',
+        'steuerberater': 'professional_services',
+        'rechtsanwalt': 'professional_services',
+        'anwalt': 'professional_services',
+        'notar': 'professional_services',
+        'versicherung': 'insurance',
+        'insurance': 'insurance',
+        'reparatur': 'maintenance',
+        'wartung': 'maintenance',
+        'maintenance': 'maintenance',
+        'grundsteuer': 'property_tax',
+        'property tax': 'property_tax',
+        'zinsen': 'loan_interest',
+        'interest': 'loan_interest',
+        'strom': 'utilities',
+        'gas': 'utilities',
+        'wasser': 'utilities',
+        'internet': 'utilities',
+        'telefon': 'utilities',
+    }
+    
+    def classify(self, transaction) -> ClassificationResult:
+        if not transaction.description:
+            return ClassificationResult(None, Decimal('0.0'))
+        
+        description_lower = transaction.description.lower()
+        transaction_type = str(transaction.type).lower() if hasattr(transaction.type, 'value') else str(transaction.type).lower()
+        
+        if 'income' in transaction_type:
+            return self._classify_income(description_lower)
+        else:
+            return self._classify_expense(description_lower)
+    
+    def _classify_income(self, description: str) -> ClassificationResult:
+        for keyword, category in self.INCOME_KEYWORDS.items():
+            if keyword in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.85'),
+                    category_type='income'
+                )
+        
+        return ClassificationResult(
+            category='employment',
+            confidence=Decimal('0.3'),
+            category_type='income'
+        )
+    
+    def _classify_expense(self, description: str) -> ClassificationResult:
+        for merchant, category in self.SUPERMARKETS.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.90'),
+                    category_type='expense'
+                )
+        
+        for merchant, category in self.HARDWARE_STORES.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.85'),
+                    category_type='expense'
+                )
+        
+        for merchant, category in self.OFFICE_STORES.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.85'),
+                    category_type='expense'
+                )
+        
+        for merchant, category in self.ELECTRONICS_STORES.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.85'),
+                    category_type='expense'
+                )
+        
+        for merchant, category in self.INSURANCE_COMPANIES.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.90'),
+                    category_type='expense'
+                )
+        
+        for merchant, category in self.UTILITY_COMPANIES.items():
+            if merchant in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.90'),
+                    category_type='expense'
+                )
+        
+        for keyword, category in self.EXPENSE_KEYWORDS.items():
+            if keyword in description:
+                return ClassificationResult(
+                    category=category,
+                    confidence=Decimal('0.75'),
+                    category_type='expense'
+                )
+        
+        return ClassificationResult(
+            category='other',
+            confidence=Decimal('0.3'),
+            category_type='expense'
+        )
+    
+    def get_confidence_score(self, transaction) -> Decimal:
+        result = self.classify(transaction)
+        return result.confidence

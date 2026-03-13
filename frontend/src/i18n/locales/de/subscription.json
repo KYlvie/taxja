@@ -1,0 +1,177 @@
+{
+  "pricing": {
+    "title": "Wählen Sie Ihren Plan",
+    "subtitle": "Starten Sie mit einer 14-tägigen Pro-Testversion und wählen Sie dann den Plan, der zu Ihnen passt",
+    "free": "Kostenlos",
+    "recommended": "Empfohlen",
+    "per_month": "/Monat",
+    "per_month_billed_yearly": "/Monat, jährlich abgerechnet",
+    "billed_as": "Abgerechnet als €{{amount}}/Jahr",
+    "trial_info": "Neue Benutzer erhalten eine 14-tägige Pro-Testversion. Keine Kreditkarte erforderlich.",
+    "support": "Fragen? Kontaktieren Sie uns unter support@taxja.com",
+    "billing": {
+      "monthly": "Monatlich",
+      "yearly": "Jährlich",
+      "save": "{{percent}}% sparen"
+    },
+    "plans": {
+      "free": {
+        "name": "Kostenlos"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "50 Transaktionen/Monat",
+      "basic_tax_calc": "Grundlegende Steuerberechnung",
+      "german_only": "Nur Deutsch",
+      "unlimited_transactions": "Unbegrenzte Transaktionen",
+      "ocr_limit": "20 OCR-Scans/Monat",
+      "full_tax_calc": "Vollständige Steuerberechnung",
+      "multi_language": "Mehrsprachig (DE, EN, ZH)",
+      "vat_svs": "USt & SVS Berechnungen",
+      "everything_plus": "Alles in Plus",
+      "unlimited_ocr": "Unbegrenzte OCR-Scans",
+      "ai_assistant": "KI-Steuerassistent",
+      "e1_generation": "E1-Formular Generierung",
+      "advanced_reports": "Erweiterte Berichte",
+      "priority_support": "Prioritäts-Support",
+      "api_access": "API-Zugriff",
+      "ocr": "OCR-Scanning"
+    },
+    "buttons": {
+      "get_started": "Loslegen",
+      "subscribe": "Abonnieren",
+      "upgrade": "Upgraden",
+      "start_trial": "14-Tage Pro-Test starten",
+      "loading": "Lädt..."
+    },
+    "errors": {
+      "checkout_failed": "Checkout konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
+    }
+  },
+  "subscription": {
+    "loading": "Lade Abonnement-Details...",
+    "manage": "Abonnement verwalten",
+    "manage_title": "Abonnement verwalten",
+    "current_plan": "Aktueller Plan",
+    "free": "Kostenlos",
+    "per_month": "/Monat",
+    "per_year": "/Jahr",
+    "not_applicable": "N/V",
+    "trial_days_remaining": "Noch {{days}} Tage",
+    "trial_message": "in Ihrer Pro-Testversion. Upgraden Sie, um alle Funktionen zu behalten!",
+    "trial_active": "Sie befinden sich in der kostenlosen Testphase bis {{date}}",
+    "period_start": "Periodenbeginn",
+    "period_end": "Periodenende",
+    "billing_cycle": "Abrechnungszyklus",
+    "next_billing": "Nächstes Abrechnungsdatum",
+    "canceling": "Wird gekündigt",
+    "ends_on": "Endet am {{date}}",
+    "cancel_notice": "Ihr Abonnement wird am Ende der aktuellen Periode gekündigt",
+    "usage_title": "Nutzung in dieser Periode",
+    "unlimited": "Unbegrenzt",
+    "quota_exceeded": "Überschritten",
+    "change_plan": "Plan ändern",
+    "reactivate": "Abonnement reaktivieren",
+    "cancel": "Abonnement kündigen",
+    "payment_method": "Zahlungsmethode",
+    "payment_managed": "Die Zahlungsmethode wird über Stripe verwaltet.",
+    "manage_payment": "Zahlungsmethode verwalten",
+    "billing_history": "Abrechnungsverlauf",
+    "no_history": "Noch kein Abrechnungsverlauf verfügbar.",
+    "cancel_confirm_title": "Abonnement kündigen?",
+    "cancel_confirm_message": "Ihr Abonnement bleibt bis {{date}} aktiv. Danach werden Sie auf den kostenlosen Plan herabgestuft.",
+    "confirm_cancel": "Ja, kündigen",
+    "change_plan_title": "Plan ändern",
+    "change_plan_message": "Sie werden zur Preisseite weitergeleitet, um einen neuen Plan auszuwählen.",
+    "continue": "Fortfahren",
+    "cancel_success": "Ihr Abonnement wird am Ende der aktuellen Periode gekündigt.",
+    "cancel_error": "Abonnement konnte nicht gekündigt werden. Bitte versuchen Sie es erneut.",
+    "reactivate_success": "Ihr Abonnement wurde reaktiviert!",
+    "reactivate_error": "Abonnement konnte nicht reaktiviert werden. Bitte versuchen Sie es erneut.",
+    "status": {
+      "active": "Aktiv",
+      "trialing": "Testversion",
+      "past_due": "Überfällig",
+      "canceled": "Gekündigt"
+    },
+    "billing": {
+      "monthly": "Monatlich",
+      "yearly": "Jährlich"
+    },
+    "resources": {
+      "transactions": "Transaktionen",
+      "ocr_scans": "OCR-Scans",
+      "ai_conversations": "KI-Gespräche"
+    }
+  },
+  "usage": {
+    "title": "Ressourcennutzung",
+    "resets_on": "Zurücksetzen: {{date}}",
+    "unlimited": "Unbegrenzt",
+    "quota_exceeded": "Kontingent überschritten",
+    "quota_warning": "Limit wird erreicht ({{percent}}%)",
+    "transactions": "Transaktionen",
+    "ocr_scans": "OCR-Scans",
+    "ai_conversations": "KI-Gespräche"
+  },
+  "upgrade": {
+    "title": "Auf {{plan}} upgraden",
+    "description": "{{feature}} ist im {{plan}}-Plan verfügbar. Upgraden Sie jetzt, um diese und weitere Funktionen freizuschalten!",
+    "benefits_title": "Was Sie erhalten:",
+    "button": "Jetzt upgraden",
+    "cancel": "Vielleicht später",
+    "trial_note": "✨ Starten Sie mit einer 14-tägigen kostenlosen Testversion des Pro-Plans",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "OCR-Scanning",
+      "unlimited_ocr": "Unbegrenzte OCR",
+      "ai_assistant": "KI-Steuerassistent",
+      "e1_generation": "E1-Formular Generierung",
+      "advanced_reports": "Erweiterte Berichte",
+      "api_access": "API-Zugriff",
+      "unlimited_transactions": "Unbegrenzte Transaktionen"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Unbegrenzte Transaktionen",
+        "2": "20 OCR-Scans pro Monat",
+        "3": "Vollständige Steuerberechnungen",
+        "4": "Mehrsprachiger Support",
+        "5": "USt & SVS Berechnungen"
+      },
+      "pro": {
+        "1": "Unbegrenzte OCR-Scans",
+        "2": "KI-gestützte Steuerberatung",
+        "3": "Automatische E1-Formular Generierung",
+        "4": "Erweiterte Analysen und Berichte",
+        "5": "Prioritäts-Kundensupport"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Zahlung erfolgreich!",
+    "success_message": "Vielen Dank für Ihr Abonnement! Ihre Zahlung wurde erfolgreich verarbeitet.",
+    "plan_activated": "Ihr {{plan}}-Plan ist jetzt aktiv!",
+    "detail_1": "Voller Zugriff auf alle Funktionen",
+    "detail_2": "Abrechnung beginnt heute",
+    "detail_3": "Jederzeit kündbar",
+    "session_id": "Sitzungs-ID",
+    "continue_dashboard": "Zum Dashboard",
+    "view_subscription": "Abonnement-Details anzeigen",
+    "support": "Fragen? Kontaktieren Sie uns unter support@taxja.com"
+  },
+  "common": {
+    "back": "Zurück",
+    "cancel": "Abbrechen",
+    "nevermind": "Doch nicht"
+  }
+}

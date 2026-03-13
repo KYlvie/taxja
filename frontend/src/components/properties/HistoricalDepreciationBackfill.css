@@ -1,0 +1,315 @@
+/* Historical Depreciation Backfill Component Styles */
+
+.historical-backfill-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.backfill-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.notice-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.notice-content {
+  flex: 1;
+}
+
+.notice-content h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+.notice-content p {
+  margin: 0;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+.backfill-notice .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Error Message */
+.error-message {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8d7da;
+  border: 1px solid #f5c2c7;
+  border-radius: 4px;
+  color: #842029;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.error-icon {
+  font-size: 1.2rem;
+}
+
+/* Modal Styles */
+.backfill-modal {
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.backfill-modal .modal-body {
+  padding: 1.5rem;
+}
+
+/* Warning Box */
+.warning-box {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffecb5;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.warning-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-content strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #664d03;
+}
+
+.warning-content p {
+  margin: 0;
+  color: #856404;
+  line-height: 1.5;
+}
+
+/* Preview Description */
+.preview-description {
+  margin-bottom: 1.5rem;
+}
+
+.preview-description p {
+  margin: 0;
+  color: #495057;
+  line-height: 1.6;
+}
+
+/* Backfill Table */
+.backfill-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.backfill-table thead {
+  background: #f8f9fa;
+}
+
+.backfill-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+}
+
+.backfill-table tbody tr {
+  border-bottom: 1px solid #dee2e6;
+}
+
+.backfill-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.backfill-table td {
+  padding: 0.75rem 1rem;
+  color: #212529;
+}
+
+.backfill-table td.amount {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.backfill-table tfoot {
+  background: #f8f9fa;
+  border-top: 2px solid #dee2e6;
+}
+
+.backfill-table tfoot td {
+  padding: 1rem;
+  font-size: 1.05rem;
+}
+
+.backfill-table .total-row td {
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Success View */
+.backfill-success {
+  text-align: center;
+}
+
+.success-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.success-message {
+  font-size: 1.1rem;
+  color: #155724;
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.backfill-summary {
+  text-align: left;
+}
+
+.backfill-summary h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* No Backfill Needed */
+.no-backfill {
+  text-align: center;
+  padding: 2rem;
+}
+
+.no-backfill .info-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.no-backfill p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 1.05rem;
+}
+
+/* Loading Spinner */
+.loading-spinner-small {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 0.5rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .backfill-notice {
+    flex-direction: column;
+  }
+
+  .backfill-notice .btn {
+    width: 100%;
+  }
+
+  .backfill-modal {
+    max-width: 95%;
+    margin: 1rem;
+  }
+
+  .backfill-table {
+    font-size: 0.9rem;
+  }
+
+  .backfill-table th,
+  .backfill-table td {
+    padding: 0.5rem;
+  }
+
+  .warning-box {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* Dark Mode Support (if needed) */
+@media (prefers-color-scheme: dark) {
+  .historical-backfill-section {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+
+  .notice-content h3 {
+    color: #e2e8f0;
+  }
+
+  .notice-content p {
+    color: #a0aec0;
+  }
+
+  .backfill-table {
+    background: #2d3748;
+  }
+
+  .backfill-table thead {
+    background: #1a202c;
+  }
+
+  .backfill-table th {
+    color: #e2e8f0;
+    border-bottom-color: #4a5568;
+  }
+
+  .backfill-table tbody tr {
+    border-bottom-color: #4a5568;
+  }
+
+  .backfill-table td {
+    color: #e2e8f0;
+  }
+
+  .backfill-table tfoot {
+    background: #1a202c;
+    border-top-color: #4a5568;
+  }
+
+  .warning-box {
+    background: #744210;
+    border-color: #975a16;
+  }
+
+  .warning-content strong,
+  .warning-content p {
+    color: #fef3c7;
+  }
+}

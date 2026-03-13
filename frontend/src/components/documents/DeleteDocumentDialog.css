@@ -1,0 +1,221 @@
+/* Delete Document Dialog Styles */
+
+.delete-dialog {
+  max-width: 600px;
+  width: 90%;
+}
+
+.delete-dialog .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* Related Data Section */
+.related-data-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+}
+
+.warning-text {
+  font-weight: 600;
+  color: #856404;
+  margin-bottom: 1rem;
+}
+
+.related-item {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ffe69c;
+}
+
+.related-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.related-item strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #856404;
+}
+
+.related-details {
+  padding-left: 1rem;
+  color: #664d03;
+}
+
+.related-meta {
+  font-size: 0.875rem;
+  color: #997404;
+  margin-top: 0.25rem;
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+}
+
+.transaction-amount {
+  font-weight: 500;
+}
+
+.more-items {
+  font-size: 0.875rem;
+  font-style: italic;
+  color: #997404;
+  margin-top: 0.5rem;
+}
+
+/* Delete Options */
+.delete-options {
+  margin-bottom: 1.5rem;
+}
+
+.delete-options h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.delete-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-option:hover {
+  border-color: #2563eb;
+  background: #f8f9fa;
+}
+
+.delete-option.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.delete-option.destructive:hover {
+  border-color: #dc3545;
+}
+
+.delete-option.destructive.selected {
+  border-color: #dc3545;
+  background: #fff5f5;
+}
+
+.delete-option input[type="radio"] {
+  margin-top: 0.25rem;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.option-content {
+  flex: 1;
+}
+
+.option-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: #333;
+}
+
+.option-description {
+  font-size: 0.875rem;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* Warning and Info Boxes */
+.warning-box {
+  padding: 0.75rem 1rem;
+  background: #fff5f5;
+  border: 1px solid #dc3545;
+  border-radius: 6px;
+  color: #721c24;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.info-box {
+  padding: 0.75rem 1rem;
+  background: #e7f3ff;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  color: #004085;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #2563eb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Modal Footer */
+.delete-dialog .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dee2e6;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .delete-dialog {
+    width: 95%;
+    max-width: none;
+  }
+
+  .delete-dialog .modal-body {
+    max-height: 60vh;
+  }
+
+  .option-title {
+    font-size: 0.9rem;
+  }
+
+  .option-description {
+    font-size: 0.8rem;
+  }
+}

@@ -1,0 +1,169 @@
+.camera-capture {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+}
+
+.camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+}
+
+.camera-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.camera-close,
+.camera-switch {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background var(--transition-fast);
+}
+
+.camera-close:hover,
+.camera-switch:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.camera-viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.camera-frame {
+  width: 90%;
+  max-width: 500px;
+  aspect-ratio: 3/4;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+}
+
+.camera-error {
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
+.camera-error p {
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.camera-error button {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.camera-controls {
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.camera-tips {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+.camera-tips p { margin: 4px 0; }
+
+.camera-capture-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast);
+}
+
+.camera-capture-button:active {
+  transform: scale(0.95);
+}
+
+.camera-capture-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.camera-capture-ring {
+  width: 80px;
+  height: 80px;
+  border: 4px solid white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.camera-capture-inner {
+  width: 60px;
+  height: 60px;
+  background: white;
+  border-radius: 50%;
+}
+
+@media (orientation: landscape) {
+  .camera-capture { flex-direction: row; }
+  .camera-header { flex-direction: column; width: auto; }
+  .camera-controls { width: auto; height: 100%; justify-content: center; }
+  .camera-frame { aspect-ratio: 4/3; }
+}
+
+@media (min-width: 768px) {
+  .camera-frame { max-width: 600px; }
+}

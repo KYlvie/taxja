@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>重置向导</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>重置快速开始向导</h1>
+    <button onclick="resetWizard()">点击重置</button>
+    <p id="status"></p>
+    
+    <script>
+        function resetWizard() {
+            localStorage.removeItem('taxja_wizard_dismissed');
+            document.getElementById('status').textContent = '✅ 已重置！刷新仪表板页面即可看到向导。';
+        }
+    </script>
+</body>
+</html>

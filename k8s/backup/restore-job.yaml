@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-restore
+  namespace: taxja
+spec:
+  template:
+    spec:
+      containers:
+      - name: postgres-restore
+        image: postgres:15-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting database restore"
+          
+          # List available backups
+          echo "Available backups:"
+          ls -lh /backups/
+          
+          # Restore from specified backup file
+          if [ -z "$BACKUP_FILE" ]; then
+            echo "ERROR: BACKUP_FILE environment variable not set"
+            exit 1
+          fi
+          
+          if [ ! -f "/backups/$BACKUP_FILE" ]; then
+            echo "ERROR: Backup file /backups/$BACKUP_FILE not found"
+            exit 1
+          fi
+          
+          echo "Restoring from /backups/$BACKUP_FILE"
+          
+          # Drop existing connections
+          psql -h postgres -U $POSTGRES_USER -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$POSTGRES_DB' AND pid <> pg_backend_pid();"
+          
+          # Drop and recreate database
+          psql -h postgres -U $POSTGRES_USER -d postgres -c "DROP DATABASE IF EXISTS $POSTGRES_DB;"
+          psql -h postgres -U $POSTGRES_USER -d postgres -c "CREATE DATABASE $POSTGRES_DB;"
+          
+          # Restore backup
+          gunzip -c /backups/$BACKUP_FILE | psql -h postgres -U $POSTGRES_USER -d $POSTGRES_DB
+          
+          if [ $? -eq 0 ]; then
+            echo "Database restore completed successfully"
+          else
+            echo "Database restore failed"
+            exit 1
+          fi
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: taxja-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: taxja-secrets
+              key: postgres-password
+        - name: POSTGRES_DB
+          value: taxja
+        - name: BACKUP_FILE
+          value: ""  # Set this to the backup file name when running the job
+        volumeMounts:
+        - name: backup-storage
+          mountPath: /backups
+      restartPolicy: Never
+      volumes:
+      - name: backup-storage
+        persistentVolumeClaim:
+          claimName: backup-pvc
+  backoffLimit: 3

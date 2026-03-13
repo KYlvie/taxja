@@ -1,0 +1,27 @@
+
+EINKOMMENSTEUERERKLÄRUNG 2025
+E1 Formular
+
+Steuerpflichtige/r: Max Mustermann
+Steuernummer: 12-345/6789
+
+EINKÜNFTE:
+
+KZ 245 - Einkünfte aus nichtselbständiger Arbeit
+Betrag: 48.000,00 EUR
+
+KZ 350 - Einkünfte aus Vermietung und Verpachtung
+Betrag: 18.000,00 EUR
+
+Vermietungsdetails:
+Objekt: Linzer Straße 78, 5020 Salzburg
+Monatliche Miete: 1.500,00 EUR
+Jahresmiete: 18.000,00 EUR
+
+WERBUNGSKOSTEN:
+
+KZ 260 - Werbungskosten
+Betrag: 1.800,00 EUR
+
+Datum: 31.12.2025
+Unterschrift: Max Mustermann

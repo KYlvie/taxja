@@ -1,0 +1,123 @@
+.dashboard-overview {
+  margin-bottom: 28px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.overview-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border-light);
+  display: flex;
+  gap: 16px;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.overview-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+}
+
+.overview-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-icon {
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-content h3 {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.card-content .amount {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  font-family: var(--font-sans);
+}
+
+.card-content .amount.highlight {
+  color: var(--color-primary);
+}
+
+.card-content .subtitle {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.tax-breakdown {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tax-breakdown .paid {
+  color: var(--color-success);
+}
+
+.tax-breakdown .remaining {
+  color: var(--color-warning);
+}
+
+/* Card accent colors */
+.overview-card.income::before { background: var(--color-success); }
+.overview-card.income .card-icon { background: var(--color-success-light); }
+
+.overview-card.expenses::before { background: var(--color-danger); }
+.overview-card.expenses .card-icon { background: var(--color-danger-light); }
+
+.overview-card.tax::before { background: var(--color-warning); }
+.overview-card.tax .card-icon { background: var(--color-warning-light); }
+
+.overview-card.net-income::before { background: var(--color-primary); }
+.overview-card.net-income .card-icon { background: var(--color-primary-50); }
+
+.overview-card.vat-threshold::before { background: #8b5cf6; }
+.overview-card.vat-threshold .card-icon { background: #f5f3ff; }
+
+@media (max-width: 768px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .card-content .amount {
+    font-size: 1.4rem;
+  }
+}
