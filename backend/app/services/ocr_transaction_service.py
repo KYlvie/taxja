@@ -1,7 +1,7 @@
 """Service for creating transaction suggestions from OCR data"""
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import logging
 
@@ -25,41 +25,81 @@ class OCRTransactionService:
         self, document_id: int, user_id: int
     ) -> Optional[Dict[str, Any]]:
         """
-        Create a transaction suggestion from OCR data
-        
-        Args:
-            document_id: ID of document with OCR results
-            user_id: User ID for classification context
-            
-        Returns:
-            Dictionary with transaction suggestion or None if not enough data
+        Create a transaction suggestion from OCR data.
+        Returns the first (or only) suggestion. For split receipts, use
+        create_split_suggestions() instead.
         """
-        # Get document with OCR results
+        suggestions = self.create_split_suggestions(document_id, user_id)
+        if not suggestions:
+            return None
+        return suggestions[0]
+
+    def create_split_suggestions(
+        self, document_id: int, user_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Create transaction suggestions from OCR data. If the receipt contains
+        a mix of deductible and non-deductible items (e.g. office supplies +
+        personal groceries on one Billa receipt), AI splits it into two
+        separate suggestions with correct amounts.
+
+        Returns:
+            List of 1-2 suggestion dicts, or empty list if not enough data.
+        """
         document = (
             self.db.query(Document)
             .filter(Document.id == document_id, Document.user_id == user_id)
             .first()
         )
-        
+
         if not document or not document.ocr_result:
             logger.warning(f"Document {document_id} not found or has no OCR results")
-            return None
-        
+            return []
+
         ocr_data = document.ocr_result
-        
-        # Extract transaction data from OCR
         transaction_data = self._extract_transaction_data(document, ocr_data)
-        
+
         if not transaction_data:
             logger.warning(f"Could not extract transaction data from document {document_id}")
-            return None
-        
-        # Classify transaction
+            return []
+
         classification = self._classify_from_ocr(document, transaction_data, user_id)
-        
-        # Build suggestion
-        suggestion = {
-            "document_id": document_id,
+
+        # Check if this is a NEEDS_AI category that might benefit from split analysis
+        doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
+        line_items = ocr_data.get("line_items", [])
+
+        if (
+            doc_type in [DocumentType.RECEIPT.value, DocumentType.INVOICE.value]
+            and line_items
+            and len(line_items) >= 2
+        ):
+            from app.models.user import User
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user:
+                user_type_val = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type or "employee")
+                # Only attempt split for business user types
+                if user_type_val in ("self_employed", "mixed", "gmbh"):
+                    split = self.deductibility_checker.ai_split_analyze(
+                        user_type_val, ocr_data, transaction_data.get("description", "")
+                    )
+                    if split and split.get("has_split"):
+                        return self._build_split_suggestions(
+                            document, transaction_data, classification, split, ocr_data
+                        )
+
+        # No split needed — return single suggestion
+        suggestion = self._build_single_suggestion(
+            document, transaction_data, classification, ocr_data
+        )
+        return [suggestion]
+
+    def _build_single_suggestion(
+        self, document, transaction_data, classification, ocr_data
+    ) -> Dict[str, Any]:
+        """Build a single transaction suggestion dict."""
+        return {
+            "document_id": document.id,
             "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
             "transaction_type": classification["transaction_type"],
             "amount": str(transaction_data["amount"]),
@@ -72,8 +112,92 @@ class OCRTransactionService:
             "needs_review": (float(classification["confidence"]) < 0.7 if classification["confidence"] else True) or classification.get("requires_review", False),
             "extracted_fields": {k: (float(v) if isinstance(v, Decimal) else v.isoformat() if isinstance(v, (datetime,)) else v) for k, v in ocr_data.items()} if ocr_data else {},
         }
-        
-        return suggestion
+
+    def _build_split_suggestions(
+        self, document, transaction_data, classification, split, ocr_data
+    ) -> List[Dict[str, Any]]:
+        """Build two suggestions from AI split analysis."""
+        suggestions = []
+        merchant = ocr_data.get("merchant", "")
+        base_date = transaction_data["date"]
+        date_str = base_date.isoformat() if base_date and hasattr(base_date, 'isoformat') else str(base_date) if base_date else None
+
+        deduct_amt = Decimal(str(split["deductible_amount"]))
+        non_deduct_amt = Decimal(str(split["non_deductible_amount"]))
+
+        # Sanity check: amounts should roughly add up to total
+        total = transaction_data["amount"]
+        split_total = deduct_amt + non_deduct_amt
+        diff = abs(split_total - total)
+        if diff > Decimal("2.0"):
+            # AI amounts way off — fall back to single suggestion
+            logger.warning(
+                "Split amounts (%.2f + %.2f = %.2f) don't match total %.2f (diff=%.2f), skipping split",
+                deduct_amt, non_deduct_amt, split_total, total, diff,
+            )
+            return [self._build_single_suggestion(document, transaction_data, classification, ocr_data)]
+
+        # Auto-correct small rounding differences by adjusting the larger portion
+        if diff > Decimal("0.01"):
+            if deduct_amt >= non_deduct_amt:
+                deduct_amt = total - non_deduct_amt
+            else:
+                non_deduct_amt = total - deduct_amt
+            logger.info("Adjusted split amounts to match total: deductible=%.2f, non-deductible=%.2f", deduct_amt, non_deduct_amt)
+
+        deduct_reason = split.get("deductible_reason", "Betriebsausgabe")
+        non_deduct_reason = split.get("non_deductible_reason", "Private Lebensführung")
+        tax_tip = split.get("tax_tip", "")
+
+        # 1) Deductible portion
+        if deduct_amt > 0:
+            deduct_items = split.get("deductible_items", "")
+            desc = f"{merchant}: {deduct_items}" if deduct_items else f"{merchant} (Betriebsausgabe)"
+            reason = deduct_reason
+            if tax_tip:
+                reason = f"{deduct_reason} | {tax_tip}"
+            suggestions.append({
+                "document_id": document.id,
+                "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
+                "transaction_type": TransactionType.EXPENSE.value,
+                "amount": str(deduct_amt),
+                "date": date_str,
+                "description": desc[:500],
+                "category": classification.get("category", "other"),
+                "is_deductible": True,
+                "deduction_reason": reason[:500],
+                "confidence": 0.85,
+                "needs_review": False,
+                "extracted_fields": {},
+            })
+
+        # 2) Non-deductible portion
+        if non_deduct_amt > 0:
+            non_deduct_items = split.get("non_deductible_items", "")
+            desc = f"{merchant}: {non_deduct_items}" if non_deduct_items else f"{merchant} (Privat)"
+            suggestions.append({
+                "document_id": document.id,
+                "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
+                "transaction_type": TransactionType.EXPENSE.value,
+                "amount": str(non_deduct_amt),
+                "date": date_str,
+                "description": desc[:500],
+                "category": "groceries",
+                "is_deductible": False,
+                "deduction_reason": non_deduct_reason[:500],
+                "confidence": 0.85,
+                "needs_review": False,
+                "extracted_fields": {},
+            })
+
+        if not suggestions:
+            return [self._build_single_suggestion(document, transaction_data, classification, ocr_data)]
+
+        logger.info(
+            "Split receipt %d into %d transactions: deductible=€%.2f, non-deductible=€%.2f",
+            document.id, len(suggestions), deduct_amt, non_deduct_amt,
+        )
+        return suggestions
 
     def create_transaction_from_suggestion(
         self, suggestion: Dict[str, Any], user_id: int

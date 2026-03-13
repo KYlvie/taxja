@@ -406,3 +406,128 @@ class DeductibilityChecker:
         if result.max_amount:
             lines.append(f"Max amount: €{result.max_amount:.2f}")
         return "\n".join(lines)
+
+    def ai_split_analyze(
+        self,
+        user_type: str,
+        ocr_data: dict,
+        description: str = "",
+    ) -> Optional[dict]:
+        """
+        Ask AI to split a mixed receipt into deductible vs non-deductible items.
+
+        Returns dict like:
+        {
+            "has_split": True/False,
+            "deductible_amount": 12.50,
+            "non_deductible_amount": 8.30,
+            "deductible_items": "Druckerpapier A4, Kugelschreiber",
+            "non_deductible_items": "Milch, Butter, Toastbrot",
+            "deductible_reason": "...",
+            "non_deductible_reason": "...",
+            "tax_tip": "..."
+        }
+        Returns None if AI unavailable or no line items to split.
+        """
+        line_items = ocr_data.get("line_items", [])
+        if not line_items or not isinstance(line_items, list) or len(line_items) < 2:
+            return None
+
+        try:
+            from app.services.llm_service import get_llm_service
+
+            llm = get_llm_service()
+            if not llm.is_available:
+                return None
+
+            ut_labels = {
+                "self_employed": "Selbständig/Einzelunternehmer",
+                "mixed": "Angestellt + selbständige Nebentätigkeit",
+                "gmbh": "GmbH-Geschäftsführer",
+                "landlord": "Vermieter",
+                "employee": "Angestellter",
+            }
+
+            merchant = ocr_data.get("merchant", "unknown")
+            items_text = "\n".join(
+                f"- {it.get('name', '?')} €{it.get('total_price', '?')}"
+                for it in line_items[:20]
+            )
+
+            system_prompt = (
+                "You are an Austrian tax expert. A business user bought multiple items "
+                "on one receipt. Classify EACH item as deductible (business) or "
+                "non-deductible (personal).\n\n"
+                "Rules:\n"
+                "- Office supplies, cleaning products, printer paper = deductible\n"
+                "- Coffee, drinks, snacks for office/clients = deductible (Bewirtung)\n"
+                "- Personal food (bread, milk, butter, meat) = NOT deductible\n"
+                "- Hygiene items for personal use = NOT deductible\n"
+                "- If ALL items are one type, set has_split=false\n\n"
+                "IMPORTANT: Calculate amounts by SUMMING the exact prices shown. "
+                "deductible_amount + non_deductible_amount MUST equal the receipt total.\n\n"
+                "Reply ONLY with JSON:\n"
+                '{"has_split": true/false, '
+                '"deductible_amount": number, "non_deductible_amount": number, '
+                '"deductible_items": "comma-separated item names", '
+                '"non_deductible_items": "comma-separated item names", '
+                '"deductible_reason": "short German reason", '
+                '"non_deductible_reason": "short German reason", '
+                '"tax_tip": "German advice for the user"}'
+            )
+
+            user_prompt = (
+                f"User type: {ut_labels.get(user_type.lower(), user_type)}\n"
+                f"Merchant: {merchant}\n"
+                f"Items:\n{items_text}\n"
+                f"\nClassify each item and calculate split amounts."
+            )
+
+            response = llm.generate_simple(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+                max_tokens=400,
+            )
+
+            return self._parse_split_response(response)
+
+        except Exception as e:
+            logger.warning("AI split analysis failed: %s", e)
+            return None
+
+    def _parse_split_response(self, response: str) -> Optional[dict]:
+        """Parse the split analysis JSON from AI."""
+        try:
+            text = response.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[-1]
+            if text.endswith("```"):
+                text = text.rsplit("```", 1)[0]
+            text = text.strip()
+
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start < 0 or end <= start:
+                return None
+
+            data = json.loads(text[start:end])
+
+            # Validate required fields
+            if "has_split" not in data:
+                return None
+
+            return {
+                "has_split": bool(data.get("has_split", False)),
+                "deductible_amount": float(data.get("deductible_amount", 0)),
+                "non_deductible_amount": float(data.get("non_deductible_amount", 0)),
+                "deductible_items": str(data.get("deductible_items", "")),
+                "non_deductible_items": str(data.get("non_deductible_items", "")),
+                "deductible_reason": str(data.get("deductible_reason", "")),
+                "non_deductible_reason": str(data.get("non_deductible_reason", "")),
+                "tax_tip": str(data.get("tax_tip", "")),
+            }
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            logger.warning("Failed to parse AI split response: %s", e)
+            return None
+

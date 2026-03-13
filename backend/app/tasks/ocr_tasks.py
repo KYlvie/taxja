@@ -139,26 +139,31 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
             try:
                 from app.services.ocr_transaction_service import OCRTransactionService
                 ocr_transaction_service = OCRTransactionService(db)
-                suggestion = ocr_transaction_service.create_transaction_suggestion(
+                suggestions = ocr_transaction_service.create_split_suggestions(
                     document_id, document.user_id
                 )
-                if suggestion:
-                    logger.info(f"Created transaction suggestion for document {document_id}")
-                    try:
-                        transaction = ocr_transaction_service.create_transaction_from_suggestion(
-                            suggestion, document.user_id
-                        )
-                        logger.info(
-                            f"Auto-created transaction {transaction.id} from document "
-                            f"{document_id}"
-                        )
-                        result_dict["transaction_suggestion"] = suggestion
-                        result_dict["transaction_created"] = True
-                        result_dict["transaction_id"] = transaction.id
-                    except Exception as e:
-                        logger.warning(f"Could not auto-create transaction from document {document_id}: {e}")
-                        result_dict["transaction_suggestion"] = suggestion
-                        result_dict["transaction_created"] = False
+                if suggestions:
+                    logger.info(
+                        f"Created {len(suggestions)} transaction suggestion(s) for document {document_id}"
+                    )
+                    created_ids = []
+                    for suggestion in suggestions:
+                        try:
+                            transaction = ocr_transaction_service.create_transaction_from_suggestion(
+                                suggestion, document.user_id
+                            )
+                            created_ids.append(transaction.id)
+                            logger.info(
+                                f"Auto-created transaction {transaction.id} from document "
+                                f"{document_id} (deductible={suggestion.get('is_deductible')})"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Could not auto-create transaction from document {document_id}: {e}")
+                    result_dict["transaction_suggestion"] = suggestions[0]
+                    result_dict["transaction_created"] = len(created_ids) > 0
+                    result_dict["transaction_id"] = created_ids[0] if created_ids else None
+                    if len(created_ids) > 1:
+                        result_dict["split_transaction_ids"] = created_ids
             except Exception as e:
                 logger.warning(f"Could not create transaction suggestion: {e}")
 
