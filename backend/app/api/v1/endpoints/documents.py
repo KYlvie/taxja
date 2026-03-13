@@ -33,7 +33,7 @@ from app.schemas.ocr_review import (
     OCRRetakeGuidance,
 )
 from app.services.storage_service import StorageService
-from app.tasks.ocr_tasks import process_document_ocr, run_ocr_sync
+from app.tasks.ocr_tasks import process_document_ocr, run_ocr_sync, run_ocr_pipeline
 from app.core.security import get_current_user
 
 router = APIRouter()
@@ -136,11 +136,15 @@ async def upload_document(
     # Run OCR in background via FastAPI BackgroundTasks (reliable, not killed on reload)
     def _background_ocr(doc_id: int):
         try:
-            logger.info(f"Background OCR starting for document {doc_id}")
-            run_ocr_sync(doc_id)
-            logger.info(f"Background OCR completed for document {doc_id}")
+            logger.info(f"Background OCR pipeline starting for document {doc_id}")
+            run_ocr_pipeline(doc_id)
+            logger.info(f"Background OCR pipeline completed for document {doc_id}")
         except Exception as ocr_err:
-            logger.error(f"Background OCR failed for document {doc_id}: {ocr_err}")
+            logger.warning(f"Pipeline failed for document {doc_id}, falling back to legacy: {ocr_err}")
+            try:
+                run_ocr_sync(doc_id)
+            except Exception as legacy_err:
+                logger.error(f"Legacy OCR also failed for document {doc_id}: {legacy_err}")
 
     background_tasks.add_task(_background_ocr, document.id)
     
@@ -227,11 +231,15 @@ async def batch_upload_documents(
             # Run OCR in background via FastAPI BackgroundTasks
             def _batch_ocr(doc_id: int):
                 try:
-                    logger.info(f"Background OCR starting for batch document {doc_id}")
-                    run_ocr_sync(doc_id)
-                    logger.info(f"Background OCR completed for batch document {doc_id}")
+                    logger.info(f"Background OCR pipeline starting for batch document {doc_id}")
+                    run_ocr_pipeline(doc_id)
+                    logger.info(f"Background OCR pipeline completed for batch document {doc_id}")
                 except Exception as ocr_err:
-                    logger.error(f"Background OCR failed for batch document {doc_id}: {ocr_err}")
+                    logger.warning(f"Pipeline failed for batch doc {doc_id}, falling back: {ocr_err}")
+                    try:
+                        run_ocr_sync(doc_id)
+                    except Exception as legacy_err:
+                        logger.error(f"Legacy OCR also failed for batch doc {doc_id}: {legacy_err}")
 
             background_tasks.add_task(_batch_ocr, document.id)
             
@@ -1346,9 +1354,13 @@ async def retry_ocr_processing(
 
         def _run_ocr_retry(doc_id: int):
             try:
-                run_ocr_sync(doc_id)
+                run_ocr_pipeline(doc_id)
             except Exception as ocr_err:
-                logger.error(f"Background OCR retry failed for document {doc_id}: {ocr_err}")
+                logger.warning(f"Pipeline retry failed for doc {doc_id}, falling back: {ocr_err}")
+                try:
+                    run_ocr_sync(doc_id)
+                except Exception as legacy_err:
+                    logger.error(f"Legacy OCR retry also failed for doc {doc_id}: {legacy_err}")
 
         thread = threading.Thread(target=_run_ocr_retry, args=(document.id,), daemon=True)
         thread.start()

@@ -33,6 +33,91 @@ class OCRTask(Task):
         logger.error(f"Traceback: {einfo}")
 
 
+def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
+    """
+    Process document through the AI-orchestrated pipeline.
+
+    Uses DocumentPipelineOrchestrator for:
+      - Multi-signal classification (regex → filename → LLM)
+      - Cross-field validation
+      - Confidence-based review gating
+      - Suggestion building (never auto-creates for high-value docs)
+
+    After pipeline completes, creates transactions only for
+    receipts/invoices with high confidence.
+    """
+    from app.db.base import SessionLocal
+    from app.services.document_pipeline_orchestrator import (
+        DocumentPipelineOrchestrator,
+        ConfidenceLevel,
+        PipelineStage,
+    )
+    from app.models.document import Document, DocumentType as DBDocumentType
+
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
+    try:
+        orchestrator = DocumentPipelineOrchestrator(db)
+        pipeline_result = orchestrator.process_document(document_id)
+
+        if pipeline_result.error:
+            logger.error(
+                f"Pipeline error for document {document_id}: {pipeline_result.error}"
+            )
+            # Mark document as processed so frontend stops polling
+            try:
+                document = db.query(Document).filter(Document.id == document_id).first()
+                if document and not document.processed_at:
+                    document.processed_at = datetime.utcnow()
+                    document.confidence_score = 0.0
+                    db.commit()
+            except Exception:
+                pass
+            return pipeline_result.to_dict()
+
+        # Auto-create transactions only for receipt/invoice with high confidence
+        # and NOT requiring user confirmation
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document and document.document_type not in (
+            DBDocumentType.PURCHASE_CONTRACT,
+            DBDocumentType.RENTAL_CONTRACT,
+        ):
+            tx_suggestions = [
+                s for s in pipeline_result.suggestions
+                if s and s.get("type") not in ("create_property", "create_recurring_income")
+            ]
+            if tx_suggestions and pipeline_result.confidence_level == ConfidenceLevel.HIGH:
+                created_ids = orchestrator.create_transactions_from_suggestions(
+                    document_id, document.user_id
+                )
+                result_dict = pipeline_result.to_dict()
+                result_dict["transaction_created"] = len(created_ids) > 0
+                result_dict["transaction_id"] = created_ids[0] if created_ids else None
+                if len(created_ids) > 1:
+                    result_dict["split_transaction_ids"] = created_ids
+                return result_dict
+
+        return pipeline_result.to_dict()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Pipeline failed for document {document_id}: {e}")
+        # Mark document as processed even on failure
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document and not document.processed_at:
+                document.processed_at = datetime.utcnow()
+                document.confidence_score = 0.0
+                db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        if own_session:
+            db.close()
+
+
 def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
     """
     Run OCR processing synchronously (used as fallback when Celery is unavailable).
@@ -604,9 +689,16 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
 def process_document_ocr(self, document_id: int) -> Dict[str, Any]:
     """
     Process single document OCR in background.
-    Delegates to run_ocr_sync which contains the actual logic.
+    Uses the AI-orchestrated pipeline for classification, validation, and suggestions.
+    Falls back to run_ocr_sync if the pipeline is unavailable.
     """
-    return run_ocr_sync(document_id)
+    try:
+        return run_ocr_pipeline(document_id)
+    except Exception as e:
+        logger.warning(
+            f"Pipeline failed for document {document_id}, falling back to legacy: {e}"
+        )
+        return run_ocr_sync(document_id)
 
 
 @celery_app.task(base=OCRTask, bind=True)
