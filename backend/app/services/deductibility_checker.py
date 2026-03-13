@@ -334,12 +334,13 @@ class DeductibilityChecker:
                 'reason': 'Mortgage/business loan interest is deductible'
             },
             ExpenseCategory.GROCERIES: {
-                'deductible': False,
-                'reason': 'Personal/household purchases are not deductible'
+                'deductible': 'partial',
+                'reason': 'Groceries may be partially deductible as Betriebsausgaben if business-related (e.g., client entertainment, business meals)',
+                'requires_review': True
             },
             ExpenseCategory.OTHER: {
-                'deductible': False,
-                'reason': 'Unclassified expenses are not deductible by default',
+                'deductible': 'partial',
+                'reason': 'Other expenses may be deductible if business-related',
                 'requires_review': True
             },
             ExpenseCategory.VEHICLE: {

@@ -265,7 +265,8 @@
     "processing": "处理中",
     "completed": "已完成",
     "failed": "失败",
-    "ocrResults": "OCR 识别结果",
+    "ocrResults": "识别数据",
+    "ocrResult": "识别数据",
     "extractedData": "提取的数据",
     "confidence": "置信度",
     "documentTypes": {

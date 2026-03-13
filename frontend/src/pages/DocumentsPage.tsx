@@ -251,9 +251,6 @@ const DocumentsPage = () => {
             {viewingDocument.confidence_score != null && (
               <span>{t('documents.confidence')}: {(viewingDocument.confidence_score * 100).toFixed(0)}%</span>
             )}
-            {viewingDocument.ocr_status && (
-              <span>OCR: {viewingDocument.ocr_status}</span>
-            )}
           </div>
           <div className="viewer-content">
             {!viewerBlobUrl ? (
@@ -341,8 +338,13 @@ const DocumentsPage = () => {
                     v != null && !isNaN(Number(v))
                       ? `€ ${Number(v).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : '—';
-                  const fmtPct = (v: unknown) =>
-                    v != null && !isNaN(Number(v)) ? `${(Number(v) * 100).toFixed(0)}%` : '—';
+                  const fmtPct = (v: unknown) => {
+                    if (v == null || isNaN(Number(v))) return '—';
+                    const n = Number(v);
+                    // VLM may return 10/20 (whole %) or 0.10/0.20 (decimal)
+                    const pct = n >= 1 ? n : n * 100;
+                    return `${pct.toFixed(0)}%`;
+                  };
 
                   return (
                     <>

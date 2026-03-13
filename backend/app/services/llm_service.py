@@ -321,8 +321,10 @@ class LLMService:
     ) -> str:
         """Vision LLM call: send an image + text prompt to a VL model.
         Uses OpenAI-compatible multimodal messages format supported by vLLM.
+        Automatically retries with fewer max_tokens on context-length errors.
         """
         import base64
+        from openai import BadRequestError
 
         b64 = base64.b64encode(image_bytes).decode("utf-8")
         data_url = f"data:{mime_type};base64,{b64}"
@@ -339,19 +341,37 @@ class LLMService:
         ]
 
         if self._use_ollama:
-            # Ollama also supports multimodal messages
             return self._ollama_chat(
                 messages, temperature=temperature, max_tokens=max_tokens, think=False
             )
 
         active_client, active_model = self._get_active_client_and_model()
-        response = active_client.chat.completions.create(
-            model=active_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return response.choices[0].message.content or ""
+
+        # Try with requested max_tokens, then halve on context-length 400 errors
+        attempts = [max_tokens, max_tokens // 2, max_tokens // 4]
+        last_err = None
+        for attempt_tokens in attempts:
+            try:
+                response = active_client.chat.completions.create(
+                    model=active_model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=attempt_tokens,
+                )
+                return response.choices[0].message.content or ""
+            except BadRequestError as e:
+                last_err = e
+                err_msg = str(e)
+                if "context length" in err_msg or "maximum input length" in err_msg:
+                    logger.warning(
+                        "Vision call exceeded context with max_tokens=%d, retrying with %d",
+                        attempt_tokens, attempt_tokens // 2,
+                    )
+                    continue
+                raise  # Non-context-length 400 errors should propagate
+        # All attempts exhausted
+        raise last_err
+
 
 
 

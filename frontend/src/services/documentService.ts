@@ -14,6 +14,7 @@ export const documentService = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000, // 2min — OCR processing runs synchronously
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const percentCompleted = Math.round(
@@ -44,6 +45,7 @@ export const documentService = {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 300000, // 5min for batch
       }
     );
 

@@ -554,7 +554,7 @@
     "needsReview": "Überprüfung erforderlich",
     "download": "Herunterladen",
     "previewNotAvailable": "Vorschau für diesen Dateityp nicht verfügbar",
-    "ocrResult": "OCR-Ergebnis",
+    "ocrResult": "Erkannte Daten",
     "empty": "Keine Dokumente gefunden. Laden Sie Ihr erstes Dokument hoch.",
     "confirmDelete": "Möchten Sie dieses Dokument wirklich löschen? Die verknüpfte Transaktion wird ebenfalls gelöscht.",
     "deleteSuccess": "Dokument erfolgreich gelöscht",

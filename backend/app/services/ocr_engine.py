@@ -290,48 +290,27 @@ class OCREngine:
         if not llm.is_available:
             return None
 
+        # Compact prompt to save tokens — VL models have limited context (4096).
+        # The image itself consumes most of the budget.
         system_prompt = (
-            "Du bist ein OCR-Experte. Extrahiere ALLE Textinhalte und strukturierte Daten "
-            "aus diesem Bild eines Dokuments (Rechnung, Beleg, Vertrag etc.).\n"
-            "Antworte mit einem JSON-Objekt mit folgenden Feldern (null wenn nicht gefunden):\n"
-            "- raw_text: Der vollständige extrahierte Text\n"
-            "- document_type: invoice/receipt/mietvertrag/kaufvertrag/e1_form/"
-            "einkommensteuerbescheid/bank_statement/unknown\n"
-            "- date: Datum (YYYY-MM-DD)\n"
-            "- amount: Gesamtbetrag in EUR (Zahl)\n"
-            "- merchant: Händler/Firma\n"
-            "- description: Kurze Beschreibung\n"
-            "- vat_amount: MwSt-Betrag (Zahl)\n"
-            "- vat_rate: MwSt-Satz (Zahl)\n"
-            "- invoice_number: Rechnungs-/Belegnummer\n"
-            "- payment_method: Zahlungsmethode\n"
-            "- line_items: Liste der Einzelposten, jeder mit:\n"
-            "    - name: Artikelname\n"
-            "    - quantity: Menge (Zahl, default 1)\n"
-            "    - unit_price: Einzelpreis in EUR (Zahl)\n"
-            "    - total_price: Gesamtpreis in EUR (Zahl)\n"
-            "    - vat_rate: MwSt-Satz für diesen Artikel (z.B. 0.10 oder 0.20, null wenn unbekannt)\n"
-            "    - vat_indicator: MwSt-Kennzeichen auf dem Beleg (z.B. 'A', 'B', etc.)\n"
-            "- vat_summary: MwSt-Zusammenfassung, Liste mit:\n"
-            "    - rate: MwSt-Satz (Zahl, z.B. 0.10 oder 0.20)\n"
-            "    - net_amount: Nettobetrag (Zahl)\n"
-            "    - vat_amount: MwSt-Betrag (Zahl)\n"
-            "    - indicator: Kennzeichen (z.B. 'A'=10%, 'B'=20%)\n"
-            "- property_address: Adresse (bei Verträgen)\n"
-            "- monthly_rent: Monatsmiete (bei Mietvertrag)\n"
-            "- purchase_price: Kaufpreis (bei Kaufvertrag)\n"
-            "Antworte NUR mit validem JSON."
+            "OCR expert. Extract data from this document image as JSON.\n"
+            "Fields (null if missing): raw_text, document_type (invoice/receipt/"
+            "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount, merchant, "
+            "description, vat_amount, vat_rate, invoice_number, payment_method, "
+            "line_items [{name,quantity,unit_price,total_price,vat_rate,vat_indicator}], "
+            "vat_summary [{rate,net_amount,vat_amount,indicator}], "
+            "property_address, monthly_rent, purchase_price. JSON only."
         )
 
         try:
             logger.info("Attempting VLM OCR for image (%s, %d bytes)", mime_type, len(image_bytes))
             response = llm.generate_vision(
                 system_prompt=system_prompt,
-                user_prompt="Bitte extrahiere alle Daten aus diesem Dokument.",
+                user_prompt="Extract all data from this document.",
                 image_bytes=image_bytes,
                 mime_type=mime_type,
                 temperature=0.1,
-                max_tokens=4096,
+                max_tokens=1500,
             )
 
             # Parse JSON response

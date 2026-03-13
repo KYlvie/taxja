@@ -1,5 +1,5 @@
 """Document management API endpoints"""
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -72,6 +72,7 @@ def validate_file(file: UploadFile) -> None:
 
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -132,20 +133,16 @@ async def upload_document(
     db.commit()
     db.refresh(document)
     
-    # Trigger OCR processing: try Celery first, fall back to background thread
-    try:
-        process_document_ocr.delay(document.id)
-    except Exception as e:
-        logger.warning(f"Celery unavailable for document {document.id}, running OCR in background thread: {e}")
+    # Run OCR in background via FastAPI BackgroundTasks (reliable, not killed on reload)
+    def _background_ocr(doc_id: int):
+        try:
+            logger.info(f"Background OCR starting for document {doc_id}")
+            run_ocr_sync(doc_id)
+            logger.info(f"Background OCR completed for document {doc_id}")
+        except Exception as ocr_err:
+            logger.error(f"Background OCR failed for document {doc_id}: {ocr_err}")
 
-        def _run_ocr_background(doc_id: int):
-            try:
-                run_ocr_sync(doc_id)
-            except Exception as ocr_err:
-                logger.error(f"Background OCR failed for document {doc_id}: {ocr_err}")
-
-        thread = threading.Thread(target=_run_ocr_background, args=(document.id,), daemon=True)
-        thread.start()
+    background_tasks.add_task(_background_ocr, document.id)
     
     return DocumentUploadResponse(
         id=document.id,
@@ -160,6 +157,7 @@ async def upload_document(
 
 @router.post("/batch-upload", response_model=BatchUploadResponse)
 async def batch_upload_documents(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -226,20 +224,16 @@ async def batch_upload_documents(
             db.commit()
             db.refresh(document)
             
-            # Trigger OCR processing: try Celery first, fall back to background thread
-            try:
-                process_document_ocr.delay(document.id)
-            except Exception as e:
-                logger.warning(f"Celery unavailable for batch document {document.id}, running OCR in background thread: {e}")
+            # Run OCR in background via FastAPI BackgroundTasks
+            def _batch_ocr(doc_id: int):
+                try:
+                    logger.info(f"Background OCR starting for batch document {doc_id}")
+                    run_ocr_sync(doc_id)
+                    logger.info(f"Background OCR completed for batch document {doc_id}")
+                except Exception as ocr_err:
+                    logger.error(f"Background OCR failed for batch document {doc_id}: {ocr_err}")
 
-                def _run_ocr_bg(doc_id: int):
-                    try:
-                        run_ocr_sync(doc_id)
-                    except Exception as ocr_err:
-                        logger.error(f"Background OCR failed for document {doc_id}: {ocr_err}")
-
-                thread = threading.Thread(target=_run_ocr_bg, args=(document.id,), daemon=True)
-                thread.start()
+            background_tasks.add_task(_batch_ocr, document.id)
             
             successful.append(
                 DocumentUploadResponse(

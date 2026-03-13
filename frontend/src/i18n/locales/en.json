@@ -554,7 +554,7 @@
     "needsReview": "Needs Review",
     "download": "Download",
     "previewNotAvailable": "Preview not available for this file type",
-    "ocrResult": "OCR Result",
+    "ocrResult": "Extracted Data",
     "empty": "No documents found. Upload your first document to get started.",
     "confirmDelete": "Are you sure you want to delete this document? The linked transaction will also be deleted.",
     "deleteSuccess": "Document deleted successfully",

@@ -8,7 +8,6 @@ import './DocumentUpload.css';
 const DocumentUpload: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const addDocument = useDocumentStore((state) => state.addDocument);
@@ -150,11 +149,6 @@ const DocumentUpload: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFiles(e.target.files);
-    e.target.value = '';
-  };
-
   const clearCompleted = () => {
     setUploads((prev) =>
       prev.filter((upload) => upload.status !== 'completed')
@@ -190,31 +184,9 @@ const DocumentUpload: React.FC = () => {
           ref={fileInputRef}
           type="file"
           accept="image/*,.pdf"
+          capture="environment"
           multiple
           onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-      </div>
-
-      <div className="upload-actions">
-        <button
-          className="btn btn-primary"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          📁 {t('documents.upload.selectFiles')}
-        </button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => cameraInputRef.current?.click()}
-        >
-          📷 {t('documents.upload.takePhoto')}
-        </button>
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleCameraCapture}
           style={{ display: 'none' }}
         />
       </div>

@@ -69,7 +69,7 @@ class OCRTransactionService:
             "is_deductible": classification["is_deductible"],
             "deduction_reason": classification["deduction_reason"],
             "confidence": float(classification["confidence"]) if hasattr(classification["confidence"], '__float__') else classification["confidence"],
-            "needs_review": float(classification["confidence"]) < 0.7 if classification["confidence"] else True,
+            "needs_review": (float(classification["confidence"]) < 0.7 if classification["confidence"] else True) or classification.get("requires_review", False),
             "extracted_fields": {k: (float(v) if isinstance(v, Decimal) else v.isoformat() if isinstance(v, (datetime,)) else v) for k, v in ocr_data.items()} if ocr_data else {},
         }
         
@@ -381,9 +381,11 @@ class OCRTransactionService:
                     deduct_result = self.deductibility_checker.check(category, user_type_val)
                     is_deductible = deduct_result.is_deductible
                     deduction_reason = deduct_result.reason
+                    deduct_requires_review = deduct_result.requires_review
                 else:
                     is_deductible = False
                     deduction_reason = "Unable to determine deductibility"
+                    deduct_requires_review = True
                 confidence = classification.confidence
             else:
                 category = None
@@ -397,6 +399,7 @@ class OCRTransactionService:
                 "is_deductible": is_deductible,
                 "deduction_reason": deduction_reason,
                 "confidence": confidence,
+                "requires_review": deduct_requires_review,
             }
         else:
             return {
