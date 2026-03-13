@@ -43,6 +43,8 @@ export interface Transaction {
   is_deductible: boolean;
   deduction_reason?: string;
   is_system_generated?: boolean;
+  reviewed?: boolean;
+  locked?: boolean;
   property_id?: string;
   vat_rate?: number;
   vat_amount?: number;
@@ -80,6 +82,9 @@ export interface TransactionFormData {
   category: string;
   document_id?: number;
   property_id?: string | null;
+  // Deductibility override
+  is_deductible?: boolean;
+  deduction_reason?: string;
   // Recurring fields
   is_recurring?: boolean;
   recurring_frequency?: string;

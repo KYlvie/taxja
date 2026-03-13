@@ -287,3 +287,17 @@
 .tip-icon {
   font-style: normal;
 }
+
+/* User Override & AI badges */
+.badge-user-override {
+  background: #fef3c7;
+  color: #92400e;
+  margin-left: 6px;
+}
+
+.badge-ai {
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 11px;
+  margin-left: 6px;
+}

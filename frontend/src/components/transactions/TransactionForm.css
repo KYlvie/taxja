@@ -185,3 +185,144 @@
     transform: translateY(0);
   }
 }
+
+/* Deductibility Override Section */
+.deductibility-override-section {
+  margin-bottom: 20px;
+  padding: 14px;
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 0.75rem;
+}
+
+.deductibility-current {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.deductibility-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.ai-badge {
+  font-size: 0.75rem;
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.btn-override {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  cursor: pointer;
+  margin-left: auto;
+  transition: all 0.15s;
+}
+
+.btn-override:hover {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+.override-controls {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.override-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.override-toggle input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #16a34a;
+}
+
+.override-status {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.override-status.deductible {
+  color: #16a34a;
+}
+
+.override-status.not-deductible {
+  color: #6b7280;
+}
+
+.override-reason-group {
+  margin-top: 0.5rem;
+  animation: slideDown 0.2s ease-out;
+}
+
+.override-reason-group label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.override-reason-group textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.override-reason-group textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.override-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #b45309;
+}
+
+.btn-cancel-override {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-top: 0.5rem;
+  text-decoration: underline;
+}
+
+.btn-cancel-override:hover {
+  color: #374151;
+}
+
+.ai-reason-display {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #fde68a;
+  font-size: 0.85rem;
+  color: #4b5563;
+  line-height: 1.5;
+}

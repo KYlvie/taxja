@@ -163,6 +163,8 @@ class TransactionUpdate(BaseModel):
     vat_rate: Optional[Decimal] = Field(None, ge=0, le=1)
     vat_amount: Optional[Decimal] = Field(None, ge=0)
     document_id: Optional[int] = None
+    reviewed: Optional[bool] = None
+    locked: Optional[bool] = None
     
     @field_validator('type')
     @classmethod
@@ -250,12 +252,14 @@ class TransactionResponse(TransactionBase):
     recurring_last_generated: Optional[date] = None
     parent_recurring_id: Optional[int] = None
     is_system_generated: bool = False
+    reviewed: bool = False
+    locked: bool = False
     created_at: datetime
     updated_at: datetime
 
     @field_validator(
         "needs_review", "is_recurring", "recurring_is_active",
-        "is_system_generated", "is_deductible", mode="before",
+        "is_system_generated", "is_deductible", "reviewed", "locked", mode="before",
     )
     @classmethod
     def coerce_none_to_false(cls, v):

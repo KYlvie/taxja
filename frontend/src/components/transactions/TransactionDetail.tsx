@@ -103,6 +103,11 @@ const TransactionDetail = ({
                   ✗ {t('transactions.notDeductible')}
                 </span>
               )}
+              {transaction.locked ? (
+                <span className="badge badge-user-override">🔒 {t('transactions.userOverride')}</span>
+              ) : (
+                <span className="badge badge-ai">🤖 AI</span>
+              )}
             </div>
 
             {transaction.deduction_reason && (

@@ -21,6 +21,8 @@ const transactionSchema = z.object({
   category: z.string().min(1, 'Category is required'),
   document_id: z.number().optional(),
   property_id: z.string().optional().nullable(),
+  is_deductible: z.boolean().optional(),
+  deduction_reason: z.string().optional(),
   is_recurring: z.boolean().optional().default(false),
   recurring_frequency: z.string().optional(),
   recurring_start_date: z.string().optional(),
@@ -61,6 +63,8 @@ const TransactionForm = ({
           category: transaction.category,
           document_id: transaction.document_id,
           property_id: transaction.property_id || null,
+          is_deductible: transaction.is_deductible ?? false,
+          deduction_reason: transaction.deduction_reason || '',
           is_recurring: transaction.is_recurring || false,
           recurring_frequency: transaction.recurring_frequency || 'monthly',
           recurring_start_date: transaction.recurring_start_date || '',
@@ -71,6 +75,8 @@ const TransactionForm = ({
           type: TransactionType.EXPENSE,
           date: new Date().toISOString().split('T')[0],
           property_id: null,
+          is_deductible: false,
+          deduction_reason: '',
           is_recurring: false,
           recurring_frequency: 'monthly',
           recurring_day_of_month: 1,
@@ -80,6 +86,12 @@ const TransactionForm = ({
   const transactionType = watch('type');
   const category = watch('category');
   const isRecurring = watch('is_recurring');
+  const isDeductible = watch('is_deductible');
+
+  // Track whether user is overriding AI decision
+  const [isOverriding, setIsOverriding] = useState(false);
+  const aiDecision = transaction?.is_deductible;
+  const hasAiDecision = transaction?.is_deductible !== undefined;
 
   // Fetch properties on mount
   useEffect(() => {
@@ -156,8 +168,22 @@ const TransactionForm = ({
   // Get active properties for dropdown
   const activeProperties = properties.filter(p => p.status === 'active');
 
+  // Wrap onSubmit to inject reviewed/locked when user overrides AI decision
+  const handleFormSubmit = (data: TransactionFormData) => {
+    const submitData: any = { ...data };
+    if (isOverriding && isDeductible !== aiDecision) {
+      submitData.reviewed = true;
+      submitData.locked = true;
+      // Prefix reason with [User Override] marker
+      if (submitData.deduction_reason && !submitData.deduction_reason.startsWith('[')) {
+        submitData.deduction_reason = `[Benutzer-Korrektur] ${submitData.deduction_reason}`;
+      }
+    }
+    onSubmit(submitData);
+  };
+
   return (
-    <form className="transaction-form" onSubmit={handleSubmit(onSubmit)}>
+    <form className="transaction-form" onSubmit={handleSubmit(handleFormSubmit)}>
       <h2>
         {transaction
           ? t('transactions.editTransaction')
@@ -329,16 +355,79 @@ const TransactionForm = ({
         </div>
       )}
 
-      {transaction?.is_deductible !== undefined && (
-        <div className="form-info">
-          <div className="deductibility-info">
-            <strong>{t('transactions.deductible')}:</strong>{' '}
-            {transaction.is_deductible ? (
-              <span className="badge badge-success">{t('common.yes')}</span>
+      {/* Deductibility Override Section */}
+      {transaction && hasAiDecision && (
+        <div className="deductibility-override-section">
+          <div className="deductibility-current">
+            <span className="deductibility-label">{t('transactions.deductible')}:</span>
+            {!isOverriding ? (
+              <>
+                {transaction.is_deductible ? (
+                  <span className="badge badge-success">✓ {t('transactions.deductibleYes')}</span>
+                ) : (
+                  <span className="badge badge-secondary">✗ {t('transactions.notDeductible')}</span>
+                )}
+                <span className="ai-badge">🤖 AI</span>
+                <button
+                  type="button"
+                  className="btn-override"
+                  onClick={() => setIsOverriding(true)}
+                >
+                  ✏️ {t('transactions.overrideDeductibility')}
+                </button>
+              </>
             ) : (
-              <span className="badge badge-secondary">{t('common.no')}</span>
+              <div className="override-controls">
+                <label className="override-toggle">
+                  <input
+                    type="checkbox"
+                    {...register('is_deductible')}
+                  />
+                  <span className={`override-status ${isDeductible ? 'deductible' : 'not-deductible'}`}>
+                    {isDeductible ? t('transactions.deductibleYes') : t('transactions.notDeductible')}
+                  </span>
+                </label>
+                {isDeductible !== aiDecision && (
+                  <div className="override-reason-group">
+                    <label htmlFor="deduction_reason">{t('transactions.overrideReason')}</label>
+                    <textarea
+                      id="deduction_reason"
+                      rows={2}
+                      placeholder={t('transactions.overrideReasonPlaceholder')}
+                      {...register('deduction_reason')}
+                    />
+                    <span className="override-hint">⚠️ {t('transactions.overrideWarning')}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn-cancel-override"
+                  onClick={() => {
+                    setIsOverriding(false);
+                    setValue('is_deductible', aiDecision ?? false);
+                    setValue('deduction_reason', transaction.deduction_reason || '');
+                  }}
+                >
+                  {t('transactions.cancelOverride')}
+                </button>
+              </div>
             )}
           </div>
+          {transaction.deduction_reason && !isOverriding && (
+            <div className="ai-reason-display">
+              <span className="ai-reason-text">
+                {transaction.deduction_reason.includes(' | ')
+                  ? transaction.deduction_reason.split(' | ').map((part, i) => (
+                      <span key={i}>
+                        {i === 1 && <span>💡 </span>}
+                        {part}
+                        {i === 0 && <br />}
+                      </span>
+                    ))
+                  : transaction.deduction_reason}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

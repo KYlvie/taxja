@@ -83,7 +83,7 @@ export const transactionService = {
 
   update: async (
     id: number,
-    transaction: Partial<TransactionFormData>
+    transaction: Partial<TransactionFormData> & { reviewed?: boolean; locked?: boolean }
   ): Promise<Transaction> => {
     const payload: Record<string, any> = { ...transaction };
     // Map date -> transaction_date
