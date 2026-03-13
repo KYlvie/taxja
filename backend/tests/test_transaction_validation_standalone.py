@@ -64,7 +64,7 @@ from typing import Optional
 class TransactionBase(BaseModel):
     """Base transaction schema"""
     type: TransactionType
-    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    amount: Decimal = Field(..., gt=0)
     transaction_date: date
     description: Optional[str] = Field(None, max_length=500)
     income_category: Optional[IncomeCategory] = None

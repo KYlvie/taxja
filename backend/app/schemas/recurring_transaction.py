@@ -9,7 +9,7 @@ from app.models.recurring_transaction import RecurrenceFrequency, RecurringTrans
 class RecurringTransactionBase(BaseModel):
     """Base schema for recurring transaction"""
     description: str = Field(..., min_length=1, max_length=500)
-    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    amount: Decimal = Field(..., gt=0)
     transaction_type: str = Field(..., pattern="^(income|expense)$")
     category: str = Field(..., min_length=1, max_length=100)
     frequency: RecurrenceFrequency
@@ -37,7 +37,7 @@ class RecurringTransactionCreate(RecurringTransactionBase):
 class RecurringTransactionUpdate(BaseModel):
     """Schema for updating a recurring transaction"""
     description: Optional[str] = Field(None, min_length=1, max_length=500)
-    amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    amount: Optional[Decimal] = Field(None, gt=0)
     frequency: Optional[RecurrenceFrequency] = None
     end_date: Optional[date] = None
     day_of_month: Optional[int] = Field(None, ge=1, le=31)
@@ -73,7 +73,7 @@ class RecurringTransactionResponse(RecurringTransactionBase):
 class RentalIncomeRecurringCreate(BaseModel):
     """Schema for creating rental income recurring transaction"""
     property_id: str
-    monthly_rent: Decimal = Field(..., gt=0, decimal_places=2)
+    monthly_rent: Decimal = Field(..., gt=0)
     start_date: date
     end_date: Optional[date] = None
     day_of_month: int = Field(1, ge=1, le=31)
@@ -82,7 +82,7 @@ class RentalIncomeRecurringCreate(BaseModel):
 class LoanInterestRecurringCreate(BaseModel):
     """Schema for creating loan interest recurring transaction"""
     loan_id: int
-    monthly_interest: Decimal = Field(..., gt=0, decimal_places=2)
+    monthly_interest: Decimal = Field(..., gt=0)
     start_date: date
     end_date: Optional[date] = None
     day_of_month: int = Field(1, ge=1, le=31)
@@ -103,7 +103,7 @@ class RecurringTransactionListResponse(BaseModel):
 class TemplateRecurringCreate(BaseModel):
     """Schema for creating recurring transaction from template"""
     template_id: str
-    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    amount: Decimal = Field(..., gt=0)
     start_date: date
     end_date: Optional[date] = None
     day_of_month: Optional[int] = Field(None, ge=1, le=31)

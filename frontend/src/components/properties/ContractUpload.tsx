@@ -199,6 +199,11 @@ const ContractUpload: React.FC<ContractUploadProps> = ({ onExtracted, onCancel }
 
       {uploadStatus === 'idle' && (
         <>
+          {error && (
+            <div className="validation-error">
+              <p className="error-message">{error}</p>
+            </div>
+          )}
           <div
             className={`upload-zone ${isDragging ? 'dragging' : ''}`}
             onDragEnter={handleDragEnter}

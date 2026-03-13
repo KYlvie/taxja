@@ -16,8 +16,8 @@ class PlanBase(BaseModel):
     """Base plan schema"""
     plan_type: PlanType
     name: str = Field(..., min_length=1, max_length=100)
-    monthly_price: Decimal = Field(..., ge=0, decimal_places=2)
-    yearly_price: Decimal = Field(..., ge=0, decimal_places=2)
+    monthly_price: Decimal = Field(..., ge=0)
+    yearly_price: Decimal = Field(..., ge=0)
     features: Dict[str, bool] = Field(default_factory=dict)
     quotas: Dict[str, int] = Field(default_factory=dict)
     
@@ -54,8 +54,8 @@ class PlanCreate(PlanBase):
 class PlanUpdate(BaseModel):
     """Schema for updating an existing plan"""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    monthly_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    yearly_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    monthly_price: Optional[Decimal] = Field(None, ge=0)
+    yearly_price: Optional[Decimal] = Field(None, ge=0)
     features: Optional[Dict[str, bool]] = None
     quotas: Optional[Dict[str, int]] = None
     

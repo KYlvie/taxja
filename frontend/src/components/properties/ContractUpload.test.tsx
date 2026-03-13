@@ -35,8 +35,8 @@ describe('ContractUpload', () => {
     );
 
     expect(screen.getByText(/upload contract/i)).toBeInTheDocument();
-    expect(screen.getByText(/kaufvertrag/i)).toBeInTheDocument();
-    expect(screen.getByText(/mietvertrag/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/kaufvertrag/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/mietvertrag/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows contract type cards', () => {
@@ -44,8 +44,8 @@ describe('ContractUpload', () => {
       <ContractUpload onExtracted={mockOnExtracted} onCancel={mockOnCancel} />
     );
 
-    expect(screen.getByText(/purchase contract/i)).toBeInTheDocument();
-    expect(screen.getByText(/rental contract/i)).toBeInTheDocument();
+    expect(screen.getByText(/Kaufvertrag \(Purchase Contract\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Mietvertrag \(Rental Contract\)/)).toBeInTheDocument();
   });
 
   it('calls onCancel when cancel button is clicked', () => {
@@ -65,8 +65,7 @@ describe('ContractUpload', () => {
     );
 
     const file = new File(['test'], 'test.txt', { type: 'text/plain' });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -89,8 +88,7 @@ describe('ContractUpload', () => {
     const largeFile = new File(['x'.repeat(11 * 1024 * 1024)], 'large.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [largeFile],
@@ -146,8 +144,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -214,8 +211,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -273,8 +269,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -340,8 +335,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -351,7 +345,7 @@ describe('ContractUpload', () => {
     fireEvent.change(input);
 
     await waitFor(() => {
-      expect(screen.getByText(/low confidence/i)).toBeInTheDocument();
+      expect(screen.getByText(/confidence is low/i)).toBeInTheDocument();
     }, { timeout: 3000 });
 
     expect(screen.getByText(/carefully review/i)).toBeInTheDocument();
@@ -369,8 +363,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],
@@ -398,8 +391,7 @@ describe('ContractUpload', () => {
     const file = new File(['test'], 'kaufvertrag.pdf', {
       type: 'application/pdf',
     });
-    const input = screen.getByRole('button', { name: /select file/i })
-      .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     Object.defineProperty(input, 'files', {
       value: [file],

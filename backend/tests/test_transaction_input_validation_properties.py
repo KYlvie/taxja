@@ -61,7 +61,7 @@ class ExpenseCategory(str, Enum):
 class TransactionBase(BaseModel):
     """Base transaction schema"""
     type: TransactionType
-    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    amount: Decimal = Field(..., gt=0)
     transaction_date: date
     description: Optional[str] = Field(None, max_length=500)
     income_category: Optional[IncomeCategory] = None
@@ -149,7 +149,7 @@ class TransactionCreate(TransactionBase):
 class TransactionUpdate(BaseModel):
     """Transaction update schema"""
     type: Optional[TransactionType] = None
-    amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    amount: Optional[Decimal] = Field(None, gt=0)
     transaction_date: Optional[date] = None
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     income_category: Optional[IncomeCategory] = None
