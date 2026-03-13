@@ -26,6 +26,7 @@ const DocumentsPage = () => {
   const [confirmingAction, setConfirmingAction] = useState<string | null>(null);
   const [confirmResult, setConfirmResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
 
   // When navigated with a documentId param, load and show that document
   useEffect(() => {
@@ -33,11 +34,20 @@ const DocumentsPage = () => {
       const id = parseInt(documentId);
       if (!isNaN(id)) {
         documentService.getDocument(id).then((doc) => {
-          if ((doc.document_type as string) === 'einkommensteuerbescheid') {
+          const docType = doc.document_type as string;
+          if (docType === 'einkommensteuerbescheid') {
             const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
             if (rawText) {
               setBescheidOcrText(rawText);
               setBescheidDocId(id);
+              return;
+            }
+          }
+          if (docType === 'e1_form') {
+            const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
+            if (rawText) {
+              setE1OcrText(rawText);
+              setE1DocId(id);
               return;
             }
           }
@@ -68,7 +78,8 @@ const DocumentsPage = () => {
   }, [viewingDocument]);
 
   const handleDocumentSelect = async (document: Document) => {
-    if (document.document_type === 'einkommensteuerbescheid' as any) {
+    const docType = document.document_type as string;
+    if (docType === 'einkommensteuerbescheid') {
       try {
         const detail = await documentService.getDocument(document.id);
         const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
@@ -79,6 +90,19 @@ const DocumentsPage = () => {
         }
       } catch (err) {
         console.error('Failed to load Bescheid document:', err);
+      }
+    }
+    if (docType === 'e1_form') {
+      try {
+        const detail = await documentService.getDocument(document.id);
+        const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
+        if (rawText) {
+          setE1OcrText(rawText);
+          setE1DocId(document.id);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to load E1 document:', err);
       }
     }
     if (document.needs_review) {
@@ -103,6 +127,7 @@ const DocumentsPage = () => {
   const handleCloseViewer = () => {
     setViewingDocument(null);
     setConfirmResult(null);
+    setTaxOverrides({});
     navigate('/documents', { replace: true });
   };
 
@@ -325,7 +350,7 @@ const DocumentsPage = () => {
                     return s;
                   };
 
-                  const skipKeys = ['field_confidence', 'confidence', 'import_suggestion', 'line_items', 'vat_summary'];
+                  const skipKeys = ['field_confidence', 'confidence', 'import_suggestion', 'line_items', 'vat_summary', 'tax_analysis'];
                   const entries = Object.entries(data).filter(
                     ([k, v]) => !skipKeys.includes(k) && v !== null && v !== undefined
                       && typeof v !== 'object'
@@ -344,6 +369,19 @@ const DocumentsPage = () => {
                     // VLM may return 10/20 (whole %) or 0.10/0.20 (decimal)
                     const pct = n >= 1 ? n : n * 100;
                     return `${pct.toFixed(0)}%`;
+                  };
+
+                  // Austrian VAT indicator → rate mapping
+                  const vatIndicatorMap: Record<string, number> = { A: 10, B: 20, C: 13, D: 0 };
+                  const resolveVatRate = (item: any): string => {
+                    if (item.vat_rate != null && !isNaN(Number(item.vat_rate))) {
+                      return fmtPct(item.vat_rate);
+                    }
+                    const ind = (item.vat_indicator || '').toUpperCase().trim();
+                    if (ind && vatIndicatorMap[ind] !== undefined) {
+                      return `${vatIndicatorMap[ind]}%`;
+                    }
+                    return '—';
                   };
 
                   return (
@@ -377,7 +415,7 @@ const DocumentsPage = () => {
                                 <span className="li-col-qty">{item.quantity ?? 1}</span>
                                 <span className="li-col-price">{fmtEur(item.unit_price)}</span>
                                 <span className="li-col-total">{fmtEur(item.total_price)}</span>
-                                <span className="li-col-vat">{fmtPct(item.vat_rate)}</span>
+                                <span className="li-col-vat">{resolveVatRate(item)}</span>
                                 <span className="li-col-ind">{item.vat_indicator || '—'}</span>
                               </div>
                             ))}
@@ -416,6 +454,89 @@ const DocumentsPage = () => {
               </div>
             </div>
           )}
+
+          {/* Tax Analysis Card */}
+          {(() => {
+            const data = typeof viewingDocument.ocr_result === 'string'
+              ? (() => { try { return JSON.parse(viewingDocument.ocr_result as string); } catch { return null; } })()
+              : viewingDocument.ocr_result;
+            const taxAnalysis = data?.tax_analysis;
+            if (!taxAnalysis || !taxAnalysis.items || taxAnalysis.items.length === 0) return null;
+
+            const fmtEur2 = (v: number | string | null | undefined) =>
+              v != null ? `€ ${Number(v).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+
+            // Apply user overrides to items
+            const effectiveItems = taxAnalysis.items.map((item: any, idx: number) => {
+              const overridden = taxOverrides[idx] !== undefined;
+              const isDeductible = overridden ? taxOverrides[idx] : item.is_deductible;
+              return { ...item, is_deductible: isDeductible, overridden };
+            });
+
+            const totalDeductible = effectiveItems
+              .filter((it: any) => it.is_deductible)
+              .reduce((sum: number, it: any) => sum + Number(it.amount || 0), 0);
+            const totalNonDeductible = effectiveItems
+              .filter((it: any) => !it.is_deductible)
+              .reduce((sum: number, it: any) => sum + Number(it.amount || 0), 0);
+
+            return (
+              <div className="tax-analysis-card">
+                <div className="tax-analysis-header">
+                  <span className="tax-analysis-icon">📋</span>
+                  <h3>{t('documents.ocr.taxAnalysis')}</h3>
+                  {taxAnalysis.is_split && (
+                    <span className="split-badge">{t('documents.ocr.splitReceipt')}</span>
+                  )}
+                </div>
+
+                <div className="tax-analysis-summary">
+                  <div className="tax-summary-item deductible">
+                    <span className="tax-summary-label">✅ {t('documents.ocr.deductibleAmount')}</span>
+                    <span className="tax-summary-value">{fmtEur2(totalDeductible)}</span>
+                  </div>
+                  <div className="tax-summary-item non-deductible">
+                    <span className="tax-summary-label">❌ {t('documents.ocr.nonDeductibleAmount')}</span>
+                    <span className="tax-summary-value">{fmtEur2(totalNonDeductible)}</span>
+                  </div>
+                </div>
+
+                <div className="tax-analysis-items">
+                  {effectiveItems.map((item: any, idx: number) => (
+                    <div key={idx} className={`tax-item ${item.is_deductible ? 'deductible' : 'non-deductible'}`}>
+                      <div className="tax-item-header">
+                        <span className="tax-item-badge">
+                          {item.is_deductible ? '✅' : '❌'}
+                          {item.is_deductible ? t('documents.ocr.deductible') : t('documents.ocr.notDeductible')}
+                          {item.overridden && <span className="tax-override-badge">{t('documents.ocr.userOverride', '手动')}</span>}
+                        </span>
+                        <span className="tax-item-amount">{fmtEur2(item.amount)}</span>
+                      </div>
+                      <div className="tax-item-desc">{item.description}</div>
+                      {item.category && (
+                        <div className="tax-item-category">
+                          {t('documents.ocr.category')}: {item.category}
+                        </div>
+                      )}
+                      {item.deduction_reason && (
+                        <div className="tax-item-reason">
+                          {t('documents.ocr.reason')}: {item.deduction_reason}
+                        </div>
+                      )}
+                      <button
+                        className={`tax-override-btn ${item.is_deductible ? 'mark-non-deductible' : 'mark-deductible'}`}
+                        onClick={() => setTaxOverrides(prev => ({ ...prev, [idx]: !item.is_deductible }))}
+                      >
+                        {item.is_deductible
+                          ? t('documents.ocr.markNonDeductible', '标记为不可报税')
+                          : t('documents.ocr.markDeductible', '标记为可报税')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Import Suggestion Confirmation Card */}
           {(() => {

@@ -245,6 +245,7 @@ class OCRTransactionService:
             income_category=category if transaction_type == TransactionType.INCOME else None,
             expense_category=category if transaction_type == TransactionType.EXPENSE else None,
             is_deductible=suggestion.get("is_deductible", False),
+            deduction_reason=suggestion.get("deduction_reason"),
             document_id=suggestion["document_id"],
             import_source="ocr",
             classification_confidence=Decimal(str(suggestion.get("confidence", 0.5))),
@@ -293,12 +294,27 @@ class OCRTransactionService:
         date = ocr_data.get("date")
         merchant = ocr_data.get("merchant", "Unknown merchant")
         product_summary = ocr_data.get("product_summary")
+        vlm_description = ocr_data.get("description")
+        line_items = ocr_data.get("line_items", [])
 
         if not amount:
             return None
 
-        if product_summary:
+        # Build description from best available source
+        if vlm_description and len(vlm_description) > 10:
+            description = f"{merchant}: {vlm_description}"
+        elif product_summary:
             description = f"{merchant}: {product_summary}"
+        elif line_items:
+            # Summarize from line items
+            item_names = [it.get("name", "") for it in line_items[:5] if it.get("name")]
+            if item_names:
+                summary = ", ".join(item_names)
+                if len(line_items) > 5:
+                    summary += f" (+{len(line_items) - 5} more)"
+                description = f"{merchant}: {summary}"
+            else:
+                description = f"Purchase at {merchant}"
         else:
             description = f"Purchase at {merchant}"
 

@@ -247,6 +247,20 @@ class E1FormExtractor:
     
     def _extract_taxpayer_name(self, text: str) -> Optional[str]:
         """Extract taxpayer name from form"""
+        # Pattern 0: Steuerberechnung format — name after tax number, before "FA:"
+        # "03 627/7572\nZhang Fenghong\nFA:"
+        m = re.search(
+            r"\d{2}\s+\d{3}/\d{4}\s*\n\s*([A-Za-zäöüÄÖÜß]+\s+[A-Za-zäöüÄÖÜß]+)\s*\n\s*FA:",
+            text,
+        )
+        if m:
+            name = m.group(1).strip()
+            if len(name) > 3 and not any(
+                x in name.lower()
+                for x in ["seite", "formular", "bitte", "graue", "finanzamt", "steuer", "version"]
+            ):
+                return name
+
         # Pattern 1: Name appears multiple times in Einkommensteuerberechnung section
         # "Fenghong ZHANG\nSeite 2\nEinkommensteuerberechnung"
         m = re.search(
@@ -357,6 +371,34 @@ class E1FormExtractor:
         elif re.search(r"[xX✓]\s*verwitwet", text):
             data.personenstand = "verwitwet"
     
+    def _extract_personal_info_from_fields(self, form_section: str, data: E1FormData) -> None:
+        """Extract personal info from AcroForm field values"""
+        # Look for name fields
+        for pattern in [
+            r"(?:familien|nach)name[^:]*:\s*(.+)",
+            r"vorname[^:]*:\s*(.+)",
+        ]:
+            m = re.search(pattern, form_section, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) > 1 and not data.taxpayer_name:
+                    data.taxpayer_name = val
+
+        # Look for Steuernummer in form fields
+        m = re.search(r"(?:steuer|st).*?nr[^:]*:\s*(\d[\d\s/]+\d)", form_section, re.IGNORECASE)
+        if m and not data.steuernummer:
+            data.steuernummer = m.group(1).strip()
+
+        # Gender from form fields (checkbox values like "1" or "Yes")
+        if not data.geschlecht:
+            m = re.search(r"(?:weiblich|female)[^:]*:\s*(1|[Jj]a|[Yy]es|[Xx]|true)", form_section, re.IGNORECASE)
+            if m:
+                data.geschlecht = "weiblich"
+            else:
+                m = re.search(r"(?:männlich|male)[^:]*:\s*(1|[Jj]a|[Yy]es|[Xx]|true)", form_section, re.IGNORECASE)
+                if m:
+                    data.geschlecht = "männlich"
+    
     def _extract_kz_values(self, text: str, data: E1FormData) -> None:
         """Extract all KZ (Kennzahl) values from the form"""
         # Pattern: KZ number followed by amount
@@ -364,6 +406,39 @@ class E1FormExtractor:
         # "245  11593,33"
         # "KZ 245: 11.593,33"
         # "Kennzahl 245    11593.33"
+        
+        # Strategy 0: Parse AcroForm field values (from --- FORM FIELDS --- section)
+        # These look like "Kz245: 11593,33" or "KZ_245: 11593.33" or "kz245_betrag: 1234,56"
+        form_section = ""
+        form_marker = "--- FORM FIELDS ---"
+        if form_marker in text:
+            form_section = text[text.index(form_marker):]
+        
+        if form_section:
+            # Match field names containing KZ/Kz + digits, followed by a value
+            form_patterns = [
+                # "Kz245: 11593,33" or "KZ_245: 1234.56"
+                r"[Kk][Zz][_\s]?(\d{3,4})[^:]*:\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+                # Field name with digits, value is a number (e.g. "betrag245: 1234,56")
+                r"(?:betrag|feld|field|wert|val)[_\s]?(\d{3,4})[^:]*:\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+                # Generic: any field with 3-4 digit code and numeric value
+                r"[A-Za-z_]*(\d{3,4})[A-Za-z_]*:\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+            ]
+            for pattern in form_patterns:
+                for match in re.finditer(pattern, form_section, re.IGNORECASE):
+                    kz_code = match.group(1)
+                    # Normalize 4-digit codes (e.g. 0245 -> 245)
+                    if len(kz_code) == 4 and kz_code.startswith("0"):
+                        kz_code = kz_code[1:]
+                    amount_str = match.group(2)
+                    amount = self._parse_amount(amount_str)
+                    if amount is not None and amount != Decimal("0"):
+                        if kz_code not in data.all_kz_values:
+                            data.all_kz_values[kz_code] = amount
+                            self._map_kz_to_field(kz_code, amount, data)
+            
+            # Also extract personal info from form fields
+            self._extract_personal_info_from_fields(form_section, data)
         
         # Strategy 1: Find explicit KZ patterns with amounts
         patterns = [
@@ -388,16 +463,43 @@ class E1FormExtractor:
         
         # Strategy 2: Special handling for KZ 245 (employment income) in Einkommensteuerberechnung
         # Look for "Summe Lohnzettel L16 [KZ 245]" or similar
-        m = re.search(
-            r"Summe\s+Lohnzettel.*?\[KZ\s+245\]\s*\n?\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
-            text,
-            re.IGNORECASE | re.DOTALL
-        )
-        if m:
-            amount = self._parse_amount(m.group(1))
-            if amount and amount > 0:
-                data.kz_245 = amount
-                data.all_kz_values["245"] = amount
+        if not data.kz_245:
+            m = re.search(
+                r"Summe\s+Lohnzettel.*?\[KZ\s+245\]\s*\n?\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+                text,
+                re.IGNORECASE | re.DOTALL
+            )
+            if m:
+                amount = self._parse_amount(m.group(1))
+                if amount and amount > 0:
+                    data.kz_245 = amount
+                    data.all_kz_values["245"] = amount
+        
+        # Strategy 2b: Steuerberechnung format — "stpfl.Bezüge (245)" then employer, then amount
+        if not data.kz_245:
+            m = re.search(
+                r"stpfl\.Bez.{1,3}ge\s*\(245\).*?(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+                text,
+                re.IGNORECASE | re.DOTALL
+            )
+            if m:
+                amount = self._parse_amount(m.group(1))
+                if amount and amount > 0:
+                    data.kz_245 = amount
+                    data.all_kz_values["245"] = amount
+        
+        # Strategy 2c: "Anrechenbare Lohnsteuer (260)" pattern for KZ 260
+        if not data.kz_260:
+            m = re.search(
+                r"Anrechenbare\s+Lohnsteuer\s*\(260\)\s*\n?\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})",
+                text,
+                re.IGNORECASE | re.DOTALL
+            )
+            if m:
+                amount = self._parse_amount(m.group(1))
+                if amount is not None:
+                    data.kz_260 = amount
+                    data.all_kz_values["260"] = amount
         
         # Strategy 3: Special handling for rental income (KZ 350) in Einkommensteuerberechnung
         # Look for "Einkünfte aus Vermietung und Verpachtung" followed by amount

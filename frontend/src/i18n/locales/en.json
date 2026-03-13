@@ -747,7 +747,19 @@
       "vatSummary": "VAT Summary",
       "netAmount": "Net Amount",
       "vatAmount": "VAT Amount",
-      "indicator": "Indicator"
+      "indicator": "Indicator",
+      "taxAnalysis": "Tax Analysis",
+      "deductible": "Deductible",
+      "notDeductible": "Not Deductible",
+      "deductibleAmount": "Deductible Amount",
+      "nonDeductibleAmount": "Non-Deductible Amount",
+      "splitReceipt": "Receipt Split",
+      "reason": "Reason",
+      "category": "Category",
+      "taxTip": "Tax Tip",
+      "markDeductible": "Mark as deductible",
+      "markNonDeductible": "Mark as non-deductible",
+      "userOverride": "Manual"
     },
     "suggestion": {
       "createProperty": "Create property from purchase contract?",

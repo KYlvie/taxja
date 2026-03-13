@@ -524,3 +524,193 @@
     font-size: 11px;
   }
 }
+
+/* Tax Analysis Card */
+.tax-analysis-card {
+  margin: 0;
+  padding: var(--space-5);
+  border-top: 2px solid #6366f1;
+  background: linear-gradient(135deg, #f5f3ff 0%, var(--color-bg) 100%);
+}
+
+.tax-analysis-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tax-analysis-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.tax-analysis-icon {
+  font-size: 24px;
+}
+
+.split-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.tax-analysis-summary {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.tax-summary-item {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tax-summary-item.deductible {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.tax-summary-item.non-deductible {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.tax-summary-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.tax-summary-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.tax-analysis-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tax-item {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.tax-item.deductible {
+  border-left: 4px solid #22c55e;
+  background: #fafff9;
+}
+
+.tax-item.non-deductible {
+  border-left: 4px solid #ef4444;
+  background: #fffafa;
+}
+
+.tax-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.tax-item-badge {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tax-item-amount {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.tax-item-desc {
+  font-size: 13px;
+  color: var(--color-text);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.tax-item-category {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.tax-item-reason {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .tax-analysis-summary {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .tax-summary-item {
+    padding: 8px 12px;
+  }
+
+  .tax-summary-value {
+    font-size: 14px;
+  }
+}
+
+/* Tax Override Button */
+.tax-override-btn {
+  margin-top: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary);
+}
+
+.tax-override-btn.mark-deductible {
+  border-color: #22c55e;
+  color: #16a34a;
+}
+
+.tax-override-btn.mark-deductible:hover {
+  background: #f0fdf4;
+}
+
+.tax-override-btn.mark-non-deductible {
+  border-color: #ef4444;
+  color: #dc2626;
+}
+
+.tax-override-btn.mark-non-deductible:hover {
+  background: #fef2f2;
+}
+
+.tax-override-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+}

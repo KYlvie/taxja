@@ -4,7 +4,6 @@ import { useForm } from 'react-hook-form';
 import { MessageCircle } from 'lucide-react';
 import { dashboardService } from '../../services/dashboardService';
 import { aiService } from '../../services/aiService';
-import AIChatWidget from '../ai/AIChatWidget';
 import './WhatIfSimulator.css';
 
 interface SimulationForm {
@@ -262,13 +261,6 @@ const WhatIfSimulator = () => {
         </div>
       )}
 
-      {/* AI Chat Widget with simulator context */}
-      <AIChatWidget
-        contextData={{
-          page: 'simulator',
-          simulationResult: result,
-        }}
-      />
     </div>
   );
 };

@@ -747,7 +747,19 @@
       "vatSummary": "MwSt-Zusammenfassung",
       "netAmount": "Nettobetrag",
       "vatAmount": "MwSt-Betrag",
-      "indicator": "Kennzeichen"
+      "indicator": "Kennzeichen",
+      "taxAnalysis": "Steueranalyse",
+      "deductible": "Abzugsfähig",
+      "notDeductible": "Nicht abzugsfähig",
+      "deductibleAmount": "Abzugsfähiger Betrag",
+      "nonDeductibleAmount": "Nicht abzugsfähiger Betrag",
+      "splitReceipt": "Beleg aufgeteilt",
+      "reason": "Begründung",
+      "category": "Kategorie",
+      "taxTip": "Steuertipp",
+      "markDeductible": "Als absetzbar markieren",
+      "markNonDeductible": "Als nicht absetzbar markieren",
+      "userOverride": "Manuell"
     },
     "suggestion": {
       "createProperty": "Immobilie aus Kaufvertrag erstellen?",

@@ -281,6 +281,10 @@ class DocumentClassifier:
                     "außergewöhnliche belastungen",
                     "verlustvortrag",
                     "familienbonus",
+                    "e 1b",
+                    "e 1b-pdf",
+                    "l 1k",
+                    "beilage zur einkommensteuererklärung",
                 ],
                 "required_keywords": [],
                 "required_any": [
@@ -290,7 +294,7 @@ class DocumentClassifier:
                     "e 1-pdf",
                     "steuererklärung für",
                 ],
-                "weight": 1.5,
+                "weight": 1.8,
             },
         }
 
@@ -325,6 +329,18 @@ class DocumentClassifier:
             Dictionary with type and confidence
         """
         text_lower = text.lower()
+
+        # Early detection: E1 forms are multi-page and contain keywords that match
+        # many other types (Lohnzettel, Bescheid, etc.). Check the first page for
+        # definitive E1 markers to avoid misclassification.
+        first_page = text_lower[:1500]
+        if any(marker in first_page for marker in [
+            "e 1-pdf", "e 1-edv", "e 1,",
+            "einkommensteuererklärung für",
+            "einkommensteuererklaerung fuer",
+        ]):
+            return {"type": DocumentType.E1_FORM, "confidence": 0.90}
+
         scores = {}
 
         for doc_type, pattern_info in self.patterns.items():

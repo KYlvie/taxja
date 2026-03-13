@@ -13,7 +13,6 @@ import FlatRateComparison from '../components/dashboard/FlatRateComparison';
 import RefundEstimate from '../components/dashboard/RefundEstimate';
 import IncomeTypeHint from '../components/dashboard/IncomeTypeHint';
 import { RecurringSuggestionsList } from '../components/recurring/RecurringSuggestionsList';
-import { QuickStartWizard } from '../components/onboarding/QuickStartWizard';
 import { QuickActions } from '../components/dashboard/QuickActions';
 import './DashboardPage.css';
 
@@ -34,10 +33,6 @@ const DashboardPage = () => {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [chartData, setChartData] = useState<any>(null);
   const [propertyMetrics, setPropertyMetrics] = useState<any>(null);
-  const [showWizard, setShowWizard] = useState(false);
-  const [wizardDismissed, setWizardDismissed] = useState(() => {
-    return localStorage.getItem('taxja_wizard_dismissed') === 'true';
-  });
   const { user } = useAuthStore();
   const isGmbH = user?.user_type === 'gmbh';
   const isLandlordOrMixed = user?.user_type === 'landlord' || user?.user_type === 'mixed';
@@ -130,10 +125,6 @@ const DashboardPage = () => {
           yearOverYearData: dashboardData.yearOverYearData,
         });
 
-        // Show wizard if user hasn't dismissed it yet
-        if (!wizardDismissed) {
-          setShowWizard(true);
-        }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
       } finally {
@@ -142,7 +133,7 @@ const DashboardPage = () => {
     };
 
     fetchData();
-  }, [selectedYear, setData, setDeadlines, setSuggestions, setLoading, isLandlordOrMixed, wizardDismissed]);
+  }, [selectedYear, setData, setDeadlines, setSuggestions, setLoading, isLandlordOrMixed]);
 
   if (isLoading) {
     return (
@@ -154,27 +145,8 @@ const DashboardPage = () => {
 
   const hasTransactions = data && (data.yearToDateIncome > 0 || data.yearToDateExpenses > 0);
 
-  const handleWizardComplete = () => {
-    setShowWizard(false);
-    localStorage.setItem('taxja_wizard_dismissed', 'true');
-    setWizardDismissed(true);
-  };
-
-  const handleWizardSkip = () => {
-    setShowWizard(false);
-    localStorage.setItem('taxja_wizard_dismissed', 'true');
-    setWizardDismissed(true);
-  };
-
   return (
     <div className="dashboard-page">
-      {/* Quick Start Wizard for new users */}
-      {showWizard && (
-        <QuickStartWizard 
-          onComplete={handleWizardComplete}
-          onSkip={handleWizardSkip}
-        />
-      )}
       <div className="dashboard-header">
         <div className="dashboard-header-top">
           <div>

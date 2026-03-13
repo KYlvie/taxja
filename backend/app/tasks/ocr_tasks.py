@@ -164,6 +164,37 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                     result_dict["transaction_id"] = created_ids[0] if created_ids else None
                     if len(created_ids) > 1:
                         result_dict["split_transaction_ids"] = created_ids
+
+                    # Persist tax_analysis into document.ocr_result so frontend can display it
+                    try:
+                        import json as _json
+                        updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+                        tax_items = []
+                        for s in suggestions:
+                            tax_items.append({
+                                "description": s.get("description", ""),
+                                "amount": s.get("amount"),
+                                "category": s.get("category"),
+                                "is_deductible": s.get("is_deductible", False),
+                                "deduction_reason": s.get("deduction_reason", ""),
+                                "confidence": s.get("confidence", 0),
+                                "transaction_type": s.get("transaction_type", "expense"),
+                            })
+                        updated_ocr["tax_analysis"] = {
+                            "items": tax_items,
+                            "is_split": len(suggestions) > 1,
+                            "total_deductible": sum(
+                                float(s.get("amount", 0)) for s in suggestions if s.get("is_deductible")
+                            ),
+                            "total_non_deductible": sum(
+                                float(s.get("amount", 0)) for s in suggestions if not s.get("is_deductible")
+                            ),
+                        }
+                        document.ocr_result = updated_ocr
+                        db.commit()
+                        logger.info(f"Stored tax_analysis for document {document_id}")
+                    except Exception as tax_err:
+                        logger.warning(f"Could not store tax_analysis for doc {document_id}: {tax_err}")
             except Exception as e:
                 logger.warning(f"Could not create transaction suggestion: {e}")
 

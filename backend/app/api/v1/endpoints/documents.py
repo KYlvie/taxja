@@ -949,17 +949,29 @@ def review_ocr_results(
 
     # Build confidence map from *_confidence keys or field_confidence dict
     field_confidences = ocr_data.get("confidence", {})
+    if not isinstance(field_confidences, dict):
+        field_confidences = {}
     if not field_confidences and isinstance(ocr_data.get("field_confidence"), dict):
         field_confidences = ocr_data["field_confidence"]
-    skip_keys = {"confidence", "field_confidence", "raw_text", "product_summary"}
+    skip_keys = {"confidence", "field_confidence", "raw_text", "product_summary",
+                 "line_items", "vat_summary", "tax_analysis", "import_suggestion"}
 
     for field_name, value in ocr_data.items():
         if field_name in skip_keys or field_name.endswith("_confidence"):
             continue
+        # Skip non-scalar values (lists, dicts)
+        if isinstance(value, (list, dict)):
+            continue
 
         # Look for companion confidence key (e.g. date_confidence)
         conf_key = f"{field_name}_confidence"
-        field_confidence = ocr_data.get(conf_key, field_confidences.get(field_name, 0.5))
+        conf_val = ocr_data.get(conf_key)
+        if conf_val is not None and isinstance(conf_val, (int, float)):
+            field_confidence = float(conf_val)
+        elif field_name in field_confidences:
+            field_confidence = float(field_confidences[field_name])
+        else:
+            field_confidence = 0.5
         needs_review = field_confidence < 0.6
 
         # Convert datetime objects to string for JSON serialization

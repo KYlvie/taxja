@@ -36,12 +36,21 @@ class DocumentDetail(BaseModel):
     ocr_result: Optional[Dict[str, Any]] = None
     raw_text: Optional[str] = None
     confidence_score: Optional[float] = None
+    needs_review: bool = False
     transaction_id: Optional[int] = None
     uploaded_at: datetime
     processed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        """Override to compute needs_review from confidence_score"""
+        instance = super().from_orm(obj)
+        if not hasattr(obj, 'needs_review') or obj.needs_review is None:
+            instance.needs_review = (instance.confidence_score or 0) < 0.6
+        return instance
 
 
 class DocumentList(BaseModel):

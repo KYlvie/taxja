@@ -5,7 +5,6 @@ import { MessageCircle } from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { aiService } from '../../services/aiService';
 import { OCRReviewData, ExtractedData, DocumentType } from '../../types/document';
-import AIChatWidget from '../ai/AIChatWidget';
 import BescheidImport from './BescheidImport';
 import './OCRReview.css';
 
@@ -27,7 +26,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [, setShowAIChat] = useState(false);
   const [aiExplanation, setAIExplanation] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -126,7 +124,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       setLoadingAI(true);
       const response = await aiService.explainOCRResult(String(documentId), editedData);
       setAIExplanation(response.content);
-      setShowAIChat(true);
     } catch (err) {
       console.error('Failed to get AI explanation:', err);
     } finally {
@@ -537,12 +534,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       </div>
 
       {/* AI Chat Widget with document context */}
-      <AIChatWidget
-        contextData={{
-          page: 'ocr-review',
-          documentId: documentId.toString(),
-        }}
-      />
     </div>
   );
 };

@@ -294,23 +294,29 @@ class OCREngine:
         # The image itself consumes most of the budget.
         system_prompt = (
             "OCR expert. Extract data from this document image as JSON.\n"
-            "Fields (null if missing): raw_text, document_type (invoice/receipt/"
-            "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount, merchant, "
-            "description, vat_amount, vat_rate, invoice_number, payment_method, "
+            "IMPORTANT: If the image contains MULTIPLE receipts/invoices, return a JSON array "
+            "with one object per receipt. If only one receipt, return a single JSON object.\n"
+            "Fields (null if missing): raw_text (first 200 chars), document_type (invoice/receipt/"
+            "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount (total), merchant, "
+            "description (brief summary of purchased items), vat_amount, vat_rate, "
+            "invoice_number, payment_method, tax_id, "
             "line_items [{name,quantity,unit_price,total_price,vat_rate,vat_indicator}], "
             "vat_summary [{rate,net_amount,vat_amount,indicator}], "
-            "property_address, monthly_rent, purchase_price. JSON only."
+            "property_address, monthly_rent, purchase_price.\n"
+            "CRITICAL: Read ALL line items from the receipt. For each item include at minimum "
+            "the name and total_price. If the receipt has many items, still list them all.\n"
+            "JSON only, no markdown."
         )
 
         try:
             logger.info("Attempting VLM OCR for image (%s, %d bytes)", mime_type, len(image_bytes))
             response = llm.generate_vision(
                 system_prompt=system_prompt,
-                user_prompt="Extract all data from this document.",
+                user_prompt="Extract all data from this document. If multiple receipts are visible, extract each one separately.",
                 image_bytes=image_bytes,
                 mime_type=mime_type,
                 temperature=0.1,
-                max_tokens=1500,
+                max_tokens=3500,
             )
 
             # Parse JSON response
@@ -318,6 +324,48 @@ class OCREngine:
             if not data:
                 logger.warning("VLM OCR returned unparseable response")
                 return None
+
+            # Handle multi-receipt response (VLM returns array)
+            if isinstance(data, list):
+                if len(data) == 0:
+                    logger.warning("VLM OCR returned empty array")
+                    return None
+                if len(data) == 1:
+                    data = data[0]
+                else:
+                    # Multiple receipts in one image — build a combined result
+                    # Store all receipts in extracted_data for downstream processing
+                    logger.info("VLM detected %d receipts in single image", len(data))
+                    all_receipts = []
+                    total_amount = 0
+                    for i, receipt in enumerate(data):
+                        cleaned = {k: v for k, v in receipt.items() if v is not None}
+                        cleaned.pop("raw_text", None)
+                        cleaned.pop("document_type", None)
+                        if "amount" in cleaned:
+                            try:
+                                total_amount += float(cleaned["amount"])
+                            except (ValueError, TypeError):
+                                pass
+                        all_receipts.append(cleaned)
+
+                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                    return OCRResult(
+                        document_type=DocumentType.RECEIPT,
+                        extracted_data={
+                            "multiple_receipts": all_receipts,
+                            "receipt_count": len(all_receipts),
+                            "total_amount": round(total_amount, 2),
+                        },
+                        raw_text=response,
+                        confidence_score=0.85,
+                        needs_review=True,
+                        processing_time_ms=processing_time,
+                        suggestions=[
+                            f"Detected {len(all_receipts)} receipts in one image. "
+                            "Please upload each receipt separately for best results."
+                        ],
+                    )
 
             raw_text = data.pop("raw_text", response) or response
             doc_type_str = data.pop("document_type", "unknown") or "unknown"
@@ -360,7 +408,7 @@ class OCREngine:
             return None
 
     @staticmethod
-    def _parse_vlm_json(response: str) -> Optional[Dict[str, Any]]:
+    def _parse_vlm_json(response: str) -> Optional[Any]:
         """Parse JSON from VLM response, handling markdown code blocks and nested structures."""
         import re, json
 
@@ -374,10 +422,44 @@ class OCREngine:
         # Try parsing the whole text first (handles nested arrays/objects)
         try:
             data = json.loads(text)
-            if isinstance(data, dict):
+            if isinstance(data, (dict, list)):
                 return data
         except Exception:
             pass
+
+        # Try finding a JSON array first [ ... ]
+        arr_start = text.find("[")
+        obj_start = text.find("{")
+        if arr_start != -1 and (obj_start == -1 or arr_start < obj_start):
+            # Try to parse as array
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(arr_start, len(text)):
+                c = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if c == "\\":
+                    escape = True
+                    continue
+                if c == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if c == "[":
+                    depth += 1
+                elif c == "]":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            data = json.loads(text[arr_start : i + 1])
+                            if isinstance(data, list):
+                                return data
+                        except Exception:
+                            pass
+                        break
 
         # Find the outermost { ... } using brace counting (supports deep nesting)
         start = text.find("{")
@@ -579,24 +661,60 @@ class OCREngine:
         self, raw_text: str, start_time: datetime
     ) -> OCRResult:
         """
-        Route E1 tax declaration form to specialized extractor
+        Route E1 tax declaration form to specialized extractor.
 
-        Args:
-            raw_text: Extracted text from OCR
-            start_time: Processing start time
-
-        Returns:
-            OCRResult with specialized extraction data
+        Strategy: Regex extractor first (fast, reliable, 900+ lines of
+        Austrian-tax-specific logic). LLM is only used as a lightweight
+        validation layer when regex confidence is below threshold.
+        AI = orchestration layer, not data extraction.
         """
-        try:
-            from app.services.e1_form_extractor import E1FormExtractor
+        from app.services.e1_form_extractor import E1FormExtractor
 
+        try:
             extractor = E1FormExtractor()
             data = extractor.extract(raw_text)
-
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000
             extracted_data = extractor.to_dict(data)
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
+            # If regex confidence is high enough, return directly
+            if data.confidence >= self.config.CONFIDENCE_THRESHOLD:
+                logger.info(
+                    "E1 regex extraction succeeded: confidence %.2f", data.confidence
+                )
+                return OCRResult(
+                    document_type=DocumentType.E1_FORM,
+                    extracted_data=extracted_data,
+                    raw_text=raw_text,
+                    confidence_score=data.confidence,
+                    needs_review=False,
+                    processing_time_ms=processing_time,
+                    suggestions=[],
+                )
+
+            # Low confidence — try LLM to validate/supplement key fields
+            llm_supplement = self._try_llm_e1_validation(
+                raw_text, extracted_data, data.confidence
+            )
+            if llm_supplement:
+                extracted_data.update(llm_supplement)
+                # Bump confidence slightly since LLM confirmed/added fields
+                boosted = min(0.95, data.confidence + 0.15)
+                processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                logger.info(
+                    "E1 LLM validation supplemented %d fields, confidence %.2f -> %.2f",
+                    len(llm_supplement), data.confidence, boosted,
+                )
+                return OCRResult(
+                    document_type=DocumentType.E1_FORM,
+                    extracted_data=extracted_data,
+                    raw_text=raw_text,
+                    confidence_score=boosted,
+                    needs_review=boosted < self.config.CONFIDENCE_THRESHOLD,
+                    processing_time_ms=processing_time,
+                    suggestions=["AI validation used to supplement extraction."],
+                )
+
+            # LLM unavailable or didn't help — return regex result as-is
             return OCRResult(
                 document_type=DocumentType.E1_FORM,
                 extracted_data=extracted_data,
@@ -618,6 +736,84 @@ class OCREngine:
                 processing_time_ms=processing_time,
                 suggestions=[f"E1 form extraction failed: {str(e)}"],
             )
+
+
+    def _try_llm_e1_validation(
+        self, raw_text: str, extracted_data: dict, regex_confidence: float
+    ) -> Optional[Dict[str, Any]]:
+        """
+        LLM as validation/supplement layer for E1 forms.
+
+        Only called when regex confidence is low. Sends a compact summary of
+        what regex already found plus a focused text excerpt, asking the LLM
+        to fill in missing fields. Returns a dict of supplemental fields to
+        merge, or None if LLM unavailable/unhelpful.
+
+        AI = orchestration layer. Regex does the heavy lifting.
+        """
+        from app.services.llm_service import get_llm_service
+
+        llm = get_llm_service()
+        if not llm.is_available:
+            return None
+
+        # Identify which key fields regex missed
+        key_fields = {
+            "tax_year": "Steuerjahr",
+            "taxpayer_name": "Name des Steuerpflichtigen",
+            "steuernummer": "Steuernummer",
+            "kz_245": "KZ 245 (Einkünfte aus nichtselbständiger Arbeit)",
+            "kz_260": "KZ 260 (Lohnsteuer)",
+            "kz_350": "KZ 350 (Einkünfte aus Vermietung)",
+        }
+        missing = {k: desc for k, desc in key_fields.items() if not extracted_data.get(k)}
+
+        if not missing:
+            # Nothing to supplement
+            return None
+
+        # Send a compact excerpt (first 6000 chars) — just enough for LLM
+        # to find the missing fields without blowing the context window
+        excerpt = raw_text[:6000]
+
+        missing_list = ", ".join(f"{k} ({desc})" for k, desc in missing.items())
+        system_prompt = (
+            "You are validating an Austrian E1 tax form extraction. "
+            "The regex extractor missed some fields. "
+            "Find ONLY the missing fields from the text. Reply with JSON only.\n"
+            "Austrian number format: 1.234,56 → output as 1234.56\n"
+            "Return ONLY a flat JSON object with the missing field keys and values."
+        )
+        user_prompt = (
+            f"Missing fields: {missing_list}\n\n"
+            f"Document text (excerpt):\n{excerpt}"
+        )
+
+        try:
+            logger.info(
+                "LLM E1 validation: %d missing fields, %d chars excerpt",
+                len(missing), len(excerpt),
+            )
+            response = llm.generate_simple(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+                max_tokens=500,
+            )
+
+            data = self._parse_vlm_json(response)
+            if not data or not isinstance(data, dict):
+                return None
+
+            # Only return fields that were actually missing
+            supplement = {k: v for k, v in data.items() if k in missing and v is not None}
+            if supplement:
+                logger.info("LLM supplemented %d fields: %s", len(supplement), list(supplement))
+            return supplement or None
+
+        except Exception as e:
+            logger.warning("LLM E1 validation failed: %s", e)
+            return None
 
     def _generate_tax_document_suggestions(self, confidence: float) -> List[str]:
         """
@@ -684,20 +880,67 @@ class OCREngine:
         return image
 
     def _extract_text_from_pdf(self, pdf_bytes: bytes) -> str:
-        """Extract text directly from PDF using PyMuPDF (no OCR needed if text layer exists)"""
+        """Extract text directly from PDF using PyMuPDF (no OCR needed if text layer exists).
+
+        Also extracts AcroForm widget values (filled-in form fields) which are common
+        in Austrian tax forms (E1, L1, etc.) where the text layer only contains labels
+        but the actual data lives in interactive form fields.
+        """
         try:
             import fitz
 
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+            # Detect if this is a tax form (E1/L1/etc.) — they can be 10+ pages
+            first_page_text = doc[0].get_text() if len(doc) > 0 else ""
+            is_tax_form = any(
+                kw in first_page_text
+                for kw in [
+                    "Einkommensteuererklärung",
+                    "E 1,",
+                    "E 1-PDF",
+                    "E 1-EDV",
+                    "Arbeitnehmerveranlagung",
+                    "L 1,",
+                    "Steuerberechnung",
+                ]
+            )
+            max_pages = min(len(doc), 20 if is_tax_form else 5)
+
             text_parts = []
-            # Extract text from first 3 pages max (receipts/invoices are usually 1-2 pages)
-            for i in range(min(len(doc), 3)):
-                page_text = doc[i].get_text()
+            form_field_parts = []
+
+            for i in range(max_pages):
+                page = doc[i]
+                page_text = page.get_text()
                 if page_text:
                     text_parts.append(page_text)
+
+                # Extract AcroForm widget values (filled-in form fields)
+                try:
+                    for widget in page.widgets():
+                        field_name = widget.field_name or ""
+                        field_value = widget.field_value
+                        if field_value and str(field_value).strip():
+                            form_field_parts.append(f"{field_name}: {field_value}")
+                except Exception:
+                    pass  # page.widgets() may fail on non-form pages
+
             doc.close()
-            return "\n".join(text_parts)
-        except Exception:
+
+            combined = "\n".join(text_parts)
+
+            # Append form field data so regex extractors can find KZ values
+            if form_field_parts:
+                logger.info(
+                    "Extracted %d form field values from PDF", len(form_field_parts)
+                )
+                combined += "\n\n--- FORM FIELDS ---\n"
+                combined += "\n".join(form_field_parts)
+
+            return combined
+        except Exception as e:
+            logger.warning("PDF text extraction failed: %s", e)
             return ""
 
     def _load_pdf_as_image(self, pdf_bytes: bytes) -> np.ndarray:
