@@ -58,7 +58,7 @@ def upgrade():
         'uat_feedback',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=True),
-        sa.Column('test_scenario', sa.Enum(
+        sa.Column('test_scenario', postgresql.ENUM(
             'property_registration',
             'historical_backfill',
             'transaction_linking',
@@ -67,24 +67,27 @@ def upgrade():
             'multi_property',
             'property_archival',
             'general',
-            name='testscenario'
+            name='testscenario',
+            create_type=False
         ), nullable=False),
-        sa.Column('category', sa.Enum(
+        sa.Column('category', postgresql.ENUM(
             'usability',
             'functionality',
             'value',
             'bug_report',
             'feature_request',
-            name='feedbackcategory'
+            name='feedbackcategory',
+            create_type=False
         ), nullable=False),
         sa.Column('rating', sa.Integer(), nullable=True),
         sa.Column('comment', sa.Text(), nullable=True),
-        sa.Column('severity', sa.Enum(
+        sa.Column('severity', postgresql.ENUM(
             'critical',
             'high',
             'medium',
             'low',
-            name='feedbackseverity'
+            name='feedbackseverity',
+            create_type=False
         ), nullable=True),
         sa.Column('steps_to_reproduce', sa.Text(), nullable=True),
         sa.Column('expected_result', sa.Text(), nullable=True),
@@ -107,7 +110,7 @@ def upgrade():
         'uat_metrics',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.Column('test_scenario', sa.Enum(
+        sa.Column('test_scenario', postgresql.ENUM(
             'property_registration',
             'historical_backfill',
             'transaction_linking',
@@ -116,7 +119,8 @@ def upgrade():
             'multi_property',
             'property_archival',
             'general',
-            name='testscenario'
+            name='testscenario',
+            create_type=False
         ), nullable=False),
         sa.Column('action', sa.String(length=100), nullable=False),
         sa.Column('duration_seconds', sa.Float(), nullable=True),
