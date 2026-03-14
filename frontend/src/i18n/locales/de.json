@@ -1152,6 +1152,10 @@
     "explanation": "AI-Erklärung",
     "suggestions": "AI-Vorschläge",
     "loading": "Laden...",
+    "serviceUnavailable": "AI-Dienst ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.",
+    "suggestionError": "Vorschläge konnten nicht geladen werden.",
+    "taxAdvisorTitle": "AI Steueroptimierung",
+    "taxAdvisorDesc": "Erhalten Sie personalisierte Steueroptimierungsvorschläge basierend auf Ihren Daten",
     "questions": {
       "general": {
         "incomeTax": "Wie wird die Einkommensteuer in Österreich berechnet?",

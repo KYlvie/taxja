@@ -219,6 +219,122 @@ class RAGService:
         if user.home_office_eligible:
             lines.append("Home office eligible: yes")
 
+        # --- Enhanced context: properties, loans, thresholds, gaps ---
+
+        # Property portfolio
+        try:
+            from app.models.property import Property, PropertyStatus
+            from app.models.property_loan import PropertyLoan
+
+            properties = (
+                self.db.query(Property)
+                .filter(Property.user_id == user.id, Property.status == PropertyStatus.ACTIVE)
+                .all()
+            )
+            if properties:
+                lines.append(f"Active properties: {len(properties)}")
+                for p in properties:
+                    dep_rate_pct = float(p.depreciation_rate or 0) * 100
+                    annual_dep = float(p.building_value or 0) * float(p.depreciation_rate or 0)
+                    lines.append(
+                        f"  Property: purchase €{p.purchase_price:,.0f}, "
+                        f"building €{p.building_value:,.0f}, "
+                        f"depreciation {dep_rate_pct:.1f}%/yr (€{annual_dep:,.0f}/yr), "
+                        f"accumulated depreciation €{p.accumulated_depreciation:,.0f}"
+                    )
+
+            loans = (
+                self.db.query(PropertyLoan)
+                .filter(PropertyLoan.user_id == user.id)
+                .all()
+            )
+            if loans:
+                total_loan_interest = sum(
+                    float(lo.calculate_annual_interest(tax_year)) for lo in loans
+                )
+                lines.append(
+                    f"Property loans: {len(loans)}, "
+                    f"estimated annual interest: €{total_loan_interest:,.0f}"
+                )
+        except Exception:
+            pass  # Property tables may not exist in all environments
+
+        # Recurring transactions
+        recurring = [t for t in transactions if t.is_recurring and t.recurring_is_active]
+        if recurring:
+            lines.append(f"Active recurring transactions: {len(recurring)}")
+
+        # Kleinunternehmerregelung threshold check (€55,000 since 2025)
+        # Only relevant for self-employed / business / mixed users
+        user_type_val = user.user_type.value if user.user_type else ""
+        if user_type_val in ("self_employed", "mixed", "small_business"):
+            business_income = sum(
+                v for k, v in income_cats.items()
+                if k in ("business", "self_employment")
+            )
+            if business_income > 0:
+                threshold = Decimal("55000")
+                pct_of_threshold = (business_income / threshold * 100).quantize(Decimal("1"))
+                lines.append(
+                    f"Kleinunternehmerregelung: business income €{business_income:,.0f} "
+                    f"= {pct_of_threshold}% of €55,000 threshold"
+                )
+                if business_income > Decimal("45000"):
+                    lines.append("WARNING: Approaching Kleinunternehmerregelung threshold!")
+
+        # Missing deduction detection
+        missing = []
+        has_employment = "employment" in income_cats
+        has_commuting_expense = "commuting" in expense_cats
+        has_home_office_expense = "home_office" in expense_cats
+        has_children = bool(family.get("num_children"))
+        has_childcare_expense = "kinderbetreuung" in expense_cats or any(
+            "kinderbetreuung" in (t.description or "").lower()
+            for t in transactions
+            if t.type == TransactionType.EXPENSE
+        )
+
+        if has_employment and commuting.get("distance_km") and not has_commuting_expense:
+            missing.append("Commuting allowance (Pendlerpauschale) not claimed")
+        if has_employment and user.home_office_eligible and not has_home_office_expense:
+            missing.append("Home office deduction not claimed")
+        if has_children and not has_childcare_expense:
+            missing.append("Childcare costs (Kinderbetreuungskosten) not recorded")
+
+        if missing:
+            lines.append("Potentially missing deductions: " + "; ".join(missing))
+
+        # Year-over-year comparison
+        try:
+            prev_transactions = (
+                self.db.query(Transaction)
+                .filter(
+                    Transaction.user_id == user.id,
+                    extract("year", Transaction.transaction_date) == tax_year - 1,
+                )
+                .all()
+            )
+            if prev_transactions:
+                prev_income = sum(
+                    (t.amount for t in prev_transactions if t.type == TransactionType.INCOME),
+                    Decimal("0"),
+                )
+                prev_expenses = sum(
+                    (t.amount for t in prev_transactions if t.type == TransactionType.EXPENSE),
+                    Decimal("0"),
+                )
+                if prev_income > 0:
+                    income_change = ((total_income - prev_income) / prev_income * 100).quantize(
+                        Decimal("1")
+                    )
+                    lines.append(
+                        f"Year-over-year: income {'+' if income_change > 0 else ''}"
+                        f"{income_change}%, "
+                        f"prev year income €{prev_income:,.0f}, expenses €{prev_expenses:,.0f}"
+                    )
+        except Exception:
+            pass
+
         return "\n".join(lines)
 
     @staticmethod

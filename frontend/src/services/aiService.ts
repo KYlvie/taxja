@@ -75,9 +75,9 @@ class AIService {
     const contextStr = parts.length > 0 ? ` My current situation: ${parts.join('. ')}.` : '';
 
     const prompts: Record<string, string> = {
-      de: `Welche Steueroptimierungen kannst du mir vorschlagen?${contextStr}`,
-      en: `What tax optimization suggestions do you have for my situation?${contextStr}`,
-      zh: `\u4F60\u80FD\u7ED9\u6211\u4EC0\u4E48\u7A0E\u52A1\u4F18\u5316\u5EFA\u8BAE\uFF1F${contextStr}`,
+      de: `Gib mir 5 konkrete, kurze Steueroptimierungstipps für österreichische Steuerpflichtige. Jeder Tipp maximal 2 Sätze. Formatiere als nummerierte Liste.${contextStr}`,
+      en: `Give me 5 specific, short tax optimization tips for Austrian taxpayers. Each tip max 2 sentences. Format as numbered list.${contextStr}`,
+      zh: `给我5条具体简短的奥地利税务优化建议。每条最多2句话。用编号列表格式。${contextStr}`,
     };
 
     return this.sendMessage(prompts[lang] || prompts.de);

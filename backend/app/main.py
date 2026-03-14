@@ -22,7 +22,15 @@ async def lifespan(app: FastAPI):
     await cache.connect()
     await rate_limiter.connect()
     print("✓ Cache and rate limiter connected")
-    
+
+    # Pre-load SentenceTransformer embedding model to avoid cold-start delay
+    try:
+        from app.services.vector_db_service import get_vector_db_service
+        _vdb = get_vector_db_service()
+        print(f"✓ Vector DB + embedding model pre-loaded ({_vdb.embedding_model.get_sentence_embedding_dimension()}d)")
+    except Exception as e:
+        print(f"⚠ Vector DB pre-load skipped: {e}")
+
     yield
     
     # Shutdown

@@ -1152,6 +1152,10 @@
     "explanation": "AI Explanation",
     "suggestions": "AI Suggestions",
     "loading": "Loading...",
+    "serviceUnavailable": "AI service is currently unavailable. Please try again later.",
+    "suggestionError": "Could not load suggestions.",
+    "taxAdvisorTitle": "AI Tax Optimization",
+    "taxAdvisorDesc": "Get personalized tax optimization suggestions based on your data",
     "questions": {
       "general": {
         "incomeTax": "How is income tax calculated in Austria?",

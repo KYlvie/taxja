@@ -12,6 +12,7 @@ import WhatIfSimulator from '../components/dashboard/WhatIfSimulator';
 import FlatRateComparison from '../components/dashboard/FlatRateComparison';
 import RefundEstimate from '../components/dashboard/RefundEstimate';
 import IncomeTypeHint from '../components/dashboard/IncomeTypeHint';
+import AITaxAdvisor from '../components/dashboard/AITaxAdvisor';
 import { RecurringSuggestionsList } from '../components/recurring/RecurringSuggestionsList';
 import { QuickActions } from '../components/dashboard/QuickActions';
 import './DashboardPage.css';
@@ -335,6 +336,9 @@ const DashboardPage = () => {
           yearOverYearData={chartData.yearOverYearData}
         />
       )}
+
+      {/* AI Tax Advisor */}
+      {hasTransactions && <AITaxAdvisor />}
 
       {/* What-If Simulator */}
       <WhatIfSimulator />
