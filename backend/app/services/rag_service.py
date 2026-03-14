@@ -257,7 +257,7 @@ class RAGService:
                     f"estimated annual interest: €{total_loan_interest:,.0f}"
                 )
         except Exception:
-            pass  # Property tables may not exist in all environments
+            self.db.rollback()  # Prevent poisoned transaction from breaking subsequent queries
 
         # Recurring transactions
         recurring = [t for t in transactions if t.is_recurring and t.recurring_is_active]
@@ -333,7 +333,7 @@ class RAGService:
                         f"prev year income €{prev_income:,.0f}, expenses €{prev_expenses:,.0f}"
                     )
         except Exception:
-            pass
+            self.db.rollback()
 
         return "\n".join(lines)
 

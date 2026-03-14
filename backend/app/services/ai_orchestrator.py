@@ -1078,7 +1078,7 @@ class AIOrchestrator:
                         rag = RAGService(self.db)
                         financial_summary = rag._build_financial_summary(user, year, language)
                     except Exception:
-                        pass
+                        self.db.rollback()
 
                 context_chunks = []
                 if extra_context:
@@ -1108,7 +1108,7 @@ class AIOrchestrator:
                             rag = RAGService(self.db)
                             user_ctx = rag._build_financial_summary(user, year, language)
                         except Exception:
-                            pass
+                            self.db.rollback()
                     text = lightweight.answer_tax_question(
                         question=message,
                         language=language,
