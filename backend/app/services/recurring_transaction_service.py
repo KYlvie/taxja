@@ -189,18 +189,23 @@ class RecurringTransactionService:
     def generate_due_transactions(self, target_date: Optional[date] = None) -> List[Transaction]:
         """
         Generate all due recurring transactions up to target date.
-        
-        This should be called daily by a scheduled task (Celery beat).
-        
+
+        Backfills ALL missed occurrences: if a monthly recurring transaction
+        has next_generation_date=2024-01-01 and target_date=2026-03-14,
+        it will generate a transaction for every missed month.
+
+        This should be called daily by a scheduled task (Celery beat),
+        and also triggered on dashboard load or manual API call.
+
         Args:
             target_date: Date to generate up to (defaults to today)
-            
+
         Returns:
             List of generated transactions
         """
         if target_date is None:
             target_date = date.today()
-        
+
         # Find all active recurring transactions that are due
         due_recurrings = self.db.query(RecurringTransaction).filter(
             and_(
@@ -209,29 +214,45 @@ class RecurringTransactionService:
                 RecurringTransaction.next_generation_date <= target_date
             )
         ).all()
-        
+
         generated_transactions = []
-        
+
         for recurring in due_recurrings:
-            # Check if should generate
-            if not recurring.should_generate_for_date(target_date):
-                continue
-            
-            # Check if end date has passed
+            # Check if end date has passed entirely
+            if recurring.end_date and target_date > recurring.end_date:
+                # Still generate up to end_date, then deactivate
+                effective_target = recurring.end_date
+            else:
+                effective_target = target_date
+
+            # Loop: generate ALL missed occurrences up to effective_target
+            # Safety limit to prevent infinite loops (max 120 = 10 years monthly)
+            iterations = 0
+            max_iterations = 120
+
+            while (
+                recurring.next_generation_date is not None
+                and recurring.next_generation_date <= effective_target
+                and iterations < max_iterations
+            ):
+                gen_date = recurring.next_generation_date
+
+                # Generate transaction for this occurrence
+                transaction = self._generate_transaction_from_recurring(recurring, gen_date)
+                generated_transactions.append(transaction)
+
+                # Advance to next occurrence
+                recurring.last_generated_date = gen_date
+                recurring.next_generation_date = recurring.calculate_next_date(gen_date)
+                iterations += 1
+
+            # Deactivate if end date has fully passed
             if recurring.end_date and target_date > recurring.end_date:
                 recurring.is_active = False
-                continue
-            
-            # Generate transaction
-            transaction = self._generate_transaction_from_recurring(recurring, target_date)
-            generated_transactions.append(transaction)
-            
-            # Update recurring transaction
-            recurring.last_generated_date = target_date
-            recurring.next_generation_date = recurring.calculate_next_date(target_date)
-        
-        self.db.commit()
-        
+
+        if generated_transactions:
+            self.db.commit()
+
         return generated_transactions
     
     def _generate_transaction_from_recurring(

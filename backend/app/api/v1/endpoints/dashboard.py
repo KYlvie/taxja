@@ -28,6 +28,21 @@ def get_dashboard(
     """Get comprehensive dashboard data."""
     resolved_year = tax_year or year or datetime.now().year
     try:
+        # Auto-generate any due recurring transactions (backfills missed months)
+        # This ensures recurring income/expenses appear even without Celery running
+        try:
+            from app.services.recurring_transaction_service import RecurringTransactionService
+            recurring_service = RecurringTransactionService(db)
+            generated = recurring_service.generate_due_transactions(target_date=date.today())
+            if generated:
+                import logging
+                logging.getLogger(__name__).info(
+                    f"Auto-generated {len(generated)} recurring transactions for user {current_user.id}"
+                )
+        except Exception as gen_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Recurring generation failed: {gen_err}")
+
         dashboard_service = DashboardService(db)
         data = dashboard_service.get_dashboard_data(current_user.id, resolved_year, user=current_user)
         return data

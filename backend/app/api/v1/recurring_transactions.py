@@ -49,6 +49,24 @@ def list_recurring_transactions(
     )
 
 
+@router.post("/generate")
+def generate_recurring_transactions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Manually trigger generation of all due recurring transactions"""
+    from datetime import date
+    service = RecurringTransactionService(db)
+    generated = service.generate_due_transactions(target_date=date.today())
+    return {
+        "generated_count": len(generated),
+        "transactions": [
+            {"id": t.id, "amount": str(t.amount), "date": str(t.date), "description": t.description}
+            for t in generated
+        ],
+    }
+
+
 @router.get("/{recurring_id}", response_model=RecurringTransactionResponse)
 def get_recurring_transaction(
     recurring_id: int,
