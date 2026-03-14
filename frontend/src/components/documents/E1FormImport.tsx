@@ -63,6 +63,17 @@ const E1FormImport = ({ ocrText, documentId, initialParseResult, onImportComplet
     ? `${(parseResult.confidence * 100).toFixed(0)}%`
     : '—';
 
+  // Map non-numeric KZ keys to readable labels
+  const kzLabel = (key: string): string => {
+    const labels: Record<string, string> = {
+      'gesamtbetrag_einkuenfte': t('documents.bescheid.einkommen', { defaultValue: 'Gesamtbetrag der Einkünfte' }),
+    };
+    if (labels[key]) return labels[key];
+    // Strip "kz_" prefix if present for cleaner display
+    const cleaned = key.replace(/^kz_/, '');
+    return `KZ ${cleaned}`;
+  };
+
   if (step === 'imported' && importResult) {
     return (
       <div className="bescheid-import">
@@ -127,7 +138,7 @@ const E1FormImport = ({ ocrText, documentId, initialParseResult, onImportComplet
               <div className="bescheid-grid">
                 {Object.entries(parseResult.all_kz_values).map(([kz, value]: [string, any]) => (
                   <div key={kz} className="bescheid-field">
-                    <label>KZ {kz}</label>
+                    <label>{kzLabel(kz)}</label>
                     <span>{fmt(value)}</span>
                   </div>
                 ))}

@@ -708,6 +708,20 @@
       "noOcrText": "Could not extract text from the file. Please ensure the file is clear and readable.",
       "uploadError": "Failed to upload Bescheid file"
     },
+    "e1": {
+      "title": "Import Income Tax Declaration (E1)",
+      "description": "Upload your E1 income tax declaration to automatically extract KZ data",
+      "parsePreview": "Preview of extracted data",
+      "importConfirm": "Import data and create transactions",
+      "taxYear": "Tax Year",
+      "taxpayerName": "Taxpayer",
+      "steuernummer": "Tax Number",
+      "extractedKZ": "Extracted KZ Values",
+      "transactionsCreated": "{{count}} transactions created",
+      "importSuccess": "E1 form imported successfully",
+      "importError": "Error importing E1 form",
+      "confidence": "Recognition Confidence"
+    },
     "ocr": {
       "propertyAddress": "Property Address",
       "street": "Street",

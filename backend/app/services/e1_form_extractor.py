@@ -714,7 +714,7 @@ class E1FormExtractor:
             # amount2 is always the net income (KZ 9414)
             if amount2 and abs(amount2) > 0:
                 property_detail.einkuenfte = amount2
-                data.all_kz_values['kz_9414'] = amount2
+                data.all_kz_values['9414'] = amount2
             
             # amount1 could be either income (KZ 9460) or total expenses
             # If net is negative (loss), amount1 is likely total expenses
@@ -727,11 +727,11 @@ class E1FormExtractor:
                     gross_income = amount1 - abs(amount2)
                     if gross_income > 0:
                         property_detail.einnahmen = gross_income
-                        data.all_kz_values['kz_9460'] = gross_income
+                        data.all_kz_values['9460'] = gross_income
                 else:
                     # Profit scenario: amount1 is gross income
                     property_detail.einnahmen = amount1
-                    data.all_kz_values['kz_9460'] = amount1
+                    data.all_kz_values['9460'] = amount1
             
             # Try to find property address from the same E1b section
             # Look backwards from the summary to find the address on page 1
@@ -802,7 +802,7 @@ class E1FormExtractor:
                 property_detail.einkuenfte = rental_info['net_income']
                 # Only add to all_kz_values if non-zero
                 if rental_info['net_income'] != Decimal("0"):
-                    kz_key = f"kz_9414_{len(data.vermietung_details) + 1}"
+                    kz_key = f"9414_{len(data.vermietung_details) + 1}"
                     data.all_kz_values[kz_key] = rental_info['net_income']
                 data.vermietung_details.append(property_detail)
         

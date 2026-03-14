@@ -708,6 +708,20 @@
       "noOcrText": "Kein Text aus der Datei extrahierbar. Bitte stellen Sie sicher, dass die Datei gut lesbar ist.",
       "uploadError": "Fehler beim Hochladen der Bescheid-Datei"
     },
+    "e1": {
+      "title": "Einkommensteuererklärung (E1) importieren",
+      "description": "Laden Sie Ihre E1-Erklärung hoch, um die KZ-Daten automatisch zu extrahieren",
+      "parsePreview": "Vorschau der erkannten Daten",
+      "importConfirm": "Daten importieren und Transaktionen erstellen",
+      "taxYear": "Steuerjahr",
+      "taxpayerName": "Steuerpflichtiger",
+      "steuernummer": "Steuernummer",
+      "extractedKZ": "Extrahierte KZ-Werte",
+      "transactionsCreated": "{{count}} Transaktionen erstellt",
+      "importSuccess": "E1-Erklärung erfolgreich importiert",
+      "importError": "Fehler beim Import der E1-Erklärung",
+      "confidence": "Erkennungskonfidenz"
+    },
     "ocr": {
       "propertyAddress": "Immobilienadresse",
       "street": "Straße",
