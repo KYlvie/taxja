@@ -32,15 +32,15 @@ class KnowledgeBaseService:
                 "metadata": {"source": "USP 2026", "category": "income_tax", "language": "zh"}
             },
             {
-                "text": "Umsatzsteuer (VAT) in Österreich: Der Standardsatz beträgt 20%. Für Wohnraumvermietung gilt ein ermäßigter Satz von 10% oder Befreiung. Kleinunternehmer mit einem Jahresumsatz unter €55.000 sind von der Umsatzsteuer befreit. Bei Umsätzen zwischen €55.000 und €60.500 gilt die Toleranzregel.",
+                "text": "Umsatzsteuer (VAT) in Österreich: Der Standardsatz beträgt 20%. Ermäßigter Satz 10% für Lebensmittel, Bücher, Wohnraumvermietung und Beherbergung (kurzfristige Vermietung/Hotels). Besonderer Satz 13% für Kulturveranstaltungen. Kleinunternehmerregelung (§6 Abs 1 Z 27 UStG): Jahresumsatz bis €35.000 netto = USt-befreit. Toleranzgrenze: einmalig bis €40.000. Kurzfristige Beherbergung (Airbnb, Ferienwohnung, Hotel): immer 10% USt (§10 Abs 2 Z 4 UStG), unabhängig ob §23 oder §28 EStG.",
                 "metadata": {"source": "Austrian Tax Law", "category": "vat", "language": "de"}
             },
             {
-                "text": "Value Added Tax (VAT) in Austria: The standard rate is 20%. For residential rentals, a reduced rate of 10% or exemption applies. Small businesses with annual turnover below €55,000 are exempt from VAT. For turnover between €55,000 and €60,500, the tolerance rule applies.",
+                "text": "Value Added Tax (VAT) in Austria: Standard rate 20%. Reduced rate 10% for food, books, residential rental, and accommodation (short-term rental/hotels, §10 Abs 2 Z 4 UStG). Special rate 13% for cultural events. Kleinunternehmerregelung (§6 Abs 1 Z 27 UStG): annual turnover up to €35,000 net = VAT exempt. Tolerance: one-time up to €40,000. Short-term accommodation (Airbnb, holiday apartment, hotel): always 10% VAT, regardless of whether classified as §23 or §28 EStG.",
                 "metadata": {"source": "Austrian Tax Law", "category": "vat", "language": "en"}
             },
             {
-                "text": "奥地利增值税：标准税率为20%。住宅租赁适用10%的优惠税率或免税。年营业额低于€55,000的小企业免征增值税。营业额在€55,000至€60,500之间适用容忍规则。",
+                "text": "奥地利增值税(UStG)：标准税率20%。优惠税率10%适用于食品、书籍、住宅租赁和住宿服务（短租/酒店，§10 Abs 2 Z 4 UStG）。特殊税率13%适用于文化活动。小企业规则(Kleinunternehmerregelung，§6 Abs 1 Z 27 UStG)：年净营业额不超过€35,000可免征增值税。容忍限额：一次性可达€40,000。短期住宿（Airbnb、度假公寓、酒店）：始终适用10%增值税，无论所得税分类为§23还是§28 EStG。",
                 "metadata": {"source": "Austrian Tax Law", "category": "vat", "language": "zh"}
             },
             {
@@ -270,6 +270,137 @@ class KnowledgeBaseService:
             {
                 "text": "基本利润免税额(Grundfreibetrag)：自雇人员可申请利润的15%作为基本免税额，每年最高€4,950。此金额在所得税计算中自动应用，减少应税收入。",
                 "metadata": {"source": "BMF Steuerbuch 2026", "category": "self_employed_deductions", "language": "zh"}
+            },
+            # --- Short-term Rental / Airbnb Classification ---
+            {
+                "text": (
+                    "Kurzfristige Vermietung (Airbnb, Ferienwohnung) – Einkommensteuer und USt: "
+                    "1) Einkommensteuer-Klassifizierung: Wenn der Vermieter hotel-ähnliche Leistungen erbringt "
+                    "(Reinigung, Bettwäsche, Frühstück, Check-in-Service, Gästebetreuung), handelt es sich um "
+                    "§23 EStG Gewerbebetrieb. Ohne solche Zusatzleistungen (nur Schlüsselübergabe + Wohnung) "
+                    "= §28 EStG Vermietung und Verpachtung. "
+                    "2) Umsatzsteuer: Kurzfristige Beherbergung unterliegt IMMER 10% USt "
+                    "(§10 Abs 2 Z 4 UStG – Beherbergung in eingerichteten Wohn- und Schlafräumen), "
+                    "unabhängig davon ob es als §23 oder §28 klassifiziert wird. "
+                    "NICHT 20% und NICHT 13%. "
+                    "3) Kleinunternehmerregelung: Bei Jahresumsatz ≤ €35.000 netto entfällt die USt-Pflicht "
+                    "(§6 Abs 1 Z 27 UStG). "
+                    "4) SVS: Nur bei §23 Gewerbebetrieb fallen SVS-Beiträge an. Bei §28 Vermietung keine SVS."
+                ),
+                "metadata": {"source": "EStG §23/§28, UStG §10 Abs 2 Z 4", "category": "rental_vat", "language": "de"}
+            },
+            {
+                "text": (
+                    "Short-term rental (Airbnb, holiday apartment) – Income tax and VAT classification: "
+                    "1) Income tax: If the landlord provides hotel-like services (cleaning, linens, breakfast, "
+                    "check-in service, guest care) = §23 EStG Gewerbebetrieb (trade/business). "
+                    "Without such services (just keys + apartment) = §28 EStG Vermietung (rental). "
+                    "2) VAT: Short-term accommodation is ALWAYS subject to 10% VAT "
+                    "(§10 Abs 2 Z 4 UStG – accommodation in furnished rooms), "
+                    "regardless of whether classified as §23 or §28. NOT 20% and NOT 13%. "
+                    "3) Kleinunternehmerregelung: Annual turnover ≤ €35,000 net = VAT exempt "
+                    "(§6 Abs 1 Z 27 UStG). "
+                    "4) SVS: Only §23 Gewerbebetrieb triggers SVS contributions. §28 rental = no SVS."
+                ),
+                "metadata": {"source": "EStG §23/§28, UStG §10 Abs 2 Z 4", "category": "rental_vat", "language": "en"}
+            },
+            {
+                "text": (
+                    "短期出租（Airbnb、度假公寓）— 所得税和增值税分类规则："
+                    "1) 所得税分类：如果房东提供酒店式服务（清洁、床上用品、早餐、入住服务、客人接待），"
+                    "属于§23 EStG 营业收入(Gewerbebetrieb)。"
+                    "如果没有这些附加服务（只是交钥匙+公寓），属于§28 EStG 出租收入(Vermietung)。"
+                    "2) 增值税：短期住宿始终适用10%增值税"
+                    "（§10 Abs 2 Z 4 UStG — 配备家具的住宿房间），"
+                    "无论所得税分类为§23还是§28。不是20%，也不是13%。"
+                    "3) 小企业规则：年净营业额≤€35,000可免征增值税（§6 Abs 1 Z 27 UStG）。"
+                    "4) SVS社保：只有§23营业收入需要缴纳SVS。§28出租收入不需要SVS。"
+                ),
+                "metadata": {"source": "EStG §23/§28, UStG §10 Abs 2 Z 4", "category": "rental_vat", "language": "zh"}
+            },
+            # --- UStG VAT Rate Summary ---
+            {
+                "text": (
+                    "Österreichische USt-Sätze Übersicht (UStG): "
+                    "20% Normalsteuersatz (§10 Abs 1): Dienstleistungen, Waren, gewerbliche Vermietung. "
+                    "10% Ermäßigter Satz (§10 Abs 2): Lebensmittel, Bücher, Zeitungen, Personenbeförderung, "
+                    "Wohnraumvermietung, Beherbergung (Hotels, Airbnb, Ferienwohnungen), Medikamente. "
+                    "13% Besonderer Satz (§10 Abs 3): Kulturveranstaltungen, Tierhaltung, Blumen, "
+                    "Jugendbeherbergung, Filmvorführungen. "
+                    "0% Steuerbefreiung: Exporte, innergemeinschaftliche Lieferungen, "
+                    "Kleinunternehmer (§6 Abs 1 Z 27, Umsatz ≤ €35.000/Jahr)."
+                ),
+                "metadata": {"source": "UStG §10", "category": "vat_rates", "language": "de"}
+            },
+            {
+                "text": (
+                    "Austrian VAT rates overview (UStG): "
+                    "20% Standard rate (§10 Abs 1): Services, goods, commercial rental. "
+                    "10% Reduced rate (§10 Abs 2): Food, books, newspapers, passenger transport, "
+                    "residential rental, accommodation (hotels, Airbnb, holiday apartments), medicine. "
+                    "13% Special rate (§10 Abs 3): Cultural events, animal husbandry, flowers, "
+                    "youth hostels, film screenings. "
+                    "0% Exempt: Exports, intra-community supplies, "
+                    "small businesses (§6 Abs 1 Z 27, turnover ≤ €35,000/year)."
+                ),
+                "metadata": {"source": "UStG §10", "category": "vat_rates", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利增值税税率总览(UStG)："
+                    "20%标准税率(§10 Abs 1)：服务、商品、商业出租。"
+                    "10%优惠税率(§10 Abs 2)：食品、书籍、报纸、客运、"
+                    "住宅出租、住宿服务（酒店、Airbnb、度假公寓）、药品。"
+                    "13%特殊税率(§10 Abs 3)：文化活动、畜牧业、花卉、青年旅舍、电影放映。"
+                    "0%免税：出口、欧盟内部供应、"
+                    "小企业（§6 Abs 1 Z 27，年营业额≤€35,000）。"
+                ),
+                "metadata": {"source": "UStG §10", "category": "vat_rates", "language": "zh"}
+            },
+            # --- Einkunftsarten (7 Income Types) ---
+            {
+                "text": (
+                    "Die 7 Einkunftsarten nach §2 EStG: "
+                    "1. §21 Land- und Forstwirtschaft: Einkünfte aus land-/forstwirtschaftlichem Betrieb. "
+                    "2. §22 Selbständige Arbeit: Freiberufler (Ärzte, Anwälte, Künstler, Wissenschaftler). "
+                    "3. §23 Gewerbebetrieb: Gewerbliche Tätigkeit mit Gewinnerzielungsabsicht. "
+                    "Dazu gehört auch kurzfristige Vermietung MIT hotel-ähnlichen Zusatzleistungen. "
+                    "4. §25 Nichtselbständige Arbeit: Arbeitnehmer, Pensionisten. "
+                    "5. §27 Kapitalvermögen: Zinsen, Dividenden, Kursgewinne (KESt 27,5%). "
+                    "6. §28 Vermietung und Verpachtung: Langfristige Vermietung, kurzfristige Vermietung "
+                    "OHNE hotel-ähnliche Leistungen. Keine SVS-Pflicht. "
+                    "7. §29 Sonstige Einkünfte: Spekulationsgewinne, gelegentliche Vermittlung."
+                ),
+                "metadata": {"source": "EStG §2", "category": "income_types", "language": "de"}
+            },
+            {
+                "text": (
+                    "The 7 income types under §2 EStG: "
+                    "1. §21 Agriculture/Forestry: Income from agricultural/forestry operations. "
+                    "2. §22 Self-employment: Freelancers (doctors, lawyers, artists, scientists). "
+                    "3. §23 Trade/Business (Gewerbebetrieb): Commercial activity with profit intent. "
+                    "Includes short-term rental WITH hotel-like additional services. "
+                    "4. §25 Employment: Employees, pensioners. "
+                    "5. §27 Capital gains: Interest, dividends, capital gains (KESt 27.5%). "
+                    "6. §28 Rental income (Vermietung): Long-term rental, short-term rental "
+                    "WITHOUT hotel-like services. No SVS obligation. "
+                    "7. §29 Other income: Speculative gains, occasional brokerage."
+                ),
+                "metadata": {"source": "EStG §2", "category": "income_types", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利所得税法(EStG)§2规定的7种收入类型："
+                    "1. §21 农林业收入：来自农业/林业经营的收入。"
+                    "2. §22 自由职业收入：自由职业者（医生、律师、艺术家、科学家）。"
+                    "3. §23 营业收入(Gewerbebetrieb)：以盈利为目的的商业活动。"
+                    "包括提供酒店式附加服务的短期出租。"
+                    "4. §25 雇佣收入：雇员、退休人员。"
+                    "5. §27 资本收入：利息、股息、资本利得（KESt 27.5%）。"
+                    "6. §28 出租收入(Vermietung)：长期出租、不提供酒店式服务的短期出租。无SVS义务。"
+                    "7. §29 其他收入：投机收益、偶尔的中介活动。"
+                ),
+                "metadata": {"source": "EStG §2", "category": "income_types", "language": "zh"}
             }
         ]
         
@@ -343,15 +474,15 @@ class KnowledgeBaseService:
                 "metadata": {"category": "deductions", "language": "zh"}
             },
             {
-                "text": "Q: Muss ich als Kleinunternehmer Umsatzsteuer zahlen? A: Nein, wenn Ihr Jahresumsatz unter €55.000 liegt, sind Sie von der Umsatzsteuer befreit. Bei €55.000-€60.500 gilt die Toleranzregel (noch befreit, aber nächstes Jahr automatisch steuerpflichtig).",
+                "text": "Q: Muss ich als Kleinunternehmer Umsatzsteuer zahlen? A: Nein, wenn Ihr Jahresumsatz unter €35.000 netto liegt, sind Sie von der Umsatzsteuer befreit (§6 Abs 1 Z 27 UStG). Toleranzgrenze: einmalig bis €40.000. Achtung: Kurzfristige Beherbergung (Airbnb, Ferienwohnung) unterliegt 10% USt (§10 Abs 2 Z 4 UStG), nicht 20%.",
                 "metadata": {"category": "vat", "language": "de"}
             },
             {
-                "text": "Q: Do I have to pay VAT as a small business? A: No, if your annual turnover is below €55,000, you are exempt from VAT. For €55,000-€60,500, the tolerance rule applies (still exempt, but automatically taxable next year).",
+                "text": "Q: Do I have to pay VAT as a small business? A: No, if your annual net turnover is below €35,000, you are exempt from VAT (§6 Abs 1 Z 27 UStG). Tolerance: one-time up to €40,000. Note: Short-term accommodation (Airbnb, holiday apartment) is subject to 10% VAT (§10 Abs 2 Z 4 UStG), not 20%.",
                 "metadata": {"category": "vat", "language": "en"}
             },
             {
-                "text": "Q: 作为小企业我需要缴纳增值税吗？A: 不需要，如果您的年营业额低于€55,000，您可以免征增值税。对于€55,000-€60,500，适用容忍规则(仍然免税，但明年自动纳税)。",
+                "text": "Q: 作为小企业我需要缴纳增值税吗？A: 不需要，如果您的年净营业额低于€35,000，您可以免征增值税（§6 Abs 1 Z 27 UStG）。容忍限额：一次性可达€40,000。注意：短期住宿（Airbnb、度假公寓）适用10%增值税（§10 Abs 2 Z 4 UStG），不是20%。",
                 "metadata": {"category": "vat", "language": "zh"}
             }
         ]

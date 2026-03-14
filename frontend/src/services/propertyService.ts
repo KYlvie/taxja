@@ -225,7 +225,13 @@ export const propertyService = {
       if (year) params.year = year;
 
       const response = await api.get(`/properties/${propertyId}/transactions`, { params });
-      return response.data.transactions || response.data || [];
+      const raw = response.data.transactions || response.data || [];
+      return raw.map((t: any) => ({
+        ...t,
+        date: t.transaction_date || t.date,
+        category: t.income_category || t.expense_category || t.category || 'other',
+        amount: Number(t.amount),
+      }));
     } catch (error: any) {
       console.error('Error fetching property transactions:', error);
       throw error;

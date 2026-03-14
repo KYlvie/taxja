@@ -162,6 +162,63 @@
 .result-value.positive { color: var(--color-success); }
 .result-value.negative { color: var(--color-danger); }
 
+.classification-box {
+  background: var(--color-info-light, #f0f4ff);
+  border-left: 4px solid var(--color-primary, #6366f1);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.classification-box h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  color: var(--color-primary, #6366f1);
+}
+
+.classification-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.classification-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.classification-label {
+  color: var(--color-text-secondary, #6b7280);
+  min-width: 80px;
+}
+
+.classification-value {
+  font-weight: 500;
+}
+
+.classification-explanation {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #6b7280);
+  font-style: italic;
+}
+
+.verified-badge {
+  color: var(--color-success, #10b981);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.classification-correction {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.85rem;
+  color: var(--color-warning, #f59e0b);
+  background: rgba(245, 158, 11, 0.08);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
 .explanation-box {
   background: var(--color-info-light);
   border-left: 4px solid var(--color-info);

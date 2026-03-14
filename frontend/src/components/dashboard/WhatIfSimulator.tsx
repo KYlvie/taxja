@@ -21,6 +21,18 @@ interface SimulationResult {
   simulatedNetIncome: number;
   netIncomeDifference: number;
   explanation: string;
+  classification?: {
+    category: string;
+    category_type: string;
+    legal_basis: string;
+    is_deductible?: boolean;
+    vat_rate?: number | null;
+    vat_note?: string | null;
+    confidence: number;
+    explanation: string;
+    verified?: boolean;
+    correction_note?: string | null;
+  };
 }
 
 const WhatIfSimulator = () => {
@@ -236,6 +248,55 @@ const WhatIfSimulator = () => {
               </div>
             </div>
           </div>
+
+          {result.classification && (
+            <div className="classification-box">
+              <h5>🤖 {t('dashboard.aiClassification')}
+                {result.classification.verified && <span className="verified-badge"> ✓ {t('dashboard.verified')}</span>}
+              </h5>
+              <div className="classification-details">
+                <div className="classification-row">
+                  <span className="classification-label">{t('dashboard.classifiedCategory')}:</span>
+                  <span className="classification-value category-badge">
+                    {t(`transactions.categories.${result.classification.category}`, result.classification.category)}
+                  </span>
+                </div>
+                <div className="classification-row">
+                  <span className="classification-label">{t('dashboard.legalBasis')}:</span>
+                  <span className="classification-value">{result.classification.legal_basis}</span>
+                </div>
+                {result.classification.vat_rate != null && (
+                  <div className="classification-row">
+                    <span className="classification-label">{t('dashboard.vatRate')}:</span>
+                    <span className="classification-value">
+                      {(result.classification.vat_rate * 100).toFixed(0)}%
+                      {result.classification.vat_note && ` — ${result.classification.vat_note}`}
+                    </span>
+                  </div>
+                )}
+                {result.classification.is_deductible !== undefined && (
+                  <div className="classification-row">
+                    <span className="classification-label">{t('transactions.deductible')}:</span>
+                    <span className="classification-value">
+                      {result.classification.is_deductible ? '✓' : '✗'}
+                    </span>
+                  </div>
+                )}
+                <div className="classification-row">
+                  <span className="classification-label">{t('documents.confidence')}:</span>
+                  <span className="classification-value">
+                    {(result.classification.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+              {result.classification.correction_note && (
+                <p className="classification-correction">⚠ {result.classification.correction_note}</p>
+              )}
+              {result.classification.explanation && (
+                <p className="classification-explanation">{result.classification.explanation}</p>
+              )}
+            </div>
+          )}
 
           <div className="explanation-box">
             <h5>{t('dashboard.explanation')}</h5>

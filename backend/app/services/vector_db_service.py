@@ -122,12 +122,21 @@ class VectorDBService:
         self.client.delete_collection(name=name)
     
     def reset_collection(self, name: str):
-        """Reset a collection (delete and recreate)"""
+        """Reset a collection (delete and recreate), updating cached references."""
         try:
             self.client.delete_collection(name=name)
         except Exception:
             pass
-        return self._get_or_create_collection(name)
+        new_coll = self._get_or_create_collection(name)
+        # Update cached reference so _get_collection returns the new object
+        if name == "austrian_tax_law":
+            self.tax_law_collection = new_coll
+        elif name == "usp_2026_tax_tables":
+            self.tax_tables_collection = new_coll
+        elif name == "tax_faq":
+            self.faq_collection = new_coll
+        return new_coll
+
 
 
 # Singleton instance

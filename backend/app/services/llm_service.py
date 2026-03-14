@@ -81,7 +81,7 @@ class LLMService:
 
         # Groq settings (fast & free alternative)
         self.groq_enabled = getattr(settings, "GROQ_ENABLED", False) or os.getenv("GROQ_ENABLED", "").lower() == "true"
-        self.groq_api_key = os.getenv("GROQ_API_KEY", "")
+        self.groq_api_key = getattr(settings, "GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
         self.groq_model = getattr(settings, "GROQ_MODEL", "") or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
         self.groq_client = None
 
@@ -107,8 +107,10 @@ class LLMService:
             except Exception as e:
                 logger.warning("GPT-OSS-120B initialization failed: %s", e)
 
-        # Initialize Groq client (priority over OpenAI for speed)
-        if self.groq_enabled and self.groq_api_key and not self.gpt_oss_client:
+        # Initialize Groq client (fast cloud LLM for text tasks)
+        # Always initialize if enabled — works alongside GPT-OSS
+        # GPT-OSS handles vision (OCR), Groq handles text (classification, chat)
+        if self.groq_enabled and self.groq_api_key:
             try:
                 self.groq_client = OpenAI(
                     api_key=self.groq_api_key,
@@ -163,12 +165,24 @@ class LLMService:
     def _use_gpt_oss(self) -> bool:
         return self.gpt_oss_client is not None
 
-    def _get_active_client_and_model(self) -> tuple[OpenAI, str]:
-        """Return the highest-priority available client and model name."""
-        if self.gpt_oss_client:
-            return self.gpt_oss_client, self.gpt_oss_model
-        if self.groq_client:
-            return self.groq_client, self.groq_model
+    def _get_active_client_and_model(self, prefer_vision: bool = False) -> tuple[OpenAI, str]:
+        """Return the highest-priority available client and model name.
+
+        For text tasks (prefer_vision=False): Groq > GPT-OSS > OpenAI
+        For vision tasks (prefer_vision=True): GPT-OSS > Groq > OpenAI
+        """
+        if prefer_vision:
+            # Vision: GPT-OSS (VL model) first
+            if self.gpt_oss_client:
+                return self.gpt_oss_client, self.gpt_oss_model
+            if self.groq_client:
+                return self.groq_client, self.groq_model
+        else:
+            # Text: Groq (fast, free) first
+            if self.groq_client:
+                return self.groq_client, self.groq_model
+            if self.gpt_oss_client:
+                return self.gpt_oss_client, self.gpt_oss_model
         if self.client:
             return self.client, self.model
         raise RuntimeError("No LLM service configured")
@@ -345,7 +359,7 @@ class LLMService:
                 messages, temperature=temperature, max_tokens=max_tokens, think=False
             )
 
-        active_client, active_model = self._get_active_client_and_model()
+        active_client, active_model = self._get_active_client_and_model(prefer_vision=True)
 
         # Try with requested max_tokens, then halve on context-length 400 errors
         attempts = [max_tokens, max_tokens // 2, max_tokens // 4]

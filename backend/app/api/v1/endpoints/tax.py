@@ -29,6 +29,8 @@ from app.services.employee_refund_calculator import (
 router = APIRouter()
 
 
+
+
 class LohnzettelRequest(BaseModel):
     gross_income: float = Field(..., description="Gross annual income (Brutto)")
     withheld_tax: float = Field(..., description="Withheld income tax (Lohnsteuer)")
@@ -205,6 +207,227 @@ def estimate_refund_potential(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# AI classification helper for What-If Simulator
+# ---------------------------------------------------------------------------
+_CLASSIFY_SYSTEM_PROMPT = """\
+You are an Austrian tax classification expert. Given a description of income or expense,
+classify it according to Austrian tax law (EStG / UStG).
+
+CRITICAL: You MUST reply in the SAME LANGUAGE as the user's description.
+If the description is in Chinese, reply in Chinese. If German, reply in German. Etc.
+
+For INCOME, determine which Einkunftsart (§2 EStG) it belongs to:
+- agriculture (§21 Land- und Forstwirtschaft)
+- self_employment (§22 Selbständige Arbeit / Freiberufler)
+- business (§23 Gewerbebetrieb)
+- employment (§25 Nichtselbständige Arbeit)
+- capital_gains (§27 Kapitalvermögen)
+- rental (§28 Vermietung und Verpachtung)
+- other_income (§29 Sonstige Einkünfte)
+
+For EXPENSE, determine the expense category and whether it is tax-deductible.
+
+IMPORTANT VAT RULES (UStG):
+- Short-term accommodation rental (Airbnb, Ferienwohnung, hotel-like) = 10% VAT
+  (§10 Abs 2 Z 4 UStG — Beherbergung / accommodation)
+- Long-term residential rental (Wohnungsvermietung) = 10% VAT (§10 Abs 2 Z 4 UStG)
+- Commercial property rental = 20% VAT (§10 Abs 1 UStG)
+- Kleinunternehmerregelung: if annual turnover ≤ €35,000, VAT exemption applies
+  (§6 Abs 1 Z 27 UStG) — note this in vat_note when relevant
+
+INCOME TAX classification for short-term rental:
+- With hotel-like services (cleaning, linens, breakfast, check-in) = §23 Gewerbebetrieb
+- Without hotel-like services (just keys + apartment) = §28 Vermietung und Verpachtung
+
+Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
+{
+  "category": "<category_key>",
+  "category_type": "income" or "expense",
+  "legal_basis": "<§ reference and short explanation — in user's language>",
+  "is_deductible": true/false (for expenses),
+  "vat_rate": <decimal like 0.10 or 0.20 or null>,
+  "vat_note": "<brief VAT explanation in user's language, or null>",
+  "confidence": <0.0-1.0>,
+  "explanation": "<1-2 sentence explanation in the SAME LANGUAGE as the description>"
+}"""
+
+_VERIFY_SYSTEM_PROMPT = """\
+You are a senior Austrian tax auditor reviewing a classification made by a junior colleague.
+Given the original description and the proposed classification, verify whether it is correct.
+
+CRITICAL: You MUST reply in the SAME LANGUAGE as the original description.
+If the description is in Chinese, ALL text fields must be in Chinese. Same for German, English, etc.
+
+Check:
+1. Is the Einkunftsart (income type) or expense category correct per EStG?
+2. Is the legal basis (§ reference) accurate?
+3. Is the VAT rate correct? Key Austrian VAT rates:
+   - Accommodation / short-term rental (Beherbergung): 10% (§10 Abs 2 Z 4 UStG)
+   - Long-term residential rental: 10% (§10 Abs 2 Z 4 UStG)
+   - Commercial property rental: 20% (§10 Abs 1 UStG)
+   - Kleinunternehmerregelung (≤ €35,000/year): VAT exempt (§6 Abs 1 Z 27 UStG)
+4. Is the deductibility assessment correct?
+5. Are there any edge cases or nuances the classifier may have missed?
+
+If the classification is correct, return the SAME JSON with confidence raised (if appropriate).
+If incorrect, return a CORRECTED JSON with the right values and explain the correction.
+
+IMPORTANT: Respond ONLY with valid JSON (no markdown):
+{
+  "category": "<category_key>",
+  "category_type": "income" or "expense",
+  "legal_basis": "<§ reference — in user's language>",
+  "is_deductible": true/false (for expenses),
+  "vat_rate": <decimal like 0.10 or 0.20 or null>,
+  "vat_note": "<brief VAT explanation in user's language, or null>",
+  "confidence": <0.0-1.0>,
+  "explanation": "<1-2 sentence explanation in the SAME LANGUAGE as the original description>",
+  "verified": true,
+  "correction_note": "<null if no correction, otherwise brief note in user's language>"
+}"""
+
+
+def _parse_llm_json(raw: str) -> Optional[dict]:
+    """Parse JSON from LLM response, stripping markdown fences if present."""
+    import json as _json
+
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1]
+    if text.endswith("```"):
+        text = text.rsplit("```", 1)[0]
+    text = text.strip()
+    try:
+        return _json.loads(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def _classify_with_ai(
+    description: str,
+    amount: float,
+    change_type: str,
+    user_type: str,
+) -> Optional[dict]:
+    """
+    Two-pass AI classification using Groq LLM + RAG:
+      Pass 1 — Classify: determine category, legal basis, VAT, deductibility
+      Pass 2 — Verify: a second LLM call reviews and corrects the classification
+
+    Returns a dict with category, legal_basis, is_deductible, vat_rate, explanation, etc.
+    Returns None if LLM is unavailable or classification fails.
+    """
+    import json as _json
+
+    try:
+        from app.services.llm_service import get_llm_service
+        from app.services.rag_retrieval_service import get_rag_retrieval_service
+
+        llm = get_llm_service()
+        if not (llm.is_available() if callable(llm.is_available) else llm.is_available):
+            logger.info("LLM service not available — skipping AI classification")
+            return None
+
+        # ---- RAG context retrieval ----
+        # Detect language from description for RAG retrieval
+        def _detect_lang(text: str) -> str:
+            """Simple language detection: Chinese chars → zh, else de (tax law is in German)."""
+            for ch in text:
+                if "\u4e00" <= ch <= "\u9fff":
+                    return "zh"
+            # Default to German for Austrian tax law context
+            return "de"
+
+        desc_lang = _detect_lang(description)
+        rag = get_rag_retrieval_service()
+        # Retrieve in user's language first, then fallback to German for completeness
+        rag_results = rag.retrieve_context(query=description, language=desc_lang, top_k=3)
+        if desc_lang != "de":
+            # Also retrieve German context (most comprehensive)
+            rag_de = rag.retrieve_context(query=description, language="de", top_k=2)
+            rag_results.extend(rag_de)
+        rag_context = ""
+        if rag_results:
+            snippets = [r["document"] for r in rag_results[:3]]
+            rag_context = (
+                "\n\n=== Relevant Austrian tax law context ===\n"
+                + "\n---\n".join(snippets)
+            )
+
+        type_label = {
+            "add_income": "INCOME",
+            "add_expense": "EXPENSE",
+            "remove_expense": "EXPENSE (being removed)",
+        }.get(change_type, "UNKNOWN")
+
+        user_prompt = (
+            f"Type: {type_label}\n"
+            f"Amount: €{amount:,.2f}\n"
+            f"Description: {description}\n"
+            f"User type: {user_type}\n"
+            f"{rag_context}"
+        )
+
+        # ---- Pass 1: Classify ----
+        logger.info("AI classification pass 1 (classify) for: %s", description[:80])
+        raw1 = llm.generate_simple(
+            system_prompt=_CLASSIFY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            temperature=0.1,
+            max_tokens=500,
+        )
+
+        classification = _parse_llm_json(raw1)
+        if not classification or "category" not in classification:
+            logger.warning("AI pass 1 failed to parse: %s", raw1[:200])
+            return None
+
+        logger.info(
+            "AI pass 1 result: category=%s, confidence=%.2f",
+            classification.get("category"),
+            classification.get("confidence", 0),
+        )
+
+        # ---- Pass 2: Verify ----
+        verify_prompt = (
+            f"Original description: {description}\n"
+            f"Type: {type_label}\n"
+            f"Amount: €{amount:,.2f}\n"
+            f"User type: {user_type}\n"
+            f"{rag_context}\n\n"
+            f"=== Classification to verify ===\n"
+            f"{_json.dumps(classification, ensure_ascii=False, indent=2)}"
+        )
+
+        logger.info("AI classification pass 2 (verify)")
+        raw2 = llm.generate_simple(
+            system_prompt=_VERIFY_SYSTEM_PROMPT,
+            user_prompt=verify_prompt,
+            temperature=0.1,
+            max_tokens=500,
+        )
+
+        verified = _parse_llm_json(raw2)
+        if verified and "category" in verified:
+            correction = verified.get("correction_note")
+            if correction:
+                logger.info("AI pass 2 corrected: %s", correction)
+            else:
+                logger.info("AI pass 2 confirmed classification")
+            verified["verified"] = True
+            return verified
+
+        # Verification parse failed — return original classification anyway
+        logger.warning("AI pass 2 parse failed, using pass 1 result")
+        classification["verified"] = False
+        return classification
+
+    except Exception as exc:
+        logger.warning("AI classification failed (non-fatal): %s", exc)
+        return None
+
+
 @router.post("/tax/simulate")
 def simulate_tax_scenario(
     scenario: dict,
@@ -214,19 +437,54 @@ def simulate_tax_scenario(
     """
     Simulate tax impact of adding/removing income or expenses.
 
+    Flow:
+    1. If description provided, call LLM+RAG to classify the income/expense
+       (determine category, deductibility, VAT implications, legal basis)
+    2. Use TaxCalculationEngine (DB-backed tax rates) for proper calculation
+    3. Return classification + tax comparison
+
     Accepts: {changeType, amount, description, category?, tax_year?}
-    Returns: current vs simulated tax comparison.
+    Returns: current vs simulated tax comparison + AI classification.
     """
     tax_year = scenario.get("tax_year", datetime.now().year)
     change_type = scenario.get("changeType", scenario.get("type", "add_expense"))
     change_amount = Decimal(str(scenario.get("amount", 0)))
     description = scenario.get("description", "")
 
-    # Check if GmbH user
-    user_type = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
+    user_type = (
+        current_user.user_type.value
+        if hasattr(current_user.user_type, "value")
+        else str(current_user.user_type)
+    )
     is_gmbh = user_type == "gmbh"
 
-    # Fetch current transactions
+    # ------------------------------------------------------------------
+    # Step 1: AI classification via LLM + RAG (if description provided)
+    # ------------------------------------------------------------------
+    ai_classification = None
+    if description.strip():
+        ai_classification = _classify_with_ai(
+            description=description,
+            amount=float(change_amount),
+            change_type=change_type,
+            user_type=user_type,
+        )
+
+    # Use AI-suggested category or user-provided category
+    suggested_category = None
+    is_deductible = change_type != "add_income"  # default: expenses deductible
+    if ai_classification:
+        suggested_category = ai_classification.get("category")
+        if ai_classification.get("is_deductible") is not None:
+            is_deductible = ai_classification["is_deductible"]
+
+    # ------------------------------------------------------------------
+    # Step 2: Calculate current tax using TaxCalculationEngine (DB rates)
+    # ------------------------------------------------------------------
+    from app.services.tax_calculation_engine import TaxCalculationEngine
+
+    engine = TaxCalculationEngine(db=db)
+
     transactions = (
         db.query(Transaction)
         .filter(
@@ -242,64 +500,73 @@ def simulate_tax_scenario(
     current_expenses = sum(
         t.amount for t in transactions if t.type == TransactionType.EXPENSE
     ) or Decimal("0")
-    current_deductible = sum(
-        t.amount for t in transactions
-        if t.type == TransactionType.EXPENSE and t.is_deductible
-    ) or Decimal("0")
 
     current_net = current_income - current_expenses
 
     if is_gmbh:
         from app.services.koest_calculator import KoEstCalculator
+
         koest_calc = KoEstCalculator()
         current_tax = koest_calc.calculate(profit=current_net).effective_koest
     else:
-        current_taxable = max(Decimal("0"), current_net - EXEMPTION)
-        current_tax = _calc_progressive_tax(current_taxable)
+        calc, _vat_calc, _svs, _ded, _se = engine._get_calculators_for_year(tax_year)
+        current_taxable = calc.apply_exemption(current_net)
+        current_tax = calc.calculate_progressive_tax(current_taxable, tax_year).total_tax
 
-    # Apply scenario
+    # ------------------------------------------------------------------
+    # Step 3: Apply scenario and calculate simulated tax
+    # ------------------------------------------------------------------
     sim_income = current_income
     sim_expenses = current_expenses
-    sim_deductible = current_deductible
 
     if change_type == "add_income":
         sim_income += change_amount
     elif change_type == "add_expense":
-        sim_expenses += change_amount
-        sim_deductible += change_amount  # assume deductible
+        if is_deductible:
+            sim_expenses += change_amount
+        else:
+            # Non-deductible expense: no tax impact, but affects net income
+            sim_expenses += change_amount
     elif change_type == "remove_expense":
         sim_expenses = max(Decimal("0"), sim_expenses - change_amount)
-        sim_deductible = max(Decimal("0"), sim_deductible - change_amount)
 
     sim_net = sim_income - sim_expenses
+
     if is_gmbh:
         sim_tax = koest_calc.calculate(profit=sim_net).effective_koest
     else:
-        sim_taxable = max(Decimal("0"), sim_net - EXEMPTION)
-        sim_tax = _calc_progressive_tax(sim_taxable)
+        sim_taxable = calc.apply_exemption(sim_net)
+        sim_tax = calc.calculate_progressive_tax(sim_taxable, tax_year).total_tax
 
     tax_diff = float(sim_tax - current_tax)
     current_net_income = float(current_income - current_tax)
     sim_net_income = float(sim_income - sim_tax)
 
-    # Build explanation
-    if change_type == "add_expense":
+    # ------------------------------------------------------------------
+    # Step 4: Build explanation (use AI explanation if available)
+    # ------------------------------------------------------------------
+    if ai_classification and ai_classification.get("explanation"):
+        explanation = ai_classification["explanation"]
+    elif change_type == "add_expense":
         explanation = (
-            f"Adding a deductible expense of \u20ac{float(change_amount):,.2f} "
-            f"reduces your taxable income, saving you \u20ac{abs(tax_diff):,.2f} in taxes."
+            f"Adding a deductible expense of €{float(change_amount):,.2f} "
+            f"reduces your taxable income, saving you €{abs(tax_diff):,.2f} in taxes."
             if tax_diff < 0
-            else f"This expense does not change your tax liability (income below exemption threshold)."
+            else "This expense does not change your tax liability "
+            "(income below exemption threshold)."
         )
     elif change_type == "add_income":
         explanation = (
-            f"Adding \u20ac{float(change_amount):,.2f} in income increases your tax by \u20ac{tax_diff:,.2f}."
+            f"Adding €{float(change_amount):,.2f} in income "
+            f"increases your tax by €{tax_diff:,.2f}."
         )
     else:
         explanation = (
-            f"Removing \u20ac{float(change_amount):,.2f} in expenses increases your taxable income by that amount."
+            f"Removing €{float(change_amount):,.2f} in expenses "
+            f"increases your taxable income by that amount."
         )
 
-    return {
+    result = {
         "scenario_type": change_type,
         "tax_year": tax_year,
         "currentTax": float(current_tax),
@@ -311,6 +578,14 @@ def simulate_tax_scenario(
         "explanation": explanation,
     }
 
+    # Attach AI classification if available
+    if ai_classification:
+        result["classification"] = ai_classification
+
+    return result
+
+
+
 
 @router.get("/tax/flat-rate-compare")
 def compare_flat_rate_tax(
@@ -319,14 +594,47 @@ def compare_flat_rate_tax(
     db: Session = Depends(get_db),
 ):
     """
-    Compare actual accounting vs flat-rate (Pauschalierung) tax system.
+    Compare actual accounting vs flat-rate (Basispauschalierung) tax system.
 
-    Austrian flat-rate: 12% of gross turnover (max ?220,000 turnover, max ?26,400 deduction).
-    Only for self-employed / small business with turnover ? ?220,000.
+    Per WKO / § 17 EStG, Basispauschalierung is ONLY for:
+    - § 22 Selbständige Arbeit (freelancers)
+    - § 23 Gewerbebetrieb (business owners)
+
+    NOT for: employees, GmbH, landlords (§ 28 rental income).
+
+    For mixed users (self-employed + landlord): Basispauschalierung applies
+    ONLY to the self-employment/business portion. Rental income is always
+    calculated via actual accounting (Einnahmen-Ausgaben-Rechnung).
+
+    Rates are read from TaxConfiguration DB table (deduction_config.self_employed).
     """
+    from app.models.tax_configuration import TaxConfiguration
+
     if tax_year is None:
         tax_year = datetime.now().year
 
+    # --- Load rates from DB ---
+    tax_config = (
+        db.query(TaxConfiguration)
+        .filter(TaxConfiguration.tax_year == tax_year)
+        .first()
+    )
+
+    if tax_config and tax_config.deduction_config:
+        se_config = tax_config.deduction_config.get("self_employed", {})
+        flat_rate_pct = Decimal(str(se_config.get("flat_rate_general", "0.12")))
+        max_turnover = Decimal(str(se_config.get("flat_rate_turnover_limit", "220000")))
+        # max deduction = turnover_limit * rate (WKO rule)
+        max_deduction = max_turnover * flat_rate_pct
+    else:
+        # Fallback if no DB config
+        flat_rate_pct = Decimal("0.12")
+        max_turnover = Decimal("220000")
+        max_deduction = Decimal("26400")
+
+    pct_display = float(flat_rate_pct * 100)
+
+    # --- Load transactions ---
     transactions = (
         db.query(Transaction)
         .filter(
@@ -336,38 +644,82 @@ def compare_flat_rate_tax(
         .all()
     )
 
-    gross_income = sum(
-        t.amount for t in transactions if t.type == TransactionType.INCOME
-    ) or Decimal("0")
-    actual_expenses = sum(
-        t.amount for t in transactions
-        if t.type == TransactionType.EXPENSE and t.is_deductible
-    ) or Decimal("0")
+    user_type = (
+        current_user.user_type.value
+        if hasattr(current_user.user_type, "value")
+        else str(current_user.user_type)
+    )
 
-    # Eligibility check
-    max_turnover = Decimal("220000")
-    is_eligible = gross_income <= max_turnover
-    user_type = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
+    # --- Split income by source for mixed users ---
+    # Basispauschalierung-eligible categories: self_employment, business
+    eligible_income_cats = {"self_employment", "business"}
+
+    business_income = Decimal("0")
+    rental_income = Decimal("0")
+    other_income = Decimal("0")
+    business_expenses = Decimal("0")
+    rental_expenses = Decimal("0")
+    other_expenses = Decimal("0")
+
+    for t in transactions:
+        cat = t.income_category.value if t.income_category and hasattr(t.income_category, "value") else (str(t.income_category) if t.income_category else None)
+        ecat = t.expense_category.value if t.expense_category and hasattr(t.expense_category, "value") else None
+
+        if t.type == TransactionType.INCOME:
+            if cat in eligible_income_cats:
+                business_income += t.amount
+            elif cat == "rental":
+                rental_income += t.amount
+            else:
+                other_income += t.amount
+        elif t.type == TransactionType.EXPENSE and t.is_deductible:
+            # Assign expenses: property-related → rental, else → business
+            if ecat in ("property_maintenance", "property_insurance", "property_management",
+                        "mortgage_interest", "depreciation"):
+                rental_expenses += t.amount
+            elif cat == "rental" or (t.property_id is not None):
+                rental_expenses += t.amount
+            else:
+                business_expenses += t.amount
+
+    gross_income = business_income + rental_income + other_income
+    actual_expenses = business_expenses + rental_expenses
+
+    # --- Eligibility ---
+    is_eligible = business_income <= max_turnover
     if user_type == "employee":
         is_eligible = False
-        reason = "Flat-rate taxation is not available for employees (Arbeitnehmer)."
+        reason = "not_available_employee"
     elif user_type == "gmbh":
         is_eligible = False
-        reason = "Flat-rate taxation (Pauschalierung) is not available for GmbH. GmbH must use Bilanzierung."
+        reason = "not_available_gmbh"
+    elif user_type == "landlord":
+        # Pure landlord — no business income to apply flat rate to
+        is_eligible = False
+        reason = "not_available_landlord"
+    elif business_income == 0:
+        is_eligible = False
+        reason = "no_business_income"
     elif not is_eligible:
-        reason = f"Turnover \u20ac{float(gross_income):,.2f} exceeds the \u20ac220,000 limit."
+        reason = "turnover_exceeds_limit"
     else:
-        reason = "You are eligible for flat-rate taxation (Basispauschalierung)."
+        reason = "eligible"
 
-    # --- Actual accounting method ---
+    # --- Actual accounting (all income types) ---
     actual_taxable = max(Decimal("0"), gross_income - actual_expenses - EXEMPTION)
     actual_tax = _calc_progressive_tax(actual_taxable)
     actual_net = gross_income - actual_tax
 
     # --- Flat-rate method ---
-    flat_rate_pct = Decimal("0.12")
-    flat_rate_deduction = min(gross_income * flat_rate_pct, Decimal("26400"))
-    flat_taxable = max(Decimal("0"), gross_income - flat_rate_deduction - EXEMPTION)
+    # Only business income gets flat-rate deduction; rental uses actual expenses
+    flat_biz_deduction = min(business_income * flat_rate_pct, max_deduction)
+    flat_taxable = max(
+        Decimal("0"),
+        (business_income - flat_biz_deduction)
+        + (rental_income - rental_expenses)
+        + other_income
+        - EXEMPTION,
+    )
     flat_tax = _calc_progressive_tax(flat_taxable)
     flat_net = gross_income - flat_tax
 
@@ -385,8 +737,8 @@ def compare_flat_rate_tax(
         },
         "flatRate": {
             "grossIncome": float(gross_income),
-            "flatRateDeduction": float(flat_rate_deduction),
-            "flatRatePercentage": 12,
+            "flatRateDeduction": float(flat_biz_deduction),
+            "flatRatePercentage": pct_display,
             "taxableIncome": float(flat_taxable),
             "incomeTax": float(flat_tax),
             "netIncome": float(flat_net),
@@ -398,12 +750,6 @@ def compare_flat_rate_tax(
             "reason": reason,
             "maxProfit": float(max_turnover),
         },
-        "explanation": (
-            f"With actual accounting, your tax is \u20ac{float(actual_tax):,.2f}. "
-            f"With flat-rate (12%), your tax would be \u20ac{float(flat_tax):,.2f}. "
-            + (f"You could save \u20ac{abs(savings):,.2f} with {'flat-rate' if savings > 0 else 'actual accounting'}."
-               if is_eligible else "Flat-rate is not available for your situation.")
-        ),
     }
 
 

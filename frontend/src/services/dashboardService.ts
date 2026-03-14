@@ -22,7 +22,7 @@ export const dashboardService = {
   },
 
   simulateTax: async (data: any) => {
-    const response = await api.post('/tax/simulate', data);
+    const response = await api.post('/tax/simulate', data, { timeout: 90000 });
     return response.data;
   },
 

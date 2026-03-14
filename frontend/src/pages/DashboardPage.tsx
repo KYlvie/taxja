@@ -339,8 +339,8 @@ const DashboardPage = () => {
       {/* What-If Simulator */}
       <WhatIfSimulator />
 
-      {/* Flat-Rate Comparison — not applicable for GmbH */}
-      {!isGmbH && <FlatRateComparison year={selectedYear} />}
+      {/* Flat-Rate Comparison — only for self-employed / mixed (not for GmbH, employee, landlord) */}
+      {(user?.user_type === 'self_employed' || user?.user_type === 'mixed') && <FlatRateComparison year={selectedYear} />}
     </div>
   );
 };

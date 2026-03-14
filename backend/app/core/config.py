@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "qwen3:8b"
     OLLAMA_ENABLED: bool = True
 
+    # Groq (fast cloud LLM)
+    GROQ_ENABLED: bool = False
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
     # Celery
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""

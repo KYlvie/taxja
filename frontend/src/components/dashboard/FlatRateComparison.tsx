@@ -26,8 +26,16 @@ interface ComparisonData {
     reason: string;
     maxProfit: number;
   };
-  explanation: string;
 }
+
+const reasonKeys: Record<string, string> = {
+  not_available_employee: 'dashboard.flatRateReasonEmployee',
+  not_available_gmbh: 'dashboard.flatRateReasonGmbh',
+  not_available_landlord: 'dashboard.flatRateReasonLandlord',
+  no_business_income: 'dashboard.flatRateReasonNoBusinessIncome',
+  turnover_exceeds_limit: 'dashboard.flatRateReasonTurnover',
+  eligible: 'dashboard.flatRateReasonEligible',
+};
 
 const FlatRateComparison = ({ year }: { year?: number }) => {
   const { t } = useTranslation();
@@ -104,7 +112,7 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
               ? t('dashboard.eligibleForFlatRate')
               : t('dashboard.notEligibleForFlatRate')}
           </h4>
-          <p>{data.eligibility.reason}</p>
+          <p>{t(reasonKeys[data.eligibility.reason] || data.eligibility.reason)}</p>
           {data.eligibility.isEligible && (
             <p className="max-profit">
               {t('dashboard.maxProfit')}: {formatCurrency(data.eligibility.maxProfit)}
@@ -228,12 +236,6 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
             </p>
           )}
         </div>
-      </div>
-
-      {/* Explanation */}
-      <div className="explanation-box">
-        <h5>{t('dashboard.explanation')}</h5>
-        <p>{data.explanation}</p>
       </div>
 
       {/* Disclaimer */}
