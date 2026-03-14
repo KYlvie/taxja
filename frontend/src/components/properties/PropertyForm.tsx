@@ -21,6 +21,7 @@ const propertySchema = z.object({
   grunderwerbsteuer: z.string().optional(),
   notary_fees: z.string().optional(),
   registry_fees: z.string().optional(),
+  monthly_rent: z.string().optional(),
 }).refine(
   (data) => {
     const price = parseFloat(data.purchase_price);
@@ -152,6 +153,7 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
       grunderwerbsteuer: data.grunderwerbsteuer,
       notary_fees: data.notary_fees,
       registry_fees: data.registry_fees,
+      monthly_rent: data.monthly_rent,
     };
 
     onSubmit(formData);
@@ -418,6 +420,28 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
           )}
         </div>
       </div>
+
+      {(propertyType === PropertyType.RENTAL || propertyType === PropertyType.MIXED_USE) && !property && (
+        <div className="form-section">
+          <h3>{t('properties.rentalIncomeSection', 'Mieteinnahmen')}</h3>
+          <div className="form-group">
+            <label htmlFor="monthly_rent">
+              {t('properties.monthlyRent', 'Monatliche Miete (€)')}
+            </label>
+            <input
+              id="monthly_rent"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder={t('properties.monthlyRentPlaceholder', 'z.B. 1200.00')}
+              {...register('monthly_rent')}
+            />
+            <span className="field-hint">
+              {t('properties.monthlyRentHint', 'Wenn angegeben, wird automatisch eine monatliche Mieteinnahme eingerichtet.')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {propertyType === PropertyType.OWNER_OCCUPIED && (
         <div className="form-info disclaimer">

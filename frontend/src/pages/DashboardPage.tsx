@@ -227,6 +227,31 @@ const DashboardPage = () => {
               {t('common.viewDetails', 'Details anzeigen')} &rarr;
             </Link>
           </div>
+          {propertyMetrics.missing_rental_income_setup && (
+            <div className="rental-income-warning" style={{
+              background: '#fef3cd', border: '1px solid #ffc107', borderRadius: '8px',
+              padding: '12px 16px', marginBottom: '16px', display: 'flex',
+              alignItems: 'center', gap: '12px'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>&#9888;</span>
+              <div style={{ flex: 1 }}>
+                <strong>{t('properties.portfolio.missingRentalIncome', 'Mieteinnahmen nicht eingerichtet')}</strong>
+                <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: '#856404' }}>
+                  {t('properties.portfolio.missingRentalIncomeDesc',
+                    'Sie haben aktive Mietimmobilien, aber keine wiederkehrende Mieteinnahme eingerichtet. Richten Sie diese ein, damit Ihre Mieteinnahmen automatisch erfasst werden.')}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/recurring')}
+                style={{
+                  background: '#6c5ce7', color: 'white', border: 'none', borderRadius: '6px',
+                  padding: '8px 16px', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600
+                }}
+              >
+                {t('properties.portfolio.setupRentalIncome', 'Jetzt einrichten')}
+              </button>
+            </div>
+          )}
           <div className="dashboard-summary-grid">
             <div>
               <div className="dashboard-summary-label">{t('properties.portfolio.activeProperties', 'Aktive Immobilien')}</div>

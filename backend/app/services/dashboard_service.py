@@ -16,7 +16,7 @@ from sqlalchemy import func, extract
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.document import Document
 from app.models.user import User, UserType
-from app.models.property import Property, PropertyStatus
+from app.models.property import Property, PropertyStatus, PropertyType
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +769,27 @@ class DashboardService:
         )
         
         net_rental_income = rental_income - property_expenses
-        
+
+        # Check if rental properties have recurring income set up
+        rental_properties = [
+            p for p in properties
+            if p.property_type in (PropertyType.RENTAL, PropertyType.MIXED_USE)
+        ]
+        missing_rental_income = False
+        if rental_properties and rental_income == 0:
+            from app.models.recurring_transaction import RecurringTransaction
+            recurring_count = (
+                self.db.query(RecurringTransaction)
+                .filter(
+                    RecurringTransaction.user_id == user_id,
+                    RecurringTransaction.property_id.in_(property_ids),
+                    RecurringTransaction.is_active == True,
+                )
+                .count()
+            )
+            if recurring_count == 0:
+                missing_rental_income = True
+
         result = {
             "has_properties": True,
             "active_properties_count": len(properties),
@@ -778,6 +798,7 @@ class DashboardService:
             "net_rental_income": net_rental_income,
             "total_building_value": total_building_value,
             "total_annual_depreciation": total_annual_depreciation,
+            "missing_rental_income_setup": missing_rental_income,
         }
         
         # Cache the result

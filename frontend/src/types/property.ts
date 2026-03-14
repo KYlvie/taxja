@@ -124,4 +124,5 @@ export interface PropertyFormData {
   grunderwerbsteuer?: number | string;
   notary_fees?: number | string;
   registry_fees?: number | string;
+  monthly_rent?: number | string;
 }

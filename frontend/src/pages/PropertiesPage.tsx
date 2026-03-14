@@ -85,9 +85,14 @@ const PropertiesPage = () => {
           : data.notary_fees;
       }
       if (data.registry_fees) {
-        propertyData.registry_fees = typeof data.registry_fees === 'string' 
-          ? parseFloat(data.registry_fees) 
+        propertyData.registry_fees = typeof data.registry_fees === 'string'
+          ? parseFloat(data.registry_fees)
           : data.registry_fees;
+      }
+      if (data.monthly_rent) {
+        propertyData.monthly_rent = typeof data.monthly_rent === 'string'
+          ? parseFloat(data.monthly_rent)
+          : data.monthly_rent;
       }
 
       const newProperty = await createProperty(propertyData);

@@ -98,10 +98,32 @@ def create_property(
     ```
     """
     service = PropertyService(db)
-    
+
     try:
-        property = service.create_property(current_user.id, property_data)
-        return property
+        property_obj = service.create_property(current_user.id, property_data)
+
+        # Auto-create recurring rental income if monthly_rent provided
+        if property_data.monthly_rent and property_data.property_type in (
+            "rental", PropertyType.RENTAL, "mixed_use", PropertyType.MIXED_USE
+        ):
+            try:
+                from app.services.recurring_transaction_service import RecurringTransactionService
+                recurring_service = RecurringTransactionService(db)
+                start = property_data.rent_start_date or property_data.purchase_date
+                recurring_service.create_rental_income_recurring(
+                    user_id=current_user.id,
+                    property_id=str(property_obj.id),
+                    monthly_rent=property_data.monthly_rent,
+                    start_date=start,
+                    day_of_month=1,
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Auto-create recurring rental income failed: {e}"
+                )
+
+        return property_obj
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

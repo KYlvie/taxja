@@ -148,6 +148,16 @@ class PropertyBase(BaseModel):
 
 class PropertyCreate(PropertyBase):
     """Property creation schema with comprehensive validation"""
+    monthly_rent: Optional[Decimal] = Field(
+        None,
+        gt=0,
+        le=100_000,
+        description="Monthly rental income (if set, auto-creates recurring rental income transaction)"
+    )
+    rent_start_date: Optional[date] = Field(
+        None,
+        description="Start date for rental income (defaults to purchase_date)"
+    )
 
     @model_validator(mode='after')
     def validate_building_value_vs_purchase_price(self):
