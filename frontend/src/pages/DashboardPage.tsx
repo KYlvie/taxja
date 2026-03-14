@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDashboardStore } from '../stores/dashboardStore';
 import { useAuthStore } from '../stores/authStore';
 import { dashboardService } from '../services/dashboardService';
@@ -34,6 +34,7 @@ const DashboardPage = () => {
   const [chartData, setChartData] = useState<any>(null);
   const [propertyMetrics, setPropertyMetrics] = useState<any>(null);
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const isGmbH = user?.user_type === 'gmbh';
   const isLandlordOrMixed = user?.user_type === 'landlord' || user?.user_type === 'mixed';
 
@@ -186,32 +187,32 @@ const DashboardPage = () => {
 
       {/* GmbH KöSt Summary */}
       {isGmbH && data?.gmbhTax && (
-        <div className="gmbh-tax-summary" style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--border-color, #e5e7eb)' }}>
-          <h3 style={{ margin: '0 0 1rem 0' }}>🏢 {t('dashboard.gmbhTax.title', 'Körperschaftsteuer (KöSt)')}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div className="dashboard-summary-card">
+          <h3 className="dashboard-summary-title">{t('dashboard.gmbhTax.title', 'Körperschaftsteuer (KöSt)')}</h3>
+          <div className="dashboard-summary-grid">
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.koest', 'KöSt (23%)')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>€ {data.gmbhTax.koest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.koest', 'KöSt (23%)')}</div>
+              <div className="dashboard-summary-value">€ {data.gmbhTax.koest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.profitAfterKoest', 'Gewinn nach KöSt')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>€ {data.gmbhTax.profitAfterKoest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.profitAfterKoest', 'Gewinn nach KöSt')}</div>
+              <div className="dashboard-summary-value">€ {data.gmbhTax.profitAfterKoest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.kest', 'KESt auf Dividende (27,5%)')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>€ {data.gmbhTax.kestOnDividend.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.kest', 'KESt auf Dividende (27,5%)')}</div>
+              <div className="dashboard-summary-value">€ {data.gmbhTax.kestOnDividend.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.totalBurden', 'Gesamtsteuerbelastung')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--danger, #ef4444)' }}>€ {data.gmbhTax.totalTaxBurden.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.totalBurden', 'Gesamtsteuerbelastung')}</div>
+              <div className="dashboard-summary-value text-danger">€ {data.gmbhTax.totalTaxBurden.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.effectiveRate', 'Effektiver Steuersatz')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{(data.gmbhTax.effectiveTotalRate * 100).toFixed(1)}%</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.effectiveRate', 'Effektiver Steuersatz')}</div>
+              <div className="dashboard-summary-value">{(data.gmbhTax.effectiveTotalRate * 100).toFixed(1)}%</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('dashboard.gmbhTax.mindestKoest', 'Mindest-KöSt')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>€ {data.gmbhTax.mindestKoest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
+              <div className="dashboard-summary-label">{t('dashboard.gmbhTax.mindestKoest', 'Mindest-KöSt')}</div>
+              <div className="dashboard-summary-value">€ {data.gmbhTax.mindestKoest.toLocaleString('de-AT', { minimumFractionDigits: 2 })}</div>
             </div>
           </div>
         </div>
@@ -219,33 +220,33 @@ const DashboardPage = () => {
 
       {/* Property Portfolio Summary for Landlords */}
       {isLandlordOrMixed && propertyMetrics?.has_properties && (
-        <div className="property-portfolio-summary" style={{ background: 'var(--card-bg, #fff)', borderRadius: 12, padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid var(--border-color, #e5e7eb)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0 }}>🏢 {t('properties.portfolio.title', 'Immobilienportfolio')}</h3>
-            <Link to="/properties" style={{ fontSize: '0.9rem', color: 'var(--primary, #3b82f6)', textDecoration: 'none' }}>
-              {t('common.viewDetails', 'Details anzeigen')} →
+        <div className="dashboard-summary-card">
+          <div className="dashboard-summary-header">
+            <h3 className="dashboard-summary-title">{t('properties.portfolio.title', 'Immobilienportfolio')}</h3>
+            <Link to="/properties" className="dashboard-summary-link">
+              {t('common.viewDetails', 'Details anzeigen')} &rarr;
             </Link>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <div className="dashboard-summary-grid">
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('properties.portfolio.activeProperties', 'Aktive Immobilien')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{propertyMetrics.active_properties_count}</div>
+              <div className="dashboard-summary-label">{t('properties.portfolio.activeProperties', 'Aktive Immobilien')}</div>
+              <div className="dashboard-summary-value">{propertyMetrics.active_properties_count}</div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('properties.portfolio.totalRentalIncome', 'Mieteinnahmen gesamt')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--success, #10b981)' }}>
+              <div className="dashboard-summary-label">{t('properties.portfolio.totalRentalIncome', 'Mieteinnahmen gesamt')}</div>
+              <div className="dashboard-summary-value text-success">
                 € {propertyMetrics.total_rental_income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('properties.portfolio.totalExpenses', 'Ausgaben gesamt')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--warning, #f59e0b)' }}>
+              <div className="dashboard-summary-label">{t('properties.portfolio.totalExpenses', 'Ausgaben gesamt')}</div>
+              <div className="dashboard-summary-value text-warning">
                 € {propertyMetrics.total_property_expenses.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary, #6b7280)' }}>{t('properties.portfolio.netRentalIncome', 'Netto-Mieteinnahmen')}</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 600, color: propertyMetrics.net_rental_income >= 0 ? 'var(--success, #10b981)' : 'var(--danger, #ef4444)' }}>
+              <div className="dashboard-summary-label">{t('properties.portfolio.netRentalIncome', 'Netto-Mieteinnahmen')}</div>
+              <div className={`dashboard-summary-value ${propertyMetrics.net_rental_income >= 0 ? 'text-success' : 'text-danger'}`}>
                 € {propertyMetrics.net_rental_income.toLocaleString('de-AT', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -271,15 +272,15 @@ const DashboardPage = () => {
         <div className="dashboard-quick-start">
           <h3>🚀 {t('dashboard.quickStart.title', 'Erste Schritte')}</h3>
           <div className="quick-start-grid">
-            <div className="quick-start-card" onClick={() => window.location.href = '/transactions'} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (window.location.href = '/transactions')}>
+            <div className="quick-start-card" onClick={() => navigate('/transactions')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate('/transactions')}>
               <span className="quick-start-icon">📝</span>
               <span className="quick-start-label">{t('dashboard.quickStart.addTransaction', 'Transaktion hinzufügen')}</span>
             </div>
-            <div className="quick-start-card" onClick={() => window.location.href = '/documents'} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (window.location.href = '/documents')}>
+            <div className="quick-start-card" onClick={() => navigate('/documents')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate('/documents')}>
               <span className="quick-start-icon">📄</span>
               <span className="quick-start-label">{t('dashboard.quickStart.uploadDocument', 'Beleg hochladen')}</span>
             </div>
-            <div className="quick-start-card" onClick={() => window.location.href = '/profile'} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (window.location.href = '/profile')}>
+            <div className="quick-start-card" onClick={() => navigate('/profile')} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && navigate('/profile')}>
               <span className="quick-start-icon">👤</span>
               <span className="quick-start-label">{t('dashboard.quickStart.setupProfile', 'Profil einrichten')}</span>
             </div>

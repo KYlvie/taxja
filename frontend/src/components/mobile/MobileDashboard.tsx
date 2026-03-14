@@ -78,12 +78,12 @@ export const MobileDashboard = ({ summary, upcomingDeadlines }: MobileDashboardP
       <div className="mobile-quick-actions">
         <h3>{t('dashboard.quickActions')}</h3>
         <div className="mobile-action-grid">
-          <Link to="/documents/upload" className="mobile-action-button">
+          <Link to="/documents" className="mobile-action-button">
             <div className="mobile-action-icon">📸</div>
             <div className="mobile-action-label">{t('actions.scanReceipt')}</div>
           </Link>
 
-          <Link to="/transactions/new" className="mobile-action-button">
+          <Link to="/transactions" className="mobile-action-button">
             <div className="mobile-action-icon">➕</div>
             <div className="mobile-action-label">{t('actions.addTransaction')}</div>
           </Link>

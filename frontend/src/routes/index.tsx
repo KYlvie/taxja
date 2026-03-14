@@ -17,6 +17,7 @@ import { PropertyComparison } from '../components/properties/PropertyComparison'
 import TaxConfigAdmin from '../pages/admin/TaxConfigAdmin';
 import RecurringTransactionsPage from '../pages/RecurringTransactionsPage';
 import AIAssistantPage from '../pages/AIAssistantPage';
+import SubscriptionManagement from '../pages/SubscriptionManagement';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -117,6 +118,18 @@ export const router = createBrowserRouter([
       {
         path: 'ai-assistant',
         element: <AIAssistantPage />,
+      },
+      {
+        path: 'subscription/manage',
+        element: <SubscriptionManagement />,
+      },
+      {
+        path: 'documents/upload',
+        element: <DocumentsPage />,
+      },
+      {
+        path: 'transactions/new',
+        element: <TransactionsPage />,
       },
     ],
   },

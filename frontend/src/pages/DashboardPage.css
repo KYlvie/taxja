@@ -132,3 +132,70 @@
   font-weight: 500;
   color: var(--color-text, #111827);
 }
+
+/* Dashboard Summary Cards (GmbH, Property Portfolio) */
+.dashboard-summary-card {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.dashboard-summary-title {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dashboard-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.dashboard-summary-header .dashboard-summary-title {
+  margin: 0;
+}
+
+.dashboard-summary-link {
+  font-size: 0.9rem;
+  color: var(--primary, #3b82f6);
+  text-decoration: none;
+}
+
+.dashboard-summary-link:hover {
+  text-decoration: underline;
+}
+
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-summary-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6b7280);
+  margin-bottom: 0.25rem;
+}
+
+.dashboard-summary-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.dashboard-summary-value.text-danger {
+  color: var(--danger, #ef4444);
+}
+
+.dashboard-summary-value.text-success {
+  color: var(--success, #10b981);
+}
+
+.dashboard-summary-value.text-warning {
+  color: var(--warning, #f59e0b);
+}

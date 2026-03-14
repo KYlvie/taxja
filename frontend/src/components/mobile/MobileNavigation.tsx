@@ -24,7 +24,7 @@ export const MobileNavigation = () => {
       </NavLink>
 
       <NavLink
-        to="/documents/upload"
+        to="/documents"
         className="mobile-nav-item mobile-nav-fab"
       >
         <div className="mobile-nav-fab-icon">📸</div>
