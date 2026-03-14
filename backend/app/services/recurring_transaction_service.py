@@ -274,16 +274,15 @@ class RecurringTransactionService:
         
         transaction = Transaction(
             user_id=recurring.user_id,
-            transaction_type=txn_type,
+            type=txn_type,
             amount=recurring.amount,
-            date=transaction_date,
-            description=f"{recurring.description} (Auto-generated)",
-            category=recurring.category,
+            transaction_date=transaction_date,
+            description=f"{recurring.description} (Auto-generated from recurring #{recurring.id})",
             income_category=income_category,
             expense_category=expense_category,
             property_id=recurring.property_id,
             is_deductible=recurring.transaction_type == "expense",
-            notes=f"Auto-generated from recurring transaction #{recurring.id}"
+            is_system_generated=True,
         )
         
         self.db.add(transaction)

@@ -469,6 +469,11 @@ class FieldExtractor:
         # Known merchants/companies (expanded)
         merchants = {
             "easypark": ("EasyPark", 0.95),
+            "apcoa": ("APCOA Parking", 0.95),
+            "wipark": ("WIPARK", 0.95),
+            "parkhaus": ("Parkhaus", 0.85),
+            "parkgarage": ("Parkgarage", 0.85),
+            "kurzparkzone": ("Kurzparkzone", 0.85),
             "amazon": ("Amazon", 0.95),
             "billa": ("BILLA", 0.95),
             "spar": ("SPAR", 0.95),

@@ -41,7 +41,7 @@ def get_dashboard(
                 )
         except Exception as gen_err:
             import logging
-            logging.getLogger(__name__).warning(f"Recurring generation failed: {gen_err}")
+            logging.getLogger(__name__).warning(f"Recurring generation failed: {gen_err}", exc_info=True)
 
         dashboard_service = DashboardService(db)
         data = dashboard_service.get_dashboard_data(current_user.id, resolved_year, user=current_user)

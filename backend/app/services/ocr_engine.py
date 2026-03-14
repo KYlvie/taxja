@@ -217,8 +217,20 @@ class OCREngine:
             if llm_result is not None:
                 return llm_result
 
-            # 4. Extract fields based on document type
-            extracted_data = self.extractor.extract_fields(raw_text, doc_type)
+            # 4. Extract fields — try multi-receipt extraction for receipts/invoices
+            multi_results = self.extractor.extract_multi_receipt_fields(
+                raw_text, doc_type
+            )
+            if len(multi_results) > 1:
+                extracted_data = multi_results[0]
+                extracted_data["_additional_receipts"] = multi_results[1:]
+                extracted_data["_receipt_count"] = len(multi_results)
+                logger.info(
+                    "Detected %d receipts in scanned PDF",
+                    len(multi_results),
+                )
+            else:
+                extracted_data = multi_results[0]
 
             # 5. Calculate overall confidence score
             overall_confidence = self._calculate_confidence(
@@ -1056,7 +1068,8 @@ class OCREngine:
                     processed, config=self.config.TESSERACT_CONFIG
                 )
                 if page_text and page_text.strip():
-                    all_text.append(page_text.strip())
+                    # Add page markers for multi-receipt splitting
+                    all_text.append(f"--- PAGE {i + 1} ---\n{page_text.strip()}")
             except Exception as e:
                 logger.warning("Tesseract failed on page %d: %s", i + 1, e)
 
@@ -1071,7 +1084,9 @@ class OCREngine:
 
     def _extract_text(self, image: np.ndarray) -> str:
         """
-        Extract text from image using Tesseract
+        Extract text from image using Tesseract.
+        Tries PSM 6 (uniform block) first, falls back to PSM 4 (sparse text)
+        if result is too short — helps with parking receipts and small tickets.
 
         Args:
             image: Preprocessed image
@@ -1081,7 +1096,18 @@ class OCREngine:
         """
         try:
             text = pytesseract.image_to_string(image, config=self.config.TESSERACT_CONFIG)
-            return text.strip()
+            text = text.strip()
+
+            # If very little text extracted, retry with sparse text mode (PSM 4)
+            # This helps with parking receipts, tickets, and non-standard layouts
+            if len(text) < 30:
+                sparse_config = self.config.TESSERACT_CONFIG.replace("--psm 6", "--psm 4")
+                text2 = pytesseract.image_to_string(image, config=sparse_config).strip()
+                if len(text2) > len(text):
+                    logger.info("PSM 4 (sparse text) yielded better result: %d vs %d chars", len(text2), len(text))
+                    text = text2
+
+            return text
         except Exception as e:
             raise ValueError(f"Tesseract OCR failed: {str(e)}")
 
