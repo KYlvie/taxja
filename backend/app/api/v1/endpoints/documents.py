@@ -1002,10 +1002,15 @@ def review_ocr_results(
     warnings = []
     quality_feedback = None
     
+    is_pdf = document.mime_type == "application/pdf" if document.mime_type else False
     if overall_confidence < 0.6:
         quality_feedback = "Low confidence OCR result. Manual review recommended."
-        suggestions.append("Consider retaking the photo with better lighting")
-        suggestions.append("Ensure the document is flat and not skewed")
+        if is_pdf:
+            suggestions.append("This is a digital PDF — please verify the extracted fields manually")
+            suggestions.append("Some PDF layouts (tables, multi-column) may not extract correctly")
+        else:
+            suggestions.append("Consider retaking the photo with better lighting")
+            suggestions.append("Ensure the document is flat and not skewed")
         suggestions.append("Make sure all text is clearly visible")
         warnings.append("Some fields may be inaccurate")
     elif overall_confidence < 0.8:

@@ -124,13 +124,25 @@ class OCREngine:
                     if llm_result is not None:
                         return llm_result
 
-                    # Extract fields
+                    # Extract fields using regex
                     extracted_data = self.extractor.extract_fields(raw_text, doc_type)
 
                     # Calculate confidence
                     overall_confidence = self._calculate_confidence(
                         extracted_data, classification_confidence
                     )
+
+                    # If regex gave low confidence, retry with LLM as fallback
+                    if overall_confidence < 0.5 and self.llm_extractor.is_available:
+                        logger.info(
+                            "Regex confidence %.2f is low, retrying with LLM",
+                            overall_confidence,
+                        )
+                        llm_retry = self._try_llm_extraction(
+                            raw_text, doc_type, start_time
+                        )
+                        if llm_retry is not None:
+                            return llm_retry
 
                     needs_review = overall_confidence < self.config.CONFIDENCE_THRESHOLD
                     processing_time = (datetime.now() - start_time).total_seconds() * 1000
@@ -197,6 +209,18 @@ class OCREngine:
             overall_confidence = self._calculate_confidence(
                 extracted_data, classification_confidence
             )
+
+            # If regex gave low confidence, retry with LLM as fallback
+            if overall_confidence < 0.5 and self.llm_extractor.is_available:
+                logger.info(
+                    "Regex confidence %.2f is low, retrying with LLM",
+                    overall_confidence,
+                )
+                llm_retry = self._try_llm_extraction(
+                    raw_text, doc_type, start_time
+                )
+                if llm_retry is not None:
+                    return llm_retry
 
             # 6. Generate suggestions
             suggestions = self._generate_suggestions(
@@ -1101,11 +1125,16 @@ class OCREngine:
 
         # Low confidence warning
         if confidence < 0.6:
-            suggestions.append(
-                "OCR confidence is low. Consider retaking the photo with better lighting and focus."
-            )
+            if image is not None:
+                suggestions.append(
+                    "OCR confidence is low. Consider retaking the photo with better lighting and focus."
+                )
+            else:
+                suggestions.append(
+                    "OCR confidence is low. Please verify the extracted fields manually."
+                )
 
-        # Image quality suggestions
+        # Image quality suggestions (only for photos, not PDFs)
         if image is not None:
             quality_suggestions = self.preprocessor.suggest_improvements(image)
             suggestions.extend(quality_suggestions)

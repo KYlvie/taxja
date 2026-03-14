@@ -325,6 +325,21 @@ class FieldExtractor:
         """
         text_lower = text.lower()
 
+        # 0. Try labeled date patterns first (highest reliability)
+        # "Date: 08.11.2024", "Datum: 08.11.2024", "Rechnungsdatum: ..."
+        labeled_date_pattern = r"(?:date|datum|rechnungsdatum|belegdatum|ausstellungsdatum)[:\s]+(\d{1,2})[./](\d{1,2})[./](\d{4})"
+        labeled_match = re.search(labeled_date_pattern, text, re.IGNORECASE)
+        if labeled_match:
+            day, month, year = labeled_match.group(1), labeled_match.group(2), labeled_match.group(3)
+            try:
+                d = datetime(int(year), int(month), int(day))
+                if datetime(2020, 1, 1) <= d <= datetime.now():
+                    return ExtractedField(
+                        value=d, confidence=0.95, raw_text=f"{day}.{month}.{year}"
+                    )
+            except ValueError:
+                pass
+
         # 1. Try "DD Month YYYY" or "DD. Month YYYY" (common in Amazon invoices)
         month_pattern = (
             r"(\d{1,2})\.?\s+("
@@ -401,7 +416,8 @@ class FieldExtractor:
             r"gesamtpreis[:\s]*.{0,2}\s*(\d+[,\.]\d{2})",
             r"rechnungsbetrag[:\s]*.{0,2}\s*(\d+[,\.]\d{2})",
             r"total\s+amount\s+due[:\s]*(?:eur|.{0,2})?\s*(\d+[,\.]\d{2})",
-            r"(?:summe|gesamt|total|betrag)[:\s]*.{0,2}\s*(\d+[,\.]\d{2})",
+            r"total[,.]?\s+payment[^0-9]{0,30}(\d+[,\.]\d{2})",
+            r"(?:summe|gesamt|total|betrag)[:\s,]*.{0,2}\s*(\d+[,\.]\d{2})",
         ]
 
         for pattern in labeled_patterns:
@@ -452,6 +468,7 @@ class FieldExtractor:
 
         # Known merchants/companies (expanded)
         merchants = {
+            "easypark": ("EasyPark", 0.95),
             "amazon": ("Amazon", 0.95),
             "billa": ("BILLA", 0.95),
             "spar": ("SPAR", 0.95),
@@ -470,17 +487,26 @@ class FieldExtractor:
             "mediamarkt": ("MediaMarkt", 0.95),
             "saturn": ("Saturn", 0.95),
             "zalando": ("Zalando", 0.9),
-            "post.at": ("Oesterreichische Post", 0.9),
             "dpd": ("DPD", 0.9),
             "gls": ("GLS", 0.85),
             "eni": ("ENI", 0.9),
-            "bp ": ("BP", 0.9),
             "shell": ("Shell", 0.9),
             "omv": ("OMV", 0.9),
+            "wipark": ("WIPARK", 0.9),
+            "apcoa": ("APCOA", 0.9),
         }
 
         for key, (official_name, confidence) in merchants.items():
             if key in text_lower:
+                return ExtractedField(value=official_name, confidence=confidence)
+
+        # Regex-based merchants (need word boundary or URL context to avoid false positives)
+        regex_merchants = [
+            (r"\bpost\.at\b|österreichische\s+post|oesterreichische\s+post", "Oesterreichische Post", 0.9),
+            (r"\bbp\s", "BP", 0.9),
+        ]
+        for pattern, official_name, confidence in regex_merchants:
+            if re.search(pattern, text_lower):
                 return ExtractedField(value=official_name, confidence=confidence)
 
         # Try "Verkauft von" pattern (Amazon invoices)
