@@ -35,24 +35,15 @@ class OCRTask(Task):
 
 def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
     """
-    Process document through the AI-orchestrated pipeline.
+    Process document through the AI-orchestrated auto pipeline.
 
-    Uses DocumentPipelineOrchestrator for:
-      - Multi-signal classification (regex → filename → LLM)
-      - Cross-field validation
-      - Confidence-based review gating
-      - Suggestion building (never auto-creates for high-value docs)
-
-    After pipeline completes, creates transactions only for
-    receipts/invoices with high confidence.
+    Zero-friction: the orchestrator auto-creates everything (transactions,
+    properties, recurring income) for ALL document types. User sees results
+    in dashboard, can edit/undo if needed.
     """
     from app.db.base import SessionLocal
-    from app.services.document_pipeline_orchestrator import (
-        DocumentPipelineOrchestrator,
-        ConfidenceLevel,
-        PipelineStage,
-    )
-    from app.models.document import Document, DocumentType as DBDocumentType
+    from app.services.document_pipeline_orchestrator import DocumentPipelineOrchestrator
+    from app.models.document import Document
 
     own_session = db is None
     if own_session:
@@ -74,31 +65,17 @@ def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
                     db.commit()
             except Exception:
                 pass
-            return pipeline_result.to_dict()
 
-        # Auto-create transactions only for receipt/invoice with high confidence
-        # and NOT requiring user confirmation
-        document = db.query(Document).filter(Document.id == document_id).first()
-        if document and document.document_type not in (
-            DBDocumentType.PURCHASE_CONTRACT,
-            DBDocumentType.RENTAL_CONTRACT,
-        ):
-            tx_suggestions = [
-                s for s in pipeline_result.suggestions
-                if s and s.get("type") not in ("create_property", "create_recurring_income")
-            ]
-            if tx_suggestions and pipeline_result.confidence_level == ConfidenceLevel.HIGH:
-                created_ids = orchestrator.create_transactions_from_suggestions(
-                    document_id, document.user_id
-                )
-                result_dict = pipeline_result.to_dict()
-                result_dict["transaction_created"] = len(created_ids) > 0
-                result_dict["transaction_id"] = created_ids[0] if created_ids else None
-                if len(created_ids) > 1:
-                    result_dict["split_transaction_ids"] = created_ids
-                return result_dict
+        # Everything is auto-created by the orchestrator already.
+        # Just return the result for the frontend to display.
+        result_dict = pipeline_result.to_dict()
 
-        return pipeline_result.to_dict()
+        # Add convenience fields for frontend
+        auto_created = [s for s in pipeline_result.suggestions if s.get("status") == "auto-created"]
+        result_dict["auto_created_count"] = len(auto_created)
+        result_dict["transaction_created"] = any(s.get("transaction_id") for s in auto_created)
+
+        return result_dict
 
     except Exception as e:
         db.rollback()

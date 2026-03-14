@@ -2,13 +2,15 @@
 Document Pipeline Orchestrator — AI dispatch layer for document processing.
 
 Orchestrates the full document processing pipeline:
-  Upload → Classify → Extract → Validate → Suggest → (User confirms) → Create
+  Upload → Classify → Extract → Validate+AutoFix → AutoCreate → Notify user
 
-Design principles:
-  - AI is the quality controller and router, never the calculator
-  - Rules/regex first, LLM only as fallback for low-confidence or ambiguous cases
-  - Every AI output requires user confirmation before persisting
-  - All decisions are logged with confidence scores for auditability
+Design principles — "傻瓜操作" (zero-friction for the user):
+  - User uploads a photo/PDF → system does EVERYTHING automatically
+  - Auto-correct what can be fixed (negative amounts, bad dates, missing fields)
+  - Auto-create transactions, properties, recurring income — all document types
+  - User sees the RESULT, not questions. Can edit/undo if wrong.
+  - Only flag needs_review when data is truly unusable (no amount, no OCR text)
+  - All decisions logged with confidence scores for auditability
 """
 import json
 import logging
@@ -95,6 +97,34 @@ class PipelineResult:
     audit_log: List[Dict[str, Any]] = field(default_factory=list)
     error: Optional[str] = None
 
+    @property
+    def user_message(self) -> str:
+        """Generate a user-friendly notification message."""
+        if self.error:
+            return "Dokument konnte nicht verarbeitet werden. Bitte erneut hochladen."
+
+        auto_created = [s for s in self.suggestions if s.get("status") == "auto-created"]
+        if not auto_created:
+            if self.needs_review:
+                return "Dokument verarbeitet. Bitte überprüfen."
+            return "Dokument verarbeitet."
+
+        parts = []
+        for s in auto_created:
+            if s.get("type") == "create_property":
+                parts.append("Immobilie angelegt")
+            elif s.get("type") == "create_recurring_income":
+                parts.append("Mieteinnahme angelegt")
+            elif s.get("transaction_id"):
+                amt = s.get("amount", "?")
+                desc = s.get("description", "")
+                deductible = " (absetzbar)" if s.get("is_deductible") else ""
+                parts.append(f"€{amt} {desc}{deductible}")
+
+        if parts:
+            return "Automatisch erstellt: " + "; ".join(parts)
+        return "Dokument verarbeitet."
+
     def to_dict(self) -> Dict[str, Any]:
         result = {
             "document_id": self.document_id,
@@ -106,6 +136,7 @@ class PipelineResult:
             "processing_time_ms": self.processing_time_ms,
             "suggestions": self.suggestions,
             "error": self.error,
+            "user_message": self.user_message,
         }
         if self.classification:
             result["classification"] = asdict(self.classification)
@@ -132,22 +163,22 @@ OCR_TO_DB_TYPE_MAP = {
     OCRDocumentType.UNKNOWN: DBDocumentType.OTHER,
 }
 
-# Document types that require user confirmation before creating records
-CONFIRMATION_REQUIRED_TYPES = {
-    DBDocumentType.PURCHASE_CONTRACT,   # Kaufvertrag → property creation
-    DBDocumentType.RENTAL_CONTRACT,     # Mietvertrag → recurring income
+# Auto-create confidence thresholds — below this, still create but mark needs_review
+# These are intentionally LOW because the philosophy is "do it, let user fix later"
+AUTO_CREATE_THRESHOLDS = {
+    DBDocumentType.PURCHASE_CONTRACT: 0.4,   # Kaufvertrag: auto-create property
+    DBDocumentType.RENTAL_CONTRACT: 0.4,     # Mietvertrag: auto-create recurring
+    DBDocumentType.E1_FORM: 0.4,
+    DBDocumentType.EINKOMMENSTEUERBESCHEID: 0.4,
+    DBDocumentType.RECEIPT: 0.3,
+    DBDocumentType.INVOICE: 0.3,
 }
+DEFAULT_AUTO_CREATE_THRESHOLD = 0.3
 
-# Confidence thresholds per document type
-CONFIDENCE_THRESHOLDS = {
-    DBDocumentType.PURCHASE_CONTRACT: 0.7,
-    DBDocumentType.RENTAL_CONTRACT: 0.7,
-    DBDocumentType.E1_FORM: 0.7,
-    DBDocumentType.EINKOMMENSTEUERBESCHEID: 0.7,
-    DBDocumentType.RECEIPT: 0.5,
-    DBDocumentType.INVOICE: 0.5,
-}
-DEFAULT_CONFIDENCE_THRESHOLD = 0.6
+# Keep backward compat for tests
+CONFIRMATION_REQUIRED_TYPES = set()  # Empty — nothing requires confirmation anymore
+CONFIDENCE_THRESHOLDS = AUTO_CREATE_THRESHOLDS
+DEFAULT_CONFIDENCE_THRESHOLD = DEFAULT_AUTO_CREATE_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +189,8 @@ class DocumentPipelineOrchestrator:
     """
     Central orchestrator for the document processing pipeline.
 
-    Coordinates: OCR → Classification → Extraction → Validation → Suggestion
-    AI is used as router and quality controller, never as calculator.
+    Coordinates: OCR → Classification → Extraction → Validate+AutoFix → AutoCreate
+    Philosophy: do everything automatically, let user edit/undo later.
     """
 
     def __init__(self, db: Session):
@@ -171,18 +202,16 @@ class DocumentPipelineOrchestrator:
 
     def process_document(self, document_id: int) -> PipelineResult:
         """
-        Process a document through the full pipeline.
+        Process a document through the full auto pipeline.
 
         Steps:
-          1. Load document from storage
-          2. OCR + Classification (regex first, LLM arbitration if needed)
-          3. Extraction (specialized extractor or LLM)
-          4. Cross-field validation
-          5. Build suggestions (never auto-create for high-value docs)
-          6. Persist results and return
+          1. OCR + Classification (regex → filename → LLM)
+          2. Extraction (specialized extractor or LLM)
+          3. Validate + auto-fix (negative→abs, missing date→today, etc.)
+          4. Auto-create records (transactions, properties, recurring income)
+          5. Persist results → user sees notification, not questions
 
-        Returns:
-            PipelineResult with all stage results
+        needs_review is ONLY set when data is truly unusable.
         """
         start_time = datetime.utcnow()
         result = PipelineResult(document_id=document_id)
@@ -209,23 +238,28 @@ class DocumentPipelineOrchestrator:
             result.stage_reached = PipelineStage.EXTRACT
             self._log_audit(result, "extract", f"Extracted {len(ocr_result.extracted_data)} fields")
 
-            # Stage 4: Cross-field validation
+            # Stage 4: Validate + auto-fix
             validation = self._stage_validate(db_type, ocr_result.extracted_data, result)
             if validation.corrected_fields:
-                # Apply auto-corrections
                 result.extracted_data.update(validation.corrected_fields)
+                self._log_audit(
+                    result, "autofix",
+                    f"Auto-corrected {len(validation.corrected_fields)} field(s): "
+                    f"{list(validation.corrected_fields.keys())}"
+                )
 
-            # Stage 5: Build suggestions (respecting confirmation gates)
+            # Stage 5: Build suggestions AND auto-create
             self._stage_suggest(document, db_type, ocr_result, result)
 
             # Determine overall confidence
             result.confidence_level = self._assess_confidence(
                 ocr_result.confidence_score, db_type, validation
             )
+
+            # needs_review ONLY when data is truly unusable
             result.needs_review = (
-                result.confidence_level != ConfidenceLevel.HIGH
-                or validation.error_count > 0
-                or db_type in CONFIRMATION_REQUIRED_TYPES
+                result.confidence_level == ConfidenceLevel.LOW
+                and validation.error_count > 0
             )
 
             return self._finalize(result, document, start_time)
@@ -396,8 +430,10 @@ class DocumentPipelineOrchestrator:
         result: PipelineResult,
     ) -> ValidationResult:
         """
-        Validate extracted data for consistency and correctness.
-        Pure rules — no AI involved.
+        Validate + auto-fix extracted data.
+
+        Philosophy: FIX what can be fixed, only ERROR when data is truly unusable.
+        Auto-corrections are stored in validation.corrected_fields.
         """
         validation = ValidationResult(is_valid=True)
 
@@ -409,11 +445,12 @@ class DocumentPipelineOrchestrator:
             result.validation = validation
             return validation
 
-        # Common validations
-        self._validate_amount(extracted_data, validation)
-        self._validate_date(extracted_data, validation)
+        # Auto-fix + validate common fields
+        self._autofix_amount(extracted_data, validation)
+        self._autofix_date(extracted_data, validation)
+        self._autofix_missing_fields(extracted_data, db_type, validation)
 
-        # Type-specific validations
+        # Type-specific validations (mostly informational now)
         validators = {
             DBDocumentType.INVOICE: self._validate_invoice,
             DBDocumentType.RECEIPT: self._validate_receipt,
@@ -431,13 +468,14 @@ class DocumentPipelineOrchestrator:
         self._log_audit(
             result, "validate",
             f"Validation: valid={validation.is_valid}, "
-            f"errors={validation.error_count}, warnings={validation.warning_count}"
+            f"errors={validation.error_count}, warnings={validation.warning_count}, "
+            f"auto-fixed={len(validation.corrected_fields)}"
         )
 
         return validation
 
-    def _validate_amount(self, data: Dict[str, Any], validation: ValidationResult):
-        """Validate amount fields are positive numbers."""
+    def _autofix_amount(self, data: Dict[str, Any], validation: ValidationResult):
+        """Auto-fix amount fields: negative→abs, invalid→remove."""
         for field_name in ("amount", "purchase_price", "monthly_rent"):
             value = data.get(field_name)
             if value is None:
@@ -445,27 +483,25 @@ class DocumentPipelineOrchestrator:
             try:
                 amount = float(value)
                 if amount < 0:
+                    # Auto-fix: take absolute value
+                    fixed = abs(amount)
+                    validation.corrected_fields[field_name] = fixed
                     validation.issues.append(ValidationIssue(
                         field=field_name,
-                        issue=f"Negative amount: {amount}",
-                        severity="warning",
-                        suggestion="Amount should typically be positive",
+                        issue=f"Auto-corrected negative amount {amount} → {fixed}",
+                        severity="info",
                     ))
-                if amount == 0:
-                    validation.issues.append(ValidationIssue(
-                        field=field_name,
-                        issue="Amount is zero",
-                        severity="warning",
-                    ))
+                # Zero is OK — might be a free item or zero-cost document
             except (ValueError, TypeError):
+                # Can't parse at all — this IS an error, can't auto-fix
                 validation.issues.append(ValidationIssue(
                     field=field_name,
                     issue=f"Invalid amount value: {value}",
                     severity="error",
                 ))
 
-    def _validate_date(self, data: Dict[str, Any], validation: ValidationResult):
-        """Validate date fields are reasonable."""
+    def _autofix_date(self, data: Dict[str, Any], validation: ValidationResult):
+        """Auto-fix date fields: unparseable→today, future→today."""
         for field_name in ("date", "purchase_date", "start_date"):
             value = data.get(field_name)
             if value is None:
@@ -483,70 +519,162 @@ class DocumentPipelineOrchestrator:
                         continue
 
             if parsed_date is None:
+                # Auto-fix: use today
+                today = date.today()
+                validation.corrected_fields[field_name] = today.isoformat()
                 validation.issues.append(ValidationIssue(
                     field=field_name,
-                    issue=f"Cannot parse date: {value}",
-                    severity="warning",
+                    issue=f"Cannot parse date '{value}', auto-set to {today}",
+                    severity="info",
                 ))
                 continue
 
-            # Date shouldn't be in the future
+            # Future date → keep it (might be a contract start date)
             if parsed_date > date.today():
                 validation.issues.append(ValidationIssue(
                     field=field_name,
                     issue=f"Date is in the future: {parsed_date}",
-                    severity="warning",
+                    severity="info",
                 ))
 
-            # Date shouldn't be unreasonably old (before 2000)
+            # Very old date → keep but note
             if parsed_date.year < 2000:
                 validation.issues.append(ValidationIssue(
                     field=field_name,
-                    issue=f"Date seems too old: {parsed_date}",
-                    severity="warning",
+                    issue=f"Date seems old: {parsed_date}",
+                    severity="info",
+                ))
+
+    def _autofix_missing_fields(
+        self, data: Dict[str, Any], db_type: DBDocumentType,
+        validation: ValidationResult,
+    ):
+        """Fill in smart defaults for missing fields so auto-create can proceed."""
+        # Missing date → today
+        if not data.get("date") and "date" not in validation.corrected_fields:
+            today = date.today().isoformat()
+            validation.corrected_fields["date"] = today
+            validation.issues.append(ValidationIssue(
+                field="date", issue=f"No date found, auto-set to {today}", severity="info",
+            ))
+
+        # Missing merchant → "Unbekannt"
+        if db_type in (DBDocumentType.RECEIPT, DBDocumentType.INVOICE):
+            if not data.get("merchant") and not data.get("supplier"):
+                validation.corrected_fields["merchant"] = "Unbekannt"
+                validation.issues.append(ValidationIssue(
+                    field="merchant",
+                    issue="No merchant found, auto-set to 'Unbekannt'",
+                    severity="info",
+                ))
+
+        # Kaufvertrag: missing address → "Adresse nicht erkannt"
+        if db_type == DBDocumentType.PURCHASE_CONTRACT:
+            if not data.get("property_address"):
+                validation.corrected_fields["property_address"] = "Adresse nicht erkannt"
+                validation.issues.append(ValidationIssue(
+                    field="property_address",
+                    issue="No property address found, auto-set placeholder",
+                    severity="info",
+                ))
+
+        # Mietvertrag: missing address → "Adresse nicht erkannt"
+        if db_type == DBDocumentType.RENTAL_CONTRACT:
+            if not data.get("property_address"):
+                validation.corrected_fields["property_address"] = "Adresse nicht erkannt"
+                validation.issues.append(ValidationIssue(
+                    field="property_address",
+                    issue="No property address found, auto-set placeholder",
+                    severity="info",
                 ))
 
     def _validate_invoice(self, data: Dict[str, Any], validation: ValidationResult):
-        """Validate invoice-specific fields."""
+        """Validate invoice-specific fields. Auto-fix VAT when possible."""
         amount = data.get("amount")
         vat_amount = data.get("vat_amount")
         vat_rate = data.get("vat_rate")
 
-        if amount and vat_amount and vat_rate:
+        # If VAT rate is known but VAT amount is missing, calculate it
+        if amount and vat_rate and not vat_amount:
+            try:
+                amt = float(amount)
+                rate = float(vat_rate) / 100.0
+                calculated_vat = round(amt * rate / (1 + rate), 2)
+                validation.corrected_fields["vat_amount"] = calculated_vat
+                validation.issues.append(ValidationIssue(
+                    field="vat_amount",
+                    issue=f"Auto-calculated VAT: €{calculated_vat:.2f} ({vat_rate}%)",
+                    severity="info",
+                ))
+            except (ValueError, TypeError):
+                pass
+        elif amount and vat_amount and vat_rate:
+            # Check consistency
             try:
                 amt = float(amount)
                 vat = float(vat_amount)
                 rate = float(vat_rate) / 100.0
-                expected_vat = amt * rate / (1 + rate)  # VAT from gross
+                expected_vat = amt * rate / (1 + rate)
                 diff = abs(vat - expected_vat)
-                if diff > 1.0:  # Allow €1 tolerance
+                if diff > 1.0:
+                    # Auto-fix: recalculate VAT from amount and rate
+                    fixed_vat = round(expected_vat, 2)
+                    validation.corrected_fields["vat_amount"] = fixed_vat
                     validation.issues.append(ValidationIssue(
                         field="vat_amount",
-                        issue=f"VAT amount ({vat:.2f}) doesn't match rate ({vat_rate}%) "
-                              f"for amount ({amt:.2f}). Expected ~{expected_vat:.2f}",
-                        severity="warning",
-                        suggestion="Check if amount is gross or net",
+                        issue=f"VAT mismatch, auto-corrected {vat:.2f} → {fixed_vat:.2f}",
+                        severity="info",
                     ))
             except (ValueError, TypeError):
                 pass
 
-        if not data.get("merchant") and not data.get("supplier"):
-            validation.issues.append(ValidationIssue(
-                field="merchant",
-                issue="No merchant/supplier extracted",
-                severity="warning",
-            ))
+        # If no VAT rate, default to Austrian standard 20%
+        if amount and not vat_rate:
+            validation.corrected_fields["vat_rate"] = 20
+            try:
+                amt = float(amount)
+                calculated_vat = round(amt * 0.2 / 1.2, 2)
+                if not vat_amount:
+                    validation.corrected_fields["vat_amount"] = calculated_vat
+                validation.issues.append(ValidationIssue(
+                    field="vat_rate",
+                    issue="No VAT rate found, auto-set to 20% (Austrian standard)",
+                    severity="info",
+                ))
+            except (ValueError, TypeError):
+                pass
 
     def _validate_receipt(self, data: Dict[str, Any], validation: ValidationResult):
         """Validate receipt-specific fields."""
         if not data.get("amount"):
+            # Try to compute from line items
+            line_items = data.get("line_items", [])
+            if line_items:
+                try:
+                    items_total = sum(
+                        float(item.get("amount") or item.get("price") or 0)
+                        for item in line_items
+                    )
+                    if items_total > 0:
+                        validation.corrected_fields["amount"] = round(items_total, 2)
+                        validation.issues.append(ValidationIssue(
+                            field="amount",
+                            issue=f"No total found, auto-calculated from line items: €{items_total:.2f}",
+                            severity="info",
+                        ))
+                        return
+                except (ValueError, TypeError):
+                    pass
+
+            # No amount and no line items → genuine error
             validation.issues.append(ValidationIssue(
                 field="amount",
-                issue="Receipt has no total amount",
+                issue="Receipt has no total amount and no line items",
                 severity="error",
             ))
+            return
 
-        # Validate line items sum against total
+        # Line items sum check (informational only)
         line_items = data.get("line_items", [])
         if line_items and data.get("amount"):
             try:
@@ -561,56 +689,92 @@ class DocumentPipelineOrchestrator:
                         field="line_items",
                         issue=f"Line items sum ({items_total:.2f}) differs from "
                               f"total ({total:.2f}) by {diff:.2f}",
-                        severity="warning",
+                        severity="info",
                     ))
             except (ValueError, TypeError):
                 pass
 
     def _validate_kaufvertrag(self, data: Dict[str, Any], validation: ValidationResult):
-        """Validate Kaufvertrag-specific fields."""
+        """Validate Kaufvertrag-specific fields. Auto-fill where possible."""
         if not data.get("purchase_price"):
+            # This is a genuine error — can't create property without price
             validation.issues.append(ValidationIssue(
                 field="purchase_price",
                 issue="No purchase price found",
                 severity="error",
             ))
 
-        if not data.get("property_address"):
-            validation.issues.append(ValidationIssue(
-                field="property_address",
-                issue="No property address found",
-                severity="error",
-            ))
-
-        # Building + land values should approximate purchase price
+        # Building + land values: auto-calculate if one is missing
         building = data.get("building_value")
         land = data.get("land_value")
         price = data.get("purchase_price")
-        if building and land and price:
+        if price:
             try:
-                total = float(building) + float(land)
                 p = float(price)
-                if p > 0 and abs(total - p) / p > 0.1:  # >10% discrepancy
+                if building and not land:
+                    # Auto-calculate land value
+                    b = float(building)
+                    calculated_land = max(0, p - b)
+                    validation.corrected_fields["land_value"] = calculated_land
+                    validation.issues.append(ValidationIssue(
+                        field="land_value",
+                        issue=f"Auto-calculated land value: €{calculated_land:.0f}",
+                        severity="info",
+                    ))
+                elif land and not building:
+                    # Auto-calculate building value
+                    l = float(land)
+                    calculated_building = max(0, p - l)
+                    validation.corrected_fields["building_value"] = calculated_building
                     validation.issues.append(ValidationIssue(
                         field="building_value",
-                        issue=f"Building ({building}) + Land ({land}) = {total:.0f} "
-                              f"doesn't match purchase price ({price})",
-                        severity="warning",
+                        issue=f"Auto-calculated building value: €{calculated_building:.0f}",
+                        severity="info",
                     ))
+                elif not building and not land:
+                    # Use Austrian default split: 70% building, 30% land
+                    b = round(p * 0.7, 2)
+                    l = round(p * 0.3, 2)
+                    validation.corrected_fields["building_value"] = b
+                    validation.corrected_fields["land_value"] = l
+                    validation.issues.append(ValidationIssue(
+                        field="building_value",
+                        issue=f"No split found, auto-set 70/30: building €{b:.0f}, land €{l:.0f}",
+                        severity="info",
+                    ))
+                elif building and land:
+                    total = float(building) + float(land)
+                    if p > 0 and abs(total - p) / p > 0.1:
+                        validation.issues.append(ValidationIssue(
+                            field="building_value",
+                            issue=f"Building ({building}) + Land ({land}) = {total:.0f} "
+                                  f"doesn't match purchase price ({price})",
+                            severity="info",
+                        ))
             except (ValueError, TypeError):
                 pass
 
-        # Grunderwerbsteuer should be ~3.5% of purchase price
+        # Grunderwerbsteuer: auto-calculate if missing
         grest = data.get("grunderwerbsteuer")
-        if grest and price:
+        if not grest and price:
+            try:
+                calculated = round(float(price) * 0.035, 2)
+                validation.corrected_fields["grunderwerbsteuer"] = calculated
+                validation.issues.append(ValidationIssue(
+                    field="grunderwerbsteuer",
+                    issue=f"Auto-calculated GrESt (3.5%): €{calculated:.0f}",
+                    severity="info",
+                ))
+            except (ValueError, TypeError):
+                pass
+        elif grest and price:
             try:
                 expected = float(price) * 0.035
                 actual = float(grest)
                 if actual > 0 and abs(actual - expected) / expected > 0.3:
                     validation.issues.append(ValidationIssue(
                         field="grunderwerbsteuer",
-                        issue=f"GrESt ({actual:.0f}) differs significantly from "
-                              f"expected 3.5% ({expected:.0f})",
+                        issue=f"GrESt ({actual:.0f}) differs from expected 3.5% ({expected:.0f})",
                         severity="info",
                     ))
             except (ValueError, TypeError):
@@ -619,20 +783,14 @@ class DocumentPipelineOrchestrator:
     def _validate_mietvertrag(self, data: Dict[str, Any], validation: ValidationResult):
         """Validate Mietvertrag-specific fields."""
         if not data.get("monthly_rent"):
+            # Genuine error — can't create recurring without amount
             validation.issues.append(ValidationIssue(
                 field="monthly_rent",
                 issue="No monthly rent found",
                 severity="error",
             ))
 
-        if not data.get("property_address"):
-            validation.issues.append(ValidationIssue(
-                field="property_address",
-                issue="No property address found",
-                severity="warning",
-            ))
-
-        # Rent should be reasonable (€100–€10000)
+        # Rent range is informational only — don't block
         rent = data.get("monthly_rent")
         if rent:
             try:
@@ -641,29 +799,30 @@ class DocumentPipelineOrchestrator:
                     validation.issues.append(ValidationIssue(
                         field="monthly_rent",
                         issue=f"Rent seems unusually low: €{r:.2f}",
-                        severity="warning",
+                        severity="info",
                     ))
                 elif r > 10000:
                     validation.issues.append(ValidationIssue(
                         field="monthly_rent",
                         issue=f"Rent seems unusually high: €{r:.2f}",
-                        severity="warning",
+                        severity="info",
                     ))
             except (ValueError, TypeError):
                 pass
 
-    # ---- Stage 5: Build suggestions ----
+    # ---- Stage 5: Auto-create ----
 
     def _stage_suggest(
         self, document: Document, db_type: DBDocumentType,
         ocr_result: OCRResult, result: PipelineResult,
     ):
         """
-        Build suggestions based on document type.
+        Build suggestions AND auto-create records for ALL document types.
 
-        Key rule: Kaufvertrag and Mietvertrag NEVER auto-create records.
-        Receipts/invoices create transaction suggestions that need user confirmation
-        if confidence < threshold.
+        Philosophy: do it now, let user edit/undo later.
+        - Kaufvertrag → auto-create property
+        - Mietvertrag → auto-create recurring income
+        - Receipt/Invoice → auto-create transaction(s)
         """
         result.stage_reached = PipelineStage.SUGGEST
 
@@ -671,34 +830,50 @@ class DocumentPipelineOrchestrator:
             suggestion = self._build_kaufvertrag_suggestion(document, result)
             if suggestion:
                 result.suggestions.append(suggestion)
-                self._log_audit(result, "suggest", "Built property creation suggestion (pending user confirmation)")
+                self._log_audit(result, "auto-create", "Auto-created property from Kaufvertrag")
 
         elif db_type == DBDocumentType.RENTAL_CONTRACT:
             suggestion = self._build_mietvertrag_suggestion(document, result)
             if suggestion:
                 result.suggestions.append(suggestion)
-                self._log_audit(result, "suggest", "Built recurring income suggestion (pending user confirmation)")
+                self._log_audit(result, "auto-create", "Auto-created recurring income from Mietvertrag")
 
         else:
-            # Receipt/Invoice/Other → transaction suggestions
+            # Receipt/Invoice/Other → auto-create transaction(s)
             transaction_suggestions = self._build_transaction_suggestions(
                 document, db_type, result
             )
             result.suggestions.extend(transaction_suggestions)
             if transaction_suggestions:
                 self._log_audit(
-                    result, "suggest",
-                    f"Built {len(transaction_suggestions)} transaction suggestion(s)"
+                    result, "auto-create",
+                    f"Auto-created {len(transaction_suggestions)} transaction(s)"
                 )
 
     def _build_kaufvertrag_suggestion(
         self, document: Document, result: PipelineResult
     ) -> Optional[Dict[str, Any]]:
-        """Build property creation suggestion from Kaufvertrag. Never auto-creates."""
+        """Build AND auto-create property from Kaufvertrag."""
         from app.tasks.ocr_tasks import _build_kaufvertrag_suggestion
         try:
             suggestion_dict = _build_kaufvertrag_suggestion(self.db, document, result)
-            return suggestion_dict.get("import_suggestion")
+            suggestion = suggestion_dict.get("import_suggestion")
+            if not suggestion:
+                return None
+
+            # Auto-confirm: create the property immediately
+            try:
+                from app.tasks.ocr_tasks import create_property_from_suggestion
+                create_result = create_property_from_suggestion(
+                    self.db, document, suggestion.get("data", {})
+                )
+                suggestion["status"] = "auto-created"
+                suggestion["property_id"] = create_result.get("property_id")
+            except Exception as e:
+                logger.warning(f"Auto-create property failed, keeping as suggestion: {e}")
+                suggestion["status"] = "pending"
+
+            return suggestion
         except Exception as e:
             logger.warning(f"Kaufvertrag suggestion failed: {e}")
             return None
@@ -706,11 +881,27 @@ class DocumentPipelineOrchestrator:
     def _build_mietvertrag_suggestion(
         self, document: Document, result: PipelineResult
     ) -> Optional[Dict[str, Any]]:
-        """Build recurring income suggestion from Mietvertrag. Never auto-creates."""
+        """Build AND auto-create recurring income from Mietvertrag."""
         from app.tasks.ocr_tasks import _build_mietvertrag_suggestion
         try:
             suggestion_dict = _build_mietvertrag_suggestion(self.db, document, result)
-            return suggestion_dict.get("import_suggestion")
+            suggestion = suggestion_dict.get("import_suggestion")
+            if not suggestion:
+                return None
+
+            # Auto-confirm: create the recurring income immediately
+            try:
+                from app.tasks.ocr_tasks import create_recurring_from_suggestion
+                create_result = create_recurring_from_suggestion(
+                    self.db, document, suggestion.get("data", {})
+                )
+                suggestion["status"] = "auto-created"
+                suggestion["recurring_id"] = create_result.get("recurring_id")
+            except Exception as e:
+                logger.warning(f"Auto-create recurring failed, keeping as suggestion: {e}")
+                suggestion["status"] = "pending"
+
+            return suggestion
         except Exception as e:
             logger.warning(f"Mietvertrag suggestion failed: {e}")
             return None
@@ -719,10 +910,9 @@ class DocumentPipelineOrchestrator:
         self, document: Document, db_type: DBDocumentType, result: PipelineResult,
     ) -> List[Dict[str, Any]]:
         """
-        Build transaction suggestions for receipts/invoices.
+        Build AND auto-create transactions for receipts/invoices.
 
-        Uses OCRTransactionService for classification + deductibility,
-        but does NOT auto-create transactions — returns suggestions only.
+        Creates immediately. User sees result in dashboard, can edit/delete.
         """
         try:
             from app.services.ocr_transaction_service import OCRTransactionService
@@ -731,11 +921,17 @@ class DocumentPipelineOrchestrator:
                 document.id, document.user_id
             )
 
-            # Mark all suggestions as needing review based on confidence
-            threshold = CONFIDENCE_THRESHOLDS.get(db_type, DEFAULT_CONFIDENCE_THRESHOLD)
+            # Auto-create all suggestions as transactions
             for s in suggestions:
-                confidence = float(s.get("confidence", 0))
-                s["needs_review"] = confidence < threshold or s.get("needs_review", True)
+                s["needs_review"] = False  # Don't nag the user
+                try:
+                    s["document_id"] = document.id
+                    txn = service.create_transaction_from_suggestion(s, document.user_id)
+                    s["transaction_id"] = txn.id
+                    s["status"] = "auto-created"
+                except Exception as e:
+                    logger.warning(f"Auto-create transaction failed for doc {document.id}: {e}")
+                    s["status"] = "pending"
 
             return suggestions
 
@@ -750,24 +946,22 @@ class DocumentPipelineOrchestrator:
         validation: ValidationResult,
     ) -> ConfidenceLevel:
         """
-        Determine overall confidence level combining OCR, classification, and validation.
-        """
-        threshold = CONFIDENCE_THRESHOLDS.get(db_type, DEFAULT_CONFIDENCE_THRESHOLD)
+        Determine confidence level. Lenient — only errors drop to LOW.
 
-        # Start with OCR confidence
+        Warnings and info issues are just metadata; they don't block auto-creation.
+        """
         score = ocr_confidence
 
-        # Penalize for validation issues
+        # Only real errors reduce confidence significantly
         if validation.error_count > 0:
-            score *= 0.5
-        elif validation.warning_count > 2:
-            score *= 0.7
-        elif validation.warning_count > 0:
-            score *= 0.85
+            score *= 0.4
 
-        if score >= 0.8:
+        # Warnings are mild — auto-fix has already handled most issues
+        # Don't penalize for "info" level issues (auto-corrections)
+
+        if score >= 0.6:
             return ConfidenceLevel.HIGH
-        elif score >= threshold:
+        elif score >= 0.3:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.LOW
