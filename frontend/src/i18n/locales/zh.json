@@ -67,6 +67,7 @@
     "enter2FAManually": "或手动输入此密钥",
     "verify2FACode": "输入验证码以完成设置",
     "enable2FA": "启用双因素认证",
+    "gmbhExclusive": "GmbH 是法人实体，不能与其他角色组合",
     "disable2FA": "禁用双因素认证",
     "twoFactorEnabled": "双因素认证已启用",
     "twoFactorDisabled": "双因素认证已禁用"
@@ -767,5 +768,30 @@
     "continue_dashboard": "前往仪表盘",
     "view_subscription": "查看订阅详情",
     "support": "有问题？联系 support@taxja.com"
+  },
+  "profile": {
+    "basicInfo": "基本信息",
+    "taxInfo": "税务信息",
+    "commutingInfo": "通勤信息",
+    "familyInfo": "家庭信息",
+    "security": "安全",
+    "privacyAndData": "隐私与数据导出",
+    "name": "姓名",
+    "address": "地址",
+    "taxNumber": "税号",
+    "vatNumber": "增值税号（UID）",
+    "userType": "用户类型",
+    "employee": "雇员",
+    "landlord": "房东",
+    "selfEmployed": "自雇",
+    "smallBusiness": "小型企业",
+    "gmbh": "GmbH（有限责任公司）",
+    "commutingDistance": "通勤距离（公里）",
+    "commutingDistanceHelp": "从家到工作地点的距离（公里）",
+    "publicTransportAvailable": "有公共交通可用",
+    "numChildren": "子女人数",
+    "singleParent": "单亲",
+    "updateSuccess": "个人资料更新成功",
+    "emailCannotChange": "邮箱不可更改"
   }
 }

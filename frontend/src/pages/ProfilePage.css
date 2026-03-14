@@ -9,10 +9,17 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
+  gap: 16px;
 }
 
 .profile-header h1 {
   margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.profile-header .btn-primary {
+  flex-shrink: 0;
 }
 
 .profile-form {
@@ -152,7 +159,8 @@
 
 .role-checkbox-label:has(input:checked) {
   border-color: var(--color-primary);
-  background: var(--color-primary-light, rgba(99, 102, 241, 0.08));
+  background: var(--color-primary-50, rgba(99, 102, 241, 0.08));
+  color: var(--color-text);
 }
 
 .role-checkbox-label:has(input:disabled) {
