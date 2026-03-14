@@ -289,19 +289,32 @@ IMPORTANT: Respond ONLY with valid JSON (no markdown):
 
 
 def _parse_llm_json(raw: str) -> Optional[dict]:
-    """Parse JSON from LLM response, stripping markdown fences if present."""
+    """Parse JSON from LLM response, handling markdown fences, think tags, etc."""
     import json as _json
+    import re as _re
 
     text = raw.strip()
+    # Remove <think>...</think> reasoning blocks (GPT-OSS, DeepSeek, Qwen)
+    text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+    # Remove markdown fences
     if text.startswith("```"):
         text = text.split("\n", 1)[-1]
     if text.endswith("```"):
         text = text.rsplit("```", 1)[0]
     text = text.strip()
+    # Try direct parse
     try:
         return _json.loads(text)
     except (ValueError, TypeError):
-        return None
+        pass
+    # Try to find JSON object in the text
+    match = _re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, _re.DOTALL)
+    if match:
+        try:
+            return _json.loads(match.group(0))
+        except (ValueError, TypeError):
+            pass
+    return None
 
 
 def _classify_with_ai(
@@ -375,12 +388,12 @@ def _classify_with_ai(
             system_prompt=_CLASSIFY_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=1000,
         )
 
         classification = _parse_llm_json(raw1)
         if not classification or "category" not in classification:
-            logger.warning("AI pass 1 failed to parse: %s", raw1[:200])
+            logger.warning("AI pass 1 failed to parse. Raw[0:300]: %s", raw1[:300])
             return None
 
         logger.info(
@@ -405,7 +418,7 @@ def _classify_with_ai(
             system_prompt=_VERIFY_SYSTEM_PROMPT,
             user_prompt=verify_prompt,
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=1000,
         )
 
         verified = _parse_llm_json(raw2)
