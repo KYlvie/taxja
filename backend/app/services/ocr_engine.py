@@ -124,8 +124,23 @@ class OCREngine:
                     if llm_result is not None:
                         return llm_result
 
-                    # Extract fields using regex
-                    extracted_data = self.extractor.extract_fields(raw_text, doc_type)
+                    # Try multi-receipt extraction for receipts/invoices
+                    multi_results = self.extractor.extract_multi_receipt_fields(
+                        raw_text, doc_type
+                    )
+
+                    if len(multi_results) > 1:
+                        # Multiple receipts detected — use first for primary data,
+                        # store all in additional_receipts
+                        extracted_data = multi_results[0]
+                        extracted_data["_additional_receipts"] = multi_results[1:]
+                        extracted_data["_receipt_count"] = len(multi_results)
+                        logger.info(
+                            "Detected %d receipts in single document",
+                            len(multi_results),
+                        )
+                    else:
+                        extracted_data = multi_results[0]
 
                     # Calculate confidence
                     overall_confidence = self._calculate_confidence(
@@ -938,7 +953,7 @@ class OCREngine:
                 page = doc[i]
                 page_text = page.get_text()
                 if page_text:
-                    text_parts.append(page_text)
+                    text_parts.append(f"--- PAGE {i + 1} ---\n{page_text}")
 
                 # Extract AcroForm widget values (filled-in form fields)
                 try:

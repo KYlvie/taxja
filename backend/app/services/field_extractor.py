@@ -752,6 +752,99 @@ class FieldExtractor:
                     continue
         return ExtractedField(value=None, confidence=0.0)
 
+    # ========== Multi-receipt segmentation ==========
+
+    # Patterns that indicate the start of a new receipt/invoice within a document
+    _RECEIPT_BOUNDARY_PATTERNS = [
+        r"--- PAGE \d+ ---",                        # PDF page markers
+        r"(?:^|\n)(?:Rechnung|Invoice|Receipt|Beleg|Quittung)\s*(?:\||:|\b)",
+        r"(?:^|\n)(?:Rechnungsnummer|Invoice\s*(?:No|Number)|Receipt\s*reference)[:\s]",
+    ]
+
+    def segment_multi_receipts(self, text: str) -> List[str]:
+        """
+        Detect and split text containing multiple receipts/invoices.
+
+        Strategy:
+        1. Split by page markers first
+        2. Within pages, look for repeated receipt headers
+        3. Each segment must have at least one amount to be valid
+
+        Returns:
+            List of text segments, one per receipt. Returns [text] if only one found.
+        """
+        # Step 1: Split by page markers
+        pages = re.split(r"--- PAGE \d+ ---\n?", text)
+        pages = [p.strip() for p in pages if p.strip()]
+
+        if len(pages) <= 1:
+            # Single page — try to detect multiple receipts within it
+            return self._split_within_page(text)
+
+        # Step 2: For multi-page, check if each page is a separate receipt
+        # by verifying each page has its own amount/total
+        amount_pattern = r"\d+[,\.]\d{2}\s*(?:eur|EUR|€)"
+        valid_pages = []
+        for page in pages:
+            if re.search(amount_pattern, page):
+                valid_pages.append(page)
+
+        if len(valid_pages) >= 2:
+            # Verify pages are truly separate receipts (not continuation)
+            # by checking if each has its own total/summe/amount line
+            total_pattern = r"(?:summe|total|gesamt|betrag|zahlbetrag|rechnungsbetrag)[:\s,]"
+            pages_with_totals = [
+                p for p in valid_pages
+                if re.search(total_pattern, p, re.IGNORECASE)
+            ]
+            if len(pages_with_totals) >= 2:
+                return pages_with_totals
+
+        # Pages don't look like separate receipts — treat as single document
+        return [text]
+
+    def _split_within_page(self, text: str) -> List[str]:
+        """Try to detect multiple receipts within a single page of text."""
+        # Look for repeated receipt/invoice headers
+        header_pattern = r"(?:Rechnung|Invoice|Receipt|Beleg|Quittung)\s*(?:\||:|\b)"
+        matches = list(re.finditer(header_pattern, text, re.IGNORECASE))
+
+        if len(matches) >= 2:
+            segments = []
+            for i, match in enumerate(matches):
+                start = match.start()
+                end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+                segment = text[start:end].strip()
+                # Validate: segment must have an amount
+                if re.search(r"\d+[,\.]\d{2}", segment):
+                    segments.append(segment)
+            if len(segments) >= 2:
+                return segments
+
+        return [text]
+
+    def extract_multi_receipt_fields(self, text: str, doc_type: DocumentType) -> List[Dict[str, Any]]:
+        """
+        Extract fields from text that may contain multiple receipts/invoices.
+
+        Returns:
+            List of extracted field dicts, one per detected receipt.
+        """
+        if doc_type not in (DocumentType.RECEIPT, DocumentType.INVOICE):
+            return [self.extract_fields(text, doc_type)]
+
+        segments = self.segment_multi_receipts(text)
+        if len(segments) <= 1:
+            return [self.extract_fields(text, doc_type)]
+
+        results = []
+        for segment in segments:
+            fields = self.extract_fields(segment, doc_type)
+            # Only include segments that extracted a valid amount
+            if fields.get("amount") is not None:
+                results.append(fields)
+
+        return results if results else [self.extract_fields(text, doc_type)]
 
 
 

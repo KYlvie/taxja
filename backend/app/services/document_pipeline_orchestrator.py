@@ -912,14 +912,30 @@ class DocumentPipelineOrchestrator:
         """
         Build AND auto-create transactions for receipts/invoices.
 
+        Supports multi-receipt PDFs: if _additional_receipts is present in
+        extracted data, creates a transaction for each receipt.
+
         Creates immediately. User sees result in dashboard, can edit/delete.
         """
         try:
             from app.services.ocr_transaction_service import OCRTransactionService
             service = OCRTransactionService(self.db)
-            suggestions = service.create_split_suggestions(
-                document.id, document.user_id
-            )
+
+            # Check for multi-receipt data
+            additional_receipts = result.extracted_data.get("_additional_receipts", [])
+            receipt_count = result.extracted_data.get("_receipt_count", 1)
+
+            if receipt_count > 1 and additional_receipts:
+                logger.info(
+                    f"Multi-receipt document {document.id}: creating {receipt_count} transactions"
+                )
+                suggestions = self._create_multi_receipt_transactions(
+                    document, service, result.extracted_data, additional_receipts
+                )
+            else:
+                suggestions = service.create_split_suggestions(
+                    document.id, document.user_id
+                )
 
             # Auto-create all suggestions as transactions
             for s in suggestions:
@@ -938,6 +954,59 @@ class DocumentPipelineOrchestrator:
         except Exception as e:
             logger.warning(f"Transaction suggestion failed for doc {document.id}: {e}")
             return []
+
+    def _create_multi_receipt_transactions(
+        self, document, service, primary_data: Dict, additional_receipts: List[Dict],
+    ) -> List[Dict[str, Any]]:
+        """
+        Build transaction suggestions for a multi-receipt document.
+        Each receipt becomes its own transaction suggestion.
+        """
+        all_suggestions = []
+
+        # Build suggestion for the primary (first) receipt
+        all_receipts = [primary_data] + additional_receipts
+
+        for i, receipt_data in enumerate(all_receipts):
+            amount = receipt_data.get("amount")
+            if amount is None:
+                continue
+
+            merchant = receipt_data.get("merchant") or receipt_data.get("supplier") or "Unknown"
+            date_val = receipt_data.get("date")
+            date_str = None
+            if date_val:
+                if hasattr(date_val, "isoformat"):
+                    date_str = date_val.isoformat()
+                else:
+                    date_str = str(date_val)
+
+            description = f"{merchant}"
+            product = receipt_data.get("product_summary")
+            if product:
+                description += f" - {product}"
+
+            suggestion = {
+                "document_id": document.id,
+                "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
+                "transaction_type": "EXPENSE",
+                "amount": str(amount),
+                "date": date_str,
+                "description": description,
+                "category": "other_expense",
+                "is_deductible": False,
+                "deduction_reason": None,
+                "confidence": float(receipt_data.get("amount_confidence", 0.8)),
+                "needs_review": False,
+                "extracted_fields": {},
+                "_receipt_index": i + 1,
+            }
+            all_suggestions.append(suggestion)
+
+        logger.info(
+            f"Created {len(all_suggestions)} suggestions from multi-receipt document {document.id}"
+        )
+        return all_suggestions
 
     # ---- Confidence assessment ----
 
