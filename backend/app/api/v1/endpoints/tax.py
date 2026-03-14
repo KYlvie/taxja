@@ -233,7 +233,7 @@ IMPORTANT VAT RULES (UStG):
   (§10 Abs 2 Z 4 UStG — Beherbergung / accommodation)
 - Long-term residential rental (Wohnungsvermietung) = 10% VAT (§10 Abs 2 Z 4 UStG)
 - Commercial property rental = 20% VAT (§10 Abs 1 UStG)
-- Kleinunternehmerregelung: if annual turnover ≤ €35,000, VAT exemption applies
+- Kleinunternehmerregelung: if annual turnover ≤ €55,000 (since 2025), VAT exemption applies
   (§6 Abs 1 Z 27 UStG) — note this in vat_note when relevant
 
 INCOME TAX classification for short-term rental:
@@ -266,7 +266,7 @@ Check:
    - Accommodation / short-term rental (Beherbergung): 10% (§10 Abs 2 Z 4 UStG)
    - Long-term residential rental: 10% (§10 Abs 2 Z 4 UStG)
    - Commercial property rental: 20% (§10 Abs 1 UStG)
-   - Kleinunternehmerregelung (≤ €35,000/year): VAT exempt (§6 Abs 1 Z 27 UStG)
+   - Kleinunternehmerregelung (≤ €55,000/year since 2025): VAT exempt (§6 Abs 1 Z 27 UStG)
 4. Is the deductibility assessment correct?
 5. Are there any edge cases or nuances the classifier may have missed?
 
@@ -1090,3 +1090,52 @@ async def upload_and_parse_e1_form(
     parsed["raw_text"] = raw_text
 
     return parsed
+
+
+# ------------------------------------------------------------------
+# Knowledge Base: Auto-scrape official Austrian tax law sources
+# ------------------------------------------------------------------
+@router.post("/tax/refresh-knowledge-base")
+async def refresh_knowledge_base(
+    source_ids: Optional[List[str]] = Body(None, description="Source IDs to scrape, or null for all"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Scrape official Austrian tax law sources (WKO, USP, BMF),
+    extract structured knowledge via LLM, and update the vector DB.
+
+    This replaces manual knowledge base maintenance with automated,
+    source-verified data from official government websites.
+
+    Admin-only endpoint. First request may be slow (~60s) due to
+    web fetching + LLM extraction.
+    """
+    from app.services.tax_law_scraper import TaxLawScraper
+
+    scraper = TaxLawScraper()
+    try:
+        result = await scraper.scrape_and_update(source_ids=source_ids)
+    except Exception as e:
+        logger.error(f"Knowledge base refresh failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Scrape failed: {str(e)}")
+
+    return result
+
+
+@router.get("/tax/knowledge-base-status")
+async def knowledge_base_status(
+    current_user: User = Depends(get_current_user),
+):
+    """Check the current state of the knowledge base collections."""
+    from app.services.vector_db_service import get_vector_db_service
+
+    vdb = get_vector_db_service()
+    collections = {}
+    for name in ["austrian_tax_law", "usp_2026_tax_tables", "tax_faq", "scraped_tax_law"]:
+        try:
+            coll = vdb._get_collection(name)
+            collections[name] = {"count": coll.count()}
+        except Exception:
+            collections[name] = {"count": 0, "status": "not_initialized"}
+
+    return {"collections": collections}

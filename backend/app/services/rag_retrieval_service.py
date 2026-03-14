@@ -31,13 +31,24 @@ class RAGRetrievalService:
         """
         all_results = []
         
-        # Query tax law collection
+        # Query tax law collection (hand-written)
         tax_law_results = self.vector_db.query_documents(
             collection_name="austrian_tax_law",
             query_text=query,
             n_results=top_k,
             where={"language": language}
         )
+        
+        # Query scraped tax law collection (auto-fetched from official sources)
+        try:
+            scraped_results = self.vector_db.query_documents(
+                collection_name="scraped_tax_law",
+                query_text=query,
+                n_results=top_k,
+                where={"language": language}
+            )
+        except Exception:
+            scraped_results = {}
         
         # Query tax tables collection
         tax_tables_results = self.vector_db.query_documents(
@@ -55,7 +66,8 @@ class RAGRetrievalService:
             where={"language": language}
         )
         
-        # Combine and rank results
+        # Combine and rank results — scraped (official) gets priority
+        all_results.extend(self._format_results(scraped_results, "scraped_official"))
         all_results.extend(self._format_results(tax_law_results, "tax_law"))
         all_results.extend(self._format_results(tax_tables_results, "tax_tables"))
         all_results.extend(self._format_results(faq_results, "faq"))

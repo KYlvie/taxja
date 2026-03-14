@@ -32,6 +32,7 @@ class VectorDBService:
         self.tax_law_collection = self._get_or_create_collection("austrian_tax_law")
         self.tax_tables_collection = self._get_or_create_collection("usp_2026_tax_tables")
         self.faq_collection = self._get_or_create_collection("tax_faq")
+        self.scraped_collection = self._get_or_create_collection("scraped_tax_law")
     
     def _get_or_create_collection(self, name: str):
         """Get or create a ChromaDB collection"""
@@ -114,6 +115,8 @@ class VectorDBService:
             return self.tax_tables_collection
         elif name == "tax_faq":
             return self.faq_collection
+        elif name == "scraped_tax_law":
+            return self.scraped_collection
         else:
             return self.client.get_collection(name=name)
     
@@ -135,6 +138,8 @@ class VectorDBService:
             self.tax_tables_collection = new_coll
         elif name == "tax_faq":
             self.faq_collection = new_coll
+        elif name == "scraped_tax_law":
+            self.scraped_collection = new_coll
         return new_coll
 
 
