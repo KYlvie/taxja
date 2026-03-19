@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import uuid4
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Date, Numeric, DateTime, ForeignKey, Enum as SQLEnum, CheckConstraint, text
+from sqlalchemy import Column, Integer, String, Boolean, Date, Numeric, DateTime, ForeignKey, Enum as SQLEnum, CheckConstraint, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.postgresql import UUID
@@ -16,6 +16,16 @@ class PropertyType(str, Enum):
     RENTAL = "rental"
     OWNER_OCCUPIED = "owner_occupied"
     MIXED_USE = "mixed_use"
+
+
+class BuildingUse(str, Enum):
+    """Building usage type for AfA rate determination (§8 Abs 1 EStG).
+
+    - RESIDENTIAL (Wohngebäude): 1.5% AfA
+    - COMMERCIAL (Betriebsgebäude): 2.5% AfA — offices, retail, warehouses, clinics, etc.
+    """
+    RESIDENTIAL = "residential"
+    COMMERCIAL = "commercial"
 
 
 class PropertyStatus(str, Enum):
@@ -52,6 +62,26 @@ class Property(Base):
     business_use_percentage = Column(Numeric(5, 2), default=100.00, nullable=False)
     supplier = Column(String(255), nullable=True)
     accumulated_depreciation = Column(Numeric(12, 2), default=0, nullable=False)
+    acquisition_kind = Column(String(30), nullable=True)
+    put_into_use_date = Column(Date, nullable=True)
+    is_used_asset = Column(Boolean, default=False, nullable=False)
+    first_registration_date = Column(Date, nullable=True)
+    prior_owner_usage_years = Column(Numeric(5, 2), nullable=True)
+    comparison_basis = Column(String(10), nullable=True)
+    comparison_amount = Column(Numeric(12, 2), nullable=True)
+    gwg_eligible = Column(Boolean, default=False, nullable=False)
+    gwg_elected = Column(Boolean, default=False, nullable=False)
+    depreciation_method = Column(String(20), nullable=True, default="linear")
+    degressive_afa_rate = Column(Numeric(5, 4), nullable=True)
+    useful_life_source = Column(String(50), nullable=True)
+    income_tax_cost_cap = Column(Numeric(12, 2), nullable=True)
+    income_tax_depreciable_base = Column(Numeric(12, 2), nullable=True)
+    vat_recoverable_status = Column(String(20), nullable=True)
+    ifb_candidate = Column(Boolean, default=False, nullable=False)
+    ifb_rate = Column(Numeric(5, 4), nullable=True)
+    ifb_rate_source = Column(String(50), nullable=True)
+    recognition_decision = Column(String(50), nullable=True)
+    policy_confidence = Column(Numeric(5, 4), nullable=True)
     
     # Address fields (encrypted)
     _address = Column("address", String(1000), nullable=False)
@@ -86,16 +116,32 @@ class Property(Base):
         nullable=True,
         info={"check": "construction_year >= 1800 AND construction_year <= EXTRACT(YEAR FROM CURRENT_DATE)"}
     )
+    # Building usage type for AfA rate (§8 Abs 1 EStG)
+    # residential = Wohngebäude (1.5%), commercial = Betriebsgebäude (2.5%)
+    building_use = Column(
+        SQLEnum(BuildingUse, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        default=BuildingUse.RESIDENTIAL,
+    )
+    # Eco/klimaaktiv standard — enables extended 3× AfA for years 1-3
+    # Only for new residential buildings completed 2024-2026 (BMF erweiterte beschleunigte AfA)
+    eco_standard = Column(Boolean, default=False, nullable=False)
+
     depreciation_rate = Column(
-        Numeric(5, 4), 
-        nullable=False, 
-        default=0.02,
-        info={"check": "depreciation_rate >= 0.001 AND depreciation_rate <= 0.10"}
+        Numeric(5, 4),
+        nullable=False,
+        default=0.015,  # 1.5% — residential buildings (Wohngebäude) since 2016 reform
+        info={"check": "depreciation_rate >= 0.001 AND depreciation_rate <= 1.00"}
     )
     
     # Status
     status = Column(SQLEnum(PropertyStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=PropertyStatus.ACTIVE, index=True)
     sale_date = Column(Date, nullable=True)
+    sale_price = Column(Numeric(12, 2), nullable=True)  # ImmoESt: Veräußerungserlös
+
+    # ImmoESt exemption flags
+    hauptwohnsitz = Column(Boolean, default=False, nullable=False)  # §30 Abs 2 Z 1 EStG
+    selbst_errichtet = Column(Boolean, default=False, nullable=False)  # Herstellerbefreiung §30 Abs 2 Z 2
     
     # Document references
     kaufvertrag_document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
@@ -120,7 +166,7 @@ class Property(Base):
             name="check_building_value_range"
         ),
         CheckConstraint(
-            "depreciation_rate >= 0.001 AND depreciation_rate <= 0.10",
+            "depreciation_rate >= 0.001 AND depreciation_rate <= 1.00",
             name="check_depreciation_rate_range"
         ),
         # Note: construction_year check uses EXTRACT which is PostgreSQL-specific
@@ -143,6 +189,8 @@ class Property(Base):
     user = relationship("User", back_populates="properties")
     transactions = relationship("Transaction", back_populates="property", foreign_keys="Transaction.property_id")
     loans = relationship("PropertyLoan", back_populates="property", cascade="all, delete-orphan")
+    policy_snapshots = relationship("AssetPolicySnapshot", back_populates="property", cascade="all, delete-orphan")
+    asset_events = relationship("AssetEvent", back_populates="property", cascade="all, delete-orphan")
     
     # Hybrid properties for encrypted fields
     @hybrid_property

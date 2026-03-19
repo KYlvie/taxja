@@ -120,11 +120,13 @@ class KaufvertragExtractor:
             r"(?:liegenschaft|grundst.{1,2}ck|objekt|wohnung)[:\s]+(.+?)(?:\n|$)",
             r"(?:gelegen|befindlich)\s+(?:in|zu)\s+(.+?)(?:\n|$)",
             r"(?:adresse|anschrift)[:\s]+(.+?)(?:\n|$)",
+            # Generic Austrian street/postal code pattern anywhere in text
+            r"([A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\s.\-]+?\s+\d+(?:[/-]\d+)?(?:,\s*|\s+)\d{4}\s+[A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\s.\-]+)",
             # Land registry format: "EZ 123 ... KG Thenneberg"
             r"EZ\s+\d+\s+.*?KG\s+\d*\s*(.+?)(?:\n|,)",
             # Top/apartment number format
-            r"(?:top|wohnung)\s+\d+[,\s]+(.+?)(?:\n|$)",
-            r"im\s+hause\s+(.+?)(?:\n|$)",
+            r"(?:top|wohnung)\s+\d+[,\s]+(.+?,\s*\d{4}\s+[^\n,]+)",
+            r"im\s+hause\s*\n?\s*(.+?,\s*\d{4}\s+[^\n,]+)",
         ]
         
         for pattern in address_patterns:
@@ -137,12 +139,29 @@ class KaufvertragExtractor:
                 )
                 # Clean trailing punctuation
                 address_text = address_text.rstrip(".,;")
+                # Reject cadastral numbers (GST-NR, EZ, Fläche patterns)
+                if re.match(
+                    r"^\d{2,}/\d+|^GST|^Fläche|^Flache|^EINLAGE",
+                    address_text, re.IGNORECASE,
+                ):
+                    continue
                 if len(address_text) > 5:
                     data.property_address = address_text
                     data.field_confidence["property_address"] = 0.85
                     self._parse_address_components(address_text, data)
                     break
-        
+
+        generic_address_pattern = (
+            r"([A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\s.\-]+?\s+\d+(?:[/-]\d+)?"
+            r"(?:,\s*|\s+)\d{4}\s+[A-ZÄÖÜa-zäöüß][A-ZÄÖÜa-zäöüß\s.\-]+)"
+        )
+        generic_match = re.search(generic_address_pattern, text)
+        if generic_match and (not data.property_address or not data.postal_code or not data.street):
+            address_text = generic_match.group(1).strip().rstrip(".,;")
+            data.property_address = address_text
+            data.field_confidence["property_address"] = 0.9
+            self._parse_address_components(address_text, data)
+
         if not data.property_address:
             self._extract_address_components_separately(text, data)
     
@@ -212,7 +231,20 @@ class KaufvertragExtractor:
     def _extract_purchase_price(self, text: str, data: KaufvertragData) -> None:
         """Extract purchase price (Kaufpreis)"""
         # Austrian amount pattern: 273.000,- or 273.000,00 or 273.000,-- or 273000
-        amt = r"(\d{1,3}(?:\.\d{3})*(?:,[\d-]+)?)"
+        amt = r"((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,[\d-]+)?)"
+
+        for priority_pattern in (
+            rf"gesamtkaufpreis[:\s]+(?:EUR|â‚¬)?\s*{amt}",
+            rf"preis[:\s]+(?:EUR|â‚¬)?\s*{amt}",
+        ):
+            priority_match = re.search(priority_pattern, text, re.IGNORECASE)
+            if priority_match:
+                raw = re.sub(r",-+$", "", priority_match.group(1))
+                amount = self._parse_amount(raw)
+                if amount and amount > Decimal("1000"):
+                    data.purchase_price = amount
+                    data.field_confidence["purchase_price"] = 0.92
+                    return
 
         price_patterns = [
             # "betragt EUR 273.000,-" (OCR: beträgt → betragt)
@@ -294,11 +326,17 @@ class KaufvertragExtractor:
     def _extract_value_breakdown(self, text: str, data: KaufvertragData) -> None:
         """Extract building value and land value if specified"""
         # Building value (Gebäudewert)
+        value_amount = r"((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{2})?)"
         building_patterns = [
-            r"geb[aä].{0,2}udewert[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)",
-            r"wert\s+des\s+geb[aä].{0,2}udes[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)",
+            rf"geb[aä].{{0,2}}udewert[:\s]+(?:EUR|€)?\s*{value_amount}",
+            rf"wert\s+des\s+geb[aä].{{0,2}}udes[:\s]+(?:EUR|€)?\s*{value_amount}",
         ]
         
+        building_patterns = [
+            rf"geb.{{0,4}}dewert[:\s]+(?:EUR|â‚¬)?\s*{value_amount}",
+            rf"wert\s+des\s+geb.{{0,4}}udes[:\s]+(?:EUR|â‚¬)?\s*{value_amount}",
+            *building_patterns,
+        ]
         for pattern in building_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
@@ -310,8 +348,8 @@ class KaufvertragExtractor:
         
         # Land value (Grundwert, Bodenwert)
         land_patterns = [
-            r"(?:grundwert|bodenwert)[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)",
-            r"wert\s+des\s+grundst.{1,2}cks[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)",
+            rf"(?:grundwert|bodenwert)[:\s]+(?:EUR|€)?\s*{value_amount}",
+            rf"wert\s+des\s+grundst.{{1,2}}cks[:\s]+(?:EUR|€)?\s*{value_amount}",
         ]
         
         for pattern in land_patterns:
@@ -337,7 +375,7 @@ class KaufvertragExtractor:
         """Extract purchase-related costs"""
         # Amount pattern: handles "12.558,—" "12.558,00" "12.558,-" "12558"
         # NOTE: \u2014 is em-dash, must use Unicode escape in character class
-        amt = r"(\d{1,3}(?:\.\d{3})*(?:,[0-9\u2014\-]+)?)"
+        amt = r"((?:\d{1,3}(?:\.\d{3})+|\d+)(?:,[0-9\u2014\-]+)?)"
 
         # Grunderwerbsteuer (property transfer tax)
         # Text often says: "Grunderwerbsteuer von 3,5% ... ausgehend von EUR 273.000,-- EUR 12.558,—"
@@ -429,7 +467,7 @@ class KaufvertragExtractor:
                 # Scan backwards to find name (usually "Herrn/Frau Name, geb. ...")
                 for j in range(i - 1, max(i - 5, -1), -1):
                     name_match = re.search(
-                        r"(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
@@ -441,7 +479,7 @@ class KaufvertragExtractor:
                 # Also check same line
                 if not data.seller_name:
                     name_match = re.search(
-                        r"(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
                         line, re.IGNORECASE,
                     )
                     if name_match:
@@ -456,7 +494,7 @@ class KaufvertragExtractor:
             if re.search(r"als\s+k.{0,2}ufer", line, re.IGNORECASE):
                 for j in range(i - 1, max(i - 5, -1), -1):
                     name_match = re.search(
-                        r"(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
@@ -467,7 +505,7 @@ class KaufvertragExtractor:
                             break
                 if not data.buyer_name:
                     name_match = re.search(
-                        r"(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
                         line, re.IGNORECASE,
                     )
                     if name_match:
@@ -477,14 +515,52 @@ class KaufvertragExtractor:
                             data.field_confidence["buyer_name"] = 0.85
                 break
 
+        for i, line in enumerate(cleaned_lines):
+            if not data.seller_name and re.search(
+                r"nachstehend\s+verk.{0,2}ufer(?:in)?\s+genannt",
+                line,
+                re.IGNORECASE,
+            ):
+                for j in range(i - 1, max(i - 5, -1), -1):
+                    name_match = re.search(
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        cleaned_lines[j], re.IGNORECASE,
+                    )
+                    if name_match:
+                        name = name_match.group(1).strip().rstrip(",")
+                        if len(name) > 3:
+                            data.seller_name = name
+                            data.field_confidence["seller_name"] = 0.85
+                            break
+
+            if not data.buyer_name and re.search(
+                r"nachstehend\s+(?:k.{0,2}ufer|(?:Ã¼|ue)bernehmer)(?:in)?\s+genannt",
+                line,
+                re.IGNORECASE,
+            ):
+                for j in range(i - 1, max(i - 5, -1), -1):
+                    name_match = re.search(
+                        r"^\s*(?:Herrn?|Frau)\s+(.+?)(?:,\s*geb|$)",
+                        cleaned_lines[j], re.IGNORECASE,
+                    )
+                    if name_match:
+                        name = name_match.group(1).strip().rstrip(",")
+                        if len(name) > 3:
+                            data.buyer_name = name
+                            data.field_confidence["buyer_name"] = 0.85
+                            break
+
         # Strategy 2: Fallback to original regex patterns
         if not data.buyer_name:
             buyer_patterns = [
-                r"k.{1,2}ufer(?:in)?[:\s]+(.+?)(?:\n|,\s+geboren)",
-                r"erwerber(?:in)?[:\s]+(.+?)(?:\n|,\s+geboren)",
+                r"(?mi)^\s*k[aä].{0,2}ufer(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*(?:ü|ue)bernehmer(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*erwerber(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*(.+?)\s+als\s+(?:k[aä].{0,2}ufer|(?:ü|ue)bernehmer)\b",
+                r"(?mi)^\s*(.+?),\s+nachstehend\s+(?:k[aä].{0,2}ufer|(?:ü|ue)bernehmer)\s+genannt\b",
             ]
             for pattern in buyer_patterns:
-                match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+                match = re.search(pattern, text)
                 if match:
                     name = match.group(1).strip().rstrip(",")
                     name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
@@ -495,11 +571,14 @@ class KaufvertragExtractor:
 
         if not data.seller_name:
             seller_patterns = [
-                r"verk.{1,2}ufer(?:in)?[:\s]+(.+?)(?:\n|,\s+geboren)",
-                r"ver.{1,2}u.{1,2}erer(?:in)?[:\s]+(.+?)(?:\n|,\s+geboren)",
+                r"(?mi)^\s*verk[aä].{0,2}ufer(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*(?:ü|ue)bergeber(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*ver.{1,2}u.{1,2}erer(?:in)?[:\s]+(.+?)(?:$|,\s+geboren)",
+                r"(?mi)^\s*(.+?)\s+als\s+(?:verk[aä].{0,2}ufer|(?:ü|ue)bergeber)\b",
+                r"(?mi)^\s*(.+?),\s+nachstehend\s+(?:verk[aä].{0,2}ufer|(?:ü|ue)bergeber)\s+genannt\b",
             ]
             for pattern in seller_patterns:
-                match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+                match = re.search(pattern, text)
                 if match:
                     name = match.group(1).strip().rstrip(",")
                     name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
@@ -529,7 +608,11 @@ class KaufvertragExtractor:
                     break
         
         # Notary location (usually Wien or other Austrian cities)
-        location_pattern = r"Notar(?:in)?\s+in\s+([A-ZÄÖÜ][a-zäöüß]+(?:\s+[a-zäöüß]+)*)"
+        # Also support formats like "Notar in 1010 Wien"
+        location_pattern = (
+            r"Notar(?:in)?\s+in\s+(?:\d{4}\s+)?"
+            r"([A-ZÄÖÜ][a-zäöüß]+(?:\s+[a-zäöüß]+)*)"
+        )
         location_match = re.search(location_pattern, text, re.IGNORECASE)
         if location_match:
             data.notary_location = location_match.group(1).strip()

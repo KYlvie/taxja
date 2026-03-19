@@ -19,6 +19,8 @@ from app.services.plan_service import PlanService
 from app.services.subscription_service import SubscriptionService
 from app.services.usage_tracker_service import UsageTrackerService
 from app.services.feature_gate_service import FeatureGateService
+from app.services.credit_service import CreditService
+from app.schemas.subscription import SubscriptionCreditInfo
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,8 +30,8 @@ router = APIRouter()
 
 def _is_stripe_configured() -> bool:
     """Check if Stripe API keys are properly configured (not placeholder values)."""
-    import stripe
-    key = stripe.api_key
+    from app.core.config import settings
+    key = settings.STRIPE_SECRET_KEY
     if not key:
         return False
     if "your_" in key or key.startswith("sk_test_your"):
@@ -72,13 +74,14 @@ def get_current_subscription(
 ):
     """
     Get current user's subscription details.
-    Auto-creates a Free plan subscription if none exists.
+    Admin users get a virtual Pro subscription (no DB record needed).
+    Auto-creates a Free plan subscription for regular users if none exists.
     """
     subscription_service = SubscriptionService(db)
     subscription = subscription_service.get_user_subscription(current_user.id)
-    
+
     if not subscription:
-        # Auto-create free subscription for the user
+        # Auto-create free subscription for the user (including admin)
         free_plan = db.query(Plan).filter(Plan.plan_type == "free").first()
         if free_plan:
             try:
@@ -97,7 +100,29 @@ def get_current_subscription(
             detail="No active subscription found"
         )
     
-    return subscription
+    # Build response with credit balance info (transition period compatibility)
+    response = SubscriptionResponse.model_validate(subscription)
+    try:
+        credit_service = CreditService(db)
+        balance_info = credit_service.get_balance(current_user.id)
+        response.credit_balance = SubscriptionCreditInfo(
+            plan_balance=balance_info.plan_balance,
+            topup_balance=balance_info.topup_balance,
+            total_balance=balance_info.total_balance,
+            available_without_overage=balance_info.available_without_overage,
+            monthly_credits=balance_info.monthly_credits,
+            overage_enabled=balance_info.overage_enabled,
+            overage_credits_used=balance_info.overage_credits_used,
+            overage_price_per_credit=balance_info.overage_price_per_credit,
+            estimated_overage_cost=balance_info.estimated_overage_cost,
+            has_unpaid_overage=balance_info.has_unpaid_overage,
+            reset_date=balance_info.reset_date,
+        )
+    except Exception:
+        logger.warning(f"Failed to fetch credit balance for user {current_user.id}", exc_info=True)
+        # credit_balance stays None — old clients unaffected
+    
+    return response
 
 
 @router.post("/checkout", response_model=CheckoutSessionResponse)
@@ -190,6 +215,38 @@ def create_checkout_session(
         )
 
 
+@router.post("/customer-portal")
+def create_customer_portal_session(
+    return_url: str = "http://localhost:5173/pricing",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a Stripe Customer Portal session.
+    Users can manage billing, cancel, change payment method, view invoices.
+    """
+    if not _is_stripe_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stripe is not configured. Manage subscription from settings.",
+        )
+
+    from app.services.stripe_payment_service import StripePaymentService
+
+    stripe_service = StripePaymentService(db)
+    try:
+        result = stripe_service.create_customer_portal_session(
+            user_id=current_user.id,
+            return_url=return_url,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
 @router.post("/upgrade", response_model=SubscriptionResponse)
 def upgrade_subscription(
     plan_id: int,
@@ -202,13 +259,12 @@ def upgrade_subscription(
     feature_gate_service = FeatureGateService(db)
     
     try:
-        subscription = subscription_service.upgrade_subscription(
+        result = subscription_service.upgrade_subscription(
             user_id=current_user.id,
             new_plan_id=plan_id,
-            billing_cycle=billing_cycle
         )
         feature_gate_service.invalidate_user_plan_cache(current_user.id)
-        return subscription
+        return result["subscription"]
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -226,11 +282,11 @@ def downgrade_subscription(
     subscription_service = SubscriptionService(db)
     
     try:
-        subscription = subscription_service.downgrade_subscription(
+        result = subscription_service.downgrade_subscription(
             user_id=current_user.id,
             new_plan_id=plan_id
         )
-        return subscription
+        return result["subscription"]
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -247,8 +303,8 @@ def cancel_subscription(
     subscription_service = SubscriptionService(db)
     
     try:
-        subscription = subscription_service.cancel_subscription(current_user.id)
-        return subscription
+        result = subscription_service.cancel_subscription(current_user.id)
+        return result["subscription"]
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

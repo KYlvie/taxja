@@ -5,11 +5,17 @@ Two-tier approach:
 2. AI analysis: ambiguous cases (e.g. groceries for self-employed) are sent
    to the LLM which examines the actual invoice items, merchant, and user's
    business type to produce a definitive judgment + actionable tax tip.
+
+AI results are cached so the same (category, user_type, industry, merchant)
+combination only calls the LLM once.
 """
+import hashlib
 import json
 import logging
 from typing import Optional
 from enum import Enum
+
+from app.core.transaction_enum_coercion import coerce_enum_member
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,12 @@ class ExpenseCategory(str, Enum):
     BANK_FEES = "bank_fees"
     SVS_CONTRIBUTIONS = "svs_contributions"
     DEPRECIATION = "depreciation"
+    CLEANING = "cleaning"
+    CLOTHING = "clothing"
+    SOFTWARE = "software"
+    SHIPPING = "shipping"
+    FUEL = "fuel"
+    EDUCATION = "education"
 
 
 class DeductibilityResult:
@@ -95,6 +107,12 @@ _EMPLOYEE = {
     ExpenseCategory.PROPERTY_TAX: (False, "Not deductible for employees", None),
     ExpenseCategory.LOAN_INTEREST: (False, "Not deductible for employees", None),
     ExpenseCategory.DEPRECIATION: (False, "Not deductible for employees", None),
+    ExpenseCategory.CLEANING: (False, "Not deductible for employees", None),
+    ExpenseCategory.CLOTHING: (False, "Not deductible for employees (private Lebensführung)", None),
+    ExpenseCategory.SOFTWARE: (False, "Not deductible for employees", None),
+    ExpenseCategory.SHIPPING: (False, "Not deductible for employees", None),
+    ExpenseCategory.FUEL: (False, "Use Pendlerpauschale", None),
+    ExpenseCategory.EDUCATION: (True, "Werbungskosten – Fortbildung (job-related)", None),
 }
 
 # Self-employed: almost everything is a Betriebsausgabe, but groceries/other
@@ -118,6 +136,12 @@ _SELF_EMPLOYED = {
     ExpenseCategory.MAINTENANCE: (True, "Betriebsausgabe – Instandhaltung", None),
     ExpenseCategory.PROPERTY_TAX: (True, "Betriebsausgabe – Grundsteuer", None),
     ExpenseCategory.LOAN_INTEREST: (True, "Betriebsausgabe – Zinsen", None),
+    ExpenseCategory.CLEANING: (True, "Betriebsausgabe – Reinigungsmittel", None),
+    ExpenseCategory.CLOTHING: (_NEEDS_AI, "Depends on whether it's work clothing – AI will analyze", None),
+    ExpenseCategory.SOFTWARE: (True, "Betriebsausgabe – Software-Lizenzen", None),
+    ExpenseCategory.SHIPPING: (True, "Betriebsausgabe – Versandkosten", None),
+    ExpenseCategory.FUEL: (True, "Betriebsausgabe – Treibstoff", None),
+    ExpenseCategory.EDUCATION: (True, "Betriebsausgabe – Fortbildung", None),
     ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
     ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
 }
@@ -143,6 +167,12 @@ _LANDLORD = {
     ExpenseCategory.RENT: (False, "Not deductible for landlords", None),
     ExpenseCategory.COMMUTING: (False, "Not deductible for landlords", None),
     ExpenseCategory.HOME_OFFICE: (False, "Not deductible for landlords", None),
+    ExpenseCategory.CLEANING: (True, "Werbungskosten – Reinigung", None),
+    ExpenseCategory.CLOTHING: (False, "Private Lebensführung", None),
+    ExpenseCategory.SOFTWARE: (True, "Werbungskosten – Software", None),
+    ExpenseCategory.SHIPPING: (False, "Not deductible for landlords", None),
+    ExpenseCategory.FUEL: (True, "Werbungskosten – Treibstoff für Objektbetreuung", None),
+    ExpenseCategory.EDUCATION: (False, "Not deductible for landlords", None),
 }
 
 # Mixed = employee + self-employed/landlord activity.
@@ -167,6 +197,12 @@ _MIXED = {
     ExpenseCategory.BANK_FEES: (True, "Betriebsausgabe – Bankspesen", None),
     ExpenseCategory.SVS_CONTRIBUTIONS: (True, "SVS/SVA Pflichtbeiträge", None),
     ExpenseCategory.DEPRECIATION: (True, "AfA", None),
+    ExpenseCategory.CLEANING: (True, "Betriebsausgabe – Reinigungsmittel", None),
+    ExpenseCategory.CLOTHING: (_NEEDS_AI, "Depends on work clothing – AI will analyze", None),
+    ExpenseCategory.SOFTWARE: (True, "Betriebsausgabe – Software-Lizenzen", None),
+    ExpenseCategory.SHIPPING: (True, "Betriebsausgabe – Versandkosten", None),
+    ExpenseCategory.FUEL: (True, "Betriebsausgabe – Treibstoff", None),
+    ExpenseCategory.EDUCATION: (True, "Betriebsausgabe – Fortbildung", None),
     ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
     ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
 }
@@ -190,6 +226,12 @@ _GMBH = {
     ExpenseCategory.DEPRECIATION: (True, "AfA", None),
     ExpenseCategory.HOME_OFFICE: (True, "Betriebsausgabe – Home Office", None),
     ExpenseCategory.COMMUTING: (False, "Personal commuting – not a GmbH expense", None),
+    ExpenseCategory.CLEANING: (True, "Betriebsausgabe – Reinigungsmittel", None),
+    ExpenseCategory.CLOTHING: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
+    ExpenseCategory.SOFTWARE: (True, "Betriebsausgabe – Software-Lizenzen", None),
+    ExpenseCategory.SHIPPING: (True, "Betriebsausgabe – Versandkosten", None),
+    ExpenseCategory.FUEL: (True, "Betriebsausgabe – Treibstoff", None),
+    ExpenseCategory.EDUCATION: (True, "Betriebsausgabe – Fortbildung", None),
     ExpenseCategory.GROCERIES: (_NEEDS_AI, "Depends on business purpose – AI will analyze", None),
     ExpenseCategory.OTHER: (_NEEDS_AI, "Depends on business relevance – AI will analyze", None),
 }
@@ -203,11 +245,67 @@ _RULES = {
 }
 
 
+class _DeductibilityCache:
+    """
+    Simple in-memory cache for AI deductibility decisions.
+
+    Key = hash(category, user_type, business_industry, merchant_normalized).
+    This avoids calling the LLM repeatedly for the same combination.
+    TTL = 7 days (same as classification cache).
+    """
+
+    def __init__(self, ttl: int = 7 * 86400, max_size: int = 5_000):
+        import threading
+        import time as _time
+        self._ttl = ttl
+        self._max_size = max_size
+        self._store: dict = {}
+        self._lock = threading.Lock()
+        self._time = _time
+
+    @staticmethod
+    def _make_key(
+        category: str, user_type: str, business_industry: str, merchant: str,
+    ) -> str:
+        raw = f"{category}|{user_type}|{business_industry}|{merchant}".lower()
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+    def get(self, key: str) -> Optional["DeductibilityResult"]:
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            value, expires_at = entry
+            if self._time.monotonic() > expires_at:
+                del self._store[key]
+                return None
+            return value
+
+    def set(self, key: str, value: "DeductibilityResult") -> None:
+        with self._lock:
+            if len(self._store) >= self._max_size:
+                # evict oldest quarter
+                items = sorted(self._store.items(), key=lambda kv: kv[1][1])
+                for k, _ in items[: self._max_size // 4]:
+                    del self._store[k]
+            self._store[key] = (value, self._time.monotonic() + self._ttl)
+
+    def stats(self) -> dict:
+        with self._lock:
+            now = self._time.monotonic()
+            active = sum(1 for _, (__, exp) in self._store.items() if now <= exp)
+            return {"total": len(self._store), "active": active}
+
+
+# Module-level singleton so the cache persists across requests
+_deductibility_cache = _DeductibilityCache()
+
+
 class DeductibilityChecker:
     """
     Two-tier deductibility checker:
     1. Rule engine for clear-cut cases
-    2. LLM analysis for ambiguous cases (NEEDS_AI)
+    2. LLM analysis for ambiguous cases (NEEDS_AI) — with caching
     """
 
     def check(
@@ -216,6 +314,8 @@ class DeductibilityChecker:
         user_type: str,
         ocr_data: Optional[dict] = None,
         description: str = "",
+        business_type: Optional[str] = None,
+        business_industry: Optional[str] = None,
     ) -> DeductibilityResult:
         """
         Check deductibility. For ambiguous cases, if ocr_data is provided,
@@ -227,18 +327,27 @@ class DeductibilityChecker:
             user_type: e.g. "self_employed", "mixed"
             ocr_data: OCR extracted data (merchant, line_items, amount, etc.)
             description: transaction description text
+            business_type: SelfEmployedType value (e.g. "freiberufler", "gewerbetreibende")
+                          Only relevant for self_employed and mixed user types.
+            business_industry: Specific industry slug (e.g. "gastronomie", "it_dienstleistung")
+                              Takes priority over business_type for deductibility rules.
         """
         try:
             ut = UserType(user_type.lower())
         except ValueError:
             return DeductibilityResult(False, f"Unknown user type: {user_type}")
 
-        try:
-            cat = ExpenseCategory(expense_category.lower())
-        except ValueError:
+        cat = coerce_enum_member(ExpenseCategory, expense_category)
+        if cat is None:
             return DeductibilityResult(
                 False, f"Unknown category: {expense_category}", requires_review=True
             )
+
+        # Check business-type-specific overrides first (self-employed / mixed)
+        if (business_type or business_industry) and ut in (UserType.SELF_EMPLOYED, UserType.MIXED):
+            override = self._check_business_type_override(business_type, cat, business_industry)
+            if override is not None:
+                return override
 
         rules = _RULES.get(ut, {})
         rule = rules.get(cat)
@@ -258,21 +367,70 @@ class DeductibilityChecker:
         if deductible is False:
             return DeductibilityResult(False, reason)
 
-        # NEEDS_AI — ambiguous case
+        # NEEDS_AI — ambiguous case (check cache first, then LLM)
         if ocr_data or description:
-            ai_result = self._ai_analyze(ut, cat, ocr_data or {}, description)
+            merchant = (ocr_data or {}).get("merchant", "") or description[:50]
+            cache_key = _deductibility_cache._make_key(
+                cat.value, ut.value, business_industry or "", merchant,
+            )
+            cached = _deductibility_cache.get(cache_key)
+            if cached is not None:
+                logger.info(
+                    "Deductibility cache hit: %s/%s → %s",
+                    cat.value, ut.value, cached.is_deductible,
+                )
+                return cached
+
+            ai_result = self._ai_analyze(ut, cat, ocr_data or {}, description, business_type, business_industry)
             if ai_result:
+                _deductibility_cache.set(cache_key, ai_result)
                 return ai_result
 
         # Fallback when AI is unavailable: for business user types, default to
         # deductible with a generic tip; for employees, default to not deductible.
+        # ALWAYS mark as requires_review so the system does not silently commit
+        # a directional tax conclusion without human confirmation.
         if ut in (UserType.SELF_EMPLOYED, UserType.MIXED, UserType.GMBH):
             return DeductibilityResult(
                 True,
                 "Betriebsausgabe (AI unavailable – default for business user)",
                 tax_tip="Bitte Belege und Geschäftszweck dokumentieren.",
+                requires_review=True,
             )
-        return DeductibilityResult(False, "Not deductible (default)")
+        return DeductibilityResult(False, "Not deductible (default)", requires_review=True)
+
+    def _check_business_type_override(
+        self,
+        business_type: str,
+        category: ExpenseCategory,
+        business_industry: Optional[str] = None,
+    ) -> Optional[DeductibilityResult]:
+        """Check if the business sub-type has a specific override for this category."""
+        try:
+            from app.services.business_deductibility_rules import get_business_type_override
+            override = get_business_type_override(business_type, category.value, business_industry=business_industry)
+            if not override:
+                return None
+
+            is_deductible = override["is_deductible"]
+            reason = override["reason"]
+            max_amount = override.get("max_amount")
+            deductible_pct = override.get("deductible_pct")
+
+            # Clear yes/no
+            if is_deductible is True:
+                tip = None
+                if deductible_pct and deductible_pct < 1.0:
+                    tip = f"Nur {int(deductible_pct * 100)}% absetzbar (Repräsentationsaufwand)"
+                return DeductibilityResult(True, reason, tax_tip=tip, max_amount=max_amount)
+            if is_deductible is False:
+                return DeductibilityResult(False, reason)
+
+            # NEEDS_AI — return None to fall through to base rules + AI
+            return None
+
+        except ImportError:
+            return None
 
     def _ai_analyze(
         self,
@@ -280,6 +438,8 @@ class DeductibilityChecker:
         category: ExpenseCategory,
         ocr_data: dict,
         description: str,
+        business_type: Optional[str] = None,
+        business_industry: Optional[str] = None,
     ) -> Optional[DeductibilityResult]:
         """Call LLM to analyze whether this specific expense is deductible."""
         try:
@@ -310,23 +470,73 @@ class DeductibilityChecker:
                 UserType.EMPLOYEE: "Angestellter",
             }
 
+            # Enrich user type label with business sub-type AND industry
+            business_type_context = ""
+            if business_type and user_type in (UserType.SELF_EMPLOYED, UserType.MIXED):
+                try:
+                    from app.services.business_deductibility_rules import BUSINESS_TYPE_CONTEXTS, INDUSTRY_CONTEXTS
+                    from app.models.user import SelfEmployedType
+                    bt = SelfEmployedType(business_type)
+                    ctx = BUSINESS_TYPE_CONTEXTS.get(bt, {})
+                    business_type_context = (
+                        f"\nBusiness sub-type: {ctx.get('description_de', business_type)}\n"
+                        f"Typical expenses for this type: {', '.join(ctx.get('typical_expenses', []))}\n"
+                    )
+                    # Add industry-specific context (highest specificity)
+                    if business_industry:
+                        ind_ctx = INDUSTRY_CONTEXTS.get(business_industry.lower(), {})
+                        if ind_ctx:
+                            business_type_context += (
+                                f"Specific industry: {ind_ctx.get('description_de', business_industry)}\n"
+                                f"Industry-typical expenses: {', '.join(ind_ctx.get('typical_expenses', []))}\n"
+                                f"IMPORTANT: For this industry ({ind_ctx.get('description_de', '')}), "
+                                f"evaluate whether items on this receipt are plausible business expenses.\n"
+                            )
+                except (ValueError, ImportError):
+                    pass
+
+            # Build industry-aware system prompt
+            # Industry context is a STRONG PRIOR but not a hard rule:
+            # if receipt content contradicts industry expectation, content wins.
+            industry_rules_block = ""
+            if business_industry:
+                try:
+                    from app.services.business_deductibility_rules import INDUSTRY_CONTEXTS
+                    ind_ctx = INDUSTRY_CONTEXTS.get(business_industry.lower(), {})
+                    if ind_ctx:
+                        industry_rules_block = (
+                            f"\n## Branchenkontext (starke Vorannahme, aber Beleginhalt hat Vorrang)\n"
+                            f"Branche: {ind_ctx.get('description_de', business_industry)}\n"
+                            f"Branchentypische Betriebsausgaben: {', '.join(ind_ctx.get('typical_expenses', []))}\n"
+                            f"REGEL: Wenn der Beleg Artikel zeigt, die fuer diese Branche typisch sind "
+                            f"(z.B. Lebensmittel fuer Gastronomie = Wareneinsatz), dann als absetzbar bewerten.\n"
+                            f"ABER: Wenn der Beleg eindeutig private Artikel zeigt (Kosmetik, Kleidung, "
+                            f"Spielzeug, Heimdekoration), dann NICHT absetzbar — auch wenn der Benutzer "
+                            f"in einer Branche ist, wo aehnliche Artikel manchmal beruflich genutzt werden.\n"
+                            f"Bei Mischbelegen: Betriebliche Positionen absetzbar, private nicht. Tipp geben.\n"
+                        )
+                except ImportError:
+                    pass
+
             system_prompt = (
-                "You are an Austrian tax expert (Steuerberater). "
-                "Analyze this expense for a business user and determine tax deductibility.\n\n"
-                "IMPORTANT rules for business users (Selbständige/GmbH/Mixed):\n"
-                "- Purchases at wholesale stores (METRO, etc.) are typically business supplies\n"
-                "- Coffee, drinks, snacks for office/clients = Bewirtungsaufwand (deductible)\n"
-                "- Cleaning supplies, paper goods = Betriebsausgabe (deductible)\n"
-                "- Catering/event supplies in bulk = Bewirtungsaufwand (deductible)\n"
-                "- Pure personal groceries (daily food for private meals) = not deductible\n"
-                "- Mixed purchases: if business items dominate, mark deductible with tip to separate\n\n"
-                "Reply ONLY with JSON: "
-                '{"deductible": true/false, "reason": "short reason in German", '
-                '"tax_tip": "actionable advice in German for the user"}'
+                "Du bist ein oesterreichischer Steuerberater. "
+                "Analysiere diese Ausgabe und bestimme die steuerliche Absetzbarkeit.\n\n"
+                "GRUNDREGELN fuer Geschaeftskunden (Selbstaendige/GmbH/Mixed):\n"
+                "- Einkauf bei Grosshandel (METRO etc.) = typischerweise Betriebsausgabe\n"
+                "- Kaffee, Getraenke, Snacks fuer Buero/Kunden = Bewirtungsaufwand (absetzbar)\n"
+                "- Reinigungsmittel, Papier = Betriebsausgabe (absetzbar)\n"
+                "- Catering/Event-Bedarf in Grossmengen = Bewirtungsaufwand (absetzbar)\n"
+                "- Rein private Lebensmittel (taegliches Essen) = NICHT absetzbar\n"
+                "- Mischbelege: wenn betriebliche Positionen ueberwiegen, als absetzbar mit Hinweis\n"
+                f"{industry_rules_block}\n"
+                "Antworte NUR mit JSON: "
+                '{"deductible": true/false, "reason": "kurze Begruendung auf Deutsch", '
+                '"tax_tip": "konkreter Tipp auf Deutsch fuer den Benutzer"}'
             )
 
             user_prompt = (
                 f"User type: {user_type_labels.get(user_type, str(user_type.value))}\n"
+                f"{business_type_context}"
                 f"Merchant: {merchant}\n"
                 f"Amount: €{amount}\n"
                 f"Date: {date}\n"
@@ -383,8 +593,8 @@ class DeductibilityChecker:
 
     # ---- Convenience methods (backward compat) ----
 
-    def is_deductible(self, expense_category: str, user_type: str) -> bool:
-        return self.check(expense_category, user_type).is_deductible
+    def is_deductible(self, expense_category: str, user_type: str, business_type: Optional[str] = None, business_industry: Optional[str] = None) -> bool:
+        return self.check(expense_category, user_type, business_type=business_type, business_industry=business_industry).is_deductible
 
     def get_deduction_rules(self, user_type: str) -> dict:
         try:
@@ -412,6 +622,8 @@ class DeductibilityChecker:
         user_type: str,
         ocr_data: dict,
         description: str = "",
+        business_type: Optional[str] = None,
+        business_industry: Optional[str] = None,
     ) -> Optional[dict]:
         """
         Ask AI to split a mixed receipt into deductible vs non-deductible items.
@@ -454,30 +666,78 @@ class DeductibilityChecker:
                 for it in line_items[:20]
             )
 
+            # Build industry-specific context for smarter split analysis
+            industry_context = ""
+            if business_industry or business_type:
+                try:
+                    from app.services.business_deductibility_rules import INDUSTRY_CONTEXTS, BUSINESS_TYPE_CONTEXTS
+                    if business_industry:
+                        ind_ctx = INDUSTRY_CONTEXTS.get(business_industry.lower(), {})
+                        if ind_ctx:
+                            industry_context = (
+                                f"\nUser's specific industry: {ind_ctx.get('description_de', business_industry)}\n"
+                                f"Industry-typical deductible expenses: {', '.join(ind_ctx.get('typical_expenses', []))}\n"
+                                f"CRITICAL: For {ind_ctx.get('description_de', '')}, items like "
+                                f"{', '.join(ind_ctx.get('typical_expenses', [])[:3])} are business expenses (Wareneinsatz/Betriebsausgabe).\n"
+                            )
+                    elif business_type:
+                        from app.models.user import SelfEmployedType
+                        bt = SelfEmployedType(business_type)
+                        bt_ctx = BUSINESS_TYPE_CONTEXTS.get(bt, {})
+                        if bt_ctx:
+                            industry_context = (
+                                f"\nUser's business type: {bt_ctx.get('description_de', business_type)}\n"
+                                f"Typical expenses: {', '.join(bt_ctx.get('typical_expenses', []))}\n"
+                            )
+                except (ValueError, ImportError):
+                    pass
+
+            # Build industry-aware split prompt
+            # Industry is a STRONG PRIOR but receipt content can override
+            industry_split_block = ""
+            if business_industry:
+                try:
+                    from app.services.business_deductibility_rules import INDUSTRY_CONTEXTS
+                    ind_ctx = INDUSTRY_CONTEXTS.get(business_industry.lower(), {})
+                    if ind_ctx:
+                        industry_split_block = (
+                            f"\n## Branchenkontext (starke Vorannahme)\n"
+                            f"Branche: {ind_ctx.get('description_de', business_industry)}\n"
+                            f"Branchentypischer Wareneinsatz: {', '.join(ind_ctx.get('typical_expenses', []))}\n"
+                            f"Fuer diese Branche gilt: Wenn Artikel branchentypisch sind, "
+                            f"dann als Betriebsausgabe/Wareneinsatz werten.\n"
+                            f"ABER: Eindeutig private Artikel (Kosmetik fuer Privatgebrauch, "
+                            f"Spielzeug, Heimdekoration) bleiben NICHT absetzbar.\n"
+                        )
+                except ImportError:
+                    pass
+
             system_prompt = (
-                "You are an Austrian tax expert. A business user bought multiple items "
-                "on one receipt. Classify EACH item as deductible (business) or "
-                "non-deductible (personal).\n\n"
-                "Rules:\n"
-                "- Office supplies, cleaning products, printer paper = deductible\n"
-                "- Coffee, drinks, snacks for office/clients = deductible (Bewirtung)\n"
-                "- Personal food (bread, milk, butter, meat) = NOT deductible\n"
-                "- Hygiene items for personal use = NOT deductible\n"
-                "- If ALL items are one type, set has_split=false\n\n"
-                "IMPORTANT: Calculate amounts by SUMMING the exact prices shown. "
-                "deductible_amount + non_deductible_amount MUST equal the receipt total.\n\n"
-                "Reply ONLY with JSON:\n"
+                "Du bist ein oesterreichischer Steuerberater. Ein Geschaeftskunde hat "
+                "mehrere Artikel auf einem Beleg. Klassifiziere JEDEN Artikel als "
+                "absetzbar (betrieblich) oder nicht absetzbar (privat).\n\n"
+                "Grundregeln:\n"
+                "- Buerobedarf, Reinigungsmittel, Druckerpapier = absetzbar\n"
+                "- Kaffee, Getraenke, Snacks fuer Buero/Kunden = absetzbar (Bewirtung)\n"
+                "- Private Lebensmittel (Brot, Milch, Butter, Fleisch) = NICHT absetzbar\n"
+                "- Hygieneartikel fuer Privatgebrauch = NICHT absetzbar\n"
+                "- Wenn ALLE Artikel einer Kategorie angehoeren, setze has_split=false\n"
+                f"{industry_split_block}\n"
+                "WICHTIG: Betraege durch SUMMIERUNG der gezeigten Preise berechnen. "
+                "deductible_amount + non_deductible_amount MUSS die Belegsumme ergeben.\n\n"
+                "Antworte NUR mit JSON:\n"
                 '{"has_split": true/false, '
-                '"deductible_amount": number, "non_deductible_amount": number, '
-                '"deductible_items": "comma-separated item names", '
-                '"non_deductible_items": "comma-separated item names", '
-                '"deductible_reason": "short German reason", '
-                '"non_deductible_reason": "short German reason", '
-                '"tax_tip": "German advice for the user"}'
+                '"deductible_amount": Zahl, "non_deductible_amount": Zahl, '
+                '"deductible_items": "kommagetrennte Artikelnamen", '
+                '"non_deductible_items": "kommagetrennte Artikelnamen", '
+                '"deductible_reason": "kurze Begruendung auf Deutsch", '
+                '"non_deductible_reason": "kurze Begruendung auf Deutsch", '
+                '"tax_tip": "konkreter Tipp auf Deutsch"}'
             )
 
             user_prompt = (
                 f"User type: {ut_labels.get(user_type.lower(), user_type)}\n"
+                f"{industry_context}"
                 f"Merchant: {merchant}\n"
                 f"Items:\n{items_text}\n"
                 f"\nClassify each item and calculate split amounts."

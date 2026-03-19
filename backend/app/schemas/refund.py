@@ -49,7 +49,10 @@ class RefundResultSchema(BaseModel):
     refund_amount: float = Field(..., description="Refund amount (absolute value)")
     is_refund: bool = Field(..., description="True if refund, False if payment needed")
     deductions_applied: Dict[str, float] = Field(
-        ..., description="Deductions applied"
+        ..., description="Income deductions applied (reduce taxable income)"
+    )
+    tax_credits_applied: Dict[str, float] = Field(
+        default_factory=dict, description="Tax credits / Absetzbeträge applied (reduce tax liability)"
     )
     explanation: str = Field(..., description="Human-readable explanation")
     breakdown: Dict[str, Any] = Field(..., description="Detailed breakdown")

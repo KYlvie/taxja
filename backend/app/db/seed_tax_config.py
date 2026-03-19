@@ -1,8 +1,9 @@
-"""Seed script for tax configurations (2025 and 2026)"""
+"""Seed script for tax configurations (2022-2026)"""
 from sqlalchemy.orm import Session
 from app.db.base import SessionLocal
 from app.models.tax_configuration import (
     TaxConfiguration,
+    get_2022_tax_config,
     get_2023_tax_config,
     get_2024_tax_config,
     get_2025_tax_config,
@@ -43,7 +44,7 @@ def seed_tax_configs(db: Session = None):
         should_close = False
 
     try:
-        for getter in (get_2023_tax_config, get_2024_tax_config, get_2025_tax_config, get_2026_tax_config):
+        for getter in (get_2022_tax_config, get_2023_tax_config, get_2024_tax_config, get_2025_tax_config, get_2026_tax_config):
             _seed_year(db, getter())
 
         db.commit()

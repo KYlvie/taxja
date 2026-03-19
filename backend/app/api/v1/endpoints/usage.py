@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/summary", response_model=Dict[str, Any])
+@router.get("/summary", response_model=Dict[str, Any], deprecated=True)
 def get_usage_summary(
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -30,6 +30,7 @@ def get_usage_summary(
     usage_service = UsageTrackerService(db)
     
     try:
+        response.headers["X-Usage-Compatibility"] = "read-only"
         summary = usage_service.get_usage_summary(current_user.id)
         
         # Check for quota warnings and add to response headers
@@ -54,7 +55,7 @@ def get_usage_summary(
         )
 
 
-@router.get("/{resource_type}", response_model=UsageQuotaResponse)
+@router.get("/{resource_type}", response_model=UsageQuotaResponse, deprecated=True)
 def get_resource_usage(
     resource_type: ResourceType,
     response: Response,
@@ -70,6 +71,7 @@ def get_resource_usage(
     usage_service = UsageTrackerService(db)
     
     try:
+        response.headers["X-Usage-Compatibility"] = "read-only"
         usage_data = usage_service.get_current_usage(current_user.id, resource_type)
         
         # Add quota warning header if near limit
@@ -84,12 +86,13 @@ def get_resource_usage(
         
         return UsageQuotaResponse(
             resource_type=usage_data['resource_type'],
-            current=usage_data['current'],
-            limit=usage_data['limit'],
-            percentage=usage_data['percentage'],
-            is_warning=usage_data['is_warning'],
+            current_usage=usage_data['current_usage'],
+            quota_limit=usage_data['quota_limit'],
+            usage_percentage=usage_data['usage_percentage'],
             is_exceeded=usage_data['is_exceeded'],
-            reset_date=usage_data['reset_date']
+            is_near_limit=usage_data['is_near_limit'],
+            period_start=usage_data['period_start'],
+            period_end=usage_data['period_end'],
         )
         
     except Exception as e:

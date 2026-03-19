@@ -17,6 +17,13 @@ def get_metric_value(metric_name: str, labels: dict = None):
                     sample.labels.get(k) == v for k, v in labels.items()
                 ):
                     return sample.value
+        for sample in metric.samples:
+            if sample.name != metric_name:
+                continue
+            if labels is None or all(
+                sample.labels.get(k) == v for k, v in labels.items()
+            ):
+                return sample.value
     return None
 
 

@@ -99,6 +99,7 @@ class SubscriptionService:
         
         try:
             self.db.add(subscription)
+            self.db.flush()  # Generate subscription.id before using it
             
             # Update user's subscription_id
             user.subscription_id = subscription.id
@@ -242,6 +243,12 @@ class SubscriptionService:
                 }
             )
             
+            # Handle overage impact of plan change
+            from app.services.credit_service import CreditService
+            CreditService(self.db).handle_plan_change_overage_impact(
+                user_id, old_plan_type, new_plan.plan_type
+            )
+
             logger.info(
                 f"Upgraded subscription for user {user_id}: "
                 f"{old_plan_type} -> {new_plan.plan_type}, "
@@ -333,6 +340,12 @@ class SubscriptionService:
                 }
             )
             
+            # Handle overage impact of plan change
+            from app.services.credit_service import CreditService
+            CreditService(self.db).handle_plan_change_overage_impact(
+                user_id, old_plan_type, new_plan.plan_type
+            )
+
             logger.info(
                 f"Scheduled downgrade for user {user_id}: "
                 f"{old_plan_type} -> {new_plan.plan_type}, "
@@ -621,13 +634,17 @@ class SubscriptionService:
             entity_id: ID of the subscription
             details: Additional details about the change
         """
-        audit_log = AuditLog(
-            user_id=user_id,
-            operation_type=operation_type,
-            entity_type=AuditEntityType.TRANSACTION,  # Using TRANSACTION as placeholder
-            entity_id=entity_id,
-            details=details or {},
-        )
-        
-        self.db.add(audit_log)
-        self.db.commit()
+        try:
+            audit_log = AuditLog(
+                user_id=user_id,
+                operation_type=operation_type,
+                entity_type=AuditEntityType.TRANSACTION,  # Using TRANSACTION as placeholder
+                entity_id=entity_id,
+                details=details or {},
+            )
+            
+            self.db.add(audit_log)
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            logger.warning(f"Failed to create audit log for subscription change: {e}")

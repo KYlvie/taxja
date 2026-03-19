@@ -7,7 +7,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { useAuthStore } from './authStore';
+import api from '../services/api';
 
 // Types
 export interface Plan {
@@ -53,6 +53,60 @@ export interface UsageSummary {
   ai_conversations: UsageData;
 }
 
+export interface CreditBalance {
+  plan_balance: number;
+  topup_balance: number;
+  total_balance: number;
+  available_without_overage: number;
+  monthly_credits: number;
+  overage_enabled: boolean;
+  overage_credits_used: number;
+  overage_price_per_credit: number | null;
+  estimated_overage_cost: number;
+  has_unpaid_overage: boolean;
+  reset_date: string | null;
+}
+
+export interface CreditLedgerEntry {
+  id: number;
+  operation: string;
+  operation_detail: string | null;
+  status: string;
+  credit_amount: number;
+  source: string;
+  plan_balance_after: number;
+  topup_balance_after: number;
+  is_overage: boolean;
+  overage_portion: number;
+  context_type: string | null;
+  context_id: number | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface CreditCost {
+  operation: string;
+  credit_cost: number;
+  description: string | null;
+}
+
+export interface TopupPackage {
+  id: number;
+  name: string;
+  credits: number;
+  price: number;
+  stripe_price_id: string | null;
+  is_active: boolean;
+}
+
+export interface CreditEstimate {
+  operation: string;
+  cost: number;
+  sufficient: boolean;
+  sufficient_without_overage: boolean;
+  would_use_overage: boolean;
+}
+
 interface SubscriptionState {
   // State
   currentPlan: Plan | null;
@@ -60,6 +114,13 @@ interface SubscriptionState {
   usage: UsageSummary | null;
   loading: boolean;
   error: string | null;
+  
+  // Credit state
+  creditBalance: CreditBalance | null;
+  creditHistory: CreditLedgerEntry[];
+  creditCosts: CreditCost[];
+  topupPackages: TopupPackage[];
+  creditLoading: boolean;
   
   // Actions
   fetchSubscription: () => Promise<void>;
@@ -74,48 +135,86 @@ interface SubscriptionState {
   downgradeSubscription: (planId: number) => Promise<void>;
   cancelSubscription: () => Promise<void>;
   reactivateSubscription: () => Promise<void>;
+  openCustomerPortal: (returnUrl?: string) => Promise<void>;
   clearError: () => void;
   reset: () => void;
+  
+  // Credit actions
+  fetchCreditBalance: () => Promise<void>;
+  fetchCreditHistory: (limit?: number, offset?: number) => Promise<void>;
+  fetchCreditCosts: () => Promise<void>;
+  createTopupCheckout: (packageId: number, successUrl: string, cancelUrl: string) => Promise<{ session_id: string; url: string }>;
+  toggleOverage: (enabled: boolean) => Promise<void>;
+  fetchOverageEstimate: () => Promise<number>;
+  estimateCost: (operation: string, quantity?: number) => Promise<CreditEstimate>;
 }
 
-// API base URL
-const API_BASE = '/api/v1';
+// Helper function for API calls
+const normalizeHeaders = (headers?: HeadersInit): Record<string, string> | undefined => {
+  if (!headers) {
+    return undefined;
+  }
 
-// Helper function to get auth token from Zustand auth store
-const getAuthToken = (): string | null => {
-  return useAuthStore.getState().token;
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+
+  return headers;
 };
 
-// Helper function for API calls
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const token = getAuthToken();
-  
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...options.headers,
-    },
-  });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || error.message || 'Request failed');
+const parseRequestBody = (body?: BodyInit | null, headers?: Record<string, string>) => {
+  if (body === undefined || body === null) {
+    return undefined;
   }
-  
-  return response.json();
+
+  if (typeof body !== 'string') {
+    return body;
+  }
+
+  const contentType = headers?.['Content-Type'] || headers?.['content-type'] || 'application/json';
+  if (!contentType.includes('application/json')) {
+    return body;
+  }
+
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+};
+
+const apiCall = async (endpoint: string, options: RequestInit = {}) => {
+  const headers = normalizeHeaders(options.headers);
+  const response = await api.request({
+    url: endpoint,
+    method: options.method || 'GET',
+    headers,
+    data: parseRequestBody(options.body, headers),
+  });
+
+  return response.data;
 };
 
 export const useSubscriptionStore = create<SubscriptionState>()(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       currentPlan: null,
       subscription: null,
       usage: null,
       loading: false,
       error: null,
+      
+      // Credit state
+      creditBalance: null,
+      creditHistory: [],
+      creditCosts: [],
+      topupPackages: [],
+      creditLoading: false,
       
       // Fetch current subscription
       fetchSubscription: async () => {
@@ -209,8 +308,6 @@ export const useSubscriptionStore = create<SubscriptionState>()(
             loading: false,
           });
           
-          // Refresh usage after upgrade
-          get().fetchUsage();
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to upgrade subscription';
           set({
@@ -291,6 +388,27 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         }
       },
       
+      // Open Stripe Customer Portal
+      openCustomerPortal: async (returnUrl?: string) => {
+        set({ loading: true, error: null });
+        
+        try {
+          const url = returnUrl || `${window.location.origin}/pricing`;
+          const result = await apiCall(
+            `/subscriptions/customer-portal?return_url=${encodeURIComponent(url)}`,
+            { method: 'POST' }
+          );
+          window.location.href = result.url;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to open customer portal';
+          set({
+            error: errorMessage,
+            loading: false,
+          });
+          throw error;
+        }
+      },
+      
       // Clear error
       clearError: () => set({ error: null }),
       
@@ -301,7 +419,94 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         usage: null,
         loading: false,
         error: null,
+        creditBalance: null,
+        creditHistory: [],
+        creditCosts: [],
+        topupPackages: [],
+        creditLoading: false,
       }),
+
+      // Credit actions
+      fetchCreditBalance: async () => {
+        set({ creditLoading: true });
+        try {
+          const balance = await apiCall('/credits/balance');
+          set({ creditBalance: balance, creditLoading: false });
+        } catch (error) {
+          set({ creditLoading: false });
+        }
+      },
+
+      fetchCreditHistory: async (limit = 50, offset = 0) => {
+        set({ creditLoading: true });
+        try {
+          const history = await apiCall(`/credits/history?limit=${limit}&offset=${offset}`);
+          set({ creditHistory: history, creditLoading: false });
+        } catch (error) {
+          set({ creditLoading: false });
+        }
+      },
+
+      fetchCreditCosts: async () => {
+        try {
+          const costs = await apiCall('/credits/costs');
+          set({ creditCosts: costs });
+        } catch (error) {
+          // silently fail
+        }
+      },
+
+      createTopupCheckout: async (packageId, successUrl, cancelUrl) => {
+        set({ creditLoading: true });
+        try {
+          const result = await apiCall('/credits/topup', {
+            method: 'POST',
+            body: JSON.stringify({
+              package_id: packageId,
+              success_url: successUrl,
+              cancel_url: cancelUrl,
+            }),
+          });
+          set({ creditLoading: false });
+          return result;
+        } catch (error) {
+          set({ creditLoading: false });
+          throw error;
+        }
+      },
+
+      toggleOverage: async (enabled) => {
+        set({ creditLoading: true });
+        try {
+          await apiCall('/credits/overage', {
+            method: 'PUT',
+            body: JSON.stringify({ enabled }),
+          });
+          // Refresh balance after toggle
+          const balance = await apiCall('/credits/balance');
+          set({ creditBalance: balance, creditLoading: false });
+        } catch (error) {
+          set({ creditLoading: false });
+          throw error;
+        }
+      },
+
+      fetchOverageEstimate: async () => {
+        try {
+          const result = await apiCall('/credits/overage/estimate');
+          return result.estimated_cost || 0;
+        } catch {
+          return 0;
+        }
+      },
+
+      estimateCost: async (operation, quantity = 1) => {
+        const result = await apiCall('/credits/estimate', {
+          method: 'POST',
+          body: JSON.stringify({ operation, quantity }),
+        });
+        return result;
+      },
     }),
     { name: 'SubscriptionStore' }
   )

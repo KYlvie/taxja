@@ -1,4 +1,12 @@
-"""Unit tests for DeductionCalculator"""
+"""Unit tests for DeductionCalculator
+
+Updated to match corrected Austrian tax law classifications:
+- calculate_commuting_allowance().amount = Pendlerpauschale only (Freibetrag/income deduction)
+- Pendlereuro is in breakdown['pendler_euro'] as a separate Absetzbetrag (tax credit)
+- Kinderabsetzbetrag is informational only (paid via Familienbeihilfe)
+- AEAB/AVAB is a tax credit, not income deduction
+- Home office renamed to Telearbeitspauschale
+"""
 import pytest
 from decimal import Decimal
 from backend.app.services.deduction_calculator import (
@@ -9,7 +17,11 @@ from backend.app.services.deduction_calculator import (
 
 
 class TestCommutingAllowance:
-    """Tests for commuting allowance calculation"""
+    """Tests for commuting allowance calculation.
+
+    amount = Pendlerpauschale (base_annual) only.
+    Pendlereuro is in breakdown['pendler_euro'] for the engine to use as tax credit.
+    """
     def test_distance_below_20km_kleines_not_eligible(self):
         """Test that distances below 20km are not eligible for Kleines Pendlerpauschale"""
         calculator = DeductionCalculator()
@@ -40,14 +52,12 @@ class TestCommutingAllowance:
             public_transport_available=False
         )
 
-        # Base: €31/month * 12 = €372
-        # Pendlereuro: 10km * €6 = €60
-        # Total: €432
+        # amount = Pendlerpauschale only: €31/month * 12 = €372
+        # Pendlereuro: 10km * €6 = €60 (in breakdown, NOT in amount)
         expected_base = Decimal('31.00') * Decimal('12')
-        expected_pendler = Decimal('10') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
+        assert result.breakdown['pendler_euro'] == Decimal('60.00')
         assert result.breakdown['type'] == 'Großes Pendlerpauschale'
         assert result.breakdown['base_monthly'] == Decimal('31.00')
         assert result.breakdown['distance_bracket'] == '2-20km'
@@ -61,14 +71,10 @@ class TestCommutingAllowance:
             public_transport_available=True
         )
 
-        # Base: €58/month * 12 = €696
-        # Pendlereuro: 25km * €6 = €150
-        # Total: €846
+        # amount = Pendlerpauschale only: €58/month * 12 = €696
         expected_base = Decimal('58.00') * Decimal('12')
-        expected_pendler = Decimal('25') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['type'] == 'Kleines Pendlerpauschale'
         assert result.breakdown['distance_km'] == 25
         assert result.breakdown['base_monthly'] == Decimal('58.00')
@@ -82,16 +88,13 @@ class TestCommutingAllowance:
             public_transport_available=True
         )
 
-        # Base: €113/month * 12 = €1,356
-        # Pendlereuro: 50km * €6 = €300
-        # Total: €1,656
+        # amount = Pendlerpauschale only: €113/month * 12 = €1,356
         expected_base = Decimal('113.00') * Decimal('12')
-        expected_pendler = Decimal('50') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['base_monthly'] == Decimal('113.00')
         assert result.breakdown['distance_bracket'] == '40-60km'
+        assert result.breakdown['pendler_euro'] == Decimal('300.00')
 
     def test_small_allowance_above_60km(self):
         """Test small commuting allowance for 60km+ with public transport"""
@@ -101,16 +104,13 @@ class TestCommutingAllowance:
             public_transport_available=True
         )
 
-        # Base: €168/month * 12 = €2,016
-        # Pendlereuro: 75km * €6 = €450
-        # Total: €2,466
+        # amount = Pendlerpauschale only: €168/month * 12 = €2,016
         expected_base = Decimal('168.00') * Decimal('12')
-        expected_pendler = Decimal('75') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['base_monthly'] == Decimal('168.00')
         assert result.breakdown['distance_bracket'] == '60km+'
+        assert result.breakdown['pendler_euro'] == Decimal('450.00')
 
     def test_large_allowance_20_to_40km(self):
         """Test large commuting allowance for 20-40km without public transport"""
@@ -120,18 +120,15 @@ class TestCommutingAllowance:
             public_transport_available=False
         )
 
-        # Base: €123/month * 12 = €1,476
-        # Pendlereuro: 30km * €6 = €180
-        # Total: €1,656
+        # amount = Pendlerpauschale only: €123/month * 12 = €1,476
         expected_base = Decimal('123.00') * Decimal('12')
-        expected_pendler = Decimal('30') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['type'] == 'Großes Pendlerpauschale'
         assert result.breakdown['base_monthly'] == Decimal('123.00')
         assert result.breakdown['distance_bracket'] == '20-40km'
         assert result.breakdown['public_transport_available'] is False
+        assert result.breakdown['pendler_euro'] == Decimal('180.00')
 
     def test_large_allowance_40_to_60km(self):
         """Test large commuting allowance for 40-60km without public transport"""
@@ -141,16 +138,13 @@ class TestCommutingAllowance:
             public_transport_available=False
         )
 
-        # Base: €214/month * 12 = €2,568
-        # Pendlereuro: 45km * €6 = €270
-        # Total: €2,838
+        # amount = Pendlerpauschale only: €214/month * 12 = €2,568
         expected_base = Decimal('214.00') * Decimal('12')
-        expected_pendler = Decimal('45') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['base_monthly'] == Decimal('214.00')
         assert result.breakdown['distance_bracket'] == '40-60km'
+        assert result.breakdown['pendler_euro'] == Decimal('270.00')
 
     def test_large_allowance_above_60km(self):
         """Test large commuting allowance for 60km+ without public transport"""
@@ -160,16 +154,13 @@ class TestCommutingAllowance:
             public_transport_available=False
         )
 
-        # Base: €306/month * 12 = €3,672
-        # Pendlereuro: 80km * €6 = €480
-        # Total: €4,152
+        # amount = Pendlerpauschale only: €306/month * 12 = €3,672
         expected_base = Decimal('306.00') * Decimal('12')
-        expected_pendler = Decimal('80') * Decimal('6.00')
-        expected_total = expected_base + expected_pendler
 
-        assert result.amount == expected_total
+        assert result.amount == expected_base
         assert result.breakdown['base_monthly'] == Decimal('306.00')
         assert result.breakdown['distance_bracket'] == '60km+'
+        assert result.breakdown['pendler_euro'] == Decimal('480.00')
 
     def test_exact_boundary_20km(self):
         """Test exact boundary at 20km"""
@@ -209,21 +200,21 @@ class TestCommutingAllowance:
 
 
 class TestHomeOfficeDeduction:
-    """Tests for home office deduction"""
+    """Tests for home office deduction (Telearbeitspauschale)"""
 
     def test_home_office_flat_rate(self):
-        """Test home office deduction returns €300 flat rate"""
+        """Test home office deduction returns €300 flat rate for legacy/None"""
         calculator = DeductionCalculator()
         result = calculator.calculate_home_office_deduction()
 
         assert result.amount == Decimal('300.00')
-        assert result.breakdown['type'] == 'Home Office Deduction'
+        assert result.breakdown['type'] == 'Telearbeitspauschale'
         assert result.breakdown['annual_amount'] == Decimal('300.00')
-        assert '€300' in result.note
+        assert '300' in result.note
 
 
 class TestFamilyDeductions:
-    """Tests for family deductions"""
+    """Tests for family deductions (Kinderabsetzbetrag — informational only)"""
 
     def test_no_children_no_single_parent(self):
         """Test family deduction with no children and not single parent"""
@@ -307,7 +298,12 @@ class TestSingleParentDeduction:
 
 
 class TestTotalDeductions:
-    """Tests for total deductions calculation"""
+    """Tests for total deductions calculation.
+
+    amount = income deductions only (reduce taxable income).
+    Tax credits (Pendlereuro, AVAB/AEAB, Familienbonus) are in breakdown only.
+    Kinderabsetzbetrag is informational only (not in amount or tax credits).
+    """
 
     def test_no_deductions(self):
         """Test total deductions with no eligible deductions"""
@@ -325,13 +321,14 @@ class TestTotalDeductions:
             public_transport_available=True
         )
 
-        # Should match commuting allowance calculation
-        expected = Decimal('58.00') * Decimal('12') + Decimal('30') * Decimal('6.00')
+        # amount = Pendlerpauschale only: €58 × 12 = €696
+        expected_base = Decimal('58.00') * Decimal('12')
 
-        assert result.amount == expected
+        assert result.amount == expected_base
         assert 'commuting_allowance' in result.breakdown
-        assert 'home_office' not in result.breakdown
-        assert 'family_deductions' not in result.breakdown
+        # Pendlereuro stored separately as tax credit
+        assert 'pendlereuro' in result.breakdown
+        assert result.breakdown['pendlereuro'] == Decimal('180.00')
 
     def test_only_home_office(self):
         """Test total deductions with only home office"""
@@ -341,21 +338,26 @@ class TestTotalDeductions:
         )
 
         assert result.amount == Decimal('300.00')
-        assert 'home_office' in result.breakdown
+        assert 'telearbeit' in result.breakdown
 
     def test_only_family(self):
-        """Test total deductions with only family deductions"""
+        """Test total deductions with only family deductions.
+
+        Kinderabsetzbetrag is informational only — NOT in amount.
+        AEAB is a tax credit (Absetzbetrag) — in breakdown, NOT in amount.
+        """
         calculator = DeductionCalculator()
         family_info = FamilyInfo(num_children=2, is_single_parent=True)
         result = calculator.calculate_total_deductions(
             family_info=family_info
         )
 
-        # 2 children + single parent
-        expected = Decimal('70.90') * Decimal('12') * Decimal('2') + Decimal('612.00')
-
-        assert result.amount == expected
-        assert 'family_deductions' in result.breakdown
+        # amount = €0 (no income deductions from family items)
+        assert result.amount == Decimal('0.00')
+        # Kinderabsetzbetrag is informational
+        assert 'kinderabsetzbetrag_info' in result.breakdown
+        # AEAB is a tax credit in breakdown
+        assert 'alleinverdiener_amount' in result.breakdown
 
     def test_all_deductions_combined(self):
         """Test total deductions with all types combined"""
@@ -368,21 +370,20 @@ class TestTotalDeductions:
             family_info=family_info
         )
 
-        # Commuting: €214/month * 12 + 50km * €6 = €2,568 + €300 = €2,868
-        # Home office: €300
-        # Family: €70.90 * 12 * 2 + €612 = €1,701.60 + €612 = €2,313.60
-        commuting = Decimal('214.00') * Decimal('12') + Decimal('50') * Decimal('6.00')
+        # Income deductions only:
+        # Pendlerpauschale: €214/month * 12 = €2,568
+        # Telearbeitspauschale: €300 (legacy fallback)
+        # Family: €0 (Kinderabsetzbetrag is informational, AEAB is tax credit)
+        commuting_base = Decimal('214.00') * Decimal('12')
         home_office = Decimal('300.00')
-        family = Decimal('70.90') * Decimal('12') * Decimal('2') + Decimal('612.00')
-        expected = commuting + home_office + family
+        expected = commuting_base + home_office
 
         assert result.amount == expected
         assert 'commuting_allowance' in result.breakdown
-        assert 'home_office' in result.breakdown
-        assert 'family_deductions' in result.breakdown
-        assert result.breakdown['commuting_amount'] == commuting
-        assert result.breakdown['home_office_amount'] == home_office
-        assert result.breakdown['family_amount'] == family
+        assert 'telearbeit' in result.breakdown
+        # Tax credits in breakdown
+        assert 'pendlereuro' in result.breakdown
+        assert 'alleinverdiener_amount' in result.breakdown
 
     def test_commuting_below_threshold_excluded(self):
         """Test that commuting below 20km is excluded from total"""
@@ -458,12 +459,11 @@ class TestEdgeCases:
             public_transport_available=False
         )
 
-        # Base: €306/month * 12 = €3,672
-        # Pendlereuro: 150km * €6 = €900
-        # Total: €4,572
-        expected = Decimal('306.00') * Decimal('12') + Decimal('150') * Decimal('6.00')
+        # amount = Pendlerpauschale only: €306/month * 12 = €3,672
+        expected_base = Decimal('306.00') * Decimal('12')
 
-        assert result.amount == expected
+        assert result.amount == expected_base
+        assert result.breakdown['pendler_euro'] == Decimal('900.00')
 
 
 # ============================================================================
@@ -483,6 +483,9 @@ class TestCommutingAllowanceProperties:
 
     These tests validate the correctness properties of the Pendlerpauschale
     calculation according to Austrian tax law (Requirement 29.2).
+
+    Note: amount = Pendlerpauschale (base_annual) only.
+    Pendlereuro is a separate Absetzbetrag stored in breakdown.
     """
 
     @given(
@@ -602,7 +605,8 @@ class TestCommutingAllowanceProperties:
         Property: Allowance increases monotonically with distance.
 
         For any distance d1 < d2, allowance(d1) <= allowance(d2).
-        This holds because Pendlereuro increases linearly with distance.
+        Base_annual increases at bracket boundaries, and within a bracket
+        Pendlerpauschale is flat but the amount only changes at boundaries.
         """
         calculator = DeductionCalculator()
 
@@ -653,12 +657,11 @@ class TestCommutingAllowanceProperties:
         distance_km=st.integers(min_value=20, max_value=200)
     )
     @settings(max_examples=50)
-    def test_property_base_plus_pendlereuro(self, distance_km):
+    def test_property_amount_equals_base_annual(self, distance_km):
         """
-        Property: Total allowance = base annual + Pendlereuro.
+        Property: amount = base_annual (Pendlerpauschale only).
 
-        The total allowance is always the sum of the base monthly amount
-        (times 12) plus the Pendlereuro component.
+        Pendlereuro is NOT included in amount — it's a separate Absetzbetrag.
         """
         calculator = DeductionCalculator()
 
@@ -669,12 +672,10 @@ class TestCommutingAllowanceProperties:
             )
 
             base_annual = result.breakdown['base_annual']
-            pendler_euro = result.breakdown['pendler_euro']
-            expected_total = base_annual + pendler_euro
 
-            assert result.amount == expected_total.quantize(Decimal('0.01')), \
-                f"Total should equal base_annual + pendler_euro: " \
-                f"{result.amount} != {base_annual} + {pendler_euro}"
+            assert result.amount == base_annual.quantize(Decimal('0.01')), \
+                f"amount should equal base_annual: " \
+                f"{result.amount} != {base_annual}"
 
     @given(
         distance_km=st.integers(min_value=20, max_value=200)

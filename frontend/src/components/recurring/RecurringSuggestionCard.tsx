@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface RecurringSuggestionCardProps {
   description: string;
@@ -29,6 +30,7 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
   onDismiss,
 }) => {
   const { t } = useTranslation();
+  const { alert: showAlert } = useConfirm();
   const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
@@ -37,7 +39,7 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
       await onAccept();
     } catch (error) {
       console.error('Failed to accept suggestion:', error);
-      alert(t('recurring.suggestions.acceptFailed'));
+      await showAlert(t('recurring.suggestions.acceptFailed'), { variant: 'danger' });
     } finally {
       setLoading(false);
     }
@@ -45,12 +47,18 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
 
   const getFrequencyText = () => {
     switch (frequency) {
-      case 'monthly': return t('recurring.frequency.monthly');
-      case 'quarterly': return t('recurring.frequency.quarterly');
-      case 'annually': return t('recurring.frequency.annually');
-      case 'weekly': return t('recurring.frequency.weekly');
-      case 'biweekly': return t('recurring.frequency.biweekly');
-      default: return frequency;
+      case 'monthly':
+        return t('recurring.frequency.monthly');
+      case 'quarterly':
+        return t('recurring.frequency.quarterly');
+      case 'annually':
+        return t('recurring.frequency.annually');
+      case 'weekly':
+        return t('recurring.frequency.weekly');
+      case 'biweekly':
+        return t('recurring.frequency.biweekly');
+      default:
+        return frequency;
     }
   };
 
@@ -61,21 +69,19 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
   };
 
   const getConfidenceIcon = () => {
-    if (confidence >= 0.9) return '✓✓✓';
-    if (confidence >= 0.75) return '✓✓';
-    return '✓';
+    if (confidence >= 0.9) return '\u2713\u2713\u2713';
+    if (confidence >= 0.75) return '\u2713\u2713';
+    return '\u2713';
   };
 
   return (
     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <div className="text-3xl">💡</div>
-        
+        <div className="text-3xl">{'\uD83D\uDCA1'}</div>
+
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="font-semibold text-blue-900">
-              {t('recurring.suggestions.smartSuggestion')}
-            </h3>
+            <h3 className="font-semibold text-blue-900">{t('recurring.suggestions.smartSuggestion')}</h3>
             <span className={`text-xs font-medium ${getConfidenceColor()}`}>
               {getConfidenceIcon()} {Math.round(confidence * 100)}%
             </span>
@@ -86,7 +92,7 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
               occurrences,
               description,
               amount: amount.toFixed(2),
-              frequency: getFrequencyText().toLowerCase()
+              frequency: getFrequencyText().toLowerCase(),
             })}
           </p>
 
@@ -94,7 +100,7 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <span className="text-gray-600">{t('recurring.form.amount')}:</span>
-                <span className="ml-2 font-medium">€{amount.toFixed(2)}</span>
+                <span className="ml-2 font-medium">{`\u20AC${amount.toFixed(2)}`}</span>
               </div>
               <div>
                 <span className="text-gray-600">{t('recurring.frequency.label')}:</span>
@@ -102,7 +108,7 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
               </div>
               <div>
                 <span className="text-gray-600">{t('recurring.suggestions.dayOfMonth')}:</span>
-                <span className="ml-2 font-medium">{suggestedDayOfMonth}.</span>
+                <span className="ml-2 font-medium">{`${suggestedDayOfMonth}.`}</span>
               </div>
               <div>
                 <span className="text-gray-600">{t('recurring.suggestions.type')}:</span>
@@ -122,18 +128,18 @@ export const RecurringSuggestionCard: React.FC<RecurringSuggestionCardProps> = (
               {t('recurring.suggestions.notNow')}
             </button>
             <button
-              onClick={handleAccept}
+              onClick={() => void handleAccept()}
               className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-2"
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <span className="animate-spin">⏳</span>
+                  <span className="animate-spin">{'\u23F3'}</span>
                   {t('common.saving')}
                 </>
               ) : (
                 <>
-                  <span>🤖</span>
+                  <span>{'\uD83E\uDD16'}</span>
                   {t('recurring.suggestions.enableAuto')}
                 </>
               )}

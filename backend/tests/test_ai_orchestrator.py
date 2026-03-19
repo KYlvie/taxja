@@ -2,6 +2,7 @@
 Tests for the AI Orchestrator — intent detection, tool dispatch, and response formatting.
 """
 import pytest
+import app.services.ai_orchestrator as ai_orchestrator
 from app.services.ai_orchestrator import (
     detect_intent,
     UserIntent,
@@ -143,10 +144,21 @@ class TestIntentDetection:
         "Tell me about Austrian tax system",
         "你好",
     ])
-    def test_fallback_to_tax_qa(self, message):
+    def test_fallback_to_tax_qa(self, message, monkeypatch):
+        monkeypatch.setattr(ai_orchestrator, "_llm_intent_fallback", lambda _: None)
         result = detect_intent(message)
         assert result.intent == UserIntent.TAX_QA
         assert result.confidence >= 0.4
+
+    def test_llm_fallback_can_promote_document_explanation(self, monkeypatch):
+        monkeypatch.setattr(
+            ai_orchestrator,
+            "_llm_intent_fallback",
+            lambda _: IntentResult(intent=UserIntent.EXPLAIN_DOCUMENT, confidence=0.8),
+        )
+        result = detect_intent("Was ist der Unterschied zwischen E1 und L1?")
+        assert result.intent == UserIntent.EXPLAIN_DOCUMENT
+        assert result.confidence == 0.8
 
 
 # ===================================================================

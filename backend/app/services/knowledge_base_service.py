@@ -401,6 +401,255 @@ class KnowledgeBaseService:
                     "7. §29 其他收入：投机收益、偶尔的中介活动。"
                 ),
                 "metadata": {"source": "EStG §2", "category": "income_types", "language": "zh"}
+            },
+            # --- Pauschalierung (Flat-Rate Taxation) ---
+            {
+                "text": (
+                    "Pauschalierung in Österreich (§17 EStG): "
+                    "Basispauschalierung: Betriebsausgaben pauschal 12% des Umsatzes (max Gewinn €220.000) oder 6% für bestimmte Tätigkeiten (Beratung, Vorträge, Schriftstellerei). "
+                    "Voraussetzung: keine Buchführungspflicht, Umsatz unter €220.000. "
+                    "Branchenpauschalierung: spezielle Pauschalierungen für Gastwirte (10% oder 5,5%), Lebensmittelhändler (3,8%), Drogisten (3,8%), Künstler/Schriftsteller (12%). "
+                    "Gewinnfreibetrag (§10 EStG): zusätzlich 15% des Gewinns bis €33.000 (max €4.950). "
+                    "Vergleich: Basispauschalierung lohnt sich wenn tatsächliche Betriebsausgaben unter 12% (bzw. 6%) des Umsatzes liegen."
+                ),
+                "metadata": {"source": "EStG §17", "category": "flat_rate_taxation", "language": "de"}
+            },
+            {
+                "text": (
+                    "Flat-Rate Taxation in Austria (§17 EStG): "
+                    "Basic flat-rate (Basispauschalierung): business expenses deducted at 12% of turnover (max profit €220,000) or 6% for certain activities (consulting, lectures, writing). "
+                    "Requirement: no mandatory bookkeeping, turnover below €220,000. "
+                    "Industry-specific flat rates (Branchenpauschalierung): restaurants (10% or 5.5%), food retailers (3.8%), pharmacists (3.8%), artists/writers (12%). "
+                    "Profit allowance (Gewinnfreibetrag §10 EStG): additional 15% of profit up to €33,000 (max €4,950). "
+                    "Comparison: flat-rate is beneficial when actual business expenses are below 12% (or 6%) of turnover."
+                ),
+                "metadata": {"source": "EStG §17", "category": "flat_rate_taxation", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利固定比例征税(Pauschalierung，§17 EStG)："
+                    "基础固定比例(Basispauschalierung)：按营业额的12%扣除经营费用（利润上限€220,000），特定活动（咨询、演讲、写作）按6%。"
+                    "前提条件：无强制记账义务，营业额低于€220,000。"
+                    "行业特定比例(Branchenpauschalierung)：餐饮业(10%或5.5%)、食品零售(3.8%)、药店(3.8%)、艺术家/作家(12%)。"
+                    "利润免税额(Gewinnfreibetrag §10 EStG)：利润的15%（上限€33,000，最高€4,950）。"
+                    "比较：当实际经营费用低于营业额的12%(或6%)时，固定比例更有利。"
+                ),
+                "metadata": {"source": "EStG §17", "category": "flat_rate_taxation", "language": "zh"}
+            },
+            # --- EA-Rechnung vs Doppelte Buchhaltung ---
+            {
+                "text": (
+                    "Gewinnermittlungsarten in Österreich: "
+                    "1. Einnahmen-Ausgaben-Rechnung (§4 Abs 3 EStG): Standard für Selbständige und Gewerbetreibende unter der Buchführungsgrenze. Einfaches Zufluss-Abfluss-Prinzip. "
+                    "2. Doppelte Buchhaltung (§4 Abs 1, §5 EStG): Pflicht ab €700.000 Umsatz in 2 aufeinanderfolgenden Jahren ODER ab €1.000.000 in einem Jahr. "
+                    "Freiwilliger Wechsel jederzeit möglich. Rückwechsel erst nach 5 Jahren. "
+                    "3. Pauschalierung (§17 EStG): Vereinfachte Gewinnermittlung für kleinere Betriebe."
+                ),
+                "metadata": {"source": "EStG §4, §5, UGB §189", "category": "bookkeeping", "language": "de"}
+            },
+            {
+                "text": (
+                    "Profit determination methods in Austria: "
+                    "1. Cash-basis accounting (Einnahmen-Ausgaben-Rechnung, §4 Abs 3 EStG): Standard for self-employed and businesses below the bookkeeping threshold. Simple cash-in/cash-out principle. "
+                    "2. Double-entry bookkeeping (§4 Abs 1, §5 EStG): Mandatory when turnover exceeds €700,000 in 2 consecutive years OR €1,000,000 in a single year. "
+                    "Voluntary switch possible anytime. Switch back only after 5 years. "
+                    "3. Flat-rate taxation (§17 EStG): Simplified profit determination for smaller businesses."
+                ),
+                "metadata": {"source": "EStG §4, §5, UGB §189", "category": "bookkeeping", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利利润确定方式："
+                    "1. 收支记账法(Einnahmen-Ausgaben-Rechnung，§4 Abs 3 EStG)：低于记账门槛的个体户和商户的标准方式。简单的收付实现制。"
+                    "2. 复式记账(§4 Abs 1, §5 EStG)：连续2年营业额超过€700,000 或 单年超过€1,000,000时强制。可自愿提前切换，但切回至少等5年。"
+                    "3. 固定比例征税(§17 EStG)：小型企业的简化利润确定方式。"
+                ),
+                "metadata": {"source": "EStG §4, §5, UGB §189", "category": "bookkeeping", "language": "zh"}
+            },
+            # --- GmbH Corporate Tax ---
+            {
+                "text": (
+                    "GmbH-Besteuerung in Österreich (KStG): "
+                    "Körperschaftsteuer (KöSt): 23% flat rate (seit 2024, davor 25% bis 2022, 24% in 2023). "
+                    "Mindest-KöSt: seit 2024 €500/Jahr (GmbH, erste 10 Jahre); danach €1.750/Jahr; AG €3.500/Jahr (auch bei Verlust). "
+                    "Gewinnausschüttung: Neben KöSt fällt 27,5% KESt auf ausgeschüttete Dividenden an. "
+                    "Gesamtbelastung bei Ausschüttung: 23% KöSt + 27,5% KESt auf Rest = ca. 44,2% effektiv. "
+                    "Geschäftsführerbezüge: Gesellschafter-Geschäftsführer mit >25% Beteiligung: GSVG-pflichtig, keine Lohnsteuer sondern EStG. "
+                    "Unter 25%: wie Angestellter (Lohnsteuer, ÖGK)."
+                ),
+                "metadata": {"source": "KStG, EStG §22 Z 2", "category": "corporate_tax", "language": "de"}
+            },
+            {
+                "text": (
+                    "GmbH Taxation in Austria (KStG): "
+                    "Corporate income tax (KöSt): 23% flat rate (since 2024, previously 25% until 2022, 24% in 2023). "
+                    "Minimum KöSt: €500/quarter = €2,000/year (even with losses). "
+                    "Dividend distribution: In addition to KöSt, 27.5% KESt on distributed dividends. "
+                    "Total effective tax on distribution: 23% KöSt + 27.5% KESt on remainder ≈ 44.2%. "
+                    "Managing director compensation: Shareholder-directors with >25% ownership: GSVG-insured, income tax (not payroll). "
+                    "Below 25%: treated as employee (payroll tax, ÖGK)."
+                ),
+                "metadata": {"source": "KStG, EStG §22 Z 2", "category": "corporate_tax", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利GmbH税务(KStG)："
+                    "公司所得税(KöSt)：统一23%（2024年起，2022年前25%，2023年24%）。"
+                    "最低KöSt：每季度€500 = 每年€2,000（即使亏损也需缴纳）。"
+                    "利润分配：除KöSt外，分配的股息还需缴纳27.5% KESt。"
+                    "分配总有效税率：23% KöSt + 剩余部分27.5% KESt ≈ 44.2%。"
+                    "总经理薪酬：持股>25%的股东-总经理：GSVG社保，按个人所得税（非工资税）。"
+                    "持股<25%：按雇员处理（工资税，ÖGK社保）。"
+                ),
+                "metadata": {"source": "KStG, EStG §22 Z 2", "category": "corporate_tax", "language": "zh"}
+            },
+            # --- Crypto Taxation ---
+            {
+                "text": (
+                    "Kryptowährungsbesteuerung in Österreich (seit 2022): "
+                    "Einkünfte aus Kryptowährungen unterliegen der KESt von 27,5% (§27a EStG). "
+                    "Steuerpflichtig: Verkauf, Tausch Krypto→Krypto, Tausch gegen Waren/Dienstleistungen. "
+                    "Mining: Einkünfte aus sonstigen Leistungen (§29 EStG) bis zur ersten Veräußerung, danach §27. "
+                    "Staking/Lending: Zinserträge → 27,5% KESt. "
+                    "Airdrops: steuerpflichtig als Einkünfte bei Zufluss. "
+                    "Altbestand (vor 01.03.2021): steuerfrei bei Haltedauer >1 Jahr (alte Regelung). "
+                    "Neubestand (ab 01.03.2021): keine Spekulationsfrist mehr, immer 27,5% KESt."
+                ),
+                "metadata": {"source": "EStG §27a, ÖkoStRefG 2022", "category": "crypto_tax", "language": "de"}
+            },
+            {
+                "text": (
+                    "Cryptocurrency Taxation in Austria (since 2022): "
+                    "Crypto income is subject to 27.5% KESt capital gains tax (§27a EStG). "
+                    "Taxable events: sale, crypto-to-crypto exchange, exchange for goods/services. "
+                    "Mining: other income (§29 EStG) until first disposal, then §27. "
+                    "Staking/Lending: interest income → 27.5% KESt. "
+                    "Airdrops: taxable as income upon receipt. "
+                    "Old holdings (before 01.03.2021): tax-free if held >1 year (old rule). "
+                    "New holdings (from 01.03.2021): no speculation period, always 27.5% KESt."
+                ),
+                "metadata": {"source": "EStG §27a, ÖkoStRefG 2022", "category": "crypto_tax", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利加密货币税务（2022年起）："
+                    "加密货币收入适用27.5% KESt资本利得税（§27a EStG）。"
+                    "应税事项：出售、加密货币间交换、用加密货币购买商品/服务。"
+                    "挖矿(Mining)：首次出售前为其他收入(§29 EStG)，之后为§27。"
+                    "质押/借贷(Staking/Lending)：利息收入 → 27.5% KESt。"
+                    "空投(Airdrops)：收到时作为收入征税。"
+                    "旧持仓（2021.03.01前）：持有超过1年免税（旧规则）。"
+                    "新持仓（2021.03.01起）：无投机期限，始终27.5% KESt。"
+                ),
+                "metadata": {"source": "EStG §27a, ÖkoStRefG 2022", "category": "crypto_tax", "language": "zh"}
+            },
+            # --- Tax Deadlines ---
+            {
+                "text": (
+                    "Wichtige Steuertermine in Österreich: "
+                    "E1 Einkommensteuererklärung: 30. April (Papier), 30. Juni (FinanzOnline). "
+                    "Steuerberater-Frist: bis 31. März des Folgejahres (mit Quotenregelung). "
+                    "Einkommensteuer-Vorauszahlungen: vierteljährlich am 15. Februar, 15. Mai, 15. August, 15. November. "
+                    "UVA (Umsatzsteuervoranmeldung): monatlich bis zum 15. des Folgemonats (bei Umsatz >€100.000), vierteljährlich (bei Umsatz ≤€100.000). "
+                    "Jahres-USt-Erklärung: bis 30. April (Papier) oder 30. Juni (FinanzOnline). "
+                    "Lohnzettel (L16): bis Ende Februar des Folgejahres. "
+                    "SVS-Beiträge: vierteljährlich (Februar, Mai, August, November)."
+                ),
+                "metadata": {"source": "BAO, EStG, UStG", "category": "tax_deadlines", "language": "de"}
+            },
+            {
+                "text": (
+                    "Important Tax Deadlines in Austria: "
+                    "E1 Income tax return: April 30 (paper), June 30 (FinanzOnline). "
+                    "Tax advisor deadline: March 31 of the following year (with quota system). "
+                    "Income tax prepayments: quarterly on February 15, May 15, August 15, November 15. "
+                    "UVA (VAT pre-filing): monthly by the 15th of following month (turnover >€100,000), quarterly (turnover ≤€100,000). "
+                    "Annual VAT return: by April 30 (paper) or June 30 (FinanzOnline). "
+                    "Payroll statements (L16): by end of February of following year. "
+                    "SVS contributions: quarterly (February, May, August, November)."
+                ),
+                "metadata": {"source": "BAO, EStG, UStG", "category": "tax_deadlines", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利重要税务截止日期："
+                    "E1所得税申报：4月30日（纸质）、6月30日（FinanzOnline）。"
+                    "税务师代理截止日：次年3月31日（配额制度）。"
+                    "所得税预缴：季度缴纳，2月15日、5月15日、8月15日、11月15日。"
+                    "UVA增值税预申报：月度截止次月15日（营业额>€100,000），季度（营业额≤€100,000）。"
+                    "年度增值税申报：4月30日（纸质）或6月30日（FinanzOnline）。"
+                    "工资报表(L16)：次年2月底前。"
+                    "SVS社保缴费：季度（2月、5月、8月、11月）。"
+                ),
+                "metadata": {"source": "BAO, EStG, UStG", "category": "tax_deadlines", "language": "zh"}
+            },
+            # --- Loss Carryforward Rules ---
+            {
+                "text": (
+                    "Verlustverrechnung und Verlustvortrag in Österreich (§18 Abs 6-7 EStG): "
+                    "Verlustausgleich: Verluste aus einer Einkunftsart können mit positiven Einkünften anderer Einkunftsarten ausgeglichen werden. "
+                    "Ausnahme: §27 Kapitalverluste nur mit §27 Kapitalgewinnen verrechenbar. "
+                    "Verlustvortrag: Nicht ausgeglichene Verluste können zeitlich unbegrenzt vorgetragen werden. "
+                    "Verrechnungsgrenze: Vorgetragene Verluste können nur bis zu 75% des Gesamtbetrags der Einkünfte abgezogen werden. "
+                    "Mindesteinkommen: €2.000 bleiben immer steuerfrei (verbleibende 25%). "
+                    "Sonderregel COVID: Rücktrag von 2020-Verlusten in 2019 und 2018 war möglich (befristet)."
+                ),
+                "metadata": {"source": "EStG §18 Abs 6-7", "category": "loss_carryforward", "language": "de"}
+            },
+            {
+                "text": (
+                    "Loss Offsetting and Carryforward in Austria (§18 Abs 6-7 EStG): "
+                    "Loss offsetting: Losses from one income type can offset positive income from other types. "
+                    "Exception: §27 capital losses can only offset §27 capital gains. "
+                    "Loss carryforward: Unoffset losses can be carried forward indefinitely. "
+                    "Offset limit: Carried-forward losses can only be deducted up to 75% of total income. "
+                    "Minimum income: €2,000 always remains tax-free (remaining 25%). "
+                    "COVID special rule: Carry-back of 2020 losses to 2019 and 2018 was possible (temporary)."
+                ),
+                "metadata": {"source": "EStG §18 Abs 6-7", "category": "loss_carryforward", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利亏损抵扣和结转（§18 Abs 6-7 EStG）："
+                    "亏损抵扣：一种收入类型的亏损可以与其他收入类型的正收入相抵。"
+                    "例外：§27资本损失只能与§27资本收益抵扣。"
+                    "亏损结转：未抵扣的亏损可以无限期向前结转。"
+                    "抵扣上限：结转亏损最多只能抵扣总收入的75%。"
+                    "最低收入：€2,000始终免税（剩余25%）。"
+                    "COVID特殊规则：2020年亏损可以回溯到2019年和2018年（临时措施）。"
+                ),
+                "metadata": {"source": "EStG §18 Abs 6-7", "category": "loss_carryforward", "language": "zh"}
+            },
+            # --- Cross-Border Tax ---
+            {
+                "text": (
+                    "Grenzüberschreitende Besteuerung in Österreich: "
+                    "Doppelbesteuerungsabkommen (DBA): Österreich hat über 90 DBA. Grundregel: Wohnsitzland besteuert Welteinkommen, Quellenland besteuert nur lokale Einkünfte. "
+                    "Reverse Charge (§19 UStG): Bei B2B-Dienstleistungen aus dem EU-Ausland schuldet der Empfänger die USt (Umkehr der Steuerschuldnerschaft). "
+                    "Zusammenfassende Meldung (ZM): Bei EU-Lieferungen/Leistungen monatliche Meldung an das Finanzamt erforderlich. "
+                    "Ausländische Einkünfte: In der E1-Erklärung anzugeben, Progressionsvorbehalt kann gelten."
+                ),
+                "metadata": {"source": "DBA, UStG §19", "category": "cross_border", "language": "de"}
+            },
+            {
+                "text": (
+                    "Cross-Border Taxation in Austria: "
+                    "Double Taxation Agreements (DBA): Austria has over 90 DTAs. Basic rule: country of residence taxes worldwide income, source country taxes only local income. "
+                    "Reverse Charge (§19 UStG): For B2B services from other EU countries, the recipient owes the VAT (reverse charge mechanism). "
+                    "EU Summary Report (Zusammenfassende Meldung): Monthly report to tax office required for EU deliveries/services. "
+                    "Foreign income: Must be declared in E1 return, progression clause may apply."
+                ),
+                "metadata": {"source": "DBA, UStG §19", "category": "cross_border", "language": "en"}
+            },
+            {
+                "text": (
+                    "奥地利跨境税务："
+                    "双重征税协定(DBA)：奥地利有90多个DBA。基本规则：居住国对全球收入征税，来源国仅对本地收入征税。"
+                    "逆向征收(Reverse Charge，§19 UStG)：从其他EU国家获得B2B服务时，接收方承担增值税。"
+                    "EU汇总报告(Zusammenfassende Meldung)：EU交付/服务需每月向税务局报告。"
+                    "外国收入：必须在E1申报中申报，可能适用累进保留条款。"
+                ),
+                "metadata": {"source": "DBA, UStG §19", "category": "cross_border", "language": "zh"}
             }
         ]
         

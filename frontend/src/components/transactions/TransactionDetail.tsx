@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { translateDeductionReason } from '../../utils/translateDeductionReason';
 import { Transaction, TransactionType } from '../../types/transaction';
 import './TransactionDetail.css';
 
@@ -8,6 +11,7 @@ interface TransactionDetailProps {
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
+  onMarkReviewed?: (id: number) => void;
 }
 
 const TransactionDetail = ({
@@ -15,9 +19,12 @@ const TransactionDetail = ({
   onEdit,
   onDelete,
   onClose,
+  onMarkReviewed,
 }: TransactionDetailProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { confirm: showConfirm } = useConfirm();
   const navigate = useNavigate();
+
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('de-AT', {
@@ -44,7 +51,7 @@ const TransactionDetail = ({
     });
   };
 
-  return (
+  return createPortal(
     <div className="transaction-detail-overlay" onClick={onClose}>
       <div className="transaction-detail" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header">
@@ -89,6 +96,7 @@ const TransactionDetail = ({
             </div>
           </div>
 
+          {transaction.type !== TransactionType.INCOME && (
           <div className="detail-section">
             <h3>{t('transactions.taxInformation')}</h3>
 
@@ -118,11 +126,11 @@ const TransactionDetail = ({
                     ? transaction.deduction_reason.split(' | ').map((part, i) => (
                         <span key={i} className={i === 0 ? 'reason-main' : 'reason-tip'}>
                           {i === 1 && <span className="tip-icon">💡 </span>}
-                          {part}
+                          {translateDeductionReason(part, i18n.language)}
                           {i === 0 && <br />}
                         </span>
                       ))
-                    : transaction.deduction_reason}
+                    : translateDeductionReason(transaction.deduction_reason, i18n.language)}
                 </span>
               </div>
             )}
@@ -167,7 +175,125 @@ const TransactionDetail = ({
                 </div>
               </div>
             )}
+
+            {transaction.classification_method && (
+              <div className="detail-row">
+                <span className="detail-label">
+                  {t('transactions.classificationPipeline', 'Classification Pipeline')}:
+                </span>
+                <div className="classification-pipeline">
+                  {(() => {
+                    const method = transaction.classification_method;
+                    // Build pipeline stages based on final method
+                    const stages: Array<{ key: string; active: boolean }> = [];
+                    // User rule is always checked first
+                    if (method === 'user_rule' || method === 'user_rule_soft') {
+                      stages.push({ key: method, active: true });
+                    } else {
+                      stages.push({ key: 'user_rule', active: false });
+                    }
+                    // Rule-based is next
+                    if (method === 'rule_based' || method === 'rule') {
+                      stages.push({ key: 'rule_based', active: true });
+                    } else if (method !== 'user_rule' && method !== 'user_rule_soft' && method !== 'manual' && method !== 'csv') {
+                      stages.push({ key: 'rule_based', active: false });
+                    }
+                    // ML
+                    if (method === 'ml') {
+                      stages.push({ key: 'ml', active: true });
+                    } else if (method === 'llm' || method === 'llm_verified' || method === 'llm_consensus') {
+                      stages.push({ key: 'ml', active: false });
+                      stages.push({ key: method, active: true });
+                    }
+                    // Manual / CSV
+                    if (method === 'manual') {
+                      stages.push({ key: 'manual', active: true });
+                    }
+                    if (method === 'csv') {
+                      stages.push({ key: 'csv', active: true });
+                    }
+                    return stages.map((stage, idx) => (
+                      <span key={stage.key} className="pipeline-stage-wrap">
+                        {idx > 0 && <span className="pipeline-arrow">→</span>}
+                        <span className={`method-badge method-${stage.key} ${stage.active ? 'pipeline-active' : 'pipeline-skipped'}`}>
+                          {t(`transactions.methods.${stage.key}`, stage.key)}
+                        </span>
+                      </span>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
+          )}
+
+          {/* Line Items Section */}
+          {transaction.line_items && transaction.line_items.length > 0 && (
+            <div className="detail-section">
+              <h3>{t('transactions.lineItems.title')}</h3>
+              <div className="line-items-list">
+                {transaction.line_items.map((item, idx) => (
+                  <div key={item.id || idx} className="line-item-row">
+                    <div className="line-item-main">
+                      <span className="line-item-desc">{item.description}</span>
+                      <span className="line-item-amount">{formatAmount(item.amount)}</span>
+                    </div>
+                    <div className="line-item-meta">
+                      {item.quantity > 1 && (
+                        <span className="line-item-qty">×{item.quantity}</span>
+                      )}
+                      {item.category && (
+                        <span className="category-badge">
+                          {t(`transactions.categories.${item.category}`)}
+                        </span>
+                      )}
+                      {item.is_deductible ? (
+                        <span className="badge badge-success">✓ {t('transactions.deductibleYes')}</span>
+                      ) : (
+                        <span className="badge badge-secondary">✗ {t('transactions.notDeductible')}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {(transaction.deductible_amount != null || transaction.non_deductible_amount != null) && (
+                <div className="line-items-summary">
+                  {transaction.deductible_amount != null && transaction.deductible_amount > 0 && (
+                    <div className="summary-row">
+                      <span>{t('transactions.lineItems.deductibleTotal')}</span>
+                      <span className="amount-success">{formatAmount(transaction.deductible_amount)}</span>
+                    </div>
+                  )}
+                  {transaction.non_deductible_amount != null && transaction.non_deductible_amount > 0 && (
+                    <div className="summary-row">
+                      <span>{t('transactions.lineItems.nonDeductibleTotal')}</span>
+                      <span className="amount-muted">{formatAmount(transaction.non_deductible_amount)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {transaction.needs_review && !transaction.reviewed && (
+            <div className="detail-section review-section">
+              <h3>{t('transactions.needsReview')}</h3>
+              {transaction.ai_review_notes && (
+                <div className="detail-row review-notes-row">
+                  <span className="detail-label">{t('transactions.aiReviewNotes')}:</span>
+                  <span className="review-notes-text">{transaction.ai_review_notes}</span>
+                </div>
+              )}
+              {onMarkReviewed && (
+                <button
+                  className="btn btn-primary review-confirm-btn"
+                  onClick={() => onMarkReviewed(transaction.id)}
+                >
+                  {t('transactions.markReviewed')}
+                </button>
+              )}
+            </div>
+          )}
 
           {transaction.document_id && (
             <div className="detail-section">
@@ -181,6 +307,15 @@ const TransactionDetail = ({
                 >
                   {t('transactions.viewDocument')}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {transaction.is_system_generated && transaction.source_recurring_id && (
+            <div className="detail-section">
+              <div className="recurring-generated-hint">
+                <span>🔄</span>
+                <span>{t('recurring.edit.generatedHint')}</span>
               </div>
             </div>
           )}
@@ -217,8 +352,9 @@ const TransactionDetail = ({
             </button>
             <button
               className="btn btn-danger"
-              onClick={() => {
-                if (window.confirm(t('transactions.confirmDelete'))) {
+              onClick={async () => {
+                const ok = await showConfirm(t('transactions.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });
+                if (ok) {
                   onDelete();
                 }
               }}
@@ -228,7 +364,8 @@ const TransactionDetail = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -10,6 +10,8 @@ from app.models import (
     User,
     Transaction,
     Document,
+    EmployerAnnualArchive,
+    EmployerMonth,
     TaxConfiguration,
     LossCarryforward,
     TaxReport,

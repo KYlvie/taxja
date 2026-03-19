@@ -98,9 +98,10 @@ class KaufvertragImportService:
 
         # Initialize depreciation schedule
         depreciation_years = 0
-        if kaufvertrag_data.building_value and kaufvertrag_data.building_value > 0:
+        effective_building_value = property_obj.building_value or kaufvertrag_data.building_value
+        if effective_building_value and effective_building_value > 0:
             depreciation_result = self.initialize_depreciation_schedule(
-                property_obj.id, kaufvertrag_data.building_value, kaufvertrag_data.purchase_date
+                property_obj.id, effective_building_value, kaufvertrag_data.purchase_date
             )
             depreciation_years = depreciation_result["years_backfilled"]
 

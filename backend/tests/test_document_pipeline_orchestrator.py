@@ -349,6 +349,25 @@ class TestAutoFixValidation:
         validation = orchestrator._stage_validate(DBDocumentType.PURCHASE_CONTRACT, data, result)
         assert not validation.is_valid
 
+    def test_asset_kaufvertrag_does_not_autofill_property_fields(self):
+        """Asset-oriented purchase contracts must not get property placeholders."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {
+            "purchase_contract_kind": "asset",
+            "purchase_price": 13800,
+            "asset_type": "vehicle",
+        }
+        validation = orchestrator._stage_validate(DBDocumentType.PURCHASE_CONTRACT, data, result)
+
+        assert validation.is_valid
+        assert "property_address" not in validation.corrected_fields
+        assert "building_value" not in validation.corrected_fields
+        assert "land_value" not in validation.corrected_fields
+
     def test_mietvertrag_missing_rent_still_error(self):
         """Mietvertrag without monthly_rent is still a genuine error."""
         from app.models.document import DocumentType as DBDocumentType
@@ -808,3 +827,297 @@ class TestValidationResultProperties:
         v = ValidationResult(is_valid=True)
         assert v.error_count == 0
         assert v.warning_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Kreditvertrag validation and suggestion tests
+# ---------------------------------------------------------------------------
+
+class TestKreditvertragValidation:
+    """Tests for Kreditvertrag (loan contract) validation and suggestion building."""
+
+    def _make_orchestrator(self):
+        o = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        o.db = MagicMock()
+        return o
+
+    def test_kreditvertrag_missing_loan_amount_is_error(self):
+        """Kreditvertrag without loan_amount is a genuine error."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"interest_rate": 3.5}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        assert not validation.is_valid
+        assert any(i.field == "loan_amount" and i.severity == "error" for i in validation.issues)
+
+    def test_kreditvertrag_missing_interest_rate_is_error(self):
+        """Kreditvertrag without interest_rate is a genuine error."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"loan_amount": 200000}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        assert not validation.is_valid
+        assert any(
+            i.field == "interest_rate" and i.severity == "error" for i in validation.issues
+        )
+
+    def test_kreditvertrag_missing_both_fields_is_error(self):
+        """Kreditvertrag without both loan_amount and interest_rate has two errors."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"lender_name": "Bank Austria"}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        assert not validation.is_valid
+        error_fields = [i.field for i in validation.issues if i.severity == "error"]
+        assert "loan_amount" in error_fields
+        assert "interest_rate" in error_fields
+
+    def test_kreditvertrag_valid_passes(self):
+        """Kreditvertrag with both loan_amount and interest_rate is valid."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"loan_amount": 200000, "interest_rate": 3.5, "monthly_payment": 950}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        assert validation.is_valid
+
+    def test_kreditvertrag_low_amount_is_info(self):
+        """Unusually low loan amount is informational — don't block."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"loan_amount": 500, "interest_rate": 3.5}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        amount_issues = [i for i in validation.issues if i.field == "loan_amount"]
+        assert any("low" in i.issue for i in amount_issues)
+        assert all(i.severity == "info" for i in amount_issues)
+
+    def test_kreditvertrag_high_rate_is_info(self):
+        """Unusually high interest rate is informational — don't block."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"loan_amount": 200000, "interest_rate": 25}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        rate_issues = [i for i in validation.issues if i.field == "interest_rate"]
+        assert any("high" in i.issue for i in rate_issues)
+        assert all(i.severity == "info" for i in rate_issues)
+
+    def test_kreditvertrag_negative_rate_is_warning(self):
+        """Negative interest rate is a warning."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"loan_amount": 200000, "interest_rate": -1.5}
+        validation = orchestrator._stage_validate(DBDocumentType.LOAN_CONTRACT, data, result)
+        rate_issues = [i for i in validation.issues if i.field == "interest_rate"]
+        assert any(i.severity == "warning" for i in rate_issues)
+
+
+class TestKreditvertragSuggestion:
+    """Tests for _build_kreditvertrag_suggestion in ocr_tasks.py."""
+
+    def test_builds_suggestion_with_all_fields(self):
+        """Full Kreditvertrag data produces a pending create_loan suggestion."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={
+                "loan_amount": 250000,
+                "interest_rate": 3.75,
+                "monthly_payment": 1200,
+                "lender_name": "Erste Bank",
+                "start_date": "2025-01-01",
+                "end_date": "2050-01-01",
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion is not None
+        assert suggestion["type"] in {"create_loan", "create_loan_repayment"}
+        assert suggestion["status"] == "pending"
+        assert suggestion["data"]["loan_amount"] == 250000.0
+        assert suggestion["data"]["interest_rate"] == 3.75
+        assert suggestion["data"]["monthly_payment"] == 1200.0
+        assert suggestion["data"]["lender_name"] == "Erste Bank"
+        assert suggestion["data"]["start_date"] == "2025-01-01"
+        assert suggestion["data"]["end_date"] == "2050-01-01"
+        assert "missing_fields" not in suggestion["data"]
+
+    def test_missing_loan_amount_sets_needs_input(self):
+        """Missing loan_amount → status needs_input with missing_fields."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={
+                "interest_rate": 3.5,
+                "monthly_payment": 900,
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion["status"] == "needs_input"
+        assert "loan_amount" in suggestion["data"]["missing_fields"]
+
+    def test_missing_interest_rate_sets_needs_input(self):
+        """Missing interest_rate → status needs_input with missing_fields."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={
+                "loan_amount": 200000,
+                "monthly_payment": 900,
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion["status"] == "needs_input"
+        assert "interest_rate" in suggestion["data"]["missing_fields"]
+
+    def test_missing_both_critical_fields(self):
+        """Missing both loan_amount and interest_rate → both in missing_fields."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={"lender_name": "Bank Austria"},
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion["status"] == "needs_input"
+        assert "loan_amount" in suggestion["data"]["missing_fields"]
+        assert "interest_rate" in suggestion["data"]["missing_fields"]
+
+    def test_property_id_from_upload_context(self):
+        """Upload context property_id is resolved and included in suggestion."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+        from app.models.property import Property as PropertyModel, PropertyStatus
+
+        mock_property = MagicMock()
+        mock_property.id = 42
+        mock_property.user_id = 1
+        mock_property.status = PropertyStatus.ACTIVE
+
+        db = MagicMock()
+        # First .first() call = PropertyLoan check (no existing loan)
+        # Second .first() call = Property lookup (found)
+        db.query.return_value.filter.return_value.first.side_effect = [None, mock_property]
+
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={
+                "loan_amount": 200000,
+                "interest_rate": 3.5,
+                "_upload_context": {"property_id": 42},
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion["data"]["matched_property_id"] == "42"
+
+    def test_no_upload_context_no_property(self):
+        """Without upload context, matched_property_id is None."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            ocr_result={
+                "loan_amount": 200000,
+                "interest_rate": 3.5,
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        suggestion = out["import_suggestion"]
+
+        assert suggestion["data"]["matched_property_id"] is None
+
+    def test_invalid_ocr_result_returns_none(self):
+        """Non-dict ocr_result returns None suggestion."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        db = MagicMock()
+        # No existing PropertyLoan for this document
+        db.query.return_value.filter.return_value.first.return_value = None
+        doc = _make_document(file_name="kreditvertrag.pdf", ocr_result="invalid")
+        result = PipelineResult(document_id=1)
+
+        out = _build_kreditvertrag_suggestion(db, doc, result)
+        assert out["import_suggestion"] is None
+
+
+class TestKreditvertragStageDispatch:
+    """Tests that _stage_suggest dispatches LOAN_CONTRACT to the Kreditvertrag branch."""
+
+    def test_loan_contract_dispatches_to_kreditvertrag(self):
+        """LOAN_CONTRACT type triggers _build_kreditvertrag_suggestion."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = MagicMock()
+
+        document = _make_document(file_name="kreditvertrag.pdf")
+        ocr_result = _make_ocr_result()
+        result = PipelineResult(document_id=1)
+
+        # Mock the wrapper method on the instance
+        orchestrator._build_kreditvertrag_suggestion = MagicMock(
+            return_value={"type": "create_loan", "status": "pending", "data": {}}
+        )
+
+        orchestrator._stage_suggest(document, DBDocumentType.LOAN_CONTRACT, ocr_result, result)
+
+        orchestrator._build_kreditvertrag_suggestion.assert_called_once_with(document, result)
+        assert result.stage_reached == PipelineStage.SUGGEST
+        assert len(result.suggestions) == 1

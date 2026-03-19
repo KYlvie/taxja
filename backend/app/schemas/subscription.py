@@ -131,6 +131,21 @@ class SubscriptionUpdate(BaseModel):
     cancel_at_period_end: Optional[bool] = None
 
 
+class SubscriptionCreditInfo(BaseModel):
+    """Credit balance info embedded in subscription response (transition period)."""
+    plan_balance: int
+    topup_balance: int
+    total_balance: int
+    available_without_overage: int
+    monthly_credits: int
+    overage_enabled: bool
+    overage_credits_used: int
+    overage_price_per_credit: Optional[Decimal] = None
+    estimated_overage_cost: Decimal = Decimal(0)
+    has_unpaid_overage: bool = False
+    reset_date: Optional[datetime] = None
+
+
 class SubscriptionResponse(BaseModel):
     """Schema for subscription response"""
     id: int
@@ -145,6 +160,7 @@ class SubscriptionResponse(BaseModel):
     cancel_at_period_end: bool = False
     created_at: datetime
     updated_at: datetime
+    credit_balance: Optional[SubscriptionCreditInfo] = None
     
     class Config:
         from_attributes = True

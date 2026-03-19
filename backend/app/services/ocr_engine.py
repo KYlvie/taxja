@@ -1,5 +1,6 @@
 """Main OCR processing engine"""
 import logging
+import re
 import pytesseract
 import cv2
 import numpy as np
@@ -15,6 +16,78 @@ from app.services.merchant_database import MerchantDatabase
 from app.services.llm_extractor import get_llm_extractor
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_amount(value: Any) -> Optional[float]:
+    """Parse OCR amount values from float/int/string into a normalized float."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    cleaned = cleaned.replace("EUR", "").replace("€", "").replace(" ", "")
+
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+
+    cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
+    if not cleaned or cleaned == "-":
+        return None
+
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _amounts_match(left: Any, right: Any, tolerance_ratio: float = 0.01) -> bool:
+    """Compare amounts with a small relative tolerance for OCR noise."""
+    left_value = _parse_amount(left)
+    right_value = _parse_amount(right)
+
+    if left_value is None or right_value is None:
+        return False
+    if left_value == 0 and right_value == 0:
+        return True
+
+    denominator = max(abs(left_value), abs(right_value), 1.0)
+    return abs(left_value - right_value) / denominator <= tolerance_ratio
+
+
+def _normalize_merchant(value: str) -> str:
+    cleaned = re.sub(r"\bFILIALE\b\s*\d*", "", value.upper())
+    cleaned = re.sub(r"[^A-Z0-9\s]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _merchants_match(left: Any, right: Any) -> bool:
+    """Fuzzy-ish merchant comparison for OCR cross-validation."""
+    if not left or not right:
+        return False
+
+    left_normalized = _normalize_merchant(str(left))
+    right_normalized = _normalize_merchant(str(right))
+
+    if not left_normalized or not right_normalized:
+        return False
+
+    return (
+        left_normalized == right_normalized
+        or left_normalized in right_normalized
+        or right_normalized in left_normalized
+    )
 
 
 @dataclass
@@ -116,6 +189,10 @@ class OCREngine:
                         return self._route_to_e1_extractor(
                             raw_text, start_time
                         )
+                    elif doc_type in self.TAX_FORM_EXTRACTOR_TYPES:
+                        return self._route_to_tax_form_extractor(
+                            doc_type, raw_text, start_time
+                        )
 
                     # For generic documents (invoices, receipts, etc.), try LLM
                     llm_result = self._try_llm_extraction(
@@ -132,15 +209,13 @@ class OCREngine:
                     if len(multi_results) > 1:
                         # Multiple receipts detected — use first for primary data,
                         # store all in additional_receipts
-                        extracted_data = multi_results[0]
-                        extracted_data["_additional_receipts"] = multi_results[1:]
-                        extracted_data["_receipt_count"] = len(multi_results)
+                        extracted_data = self._build_multi_receipt_payload(multi_results)
                         logger.info(
                             "Detected %d receipts in single document",
                             len(multi_results),
                         )
                     else:
-                        extracted_data = multi_results[0]
+                        extracted_data = self._normalize_receipt_payload(multi_results[0])
 
                     # Calculate confidence
                     overall_confidence = self._calculate_confidence(
@@ -148,7 +223,7 @@ class OCREngine:
                     )
 
                     # If regex gave low confidence, retry with LLM as fallback
-                    if overall_confidence < 0.5 and self.llm_extractor.is_available:
+                    if overall_confidence < 0.9 and self.llm_extractor.is_available:
                         logger.info(
                             "Regex confidence %.2f is low, retrying with LLM",
                             overall_confidence,
@@ -173,9 +248,32 @@ class OCREngine:
                     )
 
             # 1. Load and preprocess image (falls back to Tesseract OCR)
-            # For multi-page scanned PDFs, OCR all pages
+            # For multi-page scanned PDFs, use fast-path for contracts
             if image_bytes[:5] == b"%PDF-":
-                raw_text = self._ocr_all_pdf_pages(image_bytes)
+                # Quick OCR: first 2 pages only for classification (~8s vs ~23s)
+                raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=2)
+
+                # Classify from partial text
+                doc_type, classification_confidence = self.classifier.classify(
+                    None, raw_text
+                )
+
+                # Contracts: VLM reads images directly, skip full Tesseract OCR
+                if doc_type in (
+                    DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG,
+                    DocumentType.RENTAL_CONTRACT,
+                ):
+                    extraction_type = (
+                        DocumentType.MIETVERTRAG
+                        if doc_type == DocumentType.RENTAL_CONTRACT
+                        else doc_type
+                    )
+                    return self._route_to_contract_extractor(
+                        extraction_type, raw_text, image_bytes, start_time
+                    )
+
+                # Non-contract: OCR all pages for full text extraction
+                raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=5)
             else:
                 # For images: try VLM (AI vision) first, then Tesseract as fallback
                 vlm_result = self._try_vlm_ocr(
@@ -209,6 +307,10 @@ class OCREngine:
                 return self._route_to_e1_extractor(
                     raw_text, start_time
                 )
+            elif doc_type in self.TAX_FORM_EXTRACTOR_TYPES:
+                return self._route_to_tax_form_extractor(
+                    doc_type, raw_text, start_time
+                )
 
             # For generic documents, try LLM extraction
             llm_result = self._try_llm_extraction(
@@ -222,15 +324,13 @@ class OCREngine:
                 raw_text, doc_type
             )
             if len(multi_results) > 1:
-                extracted_data = multi_results[0]
-                extracted_data["_additional_receipts"] = multi_results[1:]
-                extracted_data["_receipt_count"] = len(multi_results)
+                extracted_data = self._build_multi_receipt_payload(multi_results)
                 logger.info(
                     "Detected %d receipts in scanned PDF",
                     len(multi_results),
                 )
             else:
-                extracted_data = multi_results[0]
+                extracted_data = self._normalize_receipt_payload(multi_results[0])
 
             # 5. Calculate overall confidence score
             overall_confidence = self._calculate_confidence(
@@ -238,7 +338,7 @@ class OCREngine:
             )
 
             # If regex gave low confidence, retry with LLM as fallback
-            if overall_confidence < 0.5 and self.llm_extractor.is_available:
+            if overall_confidence < 0.9 and self.llm_extractor.is_available:
                 logger.info(
                     "Regex confidence %.2f is low, retrying with LLM",
                     overall_confidence,
@@ -283,6 +383,96 @@ class OCREngine:
                 suggestions=[f"OCR processing failed: {str(e)}"],
             )
 
+    @staticmethod
+    def _compare_extracted_fields(
+        vlm_data: Dict[str, Any], tess_data: Dict[str, Any]
+    ) -> tuple[int, list[str], int]:
+        """Compare overlapping OCR fields for cross-validation."""
+        comparable_fields = {"amount", "date", "merchant", "invoice_number"}
+        overlap = comparable_fields.intersection(vlm_data.keys()).intersection(tess_data.keys())
+
+        matches = 0
+        mismatches: list[str] = []
+
+        for field in overlap:
+            if field == "amount":
+                same = _amounts_match(vlm_data.get(field), tess_data.get(field))
+            elif field == "merchant":
+                same = _merchants_match(vlm_data.get(field), tess_data.get(field))
+            else:
+                same = (
+                    str(vlm_data.get(field)).strip().lower()
+                    == str(tess_data.get(field)).strip().lower()
+                )
+
+            if same:
+                matches += 1
+            else:
+                mismatches.append(field)
+
+        return matches, mismatches, len(overlap)
+
+    def _tesseract_llm_extract(
+        self, image_bytes: bytes, captured_at: datetime, doc_type: DocumentType
+    ) -> Optional[OCRResult]:
+        """Compatibility hook for OCR cross-validation fallback extraction."""
+        _ = (image_bytes, captured_at, doc_type)
+        return None
+
+    def _cross_validate_image(
+        self, vlm_result: OCRResult, image_bytes: bytes, captured_at: datetime
+    ) -> OCRResult:
+        """Cross-validate VLM OCR with a Tesseract+LLM fallback when confidence is moderate."""
+        if vlm_result.confidence_score >= 0.85:
+            return vlm_result
+
+        tess_result = self._tesseract_llm_extract(
+            image_bytes, captured_at, vlm_result.document_type
+        )
+        if tess_result is None:
+            return vlm_result
+
+        matches, mismatches, compared = self._compare_extracted_fields(
+            vlm_result.extracted_data, tess_result.extracted_data
+        )
+        if compared == 0:
+            return vlm_result
+
+        merged_data = dict(vlm_result.extracted_data)
+        for key, value in tess_result.extracted_data.items():
+            if key not in merged_data and value is not None:
+                merged_data[key] = value
+
+        match_ratio = matches / compared
+        critical_mismatch = any(field in {"amount", "date"} for field in mismatches)
+
+        if match_ratio >= 0.5:
+            boost = 0.15 if not critical_mismatch else 0.08
+            confidence = min(1.0, vlm_result.confidence_score + boost)
+            suggestions = [
+                *vlm_result.suggestions,
+                f"Cross-validated against fallback OCR ({matches}/{compared} key fields matched).",
+            ]
+            needs_review = False
+        else:
+            penalty = 0.20 if critical_mismatch else 0.10
+            confidence = max(0.0, vlm_result.confidence_score - penalty)
+            suggestions = [
+                *vlm_result.suggestions,
+                f"Fallback OCR disagree on {len(mismatches)} key field(s): {', '.join(mismatches)}.",
+            ]
+            needs_review = True
+
+        return OCRResult(
+            document_type=vlm_result.document_type,
+            extracted_data=merged_data,
+            raw_text=vlm_result.raw_text,
+            confidence_score=confidence,
+            needs_review=needs_review,
+            processing_time_ms=vlm_result.processing_time_ms,
+            suggestions=suggestions,
+        )
+
     def process_batch(self, image_bytes_list: List[bytes]) -> BatchOCRResult:
         """
         Process multiple documents in batch
@@ -326,6 +516,53 @@ class OCREngine:
             success_count=success_count,
             failure_count=failure_count,
         )
+
+    @staticmethod
+    def _normalize_receipt_payload(receipt: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize receipt payloads so downstream code sees stable keys."""
+        cleaned = {k: v for k, v in receipt.items() if v is not None}
+        cleaned.pop("raw_text", None)
+        cleaned.pop("document_type", None)
+        if "line_items" not in cleaned and isinstance(cleaned.get("items"), list):
+            cleaned["line_items"] = cleaned["items"]
+        return cleaned
+
+    def _build_multi_receipt_payload(self, receipts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Pack multi-receipt OCR into a backward-compatible structure."""
+        normalized = [
+            self._normalize_receipt_payload(receipt)
+            for receipt in receipts
+            if isinstance(receipt, dict)
+        ]
+        if not normalized:
+            return {}
+
+        total_amount = 0.0
+        for receipt in normalized:
+            try:
+                if receipt.get("amount") is not None:
+                    total_amount += float(receipt["amount"])
+            except (ValueError, TypeError):
+                continue
+
+        primary = dict(normalized[0])
+        additional = normalized[1:]
+        receipt_count = len(normalized)
+
+        payload = {
+            **primary,
+            "_additional_receipts": additional,
+            "_receipt_count": receipt_count,
+            "multiple_receipts": normalized,
+            "receipt_count": receipt_count,
+            "total_amount": round(total_amount, 2),
+        }
+
+        if "line_items" not in payload and isinstance(primary.get("items"), list):
+            payload["line_items"] = primary["items"]
+
+        return payload
+
     def _try_vlm_ocr(
         self, image_bytes: bytes, mime_type: str, start_time: datetime
     ) -> Optional[OCRResult]:
@@ -333,6 +570,11 @@ class OCREngine:
         Use a Vision-Language Model to OCR an image directly.
         Sends the image as base64 to the VL model and gets back structured data.
         Returns OCRResult or None if VLM unavailable/failed.
+
+        Two-pass approach for multi-receipt images:
+          Pass 1: Extract data normally.
+          Pass 2: If pass 1 returned a single receipt, ask VLM how many separate
+                  receipts are visible. If >1, re-extract each one individually.
         """
         from app.services.llm_service import get_llm_service
         import json
@@ -345,8 +587,10 @@ class OCREngine:
         # The image itself consumes most of the budget.
         system_prompt = (
             "OCR expert. Extract data from this document image as JSON.\n"
-            "IMPORTANT: If the image contains MULTIPLE receipts/invoices, return a JSON array "
-            "with one object per receipt. If only one receipt, return a single JSON object.\n"
+            "IMPORTANT: First count how many SEPARATE receipts/invoices/tickets are "
+            "visible in the image. They may be side-by-side, stacked, or overlapping.\n"
+            "If MULTIPLE receipts are visible, you MUST return a JSON array with one "
+            "object per receipt. If only one receipt, return a single JSON object.\n"
             "Fields (null if missing): raw_text (first 200 chars), document_type (invoice/receipt/"
             "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount (total), merchant, "
             "description (brief summary of purchased items), vat_amount, vat_rate, "
@@ -363,11 +607,15 @@ class OCREngine:
             logger.info("Attempting VLM OCR for image (%s, %d bytes)", mime_type, len(image_bytes))
             response = llm.generate_vision(
                 system_prompt=system_prompt,
-                user_prompt="Extract all data from this document. If multiple receipts are visible, extract each one separately.",
+                user_prompt=(
+                    "Look carefully at this image. Are there multiple separate receipts, "
+                    "invoices, or tickets visible? If yes, extract EACH one as a separate "
+                    "JSON object in an array. If only one, return a single JSON object."
+                ),
                 image_bytes=image_bytes,
                 mime_type=mime_type,
                 temperature=0.1,
-                max_tokens=3500,
+                max_tokens=4000,
             )
 
             # Parse JSON response
@@ -385,35 +633,17 @@ class OCREngine:
                     data = data[0]
                 else:
                     # Multiple receipts in one image — build a combined result
-                    # Store all receipts in extracted_data for downstream processing
                     logger.info("VLM detected %d receipts in single image", len(data))
-                    all_receipts = []
-                    total_amount = 0
-                    for i, receipt in enumerate(data):
-                        cleaned = {k: v for k, v in receipt.items() if v is not None}
-                        cleaned.pop("raw_text", None)
-                        cleaned.pop("document_type", None)
-                        if "amount" in cleaned:
-                            try:
-                                total_amount += float(cleaned["amount"])
-                            except (ValueError, TypeError):
-                                pass
-                        all_receipts.append(cleaned)
-
                     processing_time = (datetime.now() - start_time).total_seconds() * 1000
                     return OCRResult(
                         document_type=DocumentType.RECEIPT,
-                        extracted_data={
-                            "multiple_receipts": all_receipts,
-                            "receipt_count": len(all_receipts),
-                            "total_amount": round(total_amount, 2),
-                        },
+                        extracted_data=self._build_multi_receipt_payload(data),
                         raw_text=response,
                         confidence_score=0.85,
                         needs_review=True,
                         processing_time_ms=processing_time,
                         suggestions=[
-                            f"Detected {len(all_receipts)} receipts in one image. "
+                            f"Detected {len(data)} receipts in one image. "
                             "Please upload each receipt separately for best results."
                         ],
                     )
@@ -433,8 +663,18 @@ class OCREngine:
             }
             doc_type = type_map.get(doc_type_str.lower(), DocumentType.UNKNOWN)
 
-            # Remove null values
-            extracted_data = {k: v for k, v in data.items() if v is not None}
+            extracted_data = self._normalize_receipt_payload(data)
+
+            # --- Pass 2: multi-receipt detection ---
+            # VLMs often focus on the most prominent receipt and miss others.
+            # If the first pass returned a single receipt/invoice, ask the VLM
+            # specifically whether there are additional receipts in the image.
+            if doc_type in (DocumentType.RECEIPT, DocumentType.INVOICE):
+                multi_result = self._vlm_multi_receipt_check(
+                    llm, image_bytes, mime_type, extracted_data, start_time
+                )
+                if multi_result is not None:
+                    return multi_result
 
             field_count = len(extracted_data)
             confidence = min(0.95, 0.6 + field_count * 0.05)
@@ -457,6 +697,145 @@ class OCREngine:
         except Exception as e:
             logger.warning("VLM OCR failed: %s", e)
             return None
+
+    def _vlm_multi_receipt_check(
+        self, llm, image_bytes: bytes, mime_type: str,
+        first_receipt: Dict[str, Any], start_time: datetime,
+    ) -> Optional[OCRResult]:
+        """
+        Pass 2: Ask VLM if there are additional receipts beyond the one already extracted.
+
+        Returns an OCRResult with multi-receipt payload if additional receipts found,
+        or None if only one receipt is present.
+        """
+        first_merchant = first_receipt.get("merchant") or "unknown"
+        try:
+            count_prompt = (
+                f"I already extracted one receipt from merchant '{first_merchant}'. "
+                "Are there OTHER separate receipts, invoices, or tickets visible in this "
+                "image? Answer with a JSON object: "
+                '{"additional_count": <number>, "merchants": ["name1", "name2"]}. '
+                "If there are no other receipts, return {\"additional_count\": 0}."
+            )
+            count_response = llm.generate_vision(
+                system_prompt="You are an image analysis assistant. Answer precisely in JSON.",
+                user_prompt=count_prompt,
+                image_bytes=image_bytes,
+                mime_type=mime_type,
+                temperature=0.1,
+                max_tokens=300,
+            )
+            count_data = self._parse_vlm_json(count_response)
+            additional_count = 0
+            if isinstance(count_data, dict):
+                additional_count = int(count_data.get("additional_count", 0))
+
+            if additional_count <= 0:
+                return None
+
+            logger.info(
+                "VLM pass-2 detected %d additional receipt(s) besides '%s'",
+                additional_count, first_merchant,
+            )
+
+            # Extract each additional receipt individually
+            additional_merchants = []
+            if isinstance(count_data, dict) and isinstance(count_data.get("merchants"), list):
+                additional_merchants = count_data["merchants"]
+
+            all_receipts = [first_receipt]
+            for i, merchant_hint in enumerate(additional_merchants):
+                try:
+                    extra = self._vlm_extract_single_receipt(
+                        llm, image_bytes, mime_type, merchant_hint, first_merchant
+                    )
+                    if extra:
+                        all_receipts.append(extra)
+                except Exception as e:
+                    logger.warning("Failed to extract additional receipt %d: %s", i + 1, e)
+
+            # If we didn't get merchant hints or extraction failed, try a bulk re-extract
+            if len(all_receipts) == 1 and additional_count > 0:
+                bulk = self._vlm_extract_all_receipts(
+                    llm, image_bytes, mime_type, additional_count + 1
+                )
+                if bulk and len(bulk) > 1:
+                    all_receipts = bulk
+
+            if len(all_receipts) <= 1:
+                return None
+
+            logger.info(
+                "Multi-receipt extraction complete: %d receipts total", len(all_receipts)
+            )
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            return OCRResult(
+                document_type=DocumentType.RECEIPT,
+                extracted_data=self._build_multi_receipt_payload(all_receipts),
+                raw_text="",
+                confidence_score=0.80,
+                needs_review=True,
+                processing_time_ms=processing_time,
+                suggestions=[
+                    f"Detected {len(all_receipts)} receipts in one image. "
+                    "Each receipt will create a separate transaction."
+                ],
+            )
+        except Exception as e:
+            logger.warning("Multi-receipt check failed: %s", e)
+            return None
+
+    def _vlm_extract_single_receipt(
+        self, llm, image_bytes: bytes, mime_type: str,
+        target_merchant: str, exclude_merchant: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Extract a single specific receipt from a multi-receipt image."""
+        prompt = (
+            f"This image contains multiple receipts. Extract ONLY the receipt from "
+            f"'{target_merchant}' (NOT from '{exclude_merchant}'). "
+            "Return a single JSON object with fields: date, amount, merchant, description, "
+            "vat_amount, vat_rate, payment_method, "
+            "line_items [{name,quantity,unit_price,total_price}]. "
+            "JSON only, no markdown."
+        )
+        response = llm.generate_vision(
+            system_prompt="OCR expert. Extract data from the specified receipt only.",
+            user_prompt=prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            temperature=0.1,
+            max_tokens=2000,
+        )
+        data = self._parse_vlm_json(response)
+        if isinstance(data, dict):
+            return self._normalize_receipt_payload(data)
+        if isinstance(data, list) and data:
+            return self._normalize_receipt_payload(data[0])
+        return None
+
+    def _vlm_extract_all_receipts(
+        self, llm, image_bytes: bytes, mime_type: str, expected_count: int,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Bulk re-extract all receipts from a multi-receipt image."""
+        prompt = (
+            f"This image contains {expected_count} separate receipts/invoices. "
+            "Extract ALL of them. Return a JSON array with one object per receipt. "
+            "Each object: date, amount, merchant, description, vat_amount, vat_rate, "
+            "payment_method, line_items [{name,quantity,unit_price,total_price}]. "
+            "JSON only, no markdown."
+        )
+        response = llm.generate_vision(
+            system_prompt="OCR expert. Extract ALL separate receipts from this image.",
+            user_prompt=prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            temperature=0.1,
+            max_tokens=4000,
+        )
+        data = self._parse_vlm_json(response)
+        if isinstance(data, list) and len(data) > 1:
+            return [self._normalize_receipt_payload(r) for r in data if isinstance(r, dict)]
+        return None
 
     @staticmethod
     def _parse_vlm_json(response: str) -> Optional[Any]:
@@ -591,68 +970,339 @@ class OCREngine:
             logger.warning("LLM extraction failed, falling back to regex: %s", e)
             return None
 
+    # VLM confidence threshold: below this, fall back to vision model
+    _VLM_FALLBACK_THRESHOLD = 0.70
+
+    _VLM_CONTRACT_KAUFVERTRAG_PROMPT = (
+        "You are an Austrian tax document extraction expert.\n"
+        "This is a Kaufvertrag (purchase contract). Extract ALL of these fields as JSON.\n"
+        "Use null for fields you cannot find. Dates in YYYY-MM-DD. Amounts as plain numbers.\n"
+        "{\n"
+        '  "property_address": "full street address with unit/TOP, postal code and city",\n'
+        '  "street": "street name and house number (e.g. Hauptstraße 12)",\n'
+        '  "unit_number": "apartment/unit number, e.g. TOP 1, Top 3, Stiege 2/Top 5, or null",\n'
+        '  "city": "city name",\n'
+        '  "postal_code": "4-digit PLZ",\n'
+        '  "purchase_price": total price as number,\n'
+        '  "purchase_date": "YYYY-MM-DD signing date",\n'
+        '  "building_value": building value as number,\n'
+        '  "land_value": land value as number,\n'
+        '  "grunderwerbsteuer": property transfer tax as number,\n'
+        '  "notary_fees": notary fees as number,\n'
+        '  "registry_fees": land registry fee as number,\n'
+        '  "buyer_name": "buyer full name",\n'
+        '  "seller_name": "seller full name",\n'
+        '  "construction_year": year as integer\n'
+        "}\n"
+        "CRITICAL: property_address must be a real street address, NOT cadastral numbers.\n"
+        "Look for TOP/Wohnungstop/Stiege unit numbers — include them in unit_number.\n"
+        "JSON only, no markdown."
+    )
+
+    _VLM_CONTRACT_MIETVERTRAG_PROMPT = (
+        "You are an Austrian tax document extraction expert.\n"
+        "This is a Mietvertrag (rental contract). Extract ALL of these fields as JSON.\n"
+        "Use null for fields you cannot find. Dates in YYYY-MM-DD. Amounts as plain numbers.\n"
+        "{\n"
+        '  "property_address": "full street address with unit/TOP, postal code and city",\n'
+        '  "street": "street name and house number (e.g. Hauptstraße 12)",\n'
+        '  "unit_number": "apartment/unit number, e.g. TOP 1, Top 3, Stiege 2/Top 5, or null",\n'
+        '  "city": "city name",\n'
+        '  "postal_code": "4-digit PLZ",\n'
+        '  "monthly_rent": net monthly rent as number,\n'
+        '  "start_date": "YYYY-MM-DD lease start",\n'
+        '  "end_date": "YYYY-MM-DD lease end or null if unbefristet",\n'
+        '  "betriebskosten": monthly operating costs as number,\n'
+        '  "heating_costs": monthly heating costs as number,\n'
+        '  "deposit_amount": security deposit as number,\n'
+        '  "utilities_included": true/false,\n'
+        '  "tenant_name": "tenant full name",\n'
+        '  "landlord_name": "landlord full name",\n'
+        '  "contract_type": "Befristet or Unbefristet"\n'
+        "}\n"
+        "CRITICAL: Read the FULL document across all pages. "
+        "Look for Kaution/deposit amount, Betriebskosten, and contract end date carefully.\n"
+        "Look for TOP/Wohnungstop/Stiege unit numbers — include them in unit_number.\n"
+        "JSON only, no markdown."
+    )
+
+    def _vlm_contract_fallback(
+        self, image_bytes: bytes, contract_type: str, extracted_data: dict,
+    ) -> dict:
+        """
+        Use VLM (gpt-4o vision) to extract contract fields directly from the document image.
+        Called when Tesseract+LLM confidence is below threshold.
+
+        For PDFs: renders all pages (up to 5) as images and sends them ALL in a single
+        VLM request using multi-image support. This gives the model full context across
+        all pages while using only one API call.
+        """
+        from app.services.llm_service import get_llm_service
+
+        llm = get_llm_service()
+        if not llm.is_available:
+            logger.warning("VLM contract fallback: LLM service unavailable")
+            return extracted_data
+
+        # Determine prompt based on contract type
+        if contract_type == "kaufvertrag":
+            system_prompt = self._VLM_CONTRACT_KAUFVERTRAG_PROMPT
+        else:
+            system_prompt = self._VLM_CONTRACT_MIETVERTRAG_PROMPT
+
+        try:
+            if image_bytes[:5] == b"%PDF-":
+                import fitz
+
+                doc = fitz.open(stream=image_bytes, filetype="pdf")
+                num_pages = min(len(doc), 5)
+
+                # Render all pages as images
+                images: list[tuple[bytes, str]] = []
+                for i in range(num_pages):
+                    page = doc[i]
+                    mat = fitz.Matrix(100 / 72, 100 / 72)  # 100 DPI (contracts have large text)
+                    pix = page.get_pixmap(matrix=mat)
+                    images.append((pix.tobytes("png"), "image/png"))
+                doc.close()
+
+                if not images:
+                    return extracted_data
+
+                logger.info(
+                    "VLM contract fallback: sending %d pages in single request", len(images),
+                )
+
+                # Single multi-image VLM call — all pages at once
+                response = llm.generate_vision_multi(
+                    system_prompt=system_prompt,
+                    user_prompt=(
+                        f"This contract has {len(images)} pages. "
+                        "All pages are shown above. Extract ALL fields by reading across all pages. "
+                        "Key info like deposit (Kaution), end date, and operating costs (Betriebskosten) "
+                        "may appear on later pages. Return a single JSON object."
+                    ),
+                    images=images,
+                    temperature=0.0,
+                    max_tokens=2000,
+                )
+                vlm_data = self._parse_llm_contract_response(response) or {}
+
+            else:
+                # Single image — send directly
+                logger.info(
+                    "VLM contract fallback: sending image (%d bytes)", len(image_bytes),
+                )
+                response = llm.generate_vision(
+                    system_prompt=system_prompt,
+                    user_prompt="Extract all contract fields from this document image. Return JSON only.",
+                    image_bytes=image_bytes,
+                    mime_type="image/jpeg",
+                    temperature=0.0,
+                    max_tokens=2000,
+                )
+                vlm_data = self._parse_llm_contract_response(response) or {}
+
+            if not vlm_data:
+                logger.warning("VLM contract fallback: no data extracted")
+                extracted_data["_vlm_fallback"] = "no_data"
+                return extracted_data
+
+            # Merge VLM results into existing data
+            field_conf = extracted_data.get("field_confidence", {})
+            vlm_filled = []
+            vlm_corrected = []
+
+            for key, vlm_val in vlm_data.items():
+                if vlm_val is None:
+                    continue
+                current_val = extracted_data.get(key)
+                current_conf = field_conf.get(key, 0.0)
+
+                if current_val is None:
+                    # Fill missing field from VLM
+                    extracted_data[key] = vlm_val
+                    field_conf[key] = 0.90  # VLM vision confidence
+                    vlm_filled.append(key)
+                elif current_conf < 0.90 and str(vlm_val) != str(current_val):
+                    # VLM is authoritative — any disagreement below 0.90 → use VLM
+                    extracted_data[key] = vlm_val
+                    field_conf[key] = 0.90
+                    vlm_corrected.append(key)
+                # Only keep existing if confidence >= 0.90 AND values agree
+
+            extracted_data["field_confidence"] = field_conf
+            extracted_data["_vlm_fallback"] = {
+                "filled": vlm_filled,
+                "corrected": vlm_corrected,
+            }
+
+            # Rebuild property_address from best available components
+            # VLM often corrects street/city/postal_code but property_address
+            # still holds the old regex value (e.g. OCR typo "Trenneberg" vs correct "Thenneberg")
+            best_street = extracted_data.get("street") or ""
+            best_unit = extracted_data.get("unit_number") or ""
+            best_postal = extracted_data.get("postal_code") or ""
+            best_city = extracted_data.get("city") or ""
+            if best_street:
+                addr_parts = [best_street]
+                if best_unit:
+                    addr_parts[0] = f"{best_street}/{best_unit}"
+                if best_postal or best_city:
+                    addr_parts.append(f"{best_postal} {best_city}".strip())
+                new_addr = ", ".join(addr_parts)
+                old_addr = extracted_data.get("property_address", "")
+                if new_addr != old_addr:
+                    extracted_data["property_address"] = new_addr
+                    field_conf["property_address"] = 0.85
+                    logger.info(
+                        "Rebuilt property_address: '%s' → '%s'", old_addr, new_addr,
+                    )
+
+            logger.info(
+                "VLM contract fallback done: filled %s, corrected %s",
+                vlm_filled, vlm_corrected,
+            )
+            return extracted_data
+
+        except Exception as e:
+            logger.warning("VLM contract fallback failed: %s", e)
+            extracted_data["_vlm_fallback"] = f"error: {e}"
+            return extracted_data
+
     def _route_to_contract_extractor(
         self, doc_type: DocumentType, raw_text: str, image_bytes: bytes, start_time: datetime
     ) -> OCRResult:
         """
-        Route Kaufvertrag and Mietvertrag documents to specialized extractors
+        Route Kaufvertrag and Mietvertrag documents to specialized extractors.
 
-        Args:
-            doc_type: Detected document type (KAUFVERTRAG or MIETVERTRAG)
-            raw_text: Extracted text from OCR
-            image_bytes: Original document bytes
-            start_time: Processing start time
-
-        Returns:
-            OCRResult with specialized extraction data
+        Pipeline (adaptive):
+          - Regex extracts what it can from OCR text
+          - If many fields missing (≥3): skip LLM text, go straight to VLM vision (faster)
+          - If few fields missing: LLM text supplement only (cheaper, usually sufficient)
+          - If LLM text leaves gaps: VLM vision fallback
         """
         try:
+            contract_type = "kaufvertrag" if doc_type == DocumentType.KAUFVERTRAG else "mietvertrag"
+
             if doc_type == DocumentType.KAUFVERTRAG:
+                from app.services.purchase_contract_intelligence import (
+                    PurchaseContractKind,
+                    detect_purchase_contract_kind,
+                    extract_asset_purchase_contract_fields,
+                )
+
+                contract_kind = detect_purchase_contract_kind(
+                    raw_text,
+                    classifier=self.classifier,
+                )
+                if contract_kind == PurchaseContractKind.ASSET:
+                    extracted_data = extract_asset_purchase_contract_fields(
+                        raw_text,
+                        classifier=self.classifier,
+                    )
+                    conf = float(extracted_data.get("confidence") or 0.0)
+                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                    return OCRResult(
+                        document_type=doc_type,
+                        extracted_data=extracted_data,
+                        raw_text=raw_text,
+                        confidence_score=conf,
+                        needs_review=conf < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                        processing_time_ms=processing_time,
+                        suggestions=self._generate_contract_suggestions(conf),
+                    )
+
                 from app.services.kaufvertrag_ocr_service import KaufvertragOCRService
 
                 service = KaufvertragOCRService()
                 result = service.process_kaufvertrag_from_text(raw_text)
-
-                processing_time = (datetime.now() - start_time).total_seconds() * 1000
-
-                # Use the extractor's to_dict method
                 extracted_data = service.extractor.to_dict(result.kaufvertrag_data)
-
-                return OCRResult(
-                    document_type=doc_type,
-                    extracted_data=extracted_data,
-                    raw_text=raw_text,
-                    confidence_score=result.overall_confidence,
-                    needs_review=result.overall_confidence < self.config.CONFIDENCE_THRESHOLD,
-                    processing_time_ms=processing_time,
-                    suggestions=self._generate_contract_suggestions(result.overall_confidence),
-                )
-
-            elif doc_type == DocumentType.MIETVERTRAG:
+                extracted_data["purchase_contract_kind"] = PurchaseContractKind.PROPERTY.value
+            else:
                 from app.services.mietvertrag_ocr_service import MietvertragOCRService
 
                 service = MietvertragOCRService()
                 result = service.process_mietvertrag_from_text(raw_text)
-
-                processing_time = (datetime.now() - start_time).total_seconds() * 1000
-
-                # Use the extractor's to_dict method
                 extracted_data = service.extractor.to_dict(result.mietvertrag_data)
 
-                return OCRResult(
-                    document_type=doc_type,
-                    extracted_data=extracted_data,
-                    raw_text=raw_text,
-                    confidence_score=result.overall_confidence,
-                    needs_review=result.overall_confidence < self.config.CONFIDENCE_THRESHOLD,
-                    processing_time_ms=processing_time,
-                    suggestions=self._generate_contract_suggestions(result.overall_confidence),
+            # Count missing required fields after regex
+            required = (
+                self._KAUFVERTRAG_REQUIRED if contract_type == "kaufvertrag"
+                else self._MIETVERTRAG_REQUIRED
+            )
+            missing_after_regex = [f for f in required if not extracted_data.get(f)]
+
+            if len(missing_after_regex) >= 3:
+                # Many fields missing → OCR text is too garbled for LLM text extraction
+                # Skip LLM supplement, go straight to VLM vision (reads actual images)
+                logger.info(
+                    "Contract %s: %d required fields missing after regex %s — "
+                    "skipping LLM text, going straight to VLM vision",
+                    contract_type, len(missing_after_regex), missing_after_regex,
+                )
+                extracted_data["_llm_supplement"] = "skipped_for_vlm"
+                extracted_data = self._vlm_contract_fallback(
+                    image_bytes, contract_type, extracted_data,
+                )
+            else:
+                # Few fields missing → LLM text supplement is likely sufficient
+                extracted_data = self._llm_supplement_contract(
+                    extracted_data, raw_text, contract_type
                 )
 
-            else:
-                raise ValueError(f"Unsupported contract type: {doc_type}")
+                # Check if VLM fallback is still needed
+                conf = self._contract_confidence(extracted_data, contract_type)
+                logger.info(
+                    "Contract extraction after regex+LLM: conf=%.2f, threshold=%.2f, will_vlm=%s",
+                    conf, self._VLM_FALLBACK_THRESHOLD, conf < self._VLM_FALLBACK_THRESHOLD,
+                )
+
+                if conf < self._VLM_FALLBACK_THRESHOLD:
+                    logger.info(
+                        "Contract confidence %.2f < %.2f threshold, triggering VLM vision fallback",
+                        conf, self._VLM_FALLBACK_THRESHOLD,
+                    )
+                    extracted_data = self._vlm_contract_fallback(
+                        image_bytes, contract_type, extracted_data,
+                    )
+
+            # Final confidence calculation
+            conf = self._contract_confidence(extracted_data, contract_type)
+
+            # If confidence still < 0.9 after regex+LLM+VLM, try full LLM extraction
+            if conf < self.TAX_FORM_LLM_FALLBACK_THRESHOLD:
+                logger.info(
+                    "Contract %s final confidence %.2f < 0.9, attempting LLM tax form fallback",
+                    contract_type, conf,
+                )
+                llm_result = self._try_llm_tax_form_extraction(
+                    raw_text, doc_type, extracted_data, conf, start_time,
+                )
+                if llm_result is not None:
+                    return llm_result
+
+            # Sync confidence into extracted_data so DB value matches
+            extracted_data["confidence"] = conf
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+            return OCRResult(
+                document_type=doc_type,
+                extracted_data=extracted_data,
+                raw_text=raw_text,
+                confidence_score=conf,
+                needs_review=conf < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                processing_time_ms=processing_time,
+                suggestions=self._generate_contract_suggestions(conf),
+            )
 
         except Exception as e:
+            # On total failure, try LLM as last resort
+            llm_result = self._try_llm_tax_form_extraction(
+                raw_text, doc_type, {}, 0.0, start_time,
+            )
+            if llm_result is not None:
+                return llm_result
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
             return OCRResult(
                 document_type=doc_type,
@@ -664,18 +1314,199 @@ class OCREngine:
                 suggestions=[f"Contract extraction failed: {str(e)}"],
             )
 
+    # Tax form types that use the generic _route_to_tax_form_extractor
+    TAX_FORM_EXTRACTOR_TYPES = {
+        DocumentType.LOHNZETTEL,
+        DocumentType.L1_FORM,
+        DocumentType.L1K_BEILAGE,
+        DocumentType.L1AB_BEILAGE,
+        DocumentType.E1A_BEILAGE,
+        DocumentType.E1B_BEILAGE,
+        DocumentType.E1KV_BEILAGE,
+        DocumentType.U1_FORM,
+        DocumentType.U30_FORM,
+        DocumentType.JAHRESABSCHLUSS,
+        DocumentType.SVS_NOTICE,
+        DocumentType.PROPERTY_TAX,
+        DocumentType.BANK_STATEMENT,
+    }
+
+    # Confidence threshold for LLM fallback on tax forms — tax data must be accurate
+    TAX_FORM_LLM_FALLBACK_THRESHOLD = 0.9
+
+    def _route_to_tax_form_extractor(
+        self, doc_type: DocumentType, raw_text: str, start_time: datetime
+    ) -> OCRResult:
+        """
+        Generic router for all tax form extractors (L16, L1, E1a, E1b, etc.).
+
+        Each extractor follows the same interface: extract(text) -> XxxData with .confidence
+        and to_dict(data) -> dict.
+
+        If regex extraction confidence < 0.9, attempts LLM fallback for higher accuracy.
+        """
+        extractor_map = {
+            DocumentType.LOHNZETTEL: ("app.services.l16_extractor", "L16Extractor"),
+            DocumentType.L1_FORM: ("app.services.l1_form_extractor", "L1FormExtractor"),
+            DocumentType.L1K_BEILAGE: ("app.services.l1k_extractor", "L1kExtractor"),
+            DocumentType.L1AB_BEILAGE: ("app.services.l1ab_extractor", "L1abExtractor"),
+            DocumentType.E1A_BEILAGE: ("app.services.e1a_extractor", "E1aExtractor"),
+            DocumentType.E1B_BEILAGE: ("app.services.e1b_extractor", "E1bExtractor"),
+            DocumentType.E1KV_BEILAGE: ("app.services.e1kv_extractor", "E1kvExtractor"),
+            DocumentType.U1_FORM: ("app.services.vat_form_extractor", "VatFormExtractor"),
+            DocumentType.U30_FORM: ("app.services.vat_form_extractor", "VatFormExtractor"),
+            DocumentType.JAHRESABSCHLUSS: (
+                "app.services.jahresabschluss_extractor", "JahresabschlussExtractor"
+            ),
+            DocumentType.SVS_NOTICE: ("app.services.svs_extractor", "SvsExtractor"),
+            DocumentType.PROPERTY_TAX: (
+                "app.services.grundsteuer_extractor", "GrundsteuerExtractor"
+            ),
+            DocumentType.BANK_STATEMENT: (
+                "app.services.kontoauszug_extractor", "KontoauszugExtractor"
+            ),
+        }
+
+        try:
+            import importlib
+
+            module_path, class_name = extractor_map[doc_type]
+            module = importlib.import_module(module_path)
+            extractor_cls = getattr(module, class_name)
+            extractor = extractor_cls()
+
+            # U30 uses extract_u30 method
+            if doc_type == DocumentType.U30_FORM and hasattr(extractor, "extract_u30"):
+                data = extractor.extract_u30(raw_text)
+            else:
+                data = extractor.extract(raw_text)
+
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            extracted_data = extractor.to_dict(data)
+
+            # If regex confidence < 0.9, try LLM fallback for better accuracy
+            if data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD:
+                logger.info(
+                    "Tax form %s regex confidence %.2f < %.2f, attempting LLM fallback",
+                    doc_type.value, data.confidence, self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                )
+                llm_result = self._try_llm_tax_form_extraction(
+                    raw_text, doc_type, extracted_data, data.confidence, start_time
+                )
+                if llm_result is not None:
+                    return llm_result
+                logger.info(
+                    "LLM fallback unavailable/failed for %s, using regex result (%.2f)",
+                    doc_type.value, data.confidence,
+                )
+
+            return OCRResult(
+                document_type=doc_type,
+                extracted_data=extracted_data,
+                raw_text=raw_text,
+                confidence_score=data.confidence,
+                needs_review=data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                processing_time_ms=processing_time,
+                suggestions=self._generate_tax_document_suggestions(data.confidence),
+            )
+
+        except Exception as e:
+            logger.error(f"Tax form extraction failed for {doc_type.value}: {e}")
+            # On total failure, try LLM as last resort
+            llm_result = self._try_llm_tax_form_extraction(
+                raw_text, doc_type, {}, 0.0, start_time
+            )
+            if llm_result is not None:
+                return llm_result
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            return OCRResult(
+                document_type=doc_type,
+                extracted_data={},
+                raw_text=raw_text,
+                confidence_score=0.0,
+                needs_review=True,
+                processing_time_ms=processing_time,
+                suggestions=[f"{doc_type.value} extraction failed: {str(e)}"],
+            )
+
+    def _try_llm_tax_form_extraction(
+        self,
+        raw_text: str,
+        doc_type: DocumentType,
+        regex_data: dict,
+        regex_confidence: float,
+        start_time: datetime,
+    ) -> Optional[OCRResult]:
+        """
+        LLM fallback for tax form extraction when regex confidence < 0.9.
+
+        Sends the raw text + document type hint to the LLM and asks it to extract
+        structured KZ fields. Merges LLM result with regex result, preferring LLM
+        values for fields that regex missed (None/0).
+        """
+        if not self.llm_extractor.is_available:
+            return None
+
+        try:
+            logger.info(
+                "LLM fallback for tax form %s (regex confidence %.2f)",
+                doc_type.value, regex_confidence,
+            )
+
+            # Build a targeted prompt for the specific tax form type
+            llm_data = self.llm_extractor.extract(raw_text, doc_type)
+            if not llm_data or not isinstance(llm_data, dict):
+                return None
+
+            # Merge: LLM fills in gaps from regex, regex values kept if both present
+            merged = dict(regex_data)
+            llm_filled = 0
+            for k, v in llm_data.items():
+                if v is None:
+                    continue
+                existing = merged.get(k)
+                if existing is None or existing == 0 or existing == "":
+                    merged[k] = v
+                    llm_filled += 1
+
+            if llm_filled == 0:
+                logger.info("LLM did not fill any new fields for %s", doc_type.value)
+                return None
+
+            # Recalculate confidence: boost based on how many fields LLM filled
+            total_fields = len([v for v in merged.values() if v is not None and v != 0])
+            new_confidence = min(0.95, regex_confidence + llm_filled * 0.05)
+
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+            logger.info(
+                "LLM fallback for %s: filled %d fields, confidence %.2f → %.2f",
+                doc_type.value, llm_filled, regex_confidence, new_confidence,
+            )
+
+            merged["_extraction_method"] = "regex+llm"
+
+            return OCRResult(
+                document_type=doc_type,
+                extracted_data=merged,
+                raw_text=raw_text,
+                confidence_score=new_confidence,
+                needs_review=new_confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                processing_time_ms=processing_time,
+                suggestions=[
+                    f"AI-assisted extraction used (regex confidence was {regex_confidence:.0%})."
+                ],
+            )
+        except Exception as e:
+            logger.warning("LLM tax form fallback failed for %s: %s", doc_type.value, e)
+            return None
+
     def _route_to_bescheid_extractor(
         self, raw_text: str, start_time: datetime
     ) -> OCRResult:
         """
-        Route Einkommensteuerbescheid to specialized extractor
-
-        Args:
-            raw_text: Extracted text from OCR
-            start_time: Processing start time
-
-        Returns:
-            OCRResult with specialized extraction data
+        Route Einkommensteuerbescheid to specialized extractor.
+        Falls back to LLM if confidence < 0.9.
         """
         try:
             from app.services.bescheid_extractor import BescheidExtractor
@@ -686,17 +1517,36 @@ class OCREngine:
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
             extracted_data = extractor.to_dict(data)
 
+            # LLM fallback if confidence < 0.9
+            if data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD:
+                logger.info(
+                    "Bescheid regex confidence %.2f < 0.9, attempting LLM fallback",
+                    data.confidence,
+                )
+                llm_result = self._try_llm_tax_form_extraction(
+                    raw_text, DocumentType.EINKOMMENSTEUERBESCHEID,
+                    extracted_data, data.confidence, start_time,
+                )
+                if llm_result is not None:
+                    return llm_result
+
             return OCRResult(
                 document_type=DocumentType.EINKOMMENSTEUERBESCHEID,
                 extracted_data=extracted_data,
                 raw_text=raw_text,
                 confidence_score=data.confidence,
-                needs_review=data.confidence < self.config.CONFIDENCE_THRESHOLD,
+                needs_review=data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
                 processing_time_ms=processing_time,
                 suggestions=self._generate_tax_document_suggestions(data.confidence),
             )
 
         except Exception as e:
+            # On total failure, try LLM as last resort
+            llm_result = self._try_llm_tax_form_extraction(
+                raw_text, DocumentType.EINKOMMENSTEUERBESCHEID, {}, 0.0, start_time,
+            )
+            if llm_result is not None:
+                return llm_result
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
             return OCRResult(
                 document_type=DocumentType.EINKOMMENSTEUERBESCHEID,
@@ -728,7 +1578,7 @@ class OCREngine:
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
             # If regex confidence is high enough, return directly
-            if data.confidence >= self.config.CONFIDENCE_THRESHOLD:
+            if data.confidence >= self.TAX_FORM_LLM_FALLBACK_THRESHOLD:
                 logger.info(
                     "E1 regex extraction succeeded: confidence %.2f", data.confidence
                 )
@@ -755,15 +1605,28 @@ class OCREngine:
                     "E1 LLM validation supplemented %d fields, confidence %.2f -> %.2f",
                     len(llm_supplement), data.confidence, boosted,
                 )
-                return OCRResult(
-                    document_type=DocumentType.E1_FORM,
-                    extracted_data=extracted_data,
-                    raw_text=raw_text,
-                    confidence_score=boosted,
-                    needs_review=boosted < self.config.CONFIDENCE_THRESHOLD,
-                    processing_time_ms=processing_time,
-                    suggestions=["AI validation used to supplement extraction."],
-                )
+                if boosted >= self.TAX_FORM_LLM_FALLBACK_THRESHOLD:
+                    return OCRResult(
+                        document_type=DocumentType.E1_FORM,
+                        extracted_data=extracted_data,
+                        raw_text=raw_text,
+                        confidence_score=boosted,
+                        needs_review=False,
+                        processing_time_ms=processing_time,
+                        suggestions=["AI validation used to supplement extraction."],
+                    )
+                # Boosted but still < 0.9 — fall through to full LLM extraction
+
+            # Still below threshold — try full LLM tax form extraction
+            logger.info(
+                "E1 confidence still < 0.9 after validation, attempting full LLM fallback",
+            )
+            llm_result = self._try_llm_tax_form_extraction(
+                raw_text, DocumentType.E1_FORM, extracted_data,
+                data.confidence, start_time,
+            )
+            if llm_result is not None:
+                return llm_result
 
             # LLM unavailable or didn't help — return regex result as-is
             return OCRResult(
@@ -771,12 +1634,18 @@ class OCREngine:
                 extracted_data=extracted_data,
                 raw_text=raw_text,
                 confidence_score=data.confidence,
-                needs_review=data.confidence < self.config.CONFIDENCE_THRESHOLD,
+                needs_review=data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
                 processing_time_ms=processing_time,
                 suggestions=self._generate_tax_document_suggestions(data.confidence),
             )
 
         except Exception as e:
+            # On total failure, try LLM as last resort
+            llm_result = self._try_llm_tax_form_extraction(
+                raw_text, DocumentType.E1_FORM, {}, 0.0, start_time,
+            )
+            if llm_result is not None:
+                return llm_result
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
             return OCRResult(
                 document_type=DocumentType.E1_FORM,
@@ -912,6 +1781,334 @@ class OCREngine:
 
         return suggestions
 
+    # ---- LLM supplement for contracts ----
+
+    # Required fields per contract type — if ALL present with high confidence, skip LLM
+    _KAUFVERTRAG_REQUIRED = [
+        "property_address", "purchase_price", "purchase_date",
+        "building_value", "land_value", "grunderwerbsteuer",
+        "notary_fees", "registry_fees", "construction_year",
+        "buyer_name", "seller_name",
+    ]
+    _MIETVERTRAG_REQUIRED = [
+        "property_address", "monthly_rent", "start_date", "end_date",
+        "tenant_name", "landlord_name", "deposit_amount",
+        "betriebskosten",
+    ]
+
+    _CONTRACT_SUPPLEMENT_PROMPT = """You are an Austrian tax document extraction assistant.
+You are given OCR text from a {contract_type_de} and a set of fields already extracted by regex.
+Your job:
+1. For each field marked null/missing, extract the correct value from the text.
+2. For each field already extracted, verify it is correct. If you find a discrepancy, return the corrected value.
+3. Return ONLY a JSON object with the fields. Use null for fields you cannot find.
+
+IMPORTANT RULES:
+- Dates must be in YYYY-MM-DD format
+- Amounts must be plain numbers (no currency symbols, no thousand separators)
+- For purchase_date: this is the contract signing date, NOT dates referencing other documents
+- For construction_year: look for Baujahr, Errichtungsjahr, erbaut, or similar
+- For notary_fees: look for Notarkosten, Vertragserrichtungskosten, Honorar
+- For registry_fees: look for Eintragungsgebühr, Grundbuchgebühr
+- For deposit_amount: look for Kaution, Sicherheitsleistung
+- For betriebskosten: look for Betriebskosten, BK, Nebenkosten
+
+CRITICAL ADDRESS RULES:
+- property_address MUST be a real street address (e.g. "Angeligasse 86, 1100 Wien"), NOT a cadastral/land registry number
+- GST-NR like "816/129" or "GST-Fläche 615" are cadastral parcel numbers — NEVER use these as property_address
+- Look for GST-ADRESSE entries in the Grundbuch section — these contain actual street names
+- Look for addresses after "Bauf. (20)" entries — these are building addresses
+- Combine street + postal code + city from the Grundbuch or contract text
+- If the buyer or seller address in the contract matches the property district, that may be the property address
+- The Katastralgemeinde name and Bezirksgericht help identify the district/city
+
+Return ONLY valid JSON, no markdown, no explanation."""
+
+    _KAUFVERTRAG_FIELDS_PROMPT = """Extract/verify these fields from the Kaufvertrag:
+{{
+  "property_address": "full STREET address with postal code and city (e.g. 'Angeligasse 86, 1100 Wien'). NEVER use cadastral numbers like '816/129' or 'GST-Fläche'. Look for GST-ADRESSE or Bauf.(20) entries in the Grundbuch section for the actual street name.",
+  "street": "street name and house number (e.g. 'Angeligasse 86')",
+  "city": "city name",
+  "postal_code": "PLZ (4-digit Austrian postal code)",
+  "purchase_price": total purchase price as number,
+  "purchase_date": "YYYY-MM-DD contract signing date",
+  "building_value": building value as number (Gebäudewert),
+  "land_value": land value as number (Grundwert),
+  "grunderwerbsteuer": property transfer tax as number (3.5% of price),
+  "notary_fees": notary fees as number,
+  "registry_fees": land registry fee as number (Eintragungsgebühr, 1.1% of price),
+  "buyer_name": "buyer full name",
+  "seller_name": "seller full name",
+  "construction_year": year as integer,
+  "property_type": "Wohnung/Haus/Grundstück",
+  "notary_name": "notary full name",
+  "notary_location": "notary city"
+}}
+
+Already extracted by regex (verify these):
+{existing_json}
+
+OCR text:
+{raw_text}"""
+
+    _MIETVERTRAG_FIELDS_PROMPT = """Extract/verify these fields from the Mietvertrag:
+{{
+  "property_address": "full address",
+  "street": "street name and number",
+  "city": "city name",
+  "postal_code": "PLZ",
+  "monthly_rent": net monthly rent as number (Hauptmietzins),
+  "start_date": "YYYY-MM-DD lease start date",
+  "end_date": "YYYY-MM-DD lease end date or null if unbefristet",
+  "betriebskosten": monthly operating costs as number,
+  "heating_costs": monthly heating costs as number,
+  "deposit_amount": security deposit as number (Kaution),
+  "tenant_name": "tenant full name (Mieter)",
+  "landlord_name": "landlord full name (Vermieter)",
+  "contract_type": "Befristet/Unbefristet"
+}}
+
+Already extracted by regex (verify these):
+{existing_json}
+
+OCR text:
+{raw_text}"""
+
+    def _llm_supplement_contract(
+        self, extracted_data: dict, raw_text: str, contract_type: str,
+    ) -> dict:
+        """
+        Use LLM to fill missing fields and validate existing ones.
+
+        Skip LLM if all required fields are present and average field confidence >= 0.90.
+        """
+        required = (
+            self._KAUFVERTRAG_REQUIRED if contract_type == "kaufvertrag"
+            else self._MIETVERTRAG_REQUIRED
+        )
+
+        # Check if all required fields are present (non-null)
+        field_conf = extracted_data.get("field_confidence", {})
+        missing = [f for f in required if not extracted_data.get(f)]
+
+        # Detect cadastral numbers mistakenly used as property_address
+        # GST-NR patterns: "816/129", "GST-Fläche 615", pure numbers with slashes
+        import re as _re
+        current_addr = extracted_data.get("property_address") or ""
+        if current_addr and _re.match(
+            r"^[\d/]+\s*(?:GST|Fläche|Flache|EZ|KG|BG)|\d{2,}/\d{1,}",
+            current_addr, _re.IGNORECASE,
+        ):
+            logger.info(
+                "Cadastral number detected as property_address: '%s' — lowering confidence",
+                current_addr,
+            )
+            field_conf["property_address"] = 0.30  # Force LLM to correct
+
+        avg_conf = (
+            sum(field_conf.values()) / len(field_conf) if field_conf else 0.0
+        )
+
+        if not missing and avg_conf >= 0.90:
+            logger.info(
+                "Contract LLM supplement skipped: all %d required fields present, "
+                "avg confidence %.2f",
+                len(required), avg_conf,
+            )
+            extracted_data["_llm_supplement"] = "skipped"
+            return extracted_data
+
+        logger.info(
+            "Contract LLM supplement: %d missing fields %s, avg confidence %.2f",
+            len(missing), missing, avg_conf,
+        )
+
+        try:
+            from app.services.llm_service import LLMService
+            import json as _json
+
+            llm = LLMService()
+
+            # Build existing fields JSON (only non-null, non-meta fields)
+            skip_keys = {"field_confidence", "confidence", "_llm_supplement"}
+            existing = {
+                k: v for k, v in extracted_data.items()
+                if k not in skip_keys and v is not None
+            }
+            existing_json = _json.dumps(existing, ensure_ascii=False, indent=2)
+
+            # Truncate raw_text to ~6000 chars to stay within token limits
+            text_for_llm = raw_text[:6000] if len(raw_text) > 6000 else raw_text
+
+            contract_type_de = "Kaufvertrag" if contract_type == "kaufvertrag" else "Mietvertrag"
+            system_prompt = self._CONTRACT_SUPPLEMENT_PROMPT.format(
+                contract_type_de=contract_type_de
+            )
+
+            if contract_type == "kaufvertrag":
+                user_prompt = self._KAUFVERTRAG_FIELDS_PROMPT.format(
+                    existing_json=existing_json, raw_text=text_for_llm,
+                )
+            else:
+                user_prompt = self._MIETVERTRAG_FIELDS_PROMPT.format(
+                    existing_json=existing_json, raw_text=text_for_llm,
+                )
+
+            response = llm.generate_simple(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.0,
+                max_tokens=2000,
+            )
+
+            # Parse LLM response
+            llm_data = self._parse_llm_contract_response(response)
+            if not llm_data:
+                logger.warning("Contract LLM supplement: failed to parse response")
+                extracted_data["_llm_supplement"] = "parse_failed"
+                return extracted_data
+
+            # Fields that must stay as strings
+            _str_fields = {
+                "postal_code", "street", "city", "property_address",
+                "tenant_name", "landlord_name", "buyer_name", "seller_name",
+                "notary_name", "notary_location", "contract_type", "unit_number",
+                "start_date", "end_date", "purchase_date",
+            }
+
+            # Merge: LLM fills missing fields, corrects low-confidence fields
+            filled = []
+            corrected = []
+            for key, llm_val in llm_data.items():
+                if llm_val is None:
+                    continue
+                # Ensure string fields stay as strings (e.g. postal_code: 2571.0 → "2571")
+                if key in _str_fields and not isinstance(llm_val, str):
+                    llm_val = str(llm_val)
+                    if llm_val.endswith(".0"):
+                        llm_val = llm_val[:-2]
+
+                current_val = extracted_data.get(key)
+                current_conf = field_conf.get(key, 0.0)
+
+                if current_val is None:
+                    # Fill missing field
+                    extracted_data[key] = llm_val
+                    field_conf[key] = 0.80  # LLM-sourced confidence
+                    filled.append(key)
+                elif current_conf < 0.70 and str(llm_val) != str(current_val):
+                    # Low-confidence field disagrees with LLM → use LLM
+                    extracted_data[key] = llm_val
+                    field_conf[key] = 0.80
+                    corrected.append(key)
+                # High-confidence regex field agrees or LLM agrees → keep regex
+
+            extracted_data["field_confidence"] = field_conf
+            extracted_data["_llm_supplement"] = {
+                "filled": filled,
+                "corrected": corrected,
+                "missing_before": missing,
+            }
+
+            logger.info(
+                "Contract LLM supplement done: filled %s, corrected %s",
+                filled, corrected,
+            )
+            return extracted_data
+
+        except Exception as e:
+            logger.warning("Contract LLM supplement failed: %s", e)
+            extracted_data["_llm_supplement"] = f"error: {e}"
+            return extracted_data
+
+    @staticmethod
+    def _parse_llm_contract_response(response: str) -> Optional[dict]:
+        """Parse LLM JSON response for contract fields."""
+        import json as _json
+
+        text = response.strip()
+        # Strip markdown code fences
+        if text.startswith("```"):
+            lines = text.split("\n")
+            lines = [l for l in lines if not l.strip().startswith("```")]
+            text = "\n".join(lines)
+
+        # Find JSON object
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1:
+            return None
+
+        # Fields that must stay as strings even if they look numeric
+        _STRING_FIELDS = {
+            "postal_code", "street", "city", "property_address",
+            "tenant_name", "landlord_name", "buyer_name", "seller_name",
+            "notary_name", "notary_location", "contract_type", "unit_number",
+            "start_date", "end_date", "purchase_date",
+        }
+
+        try:
+            data = _json.loads(text[start:end + 1])
+            # Normalize numeric strings to float (skip string-only fields)
+            for key in list(data.keys()):
+                if key in _STRING_FIELDS:
+                    # Ensure string fields stay as strings
+                    if data[key] is not None and not isinstance(data[key], str):
+                        data[key] = str(data[key])
+                        # Strip trailing .0 from int-like floats (e.g. 2571.0 → "2571")
+                        if isinstance(data[key], str) and data[key].endswith(".0"):
+                            data[key] = data[key][:-2]
+                    continue
+                val = data[key]
+                if isinstance(val, str):
+                    # Try to parse as number if it looks numeric
+                    cleaned = val.replace(",", ".").replace(" ", "")
+                    try:
+                        data[key] = float(cleaned)
+                    except ValueError:
+                        pass
+            return data
+        except _json.JSONDecodeError:
+            return None
+
+    @staticmethod
+    def _contract_confidence(extracted_data: dict, contract_type: str) -> float:
+        """Recalculate confidence after LLM supplement based on field completeness."""
+        if contract_type == "kaufvertrag":
+            critical = ["property_address", "purchase_price", "purchase_date"]
+            important = [
+                "building_value", "land_value", "grunderwerbsteuer",
+                "buyer_name", "seller_name", "construction_year",
+            ]
+        else:
+            critical = ["property_address", "monthly_rent", "start_date"]
+            important = [
+                "tenant_name", "landlord_name", "betriebskosten",
+                "deposit_amount", "end_date",
+            ]
+
+        field_conf = extracted_data.get("field_confidence", {})
+
+        # Critical fields: each missing one costs 0.20
+        critical_score = 1.0
+        for f in critical:
+            if not extracted_data.get(f):
+                critical_score -= 0.20
+
+        # Important fields: each missing one costs 0.05
+        important_present = sum(1 for f in important if extracted_data.get(f))
+        important_missing = len(important) - important_present
+        important_penalty = important_missing * 0.05
+
+        # Average field confidence
+        avg_conf = (
+            sum(field_conf.values()) / len(field_conf) if field_conf else 0.5
+        )
+
+        score = (critical_score * 0.5) + (avg_conf * 0.3) - important_penalty + (important_present * 0.02)
+        return round(min(1.0, max(0.0, score)), 2)
+
+
     def _load_image(self, image_bytes: bytes) -> np.ndarray:
         """Load image from bytes, with PDF support via PyMuPDF"""
         # Check if the bytes are a PDF (starts with %PDF)
@@ -1031,15 +2228,8 @@ class OCREngine:
         """
         OCR all pages of a scanned PDF for better text extraction.
 
-        Renders each page at 300 DPI, preprocesses, and runs Tesseract.
+        Renders each page at 150 DPI (good balance: readable + fast).
         Concatenates text from all pages.
-
-        Args:
-            pdf_bytes: Raw PDF bytes
-            max_pages: Maximum number of pages to OCR (default 5)
-
-        Returns:
-            Combined OCR text from all pages
         """
         import fitz
 
@@ -1047,11 +2237,11 @@ class OCREngine:
         num_pages = min(len(doc), max_pages)
         all_text = []
 
-        logger.info("OCR scanning %d pages of scanned PDF at 300 DPI", num_pages)
+        logger.info("OCR scanning %d pages of scanned PDF at 150 DPI", num_pages)
 
         for i in range(num_pages):
             page = doc[i]
-            mat = fitz.Matrix(300 / 72, 300 / 72)  # 300 DPI
+            mat = fitz.Matrix(150 / 72, 150 / 72)  # 150 DPI (was 300 — 4x faster)
             pix = page.get_pixmap(matrix=mat)
             img_bytes = pix.tobytes("png")
 
@@ -1068,7 +2258,6 @@ class OCREngine:
                     processed, config=self.config.TESSERACT_CONFIG
                 )
                 if page_text and page_text.strip():
-                    # Add page markers for multi-receipt splitting
                     all_text.append(f"--- PAGE {i + 1} ---\n{page_text.strip()}")
             except Exception as e:
                 logger.warning("Tesseract failed on page %d: %s", i + 1, e)

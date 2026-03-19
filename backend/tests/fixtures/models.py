@@ -10,7 +10,12 @@ from typing import Optional
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models.user import User, UserType
+from app.models.user import (
+    Gewinnermittlungsart,
+    User,
+    UserType,
+    VatStatus,
+)
 from app.models.property import Property, PropertyType, PropertyStatus
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.document import Document, DocumentType
@@ -36,6 +41,10 @@ def create_test_user(
     Returns:
         Created and committed User instance
     """
+    if user_type in {UserType.SELF_EMPLOYED, UserType.MIXED, UserType.GMBH}:
+        kwargs.setdefault("vat_status", VatStatus.REGELBESTEUERT)
+        kwargs.setdefault("gewinnermittlungsart", Gewinnermittlungsart.EA_RECHNUNG)
+
     user = User(
         email=email,
         name=name,

@@ -1,13 +1,16 @@
 """Historical data import API endpoints"""
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
-from uuid import UUID
+from hashlib import sha256
+from uuid import UUID, uuid4
 import logging
+from pathlib import Path
 
 from app.db.base import get_db
 from app.models.user import User
+from app.models.document import Document, DocumentType
 from app.models.historical_import import (
     HistoricalImportSession,
     HistoricalImportUpload,
@@ -15,7 +18,14 @@ from app.models.historical_import import (
     ImportStatus,
     ImportSessionStatus,
 )
+from app.core.transaction_enum_coercion import (
+    coerce_expense_category,
+    coerce_income_category,
+    coerce_transaction_type,
+)
 from app.core.security import get_current_user
+from app.schemas.historical_import import HistoricalImportReviewRequest
+from app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +39,13 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+HISTORICAL_TO_DOCUMENT_TYPE = {
+    HistoricalDocumentType.E1_FORM: DocumentType.E1_FORM,
+    HistoricalDocumentType.BESCHEID: DocumentType.EINKOMMENSTEUERBESCHEID,
+    HistoricalDocumentType.KAUFVERTRAG: DocumentType.PURCHASE_CONTRACT,
+    HistoricalDocumentType.SALDENLISTE: DocumentType.OTHER,
+}
 
 
 def validate_historical_file(file: UploadFile, document_type: str) -> None:
@@ -51,9 +68,9 @@ def validate_historical_file(file: UploadFile, document_type: str) -> None:
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_historical_document(
     file: UploadFile = File(...),
-    document_type: str = None,
-    tax_year: int = None,
-    session_id: Optional[str] = None,
+    document_type: Optional[str] = Form(None),
+    tax_year: Optional[int] = Form(None),
+    session_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -151,12 +168,35 @@ async def upload_historical_document(
                 detail=f"Invalid session_id format: {session_id}",
             )
     
-    # TODO: Upload file to storage (will be implemented with StorageService integration)
-    # For now, we'll create a placeholder document record
-    
-    # TODO: Create Document record (will be integrated with existing Document model)
-    # Placeholder document_id for now
-    document_id = 1
+    # Store the uploaded file and create a backing document record so the
+    # asynchronous OCR/import task can operate on a real persisted document.
+    safe_file_name = Path(file.filename or f"{doc_type.value}.bin").name
+    storage_path = (
+        f"historical-import/{current_user.id}/"
+        f"{datetime.utcnow().strftime('%Y/%m/%d')}/"
+        f"{uuid4()}-{safe_file_name}"
+    )
+    file_hash = sha256(file_content).hexdigest()
+
+    storage = StorageService()
+    if not storage.upload_file(file_content, storage_path, file.content_type):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to store uploaded file for historical import",
+        )
+
+    document = Document(
+        user_id=current_user.id,
+        document_type=HISTORICAL_TO_DOCUMENT_TYPE[doc_type],
+        file_path=storage_path,
+        file_name=safe_file_name,
+        file_hash=file_hash,
+        file_size=file_size,
+        mime_type=file.content_type,
+    )
+    db.add(document)
+    db.flush()
+    document_id = document.id
     
     # Create HistoricalImportUpload record
     upload = HistoricalImportUpload(
@@ -454,9 +494,7 @@ def get_session_status(
 @router.post("/review/{upload_id}")
 def review_upload(
     upload_id: str,
-    approved: bool,
-    edited_data: Optional[dict] = None,
-    notes: Optional[str] = None,
+    review: HistoricalImportReviewRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -506,15 +544,15 @@ def review_upload(
         )
     
     # Store edited data if provided
-    if edited_data:
-        upload.edited_data = edited_data
+    if review.edited_data:
+        upload.edited_data = review.edited_data
     
     # Store review metadata
     upload.reviewed_at = datetime.utcnow()
     upload.reviewed_by = current_user.id
-    upload.approval_notes = notes
+    upload.approval_notes = review.notes
     
-    if approved:
+    if review.approved:
         upload.status = ImportStatus.APPROVED
 
         # Finalize import — create transactions from extracted/edited data
@@ -536,9 +574,12 @@ def review_upload(
                 if amount is None:
                     continue
 
-                txn_type_str = item.get("type", item.get("transaction_type", "expense"))
                 txn_type = (
-                    TransactionType.INCOME if txn_type_str == "income" else TransactionType.EXPENSE
+                    coerce_transaction_type(
+                        item.get("type", item.get("transaction_type", "expense")),
+                        default=TransactionType.EXPENSE,
+                    )
+                    or TransactionType.EXPENSE
                 )
 
                 # Parse date
@@ -556,15 +597,15 @@ def review_upload(
                 expense_cat = None
                 cat_str = item.get("category", "")
                 if txn_type == TransactionType.INCOME:
-                    try:
-                        income_cat = IncomeCategory(cat_str)
-                    except ValueError:
-                        income_cat = IncomeCategory.OTHER_INCOME if hasattr(IncomeCategory, "OTHER_INCOME") else None
+                    income_cat = coerce_income_category(
+                        cat_str,
+                        default=IncomeCategory.OTHER_INCOME if hasattr(IncomeCategory, "OTHER_INCOME") else None,
+                    )
                 else:
-                    try:
-                        expense_cat = ExpenseCategory(cat_str)
-                    except ValueError:
-                        expense_cat = ExpenseCategory.OTHER if hasattr(ExpenseCategory, "OTHER") else None
+                    expense_cat = coerce_expense_category(
+                        cat_str,
+                        default=ExpenseCategory.OTHER if hasattr(ExpenseCategory, "OTHER") else None,
+                    )
 
                 txn = Transaction(
                     user_id=current_user.id,

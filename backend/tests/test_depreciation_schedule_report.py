@@ -159,12 +159,21 @@ class TestDepreciationScheduleReport:
     def test_depreciation_stops_at_building_value(self, db, active_property):
         """Test that future projections stop when building value is fully depreciated"""
         report_service = PropertyReportService(db)
-        
-        # Request 50 years of projections (more than needed to fully depreciate)
+
+        effective_rate = report_service.afa_calculator.determine_depreciation_rate(
+            construction_year=active_property.construction_year,
+            is_commercial=False,
+        )
+        annual_depreciation = float(
+            active_property.building_value * effective_rate
+        )
+        years_needed = int((240000.00 / annual_depreciation)) + 5
+
+        # Request enough future years to ensure the property can fully depreciate
         result = report_service.generate_depreciation_schedule(
             str(active_property.id),
             include_future=True,
-            future_years=50
+            future_years=years_needed
         )
         
         schedule = result["schedule"]
@@ -223,7 +232,13 @@ class TestDepreciationScheduleReport:
         if len(future_entries) > 1:
             # All future full-year entries should have same annual depreciation
             # (until approaching building value limit)
-            expected_annual = 240000.00 * 0.02  # building_value * rate
+            expected_annual = float(
+                active_property.building_value
+                * report_service.afa_calculator.determine_depreciation_rate(
+                    construction_year=active_property.construction_year,
+                    is_commercial=False,
+                )
+            )
             
             for entry in future_entries[:-1]:  # Exclude last entry (might be partial)
                 # Allow small rounding differences
@@ -334,7 +349,11 @@ class TestDepreciationScheduleReport:
         )
         
         # Verify depreciation is calculated on 50% of building value
-        expected_annual = 320000.00 * 0.50 * 0.02  # building_value * rental_pct * rate
+        effective_rate = report_service.afa_calculator.determine_depreciation_rate(
+            construction_year=property.construction_year,
+            is_commercial=False,
+        )
+        expected_annual = 320000.00 * 0.50 * float(effective_rate)
         
         future_entries = [e for e in result["schedule"] if e["is_projected"]]
         if future_entries:

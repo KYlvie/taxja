@@ -5,6 +5,8 @@ import { MessageCircle } from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { aiService } from '../../services/aiService';
 import { OCRReviewData, ExtractedData, DocumentType } from '../../types/document';
+import { useRefreshStore } from '../../stores/refreshStore';
+import AIResponse from '../ai/AIResponse';
 import BescheidImport from './BescheidImport';
 import './OCRReview.css';
 
@@ -99,6 +101,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       
       await documentService.correctOCR(documentId, dataToSend);
 
+      // Refresh recurring & properties in case sync updated them
+      useRefreshStore.getState().refreshRecurring();
+      useRefreshStore.getState().refreshProperties();
+      useRefreshStore.getState().refreshTransactions();
+
       if (onConfirm) {
         onConfirm();
       } else {
@@ -186,6 +193,23 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   }
 
   const { document, extracted_data, suggestions } = reviewData;
+  const purchaseContractKind = String(
+    editedData.purchase_contract_kind
+      || extracted_data.purchase_contract_kind
+      || document.ocr_result?.purchase_contract_kind
+      || ''
+  ).toLowerCase();
+  const isPurchaseContract =
+    selectedDocType === 'purchase_contract' || selectedDocType === 'kaufvertrag';
+  const isAssetPurchaseContract = isPurchaseContract && purchaseContractKind === 'asset';
+  const isPropertyPurchaseContract = isPurchaseContract && !isAssetPurchaseContract;
+
+  const getDocumentTypeLabel = (type: string) => {
+    if (type === 'purchase_contract' && isAssetPurchaseContract && selectedDocType === type) {
+      return t('documents.review.assetPurchaseContract', '资产购置合同');
+    }
+    return t(`documents.types.${type}`);
+  };
 
   return (
     <div className="ocr-review">
@@ -232,7 +256,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         {aiExplanation && (
           <div className="ai-explanation">
             <h4>{t('ai.explanation')}</h4>
-            <p>{aiExplanation}</p>
+            <AIResponse content={aiExplanation} />
           </div>
         )}
       </div>
@@ -263,11 +287,17 @@ const OCRReview: React.FC<OCRReviewProps> = ({
             >
               {Object.values(DocumentType).filter(v => v !== 'unknown').map((type) => (
                 <option key={type} value={type}>
-                  {t(`documents.types.${type}`)}
+                  {getDocumentTypeLabel(type)}
                 </option>
               ))}
             </select>
           </div>
+
+          {isAssetPurchaseContract && (
+            <div className="review-warning">
+              {t('documents.review.assetPurchaseContractHint', '这份文件已识别为资产购置合同，将按资产信息而不是房产信息进行确认。')}
+            </div>
+          )}
 
           <div className="form-group">
             <label>{t('documents.review.transactionType')}</label>
@@ -450,7 +480,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           )}
 
           {/* Kaufvertrag (purchase contract) specific fields */}
-          {(selectedDocType === 'purchase_contract' || selectedDocType === 'kaufvertrag') && (
+          {isPropertyPurchaseContract && (
             <>
               <div className="form-group">
                 <label>{t('documents.review.fields.propertyAddress')}</label>
@@ -495,6 +525,111 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               <div className="form-group">
                 <label>{t('documents.review.fields.registryFees')}</label>
                 <input type="number" step="0.01" value={editedData.registry_fees ?? ''} onChange={(e) => handleFieldChange('registry_fees', parseFloat(e.target.value) || null)} />
+              </div>
+            </>
+          )}
+
+          {isAssetPurchaseContract && (
+            <>
+              <div className="form-group">
+                <label>{t('documents.review.fields.assetName', '资产名称')}</label>
+                <input
+                  type="text"
+                  value={editedData.asset_name || ''}
+                  onChange={(e) => handleFieldChange('asset_name', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.assetType', '资产类型')}</label>
+                <input
+                  type="text"
+                  value={editedData.asset_type || ''}
+                  onChange={(e) => handleFieldChange('asset_type', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.purchasePrice')}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editedData.purchase_price ?? ''}
+                  onChange={(e) => handleFieldChange('purchase_price', parseFloat(e.target.value) || null)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.purchaseDate')}</label>
+                <input
+                  type="date"
+                  value={editedData.purchase_date ? String(editedData.purchase_date).substring(0, 10) : ''}
+                  onChange={(e) => handleFieldChange('purchase_date', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.buyerName')}</label>
+                <input type="text" value={editedData.buyer_name || ''} onChange={(e) => handleFieldChange('buyer_name', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.sellerName')}</label>
+                <input type="text" value={editedData.seller_name || ''} onChange={(e) => handleFieldChange('seller_name', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.firstRegistrationDate', '首次登记日期')}</label>
+                <input
+                  type="date"
+                  value={editedData.first_registration_date ? String(editedData.first_registration_date).substring(0, 10) : ''}
+                  onChange={(e) => handleFieldChange('first_registration_date', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.vehicleIdentificationNumber', '车架号 / VIN')}</label>
+                <input
+                  type="text"
+                  value={editedData.vehicle_identification_number || ''}
+                  onChange={(e) => handleFieldChange('vehicle_identification_number', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.licensePlate', '车牌')}</label>
+                <input
+                  type="text"
+                  value={editedData.license_plate || ''}
+                  onChange={(e) => handleFieldChange('license_plate', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.mileageKm', '公里数')}</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={editedData.mileage_km ?? ''}
+                  onChange={(e) => handleFieldChange('mileage_km', parseFloat(e.target.value) || null)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.previousOwners', '前任车主数')}</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={editedData.previous_owners ?? ''}
+                  onChange={(e) => handleFieldChange('previous_owners', parseFloat(e.target.value) || null)}
+                />
+              </div>
+              <div className="form-group">
+                <label>{t('documents.review.fields.isUsedAsset', '是否二手资产')}</label>
+                <select
+                  value={editedData.is_used_asset === true ? 'yes' : editedData.is_used_asset === false ? 'no' : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleFieldChange(
+                      'is_used_asset',
+                      value === 'yes' ? true : value === 'no' ? false : null
+                    );
+                  }}
+                >
+                  <option value="">{t('common.pleaseSelect', '请选择')}</option>
+                  <option value="yes">{t('common.yes', '是')}</option>
+                  <option value="no">{t('common.no', '否')}</option>
+                </select>
               </div>
             </>
           )}

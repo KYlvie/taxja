@@ -23,6 +23,7 @@ from app.models.historical_import import (
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User, UserType
 from app.models.property import Property, PropertyType
+from app.models.document import Document, DocumentType
 from app.services.historical_import_orchestrator import HistoricalImportOrchestrator
 
 
@@ -47,6 +48,7 @@ def test_property(db_session, test_user):
     prop = Property(
         user_id=test_user.id,
         property_type=PropertyType.RENTAL,
+        address="Teststrasse 1, 1010 Wien",
         street="Teststrasse 1",
         city="Wien",
         postal_code="1010",
@@ -67,14 +69,40 @@ def orchestrator(db_session):
     return HistoricalImportOrchestrator(db_session)
 
 
+def _create_document(
+    db_session,
+    *,
+    user_id: int,
+    document_type: DocumentType,
+    file_name: str,
+) -> Document:
+    document = Document(
+        user_id=user_id,
+        document_type=document_type,
+        file_path=f"historical-import/{file_name}",
+        file_name=file_name,
+    )
+    db_session.add(document)
+    db_session.commit()
+    db_session.refresh(document)
+    return document
+
+
 class TestFinalizeE1Form:
     """Tests for E1 form finalization"""
 
     def test_finalize_with_extracted_data(self, orchestrator, test_user, db_session):
         """Test finalization using extracted_data (no edits)"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-extracted.pdf",
+        )
         # Create upload with extracted data
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -144,6 +172,12 @@ class TestFinalizeE1Form:
 
     def test_finalize_with_edited_data(self, orchestrator, test_user, db_session):
         """Test finalization using edited_data (user corrections)"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-edited.pdf",
+        )
         # Create initial transactions (simulating initial extraction)
         initial_txn = Transaction(
             user_id=test_user.id,
@@ -156,10 +190,12 @@ class TestFinalizeE1Form:
         )
         db_session.add(initial_txn)
         db_session.commit()
+        initial_txn_id = initial_txn.id
 
         # Create upload with both extracted and edited data
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -192,7 +228,7 @@ class TestFinalizeE1Form:
 
         # Verify old transaction is gone
         old_txn = db_session.query(Transaction).filter(
-            Transaction.id == initial_txn.id
+            Transaction.id == initial_txn_id
         ).first()
         assert old_txn is None
 
@@ -223,9 +259,16 @@ class TestFinalizeE1Form:
 
     def test_finalize_with_property_linking(self, orchestrator, test_user, test_property, db_session):
         """Test finalization with property linking suggestions"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-property-link.pdf",
+        )
         # Create upload with rental income and property linking suggestion
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -254,7 +297,8 @@ class TestFinalizeE1Form:
 
         # Verify property was linked
         assert result["properties_linked"] == 1
-        assert test_property.id in result["properties_linked"]
+        db_session.refresh(upload)
+        assert test_property.id in upload.properties_linked
 
         # Verify rental transaction is linked to property
         rental_txn = db_session.query(Transaction).filter(
@@ -272,9 +316,16 @@ class TestFinalizeKaufvertrag:
 
     def test_finalize_kaufvertrag_with_purchase_costs(self, orchestrator, test_user, test_property, db_session):
         """Test finalization of Kaufvertrag with purchase costs"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.PURCHASE_CONTRACT,
+            file_name="kaufvertrag.pdf",
+        )
         # Create upload with Kaufvertrag data
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.KAUFVERTRAG,
             tax_year=2020,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -334,9 +385,16 @@ class TestFinalizeSaldenliste:
 
     def test_finalize_saldenliste(self, orchestrator, test_user, db_session):
         """Test finalization of Saldenliste with opening balances"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.OTHER,
+            file_name="saldenliste.csv",
+        )
         # Create upload with Saldenliste data
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.SALDENLISTE,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -404,10 +462,17 @@ class TestUserProfileUpdate:
         """Test that tax number is updated from E1 data"""
         # Verify user has no tax number initially
         assert test_user.tax_number is None
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-tax-number.pdf",
+        )
 
         # Create upload with tax number
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -440,10 +505,17 @@ class TestUserProfileUpdate:
         encryption = get_encryption()
         test_user.tax_number = encryption.encrypt_field("99-999/9999")
         db_session.commit()
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-tax-number-preserve.pdf",
+        )
 
         # Create upload with different tax number
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,
@@ -475,9 +547,16 @@ class TestTransactionLocking:
 
     def test_transactions_marked_reviewed_and_locked(self, orchestrator, test_user, db_session):
         """Test that all finalized transactions are marked as reviewed and locked"""
+        document = _create_document(
+            db_session,
+            user_id=test_user.id,
+            document_type=DocumentType.E1_FORM,
+            file_name="e1-locking.pdf",
+        )
         # Create upload
         upload = HistoricalImportUpload(
             user_id=test_user.id,
+            document_id=document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.REVIEW_REQUIRED,

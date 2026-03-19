@@ -14,10 +14,26 @@ from app.schemas.recurring_transaction import (
     RentalIncomeRecurringCreate,
     LoanInterestRecurringCreate,
     TemplateRecurringCreate,
+    RecurringTransactionUpdateAndRegenerate,
+    ConvertToRecurringRequest,
 )
 from app.services.recurring_transaction_service import RecurringTransactionService
 
 router = APIRouter()
+
+
+def _invalidate_dashboard_cache(user_id: int) -> None:
+    """Best-effort dashboard cache invalidation for sync endpoints."""
+    try:
+        import asyncio
+        from app.core.cache import cache
+
+        async def _clear_cache() -> None:
+            await cache.delete_pattern(f"dashboard:{user_id}:*")
+
+        asyncio.run(_clear_cache())
+    except Exception:
+        pass
 
 
 @router.get("", response_model=RecurringTransactionListResponse)
@@ -38,8 +54,44 @@ def list_recurring_transactions(
     active_count = sum(1 for item in items if item.is_active)
     paused_count = total - active_count
     
-    # Convert ORM objects to response models explicitly
-    response_items = [RecurringTransactionResponse.model_validate(item) for item in items]
+    # Convert ORM objects to response models, resolving source document IDs
+    # Use direct queries to avoid relationship loading issues with encrypted fields
+    import logging
+    logger = logging.getLogger(__name__)
+    from app.models.property import Property
+    from app.models.property_loan import PropertyLoan
+
+    # Batch-fetch property doc IDs (keep as UUID objects for proper filtering)
+    property_ids = [item.property_id for item in items if item.property_id]
+    prop_doc_map: dict = {}
+    if property_ids:
+        props = db.query(Property.id, Property.mietvertrag_document_id, Property.kaufvertrag_document_id).filter(
+            Property.id.in_(property_ids)
+        ).all()
+        for p in props:
+            prop_doc_map[str(p.id)] = p.mietvertrag_document_id or p.kaufvertrag_document_id
+
+    # Batch-fetch loan doc IDs
+    loan_ids = [item.loan_id for item in items if item.loan_id]
+    loan_doc_map = {}
+    if loan_ids:
+        loans = db.query(PropertyLoan.id, PropertyLoan.loan_contract_document_id).filter(
+            PropertyLoan.id.in_(loan_ids)
+        ).all()
+        for l in loans:
+            loan_doc_map[l.id] = l.loan_contract_document_id
+
+    response_items = []
+    for item in items:
+        resp = RecurringTransactionResponse.model_validate(item)
+        # Prefer direct source_document_id; fall back to property/loan lookup for legacy records
+        if item.source_document_id:
+            resp.source_document_id = item.source_document_id
+        elif item.property_id:
+            resp.source_document_id = prop_doc_map.get(str(item.property_id))
+        elif item.loan_id:
+            resp.source_document_id = loan_doc_map.get(item.loan_id)
+        response_items.append(resp)
     
     return RecurringTransactionListResponse(
         items=response_items,
@@ -54,14 +106,23 @@ def generate_recurring_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Manually trigger generation of all due recurring transactions"""
+    """Manually trigger generation of due recurring transactions for current user"""
     from datetime import date
     service = RecurringTransactionService(db)
-    generated = service.generate_due_transactions(target_date=date.today())
+    generated = service.generate_due_transactions(
+        target_date=date.today(),
+        user_id=current_user.id,
+    )
+    _invalidate_dashboard_cache(current_user.id)
     return {
         "generated_count": len(generated),
         "transactions": [
-            {"id": t.id, "amount": str(t.amount), "date": str(t.date), "description": t.description}
+            {
+                "id": t.id,
+                "amount": str(t.amount),
+                "date": str(t.transaction_date),
+                "description": t.description,
+            }
             for t in generated
         ],
     }
@@ -95,6 +156,8 @@ def create_rental_income_recurring(
     current_user: User = Depends(get_current_user),
 ):
     """Create a recurring transaction for rental income"""
+    from datetime import date as date_type
+
     service = RecurringTransactionService(db)
     
     try:
@@ -106,6 +169,20 @@ def create_rental_income_recurring(
             end_date=data.end_date,
             day_of_month=data.day_of_month
         )
+        # Set unit_percentage if provided
+        if data.unit_percentage is not None:
+            recurring.unit_percentage = data.unit_percentage
+            db.commit()
+            # Recalculate property rental percentage
+            try:
+                from app.services.property_service import PropertyService
+                ps = PropertyService(db)
+                ps.recalculate_rental_percentage(data.property_id, current_user.id)
+            except Exception:
+                pass
+        service.generate_due_transactions(target_date=date_type.today(), user_id=current_user.id)
+        db.refresh(recurring)
+        _invalidate_dashboard_cache(current_user.id)
         return recurring
     except ValueError as e:
         raise HTTPException(
@@ -121,6 +198,8 @@ def create_loan_interest_recurring(
     current_user: User = Depends(get_current_user),
 ):
     """Create a recurring transaction for loan interest"""
+    from datetime import date as date_type
+
     service = RecurringTransactionService(db)
     
     try:
@@ -132,6 +211,9 @@ def create_loan_interest_recurring(
             end_date=data.end_date,
             day_of_month=data.day_of_month
         )
+        service.generate_due_transactions(target_date=date_type.today(), user_id=current_user.id)
+        db.refresh(recurring)
+        _invalidate_dashboard_cache(current_user.id)
         return recurring
     except ValueError as e:
         raise HTTPException(
@@ -171,6 +253,12 @@ def create_recurring_transaction(
     db.commit()
     db.refresh(recurring)
     
+    # Auto-generate all due transactions from start_date up to today
+    service = RecurringTransactionService(db)
+    service.generate_due_transactions(target_date=date_type.today(), user_id=current_user.id)
+    db.refresh(recurring)
+    _invalidate_dashboard_cache(current_user.id)
+    
     return recurring
 
 
@@ -181,7 +269,14 @@ def update_recurring_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update a recurring transaction"""
+    """Update a recurring transaction. If end_date is set in the past, deactivate and delete future transactions."""
+    import logging
+    from datetime import date as date_type
+    from sqlalchemy import or_
+    from app.models.transaction import Transaction
+
+    logger = logging.getLogger(__name__)
+
     recurring = db.query(RecurringTransaction).filter(
         RecurringTransaction.id == recurring_id,
         RecurringTransaction.user_id == current_user.id
@@ -198,10 +293,112 @@ def update_recurring_transaction(
     for field, value in update_data.items():
         setattr(recurring, field, value)
     
+    # If end_date is in the past (or today), deactivate and clean up future transactions
+    if recurring.end_date and recurring.end_date <= date_type.today():
+        recurring.is_active = False
+        recurring.next_generation_date = None
+        # Delete system-generated transactions after the end_date
+        # Match by description pattern OR parent_recurring_id
+        deleted = db.query(Transaction).filter(
+            Transaction.user_id == current_user.id,
+            Transaction.is_system_generated == True,
+            Transaction.transaction_date > recurring.end_date,
+            or_(
+                Transaction.source_recurring_id == recurring_id,
+                Transaction.description.ilike(f"%recurring #{recurring_id}%"),
+                Transaction.parent_recurring_id == recurring_id,
+            ),
+        ).delete(synchronize_session="fetch")
+        logger.info(
+            f"Updated recurring #{recurring_id}: end_date={recurring.end_date}, "
+            f"is_active=False, deleted {deleted} future transactions"
+        )
+    
     db.commit()
     db.refresh(recurring)
-    
+    _invalidate_dashboard_cache(current_user.id)
+
+    # Recalculate property rental_percentage when unit_percentage changes
+    if "unit_percentage" in update_data and recurring.property_id:
+        try:
+            from app.services.property_service import PropertyService
+            ps = PropertyService(db)
+            ps.recalculate_rental_percentage(recurring.property_id, current_user.id)
+        except Exception as e:
+            logger.warning(f"Failed to recalculate rental percentage: {e}")
+
     return recurring
+
+
+@router.put("/{recurring_id}/update-and-regenerate", response_model=RecurringTransactionResponse)
+def update_and_regenerate(
+    recurring_id: int,
+    data: RecurringTransactionUpdateAndRegenerate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update a recurring transaction template and regenerate future transactions.
+    
+    Changes to amount, description, category etc. will be applied to the template,
+    and all system-generated transactions from apply_from date onwards will be
+    deleted and regenerated with the new values.
+    """
+    service = RecurringTransactionService(db)
+
+    update_fields = data.model_dump(exclude_unset=True, exclude={"apply_from"})
+    if not update_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update"
+        )
+
+    try:
+        recurring = service.update_and_regenerate(
+            recurring_id=recurring_id,
+            user_id=current_user.id,
+            update_data=update_fields,
+            apply_from=data.apply_from,
+        )
+        _invalidate_dashboard_cache(current_user.id)
+        return recurring
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+
+@router.post("/convert-from-transaction", response_model=RecurringTransactionResponse, status_code=status.HTTP_201_CREATED)
+def convert_transaction_to_recurring(
+    transaction_id: int,
+    data: ConvertToRecurringRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Convert a single transaction into a recurring transaction template."""
+    service = RecurringTransactionService(db)
+
+    try:
+        recurring = service.convert_transaction_to_recurring(
+            transaction_id=transaction_id,
+            user_id=current_user.id,
+            frequency=data.frequency.value,
+            start_date=data.start_date,
+            end_date=data.end_date,
+            day_of_month=data.day_of_month,
+            notes=data.notes,
+        )
+        # Generate past-due transactions from start_date up to today
+        from datetime import date as date_type
+        service.generate_due_transactions(target_date=date_type.today(), user_id=current_user.id)
+        db.refresh(recurring)
+        _invalidate_dashboard_cache(current_user.id)
+        return recurring
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.post("/{recurring_id}/pause", response_model=RecurringTransactionResponse)
@@ -226,7 +423,9 @@ def pause_recurring_transaction(
         )
     
     try:
-        return service.pause_recurring_transaction(recurring_id)
+        recurring = service.pause_recurring_transaction(recurring_id)
+        _invalidate_dashboard_cache(current_user.id)
+        return recurring
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -256,7 +455,9 @@ def resume_recurring_transaction(
         )
     
     try:
-        return service.resume_recurring_transaction(recurring_id)
+        recurring = service.resume_recurring_transaction(recurring_id)
+        _invalidate_dashboard_cache(current_user.id)
+        return recurring
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -286,7 +487,9 @@ def stop_recurring_transaction(
         )
     
     try:
-        return service.stop_recurring_transaction(recurring_id)
+        recurring = service.stop_recurring_transaction(recurring_id)
+        _invalidate_dashboard_cache(current_user.id)
+        return recurring
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -314,6 +517,7 @@ def delete_recurring_transaction(
     
     db.delete(recurring)
     db.commit()
+    _invalidate_dashboard_cache(current_user.id)
     
     return None
 
@@ -426,5 +630,10 @@ def create_from_template(
     db.add(recurring)
     db.commit()
     db.refresh(recurring)
+    from datetime import date as date_type
+    service = RecurringTransactionService(db)
+    service.generate_due_transactions(target_date=date_type.today(), user_id=current_user.id)
+    db.refresh(recurring)
+    _invalidate_dashboard_cache(current_user.id)
     
     return recurring

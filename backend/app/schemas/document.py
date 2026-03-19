@@ -19,6 +19,8 @@ class DocumentUploadResponse(BaseModel):
     document_type: Optional[DocumentType] = None
     uploaded_at: datetime
     message: str = "Document uploaded successfully"
+    deduplicated: bool = False
+    duplicate_of_document_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -78,3 +80,65 @@ class BatchUploadResponse(BaseModel):
     successful: list[DocumentUploadResponse]
     failed: list[Dict[str, str]]
     message: str
+
+
+# =============================================================================
+# AI Unified Interaction — Process Status & Follow-Up Schemas
+# =============================================================================
+
+class FollowUpQuestionSchema(BaseModel):
+    """A single follow-up question for the AI chat panel."""
+    id: str
+    question: Dict[str, str]  # Trilingual: {"de": "...", "en": "...", "zh": "..."}
+    input_type: str  # 'text' | 'number' | 'date' | 'select' | 'boolean'
+    options: Optional[list] = None
+    default_value: Optional[Any] = None
+    required: bool = True
+    field_key: str
+    help_text: Optional[Dict[str, str]] = None  # Trilingual help text
+    validation: Optional[Dict[str, Any]] = None
+
+
+class ActionDescriptorSchema(BaseModel):
+    """Self-describing action contract for frontend generic dispatch."""
+    kind: str
+    target_id: str
+    endpoint: str
+    method: str = "POST"
+    payload: Optional[Dict[str, Any]] = None
+    confirm_label: Optional[Dict[str, str]] = None  # Trilingual
+    dismiss_label: Optional[Dict[str, str]] = None   # Trilingual
+    detail_label: Optional[Dict[str, str]] = None    # Trilingual
+
+
+class ProcessStatusResponse(BaseModel):
+    """Response for GET /documents/{id}/process-status."""
+    phase: str
+    document_type: Optional[str] = None
+    message: str
+    ui_state: str  # 'processing' | 'needs_input' | 'ready_to_confirm' | 'confirmed' | 'dismissed' | 'error'
+    suggestion: Optional[Dict[str, Any]] = None
+    phase_started_at: Optional[str] = None
+    phase_updated_at: Optional[str] = None
+    current_phase_attempt: int = 1
+    suggestion_version: Optional[int] = None
+    idempotency_key: str
+    action: Optional[ActionDescriptorSchema] = None
+    follow_up_questions: Optional[list[FollowUpQuestionSchema]] = None
+
+
+class FollowUpAnswerRequest(BaseModel):
+    """Request body for POST /documents/{id}/follow-up."""
+    answers: Dict[str, Any] = Field(default_factory=dict)
+    use_defaults: bool = False
+    suggestion_version: Optional[int] = None
+
+
+class FollowUpAnswerResponse(BaseModel):
+    """Response for POST /documents/{id}/follow-up."""
+    status: str
+    ui_state: str
+    suggestion_version: int
+    remaining_questions: int
+    remaining_question_list: list = Field(default_factory=list)
+    applied_defaults: Dict[str, Any] = Field(default_factory=dict)

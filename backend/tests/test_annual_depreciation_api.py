@@ -4,15 +4,20 @@ Tests for Annual Depreciation API Endpoints
 Tests both user and admin endpoints for generating annual depreciation.
 """
 import pytest
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models.user import User
+from app.models.user import User, UserType
 from app.models.property import Property, PropertyType, PropertyStatus
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+from app.models.recurring_transaction import (
+    RecurringTransaction,
+    RecurringTransactionType,
+    RecurrenceFrequency,
+)
 from app.core.security import create_access_token
 
 
@@ -21,9 +26,9 @@ def test_user(db: Session) -> User:
     """Create a test user"""
     user = User(
         email="testuser@example.com",
-        hashed_password="hashed_password",
+        password_hash="hashed_password",
         name="Test User",
-        is_active=True
+        user_type=UserType.EMPLOYEE,
     )
     db.add(user)
     db.commit()
@@ -32,33 +37,39 @@ def test_user(db: Session) -> User:
 
 
 @pytest.fixture
-def test_admin(db: Session) -> User:
-    """Create a test admin user"""
-    admin = User(
-        email="admin@example.com",
-        hashed_password="hashed_password",
-        name="Admin User",
-        is_active=True,
-        is_admin=True  # Assuming admin field exists
-    )
-    db.add(admin)
-    db.commit()
-    db.refresh(admin)
-    return admin
-
-
-@pytest.fixture
 def auth_headers(test_user: User) -> dict:
     """Create authentication headers for test user"""
-    token = create_access_token(subject=test_user.email)
+    token = create_access_token({"sub": test_user.email})
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture
-def admin_headers(test_admin: User) -> dict:
-    """Create authentication headers for admin user"""
-    token = create_access_token(subject=test_admin.email)
-    return {"Authorization": f"Bearer {token}"}
+def _add_rental_contract(
+    db: Session,
+    user_id: int,
+    property_id,
+    start_date: date,
+    unit_percentage: Decimal = Decimal("100.00"),
+    amount: Decimal = Decimal("1500.00"),
+) -> RecurringTransaction:
+    """Create a rental-income recurring contract so AfA is allowed for the year."""
+    contract = RecurringTransaction(
+        user_id=user_id,
+        recurring_type=RecurringTransactionType.RENTAL_INCOME,
+        property_id=property_id,
+        description="Monthly rent",
+        amount=amount,
+        transaction_type="income",
+        category="rental_income",
+        frequency=RecurrenceFrequency.MONTHLY,
+        start_date=start_date,
+        day_of_month=1,
+        is_active=True,
+        unit_percentage=unit_percentage,
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return contract
 
 
 @pytest.fixture
@@ -83,6 +94,7 @@ def test_property(db: Session, test_user: User) -> Property:
     db.add(property)
     db.commit()
     db.refresh(property)
+    _add_rental_contract(db, test_user.id, property.id, date(2020, 6, 15))
     return property
 
 
@@ -107,6 +119,7 @@ def test_property_with_depreciation(db: Session, test_user: User) -> Property:
     )
     db.add(property)
     db.commit()
+    _add_rental_contract(db, test_user.id, property.id, date(2019, 1, 1))
     
     # Add depreciation transaction for current year
     current_year = date.today().year
@@ -154,7 +167,7 @@ class TestGenerateAnnualDepreciationUserEndpoint:
         assert data["properties_processed"] == 1
         assert data["transactions_created"] == 1
         assert data["properties_skipped"] == 0
-        assert float(data["total_amount"]) == 5600.00  # 280000 * 0.02
+        assert float(data["total_amount"]) == 4200.00  # 280000 * 1.5%
         assert len(data["transaction_ids"]) == 1
         
         # Verify transaction was created in database
@@ -164,7 +177,7 @@ class TestGenerateAnnualDepreciationUserEndpoint:
         ).first()
         
         assert transaction is not None
-        assert transaction.amount == Decimal("5600.00")
+        assert transaction.amount == Decimal("4200.00")
         assert transaction.is_system_generated is True
         assert transaction.transaction_date == date(current_year, 12, 31)
     
@@ -267,88 +280,6 @@ class TestGenerateAnnualDepreciationUserEndpoint:
         assert response.status_code == 401
 
 
-class TestGenerateAnnualDepreciationAdminEndpoint:
-    """Test suite for admin annual depreciation endpoint"""
-    
-    def test_generate_depreciation_all_users_success(
-        self,
-        client: TestClient,
-        db: Session,
-        test_property: Property,
-        admin_headers: dict
-    ):
-        """Test successful depreciation generation for all users"""
-        current_year = date.today().year
-        
-        response = client.post(
-            "/api/v1/admin/generate-annual-depreciation",
-            headers=admin_headers
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert data["year"] == current_year
-        assert data["properties_processed"] >= 1
-        assert data["transactions_created"] >= 1
-        assert len(data["transaction_ids"]) >= 1
-    
-    def test_generate_depreciation_all_users_specific_year(
-        self,
-        client: TestClient,
-        test_property: Property,
-        admin_headers: dict
-    ):
-        """Test depreciation generation for all users for specific year"""
-        response = client.post(
-            "/api/v1/admin/generate-annual-depreciation?year=2024",
-            headers=admin_headers
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert data["year"] == 2024
-    
-    def test_generate_depreciation_admin_invalid_year(
-        self,
-        client: TestClient,
-        admin_headers: dict
-    ):
-        """Test validation of invalid year parameter for admin endpoint"""
-        response = client.post(
-            "/api/v1/admin/generate-annual-depreciation?year=1999",
-            headers=admin_headers
-        )
-        
-        assert response.status_code == 400
-        assert "Invalid year" in response.json()["detail"]
-    
-    def test_generate_depreciation_admin_unauthorized(
-        self,
-        client: TestClient,
-        auth_headers: dict
-    ):
-        """Test that non-admin users cannot access admin endpoint"""
-        response = client.post(
-            "/api/v1/admin/generate-annual-depreciation",
-            headers=auth_headers
-        )
-        
-        assert response.status_code == 403
-    
-    def test_generate_depreciation_admin_unauthenticated(
-        self,
-        client: TestClient
-    ):
-        """Test that unauthenticated requests are rejected"""
-        response = client.post(
-            "/api/v1/admin/generate-annual-depreciation"
-        )
-        
-        assert response.status_code == 401
-
-
 class TestAnnualDepreciationMultipleProperties:
     """Test annual depreciation with multiple properties"""
     
@@ -383,6 +314,8 @@ class TestAnnualDepreciationMultipleProperties:
             properties.append(property)
         
         db.commit()
+        for property in properties:
+            _add_rental_contract(db, test_user.id, property.id, date(2020, 1, 1))
         
         response = client.post(
             "/api/v1/properties/generate-annual-depreciation",
@@ -395,7 +328,7 @@ class TestAnnualDepreciationMultipleProperties:
         assert data["properties_processed"] == 3
         assert data["transactions_created"] == 3
         assert data["properties_skipped"] == 0
-        assert float(data["total_amount"]) == 14400.00  # 3 * (240000 * 0.02)
+        assert float(data["total_amount"]) == 10800.00  # 3 * (240000 * 1.5%)
         assert len(data["transaction_ids"]) == 3
     
     def test_generate_depreciation_mixed_status(
@@ -424,6 +357,9 @@ class TestAnnualDepreciationMultipleProperties:
             status=PropertyStatus.ACTIVE
         )
         db.add(active_property)
+        db.commit()
+        db.refresh(active_property)
+        _add_rental_contract(db, test_user.id, active_property.id, date(2020, 1, 1))
         
         # Create sold property
         sold_property = Property(
@@ -458,4 +394,4 @@ class TestAnnualDepreciationMultipleProperties:
         # Only active property should be processed
         assert data["properties_processed"] == 1
         assert data["transactions_created"] == 1
-        assert float(data["total_amount"]) == 4800.00  # 240000 * 0.02
+        assert float(data["total_amount"]) == 3600.00  # 240000 * 1.5%

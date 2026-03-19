@@ -116,6 +116,9 @@ def setup_error_handlers(app: FastAPI) -> None:
             f"Pydantic validation error on {request.url.path}",
             extra={"errors": errors, "method": request.method},
         )
+        # Print detailed error for debugging
+        for err in errors:
+            print(f"  Pydantic field={err['field']} type={err['type']} msg={err['message']}")
 
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -164,13 +167,16 @@ def setup_error_handlers(app: FastAPI) -> None:
                 "traceback": traceback.format_exc(),
             },
         )
+        # Print to stdout for debugging
+        print(f"[ERROR HANDLER] Unhandled {type(exc).__name__} on {request.url.path}: {exc}")
+        traceback.print_exc()
 
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "error": {
                     "code": "INTERNAL_SERVER_ERROR",
-                    "message": "An unexpected error occurred",
+                    "message": f"An unexpected error occurred: {type(exc).__name__}: {str(exc)}",
                     "details": {},
                     "suggestion": "Please try again later. If the problem persists, contact support.",
                 }

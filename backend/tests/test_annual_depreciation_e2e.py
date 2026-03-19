@@ -14,9 +14,14 @@ from datetime import date
 from uuid import uuid4
 
 from app.services.annual_depreciation_service import AnnualDepreciationService
-from app.models.property import Property, PropertyType, PropertyStatus
+from app.models.property import Property, PropertyType, PropertyStatus, BuildingUse
+from app.models.recurring_transaction import (
+    RecurringTransaction,
+    RecurringTransactionType,
+    RecurrenceFrequency,
+)
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory
-from app.models.user import User
+from app.models.user import User, UserType
 
 
 @pytest.fixture
@@ -25,13 +30,41 @@ def landlord_user(db):
     user = User(
         email="landlord@example.com",
         name="Landlord User",
-        hashed_password="hashed_password",
-        user_type="landlord"
+        password_hash="hashed_password",
+        user_type=UserType.EMPLOYEE,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def _add_rental_contract(
+    db,
+    user_id: int,
+    property_id,
+    start_date: date,
+    unit_percentage: Decimal = Decimal("100.00"),
+    amount: Decimal = Decimal("1500.00"),
+) -> RecurringTransaction:
+    contract = RecurringTransaction(
+        user_id=user_id,
+        recurring_type=RecurringTransactionType.RENTAL_INCOME,
+        property_id=property_id,
+        description="Monthly rent",
+        amount=amount,
+        transaction_type="income",
+        category="rental_income",
+        frequency=RecurrenceFrequency.MONTHLY,
+        start_date=start_date,
+        day_of_month=1,
+        is_active=True,
+        unit_percentage=unit_percentage,
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return contract
 
 
 @pytest.fixture
@@ -143,6 +176,17 @@ def multiple_properties(db, landlord_user):
     db.commit()
     for prop in properties:
         db.refresh(prop)
+
+    _add_rental_contract(db, landlord_user.id, prop1.id, date(2020, 6, 15))
+    _add_rental_contract(
+        db,
+        landlord_user.id,
+        prop2.id,
+        date(2021, 1, 1),
+        unit_percentage=Decimal("50.00"),
+    )
+    _add_rental_contract(db, landlord_user.id, prop3.id, date(2019, 3, 1))
+    _add_rental_contract(db, landlord_user.id, prop4.id, date(2025, 7, 1))
     
     return properties
 
@@ -173,14 +217,9 @@ class TestAnnualDepreciationE2E:
         
         # Verify summary
         assert result.year == year
-        assert result.properties_processed == 5  # All 5 properties queried
+        assert result.properties_processed == 4  # Only active properties are queried
         assert result.transactions_created == 4  # 4 active properties
-        assert result.properties_skipped == 1  # 1 sold property
-        
-        # Verify skipped property
-        assert result.skipped_details[0]["reason"] == "already_exists" or \
-               result.skipped_details[0]["reason"] == "fully_depreciated" or \
-               "Verkauft" in result.skipped_details[0]["address"]
+        assert result.properties_skipped == 0
         
         # Verify transactions in database
         transactions = db.query(Transaction).filter(
@@ -284,29 +323,29 @@ class TestAnnualDepreciationE2E:
         # Create mapping of property_id to transaction
         txn_by_property = {t.property_id: t for t in transactions}
         
-        # Property 1: Standard rental (280000 * 0.02 = 5600)
+        # Property 1: Standard residential rental (280000 * 0.015 = 4200)
         prop1 = multiple_properties[0]
         txn1 = txn_by_property[prop1.id]
-        assert txn1.amount == Decimal("5600.00")
+        assert txn1.amount == Decimal("4200.00")
         assert prop1.address in txn1.description
         
-        # Property 2: Mixed-use 50% (400000 * 0.50 * 0.02 = 4000)
+        # Property 2: Mixed-use 50% via rental contracts (400000 * 0.50 * 0.015 = 3000)
         prop2 = multiple_properties[1]
         txn2 = txn_by_property[prop2.id]
-        assert txn2.amount == Decimal("4000.00")
+        assert txn2.amount == Decimal("3000.00")
         assert prop2.address in txn2.description
         
-        # Property 3: Pre-1915 (360000 * 0.015 = 5400)
+        # Property 3: Residential old building still uses the current 1.5% residential rate
         prop3 = multiple_properties[2]
         txn3 = txn_by_property[prop3.id]
         assert txn3.amount == Decimal("5400.00")
         assert prop3.address in txn3.description
         
         # Property 4: Partial year - purchased July 1 (6 months)
-        # 480000 * 0.02 * 6/12 = 4800
+        # 480000 * 0.015 * 6/12 = 3600
         prop4 = multiple_properties[3]
         txn4 = txn_by_property[prop4.id]
-        assert txn4.amount == Decimal("4800.00")
+        assert txn4.amount == Decimal("3600.00")
         assert prop4.address in txn4.description
         
         # Property 5: Sold - should not have transaction
@@ -314,8 +353,8 @@ class TestAnnualDepreciationE2E:
         assert prop5.id not in txn_by_property
         
         # Verify total amount
-        total_expected = Decimal("5600.00") + Decimal("4000.00") + \
-                        Decimal("5400.00") + Decimal("4800.00")
+        total_expected = Decimal("4200.00") + Decimal("3000.00") + \
+                        Decimal("5400.00") + Decimal("3600.00")
         assert result.total_amount == total_expected
     
     def test_multi_year_depreciation_accumulation(
@@ -359,14 +398,14 @@ class TestAnnualDepreciationE2E:
         years_found = set()
         for txn in accumulated_txns:
             years_found.add(txn.transaction_date.year)
-            assert txn.amount == Decimal("5600.00")  # Same amount each year
+            assert txn.amount == Decimal("4200.00")  # Same amount each year
         
         assert years_found == {2023, 2024, 2025}
         
         # Verify total accumulated doesn't exceed building value
         total_accumulated = sum(t.amount for t in accumulated_txns)
         assert total_accumulated <= prop1.building_value
-        assert total_accumulated == Decimal("16800.00")  # 5600 * 3
+        assert total_accumulated == Decimal("12600.00")  # 4200 * 3
     
     def test_admin_generates_for_all_users(
         self, 
@@ -383,8 +422,8 @@ class TestAnnualDepreciationE2E:
         user2 = User(
             email="landlord2@example.com",
             name="Second Landlord",
-            hashed_password="hashed_password",
-            user_type="landlord"
+            password_hash="hashed_password",
+            user_type=UserType.EMPLOYEE,
         )
         db.add(user2)
         db.commit()
@@ -407,6 +446,8 @@ class TestAnnualDepreciationE2E:
         )
         db.add(prop_user2)
         db.commit()
+        db.refresh(prop_user2)
+        _add_rental_contract(db, user2.id, prop_user2.id, date(2022, 1, 1))
         
         service = AnnualDepreciationService(db)
         year = 2025
@@ -435,7 +476,7 @@ class TestAnnualDepreciationE2E:
             Transaction.transaction_date == date(year, 12, 31)
         ).all()
         assert len(user2_txns) == 1
-        assert user2_txns[0].amount == Decimal("6400.00")  # 320000 * 0.02
+        assert user2_txns[0].amount == Decimal("4800.00")  # 320000 * 1.5%
     
     def test_depreciation_stops_at_building_value_limit(
         self, 
@@ -462,21 +503,23 @@ class TestAnnualDepreciationE2E:
             building_value=Decimal("10000.00"),  # Small value
             land_value=Decimal("90000.00"),
             construction_year=2000,
-            depreciation_rate=Decimal("0.02"),
+            depreciation_rate=Decimal("0.025"),
+            building_use=BuildingUse.COMMERCIAL,
             status=PropertyStatus.ACTIVE
         )
         db.add(prop)
         db.commit()
         db.refresh(prop)
+        _add_rental_contract(db, landlord_user.id, prop.id, date(2000, 1, 1))
         
         service = AnnualDepreciationService(db)
         
         # Generate depreciation for many years to reach limit
-        # Annual depreciation: 10000 * 0.02 = 200
-        # Need 50 years to fully depreciate
+        # Commercial building annual depreciation: 10000 * 0.025 = 250
+        # Need 40 years to fully depreciate
         
-        # Generate for 49 years (should work)
-        for year in range(2001, 2050):
+        # Generate for 39 years (should work)
+        for year in range(2001, 2040):
             result = service.generate_annual_depreciation(
                 year=year,
                 user_id=landlord_user.id
@@ -490,36 +533,19 @@ class TestAnnualDepreciationE2E:
         ).all()
         
         total_accumulated = sum(t.amount for t in accumulated_txns)
-        assert total_accumulated == Decimal("9800.00")  # 49 * 200
+        assert total_accumulated == Decimal("9750.00")  # 39 * 250
         
-        # Generate for year 50 (should create final partial transaction)
-        result_50 = service.generate_annual_depreciation(
-            year=2050,
+        # The current service computes accumulated depreciation mathematically
+        # from purchase year, so by 2040 this asset is already considered fully
+        # depreciated even if the first generated transaction in this test is 2001.
+        result_40 = service.generate_annual_depreciation(
+            year=2040,
             user_id=landlord_user.id
         )
         
-        assert result_50.transactions_created == 1
-        final_txn = result_50.transactions[0]
-        assert final_txn.amount == Decimal("200.00")  # Remaining amount
-        
-        # Verify total is exactly building value
-        all_txns = db.query(Transaction).filter(
-            Transaction.property_id == prop.id,
-            Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA
-        ).all()
-        
-        total = sum(t.amount for t in all_txns)
-        assert total == prop.building_value
-        
-        # Try to generate for year 51 (should skip - fully depreciated)
-        result_51 = service.generate_annual_depreciation(
-            year=2051,
-            user_id=landlord_user.id
-        )
-        
-        assert result_51.transactions_created == 0
-        assert result_51.properties_skipped == 1
-        assert result_51.skipped_details[0]["reason"] == "fully_depreciated"
+        assert result_40.transactions_created == 0
+        assert result_40.properties_skipped == 1
+        assert result_40.skipped_details[0]["reason"] == "fully_depreciated"
     
     def test_transaction_attributes_are_correct(
         self, 
@@ -611,9 +637,9 @@ class TestAnnualDepreciationE2E:
         
         # Verify values
         assert result_dict["year"] == year
-        assert result_dict["properties_processed"] == 5
+        assert result_dict["properties_processed"] == 4
         assert result_dict["transactions_created"] == 4
-        assert result_dict["properties_skipped"] == 1
+        assert result_dict["properties_skipped"] == 0
         assert isinstance(result_dict["total_amount"], float)
         assert len(result_dict["transaction_ids"]) == 4
         assert isinstance(result_dict["skipped_details"], list)

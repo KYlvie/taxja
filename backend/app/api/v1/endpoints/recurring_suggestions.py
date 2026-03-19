@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_feature
+from app.services.feature_gate_service import Feature
 from app.models.user import User
 from app.models.dismissed_suggestion import DismissedSuggestion
 from app.services.recurring_pattern_detector import RecurringPatternDetector, RecurringPattern
@@ -38,7 +39,11 @@ class AcceptSuggestionRequest(BaseModel):
     property_id: str | None = None
 
 
-@router.get("/suggestions", response_model=List[RecurringPatternResponse])
+@router.get(
+    "/suggestions",
+    response_model=List[RecurringPatternResponse],
+    dependencies=[Depends(require_feature(Feature.RECURRING_SUGGESTIONS))],
+)
 def get_recurring_suggestions(
     lookback_months: int = 6,
     min_confidence: float = 0.7,
@@ -96,7 +101,11 @@ def get_recurring_suggestions(
     return suggestions
 
 
-@router.post("/suggestions/accept", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/suggestions/accept",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_feature(Feature.RECURRING_SUGGESTIONS))],
+)
 def accept_suggestion(
     data: AcceptSuggestionRequest,
     db: Session = Depends(get_db),

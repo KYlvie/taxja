@@ -15,6 +15,7 @@ from sqlalchemy import extract
 
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User, UserType
+from app.models.property import Property, PropertyStatus
 
 
 def generate_tax_form_data(
@@ -44,7 +45,7 @@ def generate_tax_form_data(
     elif user_type == "gmbh":
         return _generate_k1_form(user, transactions, tax_year)
     else:
-        return _generate_e1_form(user, transactions, tax_year)
+        return _generate_e1_form(db, user, transactions, tax_year)
 
 
 def _sum_by_income_cat(transactions: list, cat: IncomeCategory) -> Decimal:
@@ -56,23 +57,35 @@ def _sum_by_income_cat(transactions: list, cat: IncomeCategory) -> Decimal:
 
 
 def _sum_by_expense_cat(transactions: list, cats: list, deductible_only: bool = False) -> Decimal:
+    """Sum expenses by category, using line-item-level amounts when available."""
     total = Decimal("0")
     for t in transactions:
         if t.type != TransactionType.EXPENSE:
             continue
-        if t.expense_category not in cats:
-            continue
-        if deductible_only and not t.is_deductible:
-            continue
-        total += t.amount or Decimal("0")
+        cat_values = {c.value if hasattr(c, "value") else str(c) for c in cats}
+        if t.has_line_items:
+            for li in t.line_items:
+                li_cat = li.category or "other"
+                if li_cat not in cat_values:
+                    continue
+                if deductible_only and not li.is_deductible:
+                    continue
+                total += li.amount * li.quantity
+        else:
+            if t.expense_category not in cats:
+                continue
+            if deductible_only and not t.is_deductible:
+                continue
+            total += t.amount or Decimal("0")
     return total
 
 
 def _sum_deductible_expenses(transactions: list) -> Decimal:
+    """Sum all deductible expenses using line-item-level deductibility."""
     return sum(
-        (t.amount or Decimal("0"))
+        (t.deductible_amount or Decimal("0"))
         for t in transactions
-        if t.type == TransactionType.EXPENSE and t.is_deductible
+        if t.type == TransactionType.EXPENSE
     )
 
 
@@ -250,22 +263,31 @@ def _generate_l1_form(
 
 
 def _generate_e1_form(
-    user: User, transactions: list, tax_year: int
+    db: Session, user: User, transactions: list, tax_year: int
 ) -> Dict[str, Any]:
-    """Generate E1 Einkommensteuererklaerung form data."""
-    # Income by type
+    """Generate E1 Einkommensteuererklaerung form data.
+
+    Covers all 7 Austrian income types (Einkunftsarten) plus detailed
+    Sonderausgaben, aussergewoehnliche Belastungen, SVS, and V+V breakdowns.
+    """
+    # ── Income by Einkunftsart ──
+    agriculture_income = _sum_by_income_cat(transactions, IncomeCategory.AGRICULTURE)
     employment_income = _sum_by_income_cat(transactions, IncomeCategory.EMPLOYMENT)
     self_employment_income = _sum_by_income_cat(transactions, IncomeCategory.SELF_EMPLOYMENT)
+    business_income = _sum_by_income_cat(transactions, IncomeCategory.BUSINESS)
     rental_income = _sum_by_income_cat(transactions, IncomeCategory.RENTAL)
     capital_gains = _sum_by_income_cat(transactions, IncomeCategory.CAPITAL_GAINS)
+    other_income = _sum_by_income_cat(transactions, IncomeCategory.OTHER_INCOME)
 
-    # Expenses by purpose
+    # ── Business / self-employment expenses ──
     business_expenses = _sum_by_expense_cat(
         transactions,
         [
             ExpenseCategory.OFFICE_SUPPLIES, ExpenseCategory.EQUIPMENT,
             ExpenseCategory.MARKETING, ExpenseCategory.PROFESSIONAL_SERVICES,
             ExpenseCategory.DEPRECIATION, ExpenseCategory.HOME_OFFICE,
+            ExpenseCategory.GROCERIES, ExpenseCategory.RENT,
+            ExpenseCategory.TELECOM, ExpenseCategory.BANK_FEES,
         ],
         deductible_only=True,
     )
@@ -274,15 +296,50 @@ def _generate_e1_form(
         [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING],
         deductible_only=True,
     )
-    rental_expenses = _sum_by_expense_cat(
-        transactions,
-        [
-            ExpenseCategory.MAINTENANCE, ExpenseCategory.UTILITIES,
-            ExpenseCategory.PROPERTY_TAX, ExpenseCategory.LOAN_INTEREST,
-            ExpenseCategory.INSURANCE,
-        ],
+
+    # ── SVS (Sozialversicherung der Selbstaendigen) ──
+    svs_contributions = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.SVS_CONTRIBUTIONS], deductible_only=True
+    )
+
+    # ── V+V (Vermietung und Verpachtung) expense breakdown ──
+    rental_maintenance = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.MAINTENANCE], deductible_only=True
+    )
+    # Building AfA: calculate from property data using AfACalculator
+    rental_afa = Decimal("0")
+    try:
+        from app.services.afa_calculator import AfACalculator
+        from app.models.property import Property, PropertyStatus
+        afa_calc = AfACalculator(db)
+        user_properties = db.query(Property).filter(
+            Property.user_id == user.id,
+            Property.status.in_([PropertyStatus.ACTIVE, PropertyStatus.SOLD]),
+        ).all()
+        for prop in user_properties:
+            rental_afa += afa_calc.calculate_annual_depreciation(prop, tax_year)
+    except Exception:
+        pass  # Fallback: zero if calculation fails
+    rental_financing = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.LOAN_INTEREST], deductible_only=True
+    )
+    rental_mgmt_fees = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.PROPERTY_MANAGEMENT_FEES], deductible_only=True
+    )
+    rental_insurance = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.PROPERTY_INSURANCE, ExpenseCategory.INSURANCE],
         deductible_only=True,
     )
+    rental_utilities = _sum_by_expense_cat(
+        transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX],
+        deductible_only=True,
+    )
+    rental_expenses = (
+        rental_maintenance + rental_afa + rental_financing
+        + rental_mgmt_fees + rental_insurance + rental_utilities
+    )
+
+    # ── Werbungskosten (employee work-related expenses) ──
     werbungskosten = _sum_by_expense_cat(
         transactions,
         [
@@ -292,128 +349,385 @@ def _generate_e1_form(
         ],
         deductible_only=True,
     )
-    sonderausgaben = _sum_by_expense_cat(
+
+    # ── Sonderausgaben (special deductions) ──
+    sonderausgaben_insurance = _sum_by_expense_cat(
         transactions, [ExpenseCategory.INSURANCE], deductible_only=True
     )
 
     total_deductible = _sum_deductible_expenses(transactions)
 
-    # VAT
+    # ── VAT ──
     vat_collected = _sum_vat(transactions, TransactionType.INCOME)
     vat_paid = _sum_vat(transactions, TransactionType.EXPENSE)
 
-    # Gewinn aus Gewerbebetrieb = self_employment_income - business_expenses
-    gewerbebetrieb_gewinn = self_employment_income - business_expenses - travel_expenses
-    # Einkuenfte aus V+V = rental_income - rental_expenses
+    # ── Calculated fields ──
+    # Combine self_employment + business into Gewerbebetrieb
+    combined_self_emp = self_employment_income + business_income
+    gewerbebetrieb_gewinn = combined_self_emp - business_expenses - travel_expenses - svs_contributions
     vermietung_einkuenfte = rental_income - rental_expenses
 
-    # Family info
+    # ── Family info ──
     family_info = user.family_info or {}
     num_children = family_info.get("num_children", 0)
+    single_parent = family_info.get("is_single_parent", False)
     familienbonus = Decimal("2000") * num_children if num_children > 0 else Decimal("0")
 
+    alleinerzieher = Decimal("0")
+    if single_parent and num_children > 0:
+        alleinerzieher = Decimal("520")
+        if num_children >= 2:
+            alleinerzieher += Decimal("704") * (num_children - 1)
+
+    # ── Pendlerpauschale ──
+    commuting_info = user.commuting_info or {}
+    distance_km = commuting_info.get("distance_km", 0)
+    public_transport = commuting_info.get("public_transport_available", True)
+    pendlerpauschale = Decimal("0")
+    if distance_km >= 20:
+        if public_transport:
+            if distance_km >= 60:
+                pendlerpauschale = Decimal("2016")
+            elif distance_km >= 40:
+                pendlerpauschale = Decimal("1356")
+            else:
+                pendlerpauschale = Decimal("696")
+        else:
+            if distance_km >= 60:
+                pendlerpauschale = Decimal("3672")
+            elif distance_km >= 40:
+                pendlerpauschale = Decimal("2568")
+            elif distance_km >= 20:
+                pendlerpauschale = Decimal("1476")
+    elif not public_transport and distance_km >= 2:
+        pendlerpauschale = Decimal("372")
+
+    # ── ImmoESt: sold properties in the tax year ──
+    immoest_fields = []
+    immoest_total = Decimal("0")
+    immoest_gain_total = Decimal("0")
+    try:
+        sold_properties = (
+            db.query(Property)
+            .filter(
+                Property.user_id == user.id,
+                Property.status == PropertyStatus.SOLD,
+                extract("year", Property.sale_date) == tax_year,
+            )
+            .all()
+        )
+        if sold_properties:
+            from app.services.immoest_calculator import (
+                calculate_immoest, ExemptionType,
+            )
+            for prop in sold_properties:
+                if not prop.sale_price or not prop.purchase_price:
+                    continue
+                exemption = ExemptionType.NONE
+                if getattr(prop, "hauptwohnsitz", False):
+                    exemption = ExemptionType.HAUPTWOHNSITZ
+                elif getattr(prop, "selbst_errichtet", False):
+                    exemption = ExemptionType.HERSTELLER
+
+                result = calculate_immoest(
+                    sale_price=prop.sale_price,
+                    acquisition_cost=prop.purchase_price,
+                    acquisition_date=prop.purchase_date,
+                    sale_date=prop.sale_date,
+                    exemption=exemption,
+                )
+                immoest_total += result.total_tax
+                immoest_gain_total += result.taxable_gain
+    except Exception:
+        pass  # ImmoESt integration is best-effort
+
     fields = [
-        # Section 1: Einkuenfte aus nichtselbstaendiger Arbeit
+        # ═══ Einkunftsart Nr.1: Land- und Forstwirtschaft ═══
+        {
+            "kz": "310",
+            "label_de": "Einkuenfte aus Land- und Forstwirtschaft",
+            "label_en": "Agriculture and forestry income",
+            "label_zh": "农林业收入",
+            "value": float(agriculture_income),
+            "section": "einkuenfte_landwirtschaft",
+            "editable": True,
+            "note_de": "Pauschalierung moeglich bei Einheitswert bis EUR 150.000",
+        },
+        # ═══ Einkunftsart Nr.2/3: Selbstaendige Arbeit / Gewerbebetrieb ═══
+        {
+            "kz": "330",
+            "label_de": "Einkuenfte aus Gewerbebetrieb",
+            "label_en": "Business income (profit after expenses)",
+            "label_zh": "工商业经营所得（扣除费用后）",
+            "value": float(gewerbebetrieb_gewinn),
+            "section": "einkuenfte_gewerbebetrieb",
+            "editable": True,
+            "note_de": "Einnahmen abzgl. Betriebsausgaben inkl. SVS",
+        },
+        {
+            "kz": "370",
+            "label_de": "Einkuenfte aus selbstaendiger Arbeit (Freiberufler)",
+            "label_en": "Self-employment income (freelancer)",
+            "label_zh": "自由职业收入",
+            "value": float(self_employment_income),
+            "section": "einkuenfte_selbstaendig",
+            "editable": True,
+        },
+        {
+            "kz": "9230",
+            "label_de": "Betriebsausgaben gesamt",
+            "label_en": "Total business expenses",
+            "label_zh": "经营费用总计",
+            "value": float(business_expenses + travel_expenses),
+            "section": "einkuenfte_gewerbebetrieb",
+            "editable": True,
+            "note_de": "Summe aller abzugsfaehigen Betriebsausgaben",
+        },
+        {
+            "kz": "9225",
+            "label_de": "SVS-Beitraege (Pflichtversicherung Selbstaendige)",
+            "label_en": "SVS contributions (mandatory social insurance)",
+            "label_zh": "SVS社保缴费（自雇人员强制保险）",
+            "value": float(svs_contributions),
+            "section": "einkuenfte_gewerbebetrieb",
+            "editable": True,
+            "note_de": "Pflichtbeitraege an die SVS sind Betriebsausgaben (§4 Abs.4 EStG)",
+        },
+        # ═══ Einkunftsart Nr.4: Nichtselbstaendige Arbeit ═══
         {
             "kz": "245",
             "label_de": "Einkuenfte aus nichtselbstaendiger Arbeit (laut Lohnzettel)",
             "label_en": "Employment income (per payslip)",
-            "label_zh": "\u975e\u81ea\u96c7\u5c31\u4e1a\u6536\u5165\uff08\u6309\u5de5\u8d44\u5355\uff09",
+            "label_zh": "非自雇就业收入（按工资单）",
             "value": float(employment_income),
             "section": "einkuenfte_nichtselbstaendig",
             "editable": False,
             "note_de": "Wird vom Arbeitgeber elektronisch uebermittelt",
         },
-        # Section 2: Einkuenfte aus selbstaendiger Arbeit / Gewerbebetrieb
+        # ═══ Einkunftsart Nr.5: Kapitalvermoegen ═══
         {
-            "kz": "330",
-            "label_de": "Einkuenfte aus Gewerbebetrieb",
-            "label_en": "Business income (profit)",
-            "label_zh": "\u5de5\u5546\u4e1a\u7ecf\u8425\u6536\u5165",
-            "value": float(gewerbebetrieb_gewinn),
-            "section": "einkuenfte_gewerbebetrieb",
+            "kz": "981",
+            "label_de": "Einkuenfte aus Kapitalvermoegen (endbesteuert)",
+            "label_en": "Capital income (final withholding tax)",
+            "label_zh": "资本收益（最终征税）",
+            "value": float(capital_gains),
+            "section": "einkuenfte_kapital",
             "editable": True,
+            "note_de": "KESt 27,5% bereits abgezogen; nur eintragen wenn Regelbesteuerung guenstiger",
         },
-        {
-            "kz": "370",
-            "label_de": "Einkuenfte aus selbstaendiger Arbeit",
-            "label_en": "Self-employment income",
-            "label_zh": "\u81ea\u96c7\u6536\u5165",
-            "value": float(self_employment_income),
-            "section": "einkuenfte_selbstaendig",
-            "editable": True,
-        },
-        # Section 3: Einkuenfte aus Vermietung und Verpachtung
+        # ═══ Einkunftsart Nr.6: Vermietung und Verpachtung ═══
         {
             "kz": "320",
-            "label_de": "Einkuenfte aus Vermietung und Verpachtung",
-            "label_en": "Rental and leasing income",
-            "label_zh": "\u79df\u8d41\u6536\u5165",
+            "label_de": "Einkuenfte aus Vermietung und Verpachtung (Ueberschuss)",
+            "label_en": "Rental income (net of expenses)",
+            "label_zh": "租赁所得（扣除费用后）",
             "value": float(vermietung_einkuenfte),
             "section": "einkuenfte_vermietung",
             "editable": True,
         },
-        # Section 4: Einkuenfte aus Kapitalvermoegen
+        # V+V expense breakdown (Beilage E1b)
         {
-            "kz": "981",
-            "label_de": "Einkuenfte aus Kapitalvermoegen (endbesteuert)",
-            "label_en": "Capital income (final taxation)",
-            "label_zh": "\u8d44\u672c\u6536\u76ca\uff08\u6700\u7ec8\u5f81\u7a0e\uff09",
-            "value": float(capital_gains),
-            "section": "einkuenfte_kapital",
+            "kz": "9400",
+            "label_de": "Absetzung fuer Abnutzung (AfA) — Gebaeude",
+            "label_en": "Building depreciation (AfA)",
+            "label_zh": "建筑折旧 (AfA)",
+            "value": float(rental_afa),
+            "section": "einkuenfte_vermietung_detail",
+            "editable": True,
+            "note_de": "1,5% p.a. des Gebaeudewertes (§16 Abs.1 Z8 EStG)",
+        },
+        {
+            "kz": "9401",
+            "label_de": "Finanzierungskosten (Kreditzinsen)",
+            "label_en": "Financing costs (loan interest)",
+            "label_zh": "融资成本（贷款利息）",
+            "value": float(rental_financing),
+            "section": "einkuenfte_vermietung_detail",
             "editable": True,
         },
-        # Section 5: Sonderausgaben
+        {
+            "kz": "9402",
+            "label_de": "Instandhaltung und Instandsetzung",
+            "label_en": "Maintenance and repair costs",
+            "label_zh": "维护修缮费用",
+            "value": float(rental_maintenance),
+            "section": "einkuenfte_vermietung_detail",
+            "editable": True,
+            "note_de": "Instandsetzung: Verteilung auf 15 Jahre moeglich (§28 Abs.2 EStG)",
+        },
+        {
+            "kz": "9403",
+            "label_de": "Hausverwaltung",
+            "label_en": "Property management fees",
+            "label_zh": "物业管理费",
+            "value": float(rental_mgmt_fees),
+            "section": "einkuenfte_vermietung_detail",
+            "editable": True,
+        },
+        {
+            "kz": "9404",
+            "label_de": "Versicherungen (Gebaeude)",
+            "label_en": "Building insurance",
+            "label_zh": "建筑保险",
+            "value": float(rental_insurance),
+            "section": "einkuenfte_vermietung_detail",
+            "editable": True,
+        },
+        {
+            "kz": "9405",
+            "label_de": "Betriebskosten (nicht umlegbar)",
+            "label_en": "Operating costs (non-recoverable)",
+            "label_zh": "运营成本（不可转嫁）",
+            "value": float(rental_utilities),
+            "section": "einkuenfte_vermietung_detail",
+            "editable": True,
+        },
+        # ═══ Einkunftsart Nr.7: Sonstige Einkuenfte ═══
+        {
+            "kz": "350",
+            "label_de": "Sonstige Einkuenfte (§29 EStG)",
+            "label_en": "Other income (§29 EStG)",
+            "label_zh": "其他收入（§29 EStG）",
+            "value": float(other_income),
+            "section": "einkuenfte_sonstige",
+            "editable": True,
+            "note_de": "z.B. Spekulationseinkuenfte, wiederkehrende Bezuege, Funktionsgebuehren",
+        },
+        # ═══ ImmoESt — Immobilienertragsteuer (§30 EStG) ═══
+        {
+            "kz": "985",
+            "label_de": "Immobilienertragsteuer gesamt (§30 EStG)",
+            "label_en": "Real estate capital gains tax total",
+            "label_zh": "房产资本利得税总额",
+            "value": float(immoest_total),
+            "section": "einkuenfte_immoest",
+            "editable": True,
+            "note_de": "30% auf den Veraeusserungsgewinn; Hauptwohnsitz-/Herstellerbefreiung moeglich",
+        },
+        {
+            "kz": "986",
+            "label_de": "Veraeusserungsgewinn (Immobilien)",
+            "label_en": "Capital gain from property sale",
+            "label_zh": "房产出售收益",
+            "value": float(immoest_gain_total),
+            "section": "einkuenfte_immoest",
+            "editable": True,
+        },
+        # ═══ Sonderausgaben (§18 EStG) ═══
         {
             "kz": "717",
-            "label_de": "Spenden an beguestigte Einrichtungen",
+            "label_de": "Spenden an beguestigte Einrichtungen (§18 Abs.1 Z7)",
             "label_en": "Donations to eligible organizations",
-            "label_zh": "\u5411\u7b26\u5408\u6761\u4ef6\u7684\u673a\u6784\u6350\u6b3e",
+            "label_zh": "向符合条件的机构捐款",
             "value": 0.0,
             "section": "sonderausgaben",
             "editable": True,
+            "note_de": "Max. 10% des Gesamtbetrags der Einkuenfte",
         },
         {
             "kz": "718",
-            "label_de": "Personenversicherungen, Wohnraumschaffung",
-            "label_en": "Personal insurance, housing",
-            "label_zh": "\u4e2a\u4eba\u4fdd\u9669\u3001\u4f4f\u623f\u5efa\u8bbe",
-            "value": float(sonderausgaben),
+            "label_de": "Personenversicherungen, Wohnraumschaffung (§18 Abs.1 Z2)",
+            "label_en": "Personal insurance, housing construction",
+            "label_zh": "个人保险、住房建设",
+            "value": float(sonderausgaben_insurance),
             "section": "sonderausgaben",
             "editable": True,
         },
         {
             "kz": "724",
-            "label_de": "Kirchenbeitrag (max. EUR 600)",
+            "label_de": "Kirchenbeitrag (max. EUR 600, §18 Abs.1 Z5)",
             "label_en": "Church tax (max EUR 600)",
-            "label_zh": "\u6559\u4f1a\u7a0e\uff08\u6700\u9ad8600\u6b27\u5143\uff09",
+            "label_zh": "教会税（最高600欧元）",
             "value": 0.0,
             "section": "sonderausgaben",
             "editable": True,
         },
-        # Section 6: Werbungskosten
+        {
+            "kz": "450",
+            "label_de": "Steuerberatungskosten",
+            "label_en": "Tax advisory costs",
+            "label_zh": "税务咨询费用",
+            "value": 0.0,
+            "section": "sonderausgaben",
+            "editable": True,
+            "note_de": "Unbeschraenkt absetzbar als Sonderausgabe oder Betriebsausgabe",
+        },
+        # ═══ Werbungskosten (§16 EStG) ═══
+        {
+            "kz": "721",
+            "label_de": "Pendlerpauschale (jaehrlich)",
+            "label_en": "Commuter allowance (annual)",
+            "label_zh": "通勤补贴（年度）",
+            "value": float(pendlerpauschale),
+            "section": "werbungskosten",
+            "editable": True,
+            "note_de": "Abhaengig von Entfernung und Zumutbarkeit oeffentlicher Verkehrsmittel",
+        },
         {
             "kz": "775",
-            "label_de": "Werbungskosten (ohne Reisekosten)",
-            "label_en": "Work-related expenses (excl. travel)",
-            "label_zh": "\u4e0e\u5de5\u4f5c\u76f8\u5173\u7684\u8d39\u7528\uff08\u4e0d\u542b\u5dee\u65c5\uff09",
+            "label_de": "Werbungskosten gesamt (ohne Pendlerpauschale)",
+            "label_en": "Work-related expenses (excl. commuter allowance)",
+            "label_zh": "与工作相关的费用（不含通勤补贴）",
             "value": float(werbungskosten),
             "section": "werbungskosten",
             "editable": True,
+            "note_de": "Werbungskostenpauschale EUR 132 wird automatisch beruecksichtigt",
         },
-        # Section 7: Familienbonus
+        # ═══ Aussergewoehnliche Belastungen (§34/§35 EStG) ═══
+        {
+            "kz": "730",
+            "label_de": "Aussergewoehnliche Belastungen mit Selbstbehalt",
+            "label_en": "Extraordinary expenses (with deductible threshold)",
+            "label_zh": "特殊负担（含自付门槛）",
+            "value": 0.0,
+            "section": "aussergewoehnliche_belastungen",
+            "editable": True,
+            "note_de": "z.B. Krankheitskosten, Zahnersatz — Selbstbehalt 6-12% je nach Einkommen",
+        },
+        {
+            "kz": "740",
+            "label_de": "Aussergewoehnliche Belastungen ohne Selbstbehalt",
+            "label_en": "Extraordinary expenses (no deductible threshold)",
+            "label_zh": "特殊负担（无自付门槛）",
+            "value": 0.0,
+            "section": "aussergewoehnliche_belastungen",
+            "editable": True,
+            "note_de": "z.B. Behinderung, Katastrophenschaeden, Diaetkosten bei Krankheit",
+        },
+        # ═══ Absetzbetraege ═══
+        {
+            "kz": "210",
+            "label_de": "Alleinverdiener-/Alleinerzieherabsetzbetrag",
+            "label_en": "Sole earner / single parent tax credit",
+            "label_zh": "单独赚钱人/单亲税收抵免",
+            "value": float(alleinerzieher),
+            "section": "absetzbetraege",
+            "editable": True,
+        },
+        {
+            "kz": "220",
+            "label_de": "Anzahl der Kinder (Familienbonus Plus)",
+            "label_en": "Number of children (Family Bonus Plus)",
+            "label_zh": "子女数量（家庭奖金Plus）",
+            "value": num_children,
+            "section": "absetzbetraege",
+            "editable": True,
+        },
         {
             "kz": "225",
-            "label_de": "Familienbonus Plus",
-            "label_en": "Family Bonus Plus",
-            "label_zh": "\u5bb6\u5ead\u5956\u91d1Plus",
+            "label_de": "Familienbonus Plus (je Kind max. EUR 2.000)",
+            "label_en": "Family Bonus Plus (max EUR 2,000 per child)",
+            "label_zh": "家庭奖金Plus（每子女最高2000欧元）",
             "value": float(familienbonus),
             "section": "absetzbetraege",
             "editable": True,
         },
     ]
 
-    total_income = employment_income + self_employment_income + rental_income + capital_gains
+    total_income = (
+        agriculture_income + employment_income + combined_self_emp
+        + rental_income + capital_gains + other_income
+    )
     gesamtbetrag = total_income - total_deductible
 
     return {
@@ -427,20 +741,32 @@ def _generate_e1_form(
         "generated_at": date.today().isoformat(),
         "fields": fields,
         "summary": {
+            "agriculture_income": float(agriculture_income),
             "employment_income": float(employment_income),
             "self_employment_income": float(self_employment_income),
+            "business_income": float(business_income),
             "rental_income": float(rental_income),
             "capital_gains": float(capital_gains),
+            "other_income": float(other_income),
             "total_income": float(total_income),
             "business_expenses": float(business_expenses),
             "travel_expenses": float(travel_expenses),
+            "svs_contributions": float(svs_contributions),
             "rental_expenses": float(rental_expenses),
+            "rental_afa": float(rental_afa),
+            "rental_financing": float(rental_financing),
+            "rental_maintenance": float(rental_maintenance),
             "werbungskosten": float(werbungskosten),
-            "sonderausgaben": float(sonderausgaben),
+            "pendlerpauschale": float(pendlerpauschale),
+            "sonderausgaben_insurance": float(sonderausgaben_insurance),
             "total_deductible": float(total_deductible),
             "gewerbebetrieb_gewinn": float(gewerbebetrieb_gewinn),
             "vermietung_einkuenfte": float(vermietung_einkuenfte),
             "gesamtbetrag_einkuenfte": float(gesamtbetrag),
+            "familienbonus": float(familienbonus),
+            "alleinerzieher": float(alleinerzieher),
+            "immoest_total": float(immoest_total),
+            "immoest_gain": float(immoest_gain_total),
             "vat_collected": float(vat_collected),
             "vat_paid": float(vat_paid),
             "vat_balance": float(vat_collected - vat_paid),

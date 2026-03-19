@@ -1,73 +1,90 @@
+/* ═══ Dashboard Overview — Tech Dynamic ═══ */
 .dashboard-overview {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .overview-card {
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: 20px 24px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--color-border-light);
-  display: flex;
-  gap: 16px;
-  transition: all var(--transition-fast);
   position: relative;
   overflow: hidden;
+  display: flex;
+  gap: 16px;
+  padding: 22px 24px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(14px);
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+  animation: overviewReveal 680ms cubic-bezier(.22,1,.36,1) both;
 }
 
-.overview-card::before {
+.overview-card:nth-child(2) { animation-delay: 100ms; }
+.overview-card:nth-child(3) { animation-delay: 180ms; }
+.overview-card:nth-child(4) { animation-delay: 260ms; }
+.overview-card:nth-child(5) { animation-delay: 340ms; }
+
+/* Left color accent bar */
+.overview-card::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
-  width: 4px;
+  width: 3px;
   height: 100%;
-  border-radius: 4px 0 0 4px;
+  border-radius: 3px 0 0 3px;
 }
 
 .overview-card:hover {
   box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+  transform: translateY(-4px);
+  border-color: var(--color-border-hover);
 }
 
 .card-icon {
-  font-size: 2rem;
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   flex-shrink: 0;
+  font-size: 1.05rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  background: var(--color-bg-soft);
 }
 
 .card-content {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
 }
 
 .card-content h3 {
-  margin: 0 0 6px 0;
-  font-size: 12px;
+  margin: 0 0 5px 0;
+  font-size: 11px;
   color: var(--color-text-muted);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: .08em;
 }
 
 .card-content .amount {
   margin: 0;
-  font-size: 1.6rem;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
   font-weight: 700;
   color: var(--color-text);
-  letter-spacing: -0.02em;
-  font-family: var(--font-sans);
+  letter-spacing: -.04em;
 }
 
 .card-content .amount.highlight {
@@ -75,49 +92,48 @@
 }
 
 .card-content .subtitle {
-  margin: 6px 0 0 0;
-  font-size: 13px;
-  color: var(--color-text-muted);
+  margin: 5px 0 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 .tax-breakdown {
   display: flex;
   gap: 12px;
-  margin-top: 8px;
-  font-size: 13px;
-  font-weight: 500;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.tax-breakdown .paid {
-  color: var(--color-success);
+.tax-breakdown .paid { color: var(--color-success); }
+.tax-breakdown .remaining { color: var(--color-warning); }
+
+.overview-card.income::after { background: var(--color-success); }
+.overview-card.income .card-icon { color: var(--color-success); }
+
+.overview-card.expenses::after { background: var(--color-danger); }
+.overview-card.expenses .card-icon { color: var(--color-danger); }
+
+.overview-card.tax::after { background: var(--color-warning); }
+.overview-card.tax .card-icon { color: var(--color-warning); }
+
+.overview-card.net-income::after { background: var(--color-primary); }
+.overview-card.net-income .card-icon { color: var(--color-primary); }
+
+.overview-card.vat-threshold::after { background: var(--color-accent); }
+.overview-card.vat-threshold .card-icon { color: var(--color-accent); }
+
+.overview-card.pending-review::after { background: #d97706; }
+.overview-card.pending-review .card-icon { color: #d97706; background: rgba(245, 158, 11, 0.1); }
+.overview-card.pending-review .amount { color: #d97706; }
+
+@keyframes overviewReveal {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
-
-.tax-breakdown .remaining {
-  color: var(--color-warning);
-}
-
-/* Card accent colors */
-.overview-card.income::before { background: var(--color-success); }
-.overview-card.income .card-icon { background: var(--color-success-light); }
-
-.overview-card.expenses::before { background: var(--color-danger); }
-.overview-card.expenses .card-icon { background: var(--color-danger-light); }
-
-.overview-card.tax::before { background: var(--color-warning); }
-.overview-card.tax .card-icon { background: var(--color-warning-light); }
-
-.overview-card.net-income::before { background: var(--color-primary); }
-.overview-card.net-income .card-icon { background: var(--color-primary-50); }
-
-.overview-card.vat-threshold::before { background: #8b5cf6; }
-.overview-card.vat-threshold .card-icon { background: #f5f3ff; }
 
 @media (max-width: 768px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .card-content .amount {
-    font-size: 1.4rem;
-  }
+  .overview-grid { grid-template-columns: 1fr; gap: 10px; }
+  .overview-card { padding: 18px 20px; border-radius: 16px; }
+  .card-content .amount { font-size: 1.35rem; }
 }

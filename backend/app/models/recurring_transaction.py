@@ -25,6 +25,8 @@ class RecurringTransactionType(str, Enum):
     OTHER_INCOME = "other_income"  # Other recurring income
     OTHER_EXPENSE = "other_expense"  # Other recurring expense
     MANUAL = "manual"  # User-defined recurring transaction
+    INSURANCE_PREMIUM = "insurance_premium"  # Insurance premium payment
+    LOAN_REPAYMENT = "loan_repayment"  # Standalone loan repayment
 
 
 class RecurringTransaction(Base):
@@ -73,6 +75,13 @@ class RecurringTransaction(Base):
     # Template for common recurring transactions
     template = Column(String(50), nullable=True)  # e.g., "svs", "wko", "office_rent", "software_subscription"
     
+    # Source document that created this recurring transaction (OCR pipeline)
+    source_document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Rental unit percentage (what share of the property this rental unit represents)
+    # e.g. Thenneberg 51/3 = 33% of Thenneberg 51
+    unit_percentage = Column(Numeric(5, 2), nullable=True)
+
     # Metadata
     notes = Column(String(1000), nullable=True)
     
@@ -102,7 +111,7 @@ class RecurringTransaction(Base):
             "(recurring_type = 'rental_income' AND property_id IS NOT NULL) OR "
             "(recurring_type = 'loan_interest' AND loan_id IS NOT NULL) OR "
             "(recurring_type = 'depreciation' AND property_id IS NOT NULL) OR "
-            "(recurring_type IN ('other_income', 'other_expense', 'manual'))",
+            "(recurring_type IN ('other_income', 'other_expense', 'manual', 'insurance_premium', 'loan_repayment'))",
             name="check_source_entity_required"
         ),
     )

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { HelpCircle, Calculator, FileText, TrendingUp, Home } from 'lucide-react';
+import { HelpCircle, Calculator, FileText, TrendingUp, Home, Calendar, Lightbulb } from 'lucide-react';
 import './SuggestedQuestions.css';
 
 interface SuggestedQuestionsProps {
@@ -18,52 +18,46 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Get context-aware questions based on current page
   const getContextQuestions = () => {
     const page = contextData?.page;
-
     switch (page) {
       case 'dashboard':
         return [
           { icon: TrendingUp, text: t('ai.questions.dashboard.taxSavings') },
           { icon: Calculator, text: t('ai.questions.dashboard.estimatedTax') },
           { icon: FileText, text: t('ai.questions.dashboard.nextDeadline') },
+          { icon: Calendar, text: t('ai.questions.dashboard.taxCalendar') },
         ];
-
       case 'transactions':
         return [
           { icon: Calculator, text: t('ai.questions.transactions.deductible') },
           { icon: FileText, text: t('ai.questions.transactions.categorize') },
           { icon: HelpCircle, text: t('ai.questions.transactions.vat') },
         ];
-
       case 'documents':
         return [
           { icon: FileText, text: t('ai.questions.documents.receipt') },
           { icon: HelpCircle, text: t('ai.questions.documents.invoice') },
           { icon: Calculator, text: t('ai.questions.documents.deductible') },
         ];
-
       case 'reports':
         return [
           { icon: FileText, text: t('ai.questions.reports.generate') },
           { icon: HelpCircle, text: t('ai.questions.reports.finanzonline') },
           { icon: Calculator, text: t('ai.questions.reports.refund') },
         ];
-
       default:
         return getGeneralQuestions();
     }
   };
 
-  // General questions for all pages
   const getGeneralQuestions = () => [
     { icon: Calculator, text: t('ai.questions.general.incomeTax') },
     { icon: FileText, text: t('ai.questions.general.deductions') },
     { icon: TrendingUp, text: t('ai.questions.general.svs') },
+    { icon: Calendar, text: t('ai.questions.general.taxCalendar') },
+    { icon: Lightbulb, text: t('ai.questions.general.taxTips') },
     { icon: Home, text: t('ai.questions.general.commuting') },
-    { icon: HelpCircle, text: t('ai.questions.general.vat') },
-    { icon: Calculator, text: t('ai.questions.general.flatRate') },
   ];
 
   const questions = getContextQuestions();
@@ -71,7 +65,7 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
   return (
     <div className="suggested-questions">
       <div className="suggested-questions-title">
-        <HelpCircle size={16} />
+        <HelpCircle size={14} />
         <span>{t('ai.suggestedQuestions')}</span>
       </div>
       <div className="suggested-questions-grid">
@@ -83,7 +77,7 @@ const SuggestedQuestions: React.FC<SuggestedQuestionsProps> = ({
               className="suggested-question-btn"
               onClick={() => onQuestionClick(question.text)}
             >
-              <Icon size={18} />
+              <Icon size={14} />
               <span>{question.text}</span>
             </button>
           );

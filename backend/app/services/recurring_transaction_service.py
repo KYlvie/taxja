@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 
 from app.models.recurring_transaction import (
     RecurringTransaction,
@@ -20,6 +20,33 @@ class RecurringTransactionService:
     
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _build_generated_description(recurring: RecurringTransaction) -> str:
+        """Build a stable description for generated child transactions."""
+        return f"{recurring.description} (Auto-generated from recurring #{recurring.id})"
+
+    @staticmethod
+    def _generated_transaction_matcher(recurring_id: int):
+        """Match both explicit and legacy recurring child links."""
+        return or_(
+            Transaction.source_recurring_id == recurring_id,
+            Transaction.parent_recurring_id == recurring_id,
+            Transaction.description.ilike(f"%recurring #{recurring_id}%"),
+        )
+
+    def _find_existing_generated_transaction(
+        self,
+        recurring: RecurringTransaction,
+        transaction_date: date,
+    ) -> Optional[Transaction]:
+        """Find an already generated occurrence for the recurring template/date."""
+        return self.db.query(Transaction).filter(
+            Transaction.user_id == recurring.user_id,
+            Transaction.transaction_date == transaction_date,
+            Transaction.is_system_generated == True,
+            self._generated_transaction_matcher(recurring.id),
+        ).order_by(Transaction.id.desc()).first()
     
     def create_rental_income_recurring(
         self,
@@ -120,6 +147,103 @@ class RecurringTransactionService:
         
         return recurring
     
+    def create_insurance_premium_recurring(
+        self,
+        user_id: int,
+        amount: Decimal,
+        frequency: RecurrenceFrequency,
+        start_date: date,
+        description: str = "Insurance premium",
+        end_date: Optional[date] = None,
+        day_of_month: int = 1,
+        source_document_id: Optional[int] = None,
+    ) -> RecurringTransaction:
+        """
+        Create a recurring transaction for insurance premium payments.
+        
+        Args:
+            user_id: User ID
+            amount: Premium amount per period
+            frequency: Payment frequency (monthly, quarterly, annually)
+            start_date: Start date for recurring transaction
+            description: Description text
+            end_date: Optional end date (None = indefinite)
+            day_of_month: Day of month to generate transaction (1-31)
+            source_document_id: Optional source document ID
+            
+        Returns:
+            Created RecurringTransaction
+        """
+        recurring = RecurringTransaction(
+            user_id=user_id,
+            recurring_type=RecurringTransactionType.INSURANCE_PREMIUM,
+            description=description,
+            amount=amount,
+            transaction_type="expense",
+            category="insurance",
+            frequency=frequency,
+            start_date=start_date,
+            end_date=end_date,
+            day_of_month=day_of_month,
+            is_active=True,
+            next_generation_date=start_date,
+            source_document_id=source_document_id,
+        )
+        
+        self.db.add(recurring)
+        self.db.commit()
+        self.db.refresh(recurring)
+        
+        return recurring
+
+    def create_loan_repayment_recurring(
+        self,
+        user_id: int,
+        monthly_payment: Decimal,
+        start_date: date,
+        description: str = "Loan repayment",
+        end_date: Optional[date] = None,
+        day_of_month: int = 1,
+        source_document_id: Optional[int] = None,
+    ) -> RecurringTransaction:
+        """
+        Create a recurring transaction for standalone loan repayments.
+        For loans not associated with a property (car loans, personal loans, etc.).
+        
+        Args:
+            user_id: User ID
+            monthly_payment: Monthly repayment amount
+            start_date: Start date for recurring transaction
+            description: Description text
+            end_date: Optional end date (None = indefinite)
+            day_of_month: Day of month to generate transaction (1-31)
+            source_document_id: Optional source document ID
+            
+        Returns:
+            Created RecurringTransaction
+        """
+        recurring = RecurringTransaction(
+            user_id=user_id,
+            recurring_type=RecurringTransactionType.LOAN_REPAYMENT,
+            description=description,
+            amount=monthly_payment,
+            transaction_type="expense",
+            category="loan_repayment",
+            frequency=RecurrenceFrequency.MONTHLY,
+            start_date=start_date,
+            end_date=end_date,
+            day_of_month=day_of_month,
+            is_active=True,
+            next_generation_date=start_date,
+            source_document_id=source_document_id,
+        )
+        
+        self.db.add(recurring)
+        self.db.commit()
+        self.db.refresh(recurring)
+        
+        return recurring
+
     def pause_recurring_transaction(self, recurring_id: int) -> RecurringTransaction:
         """Pause a recurring transaction"""
         recurring = self.db.query(RecurringTransaction).filter(
@@ -162,7 +286,7 @@ class RecurringTransactionService:
     
     def stop_recurring_transaction(self, recurring_id: int, end_date: Optional[date] = None) -> RecurringTransaction:
         """
-        Stop a recurring transaction by setting end date.
+        Stop a recurring transaction by setting end date and deleting future transactions.
         
         Args:
             recurring_id: Recurring transaction ID
@@ -178,15 +302,36 @@ class RecurringTransactionService:
         if not recurring:
             raise ValueError(f"Recurring transaction {recurring_id} not found")
         
-        recurring.end_date = end_date or date.today()
+        stop_date = end_date or date.today()
+        recurring.end_date = stop_date
         recurring.is_active = False
+        recurring.next_generation_date = None
+        
+        # Delete system-generated transactions after the stop date
+        # Match by description pattern OR parent_recurring_id
+        deleted = self.db.query(Transaction).filter(
+            Transaction.user_id == recurring.user_id,
+            Transaction.is_system_generated == True,
+            Transaction.transaction_date > stop_date,
+            self._generated_transaction_matcher(recurring.id),
+        ).delete(synchronize_session="fetch")
+        
+        if deleted:
+            import logging
+            logging.getLogger(__name__).info(
+                f"Stopped recurring #{recurring_id}: deleted {deleted} future transactions after {stop_date}"
+            )
         
         self.db.commit()
         self.db.refresh(recurring)
         
         return recurring
     
-    def generate_due_transactions(self, target_date: Optional[date] = None) -> List[Transaction]:
+    def generate_due_transactions(
+        self,
+        target_date: Optional[date] = None,
+        user_id: Optional[int] = None,
+    ) -> List[Transaction]:
         """
         Generate all due recurring transactions up to target date.
 
@@ -199,6 +344,7 @@ class RecurringTransactionService:
 
         Args:
             target_date: Date to generate up to (defaults to today)
+            user_id: Optional user scope for interactive generation requests
 
         Returns:
             List of generated transactions
@@ -207,15 +353,20 @@ class RecurringTransactionService:
             target_date = date.today()
 
         # Find all active recurring transactions that are due
-        due_recurrings = self.db.query(RecurringTransaction).filter(
-            and_(
-                RecurringTransaction.is_active == True,
-                RecurringTransaction.start_date <= target_date,
-                RecurringTransaction.next_generation_date <= target_date
-            )
-        ).all()
+        filters = [
+            RecurringTransaction.is_active == True,
+            RecurringTransaction.start_date <= target_date,
+            RecurringTransaction.next_generation_date.isnot(None),
+            RecurringTransaction.next_generation_date <= target_date,
+        ]
+        if user_id is not None:
+            filters.append(RecurringTransaction.user_id == user_id)
+
+        due_recurrings = self.db.query(RecurringTransaction).filter(and_(*filters)).all()
 
         generated_transactions = []
+        state_changed = False
+        expired_rental_props: dict = {}  # {(prop_id_str, user_id): (prop_id, user_id)}
 
         for recurring in due_recurrings:
             # Check if end date has passed entirely
@@ -237,21 +388,59 @@ class RecurringTransactionService:
             ):
                 gen_date = recurring.next_generation_date
 
-                # Generate transaction for this occurrence
-                transaction = self._generate_transaction_from_recurring(recurring, gen_date)
-                generated_transactions.append(transaction)
+                existing_transaction = self._find_existing_generated_transaction(recurring, gen_date)
+                if existing_transaction:
+                    if existing_transaction.source_recurring_id != recurring.id:
+                        existing_transaction.source_recurring_id = recurring.id
+                        state_changed = True
+                else:
+                    transaction = self._generate_transaction_from_recurring(recurring, gen_date)
+                    generated_transactions.append(transaction)
+                    state_changed = True
 
                 # Advance to next occurrence
                 recurring.last_generated_date = gen_date
                 recurring.next_generation_date = recurring.calculate_next_date(gen_date)
+                state_changed = True
                 iterations += 1
 
             # Deactivate if end date has fully passed
-            if recurring.end_date and target_date > recurring.end_date:
+            if recurring.end_date and target_date > recurring.end_date and recurring.is_active:
                 recurring.is_active = False
+                state_changed = True
+                # Track rental contracts for property recalculation
+                if (
+                    recurring.property_id
+                    and recurring.recurring_type == RecurringTransactionType.RENTAL_INCOME
+                ):
+                    _expired_key = (str(recurring.property_id), recurring.user_id)
+                    expired_rental_props[_expired_key] = (
+                        recurring.property_id,
+                        recurring.user_id,
+                    )
 
-        if generated_transactions:
+        if state_changed:
             self.db.commit()
+
+        # Recalculate rental percentage for properties whose contracts just expired
+        if expired_rental_props:
+            from app.services.property_service import PropertyService
+            import logging
+
+            _logger = logging.getLogger(__name__)
+            ps = PropertyService(self.db)
+            for prop_id, uid in expired_rental_props.values():
+                try:
+                    ps.recalculate_rental_percentage(prop_id, uid)
+                    _logger.info(
+                        "Recalculated rental_percentage after contract expiry "
+                        f"(property={prop_id}, user={uid})"
+                    )
+                except Exception as e:
+                    _logger.warning(
+                        f"Failed to recalculate rental_percentage for property "
+                        f"{prop_id} after contract expiry: {e}"
+                    )
 
         return generated_transactions
     
@@ -270,19 +459,28 @@ class RecurringTransactionService:
         else:
             txn_type = TransactionType.EXPENSE
             income_category = None
-            expense_category = ExpenseCategory.LOAN_INTEREST if recurring.recurring_type == RecurringTransactionType.LOAN_INTEREST else ExpenseCategory.OTHER
+            # Map recurring type to expense category
+            expense_category_map = {
+                RecurringTransactionType.LOAN_INTEREST: ExpenseCategory.LOAN_INTEREST,
+                RecurringTransactionType.INSURANCE_PREMIUM: ExpenseCategory.INSURANCE,
+                RecurringTransactionType.LOAN_REPAYMENT: ExpenseCategory.LOAN_INTEREST,
+            }
+            expense_category = expense_category_map.get(
+                recurring.recurring_type, ExpenseCategory.OTHER
+            )
         
         transaction = Transaction(
             user_id=recurring.user_id,
             type=txn_type,
             amount=recurring.amount,
             transaction_date=transaction_date,
-            description=f"{recurring.description} (Auto-generated from recurring #{recurring.id})",
+            description=self._build_generated_description(recurring),
             income_category=income_category,
             expense_category=expense_category,
             property_id=recurring.property_id,
             is_deductible=recurring.transaction_type == "expense",
             is_system_generated=True,
+            source_recurring_id=recurring.id,
         )
         
         self.db.add(transaction)
@@ -292,12 +490,6 @@ class RecurringTransactionService:
     def auto_pause_for_sold_property(self, property_id: str) -> List[RecurringTransaction]:
         """
         Automatically pause all recurring transactions for a sold property.
-        
-        Args:
-            property_id: Property UUID
-            
-        Returns:
-            List of paused recurring transactions
         """
         recurrings = self.db.query(RecurringTransaction).filter(
             and_(
@@ -317,6 +509,130 @@ class RecurringTransactionService:
         self.db.commit()
         
         return paused
+
+    def update_and_regenerate(
+        self,
+        recurring_id: int,
+        user_id: int,
+        update_data: Dict[str, Any],
+        apply_from: Optional[date] = None,
+    ) -> RecurringTransaction:
+        """
+        Update a recurring transaction template and regenerate future transactions.
+
+        1. Update the recurring template fields
+        2. Delete all system-generated transactions from apply_from onwards
+        3. Regenerate transactions up to today based on new template values
+        """
+        recurring = self.db.query(RecurringTransaction).filter(
+            RecurringTransaction.id == recurring_id,
+            RecurringTransaction.user_id == user_id,
+        ).first()
+        if not recurring:
+            raise ValueError(f"Recurring transaction {recurring_id} not found")
+
+        # Apply updates to template
+        for field, value in update_data.items():
+            if value is not None and hasattr(recurring, field):
+                setattr(recurring, field, value)
+
+        # Determine the cutoff date
+        cutoff = apply_from or date.today()
+
+        # Delete future system-generated transactions linked to this recurring
+        self.db.query(Transaction).filter(
+            Transaction.user_id == user_id,
+            Transaction.is_system_generated == True,
+            self._generated_transaction_matcher(recurring.id),
+            Transaction.transaction_date >= cutoff,
+        ).delete(synchronize_session="fetch")
+
+        # Reset generation tracking to cutoff
+        recurring.last_generated_date = cutoff - __import__("datetime").timedelta(days=1)
+        recurring.next_generation_date = cutoff
+
+        self.db.commit()
+
+        # Regenerate up to today
+        generated = self.generate_due_transactions(target_date=date.today(), user_id=user_id)
+
+        self.db.refresh(recurring)
+        return recurring
+
+    def convert_transaction_to_recurring(
+        self,
+        transaction_id: int,
+        user_id: int,
+        frequency: str,
+        start_date: date,
+        end_date: Optional[date] = None,
+        day_of_month: Optional[int] = None,
+        notes: Optional[str] = None,
+    ) -> RecurringTransaction:
+        """
+        Convert a single transaction into a recurring transaction template.
+
+        Creates a new RecurringTransaction based on the single transaction's data,
+        then marks the original transaction as the first generated instance.
+        """
+        txn = self.db.query(Transaction).filter(
+            Transaction.id == transaction_id,
+            Transaction.user_id == user_id,
+        ).first()
+        if not txn:
+            raise ValueError(f"Transaction {transaction_id} not found")
+
+        if txn.is_system_generated or txn.parent_recurring_id or txn.source_recurring_id:
+            raise ValueError("Cannot convert a system-generated or recurring-child transaction")
+
+        # Determine recurring type
+        if txn.type == TransactionType.INCOME:
+            rec_type = RecurringTransactionType.OTHER_INCOME
+            category = txn.income_category.value if txn.income_category else "other_income"
+        else:
+            rec_type = RecurringTransactionType.OTHER_EXPENSE
+            category = txn.expense_category.value if txn.expense_category else "other"
+
+        # Map frequency string
+        freq_map = {
+            "monthly": RecurrenceFrequency.MONTHLY,
+            "quarterly": RecurrenceFrequency.QUARTERLY,
+            "annually": RecurrenceFrequency.ANNUALLY,
+            "weekly": RecurrenceFrequency.WEEKLY,
+            "biweekly": RecurrenceFrequency.BIWEEKLY,
+        }
+        freq = freq_map.get(frequency, RecurrenceFrequency.MONTHLY)
+
+        recurring = RecurringTransaction(
+            user_id=user_id,
+            recurring_type=rec_type,
+            property_id=txn.property_id,
+            description=txn.description,
+            amount=txn.amount,
+            transaction_type=txn.type.value,
+            category=category,
+            frequency=freq,
+            start_date=start_date,
+            end_date=end_date,
+            day_of_month=day_of_month or start_date.day,
+            notes=notes,
+            is_active=True,
+            next_generation_date=start_date,
+        )
+
+        self.db.add(recurring)
+        self.db.flush()
+
+        # Mark original transaction as linked to this recurring
+        txn.is_recurring = False
+        txn.parent_recurring_id = None  # Keep it independent
+        txn.source_recurring_id = None
+        txn.is_system_generated = False
+
+        self.db.commit()
+        self.db.refresh(recurring)
+
+        return recurring
     
     def get_user_recurring_transactions(
         self,

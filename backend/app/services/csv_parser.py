@@ -25,6 +25,7 @@ class BankFormat(str, Enum):
     ERSTE_BANK = "erste_bank"
     SPARKASSE = "sparkasse"
     BANK_AUSTRIA = "bank_austria"
+    ELBA = "elba"
     GENERIC = "generic"
 
 
@@ -65,6 +66,12 @@ class CSVParser:
             "amount": ["Betrag"],
             "description": ["Buchungstext"],
             "reference": ["Referenznummer"],
+        },
+        BankFormat.ELBA: {
+            "date": ["Buchungsdatum", "Valuta"],
+            "amount": ["Betrag"],
+            "description": ["Auftraggeber/Empfaenger", "Zahlungsreferenz", "Buchungstext"],
+            "reference": ["Zahlungsreferenz"],
         },
     }
     
@@ -151,7 +158,13 @@ class CSVParser:
         # Check for Bank Austria-specific headers
         if "referenznummer" in fieldnames_lower:
             return BankFormat.BANK_AUSTRIA
-        
+
+        # Check for ELBA (Raiffeisen Online Banking export)
+        if any("kontonummer" in f for f in fieldnames_lower) and any("valuta" in f for f in fieldnames_lower):
+            return BankFormat.ELBA
+        if any("zahlungsreferenz" in f for f in fieldnames_lower):
+            return BankFormat.ELBA
+
         return BankFormat.GENERIC
     
     def _parse_row(self, row: Dict[str, str]) -> Optional[Dict[str, Any]]:

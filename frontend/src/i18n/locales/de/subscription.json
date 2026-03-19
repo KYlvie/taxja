@@ -26,22 +26,23 @@
       }
     },
     "features": {
-      "transactions_limit": "50 Transaktionen/Monat",
+      "transactions_limit": "30 Transaktionen/Monat",
       "basic_tax_calc": "Grundlegende Steuerberechnung",
-      "german_only": "Nur Deutsch",
       "unlimited_transactions": "Unbegrenzte Transaktionen",
-      "ocr_limit": "20 OCR-Scans/Monat",
+      "ocr_limit": "20 Belege scannen/Monat",
       "full_tax_calc": "Vollständige Steuerberechnung",
       "multi_language": "Mehrsprachig (DE, EN, ZH)",
       "vat_svs": "USt & SVS Berechnungen",
+      "property_management": "Immobilienverwaltung",
+      "bank_import": "Bankimport",
+      "recurring_suggestions": "Intelligente Daueraufträge",
       "everything_plus": "Alles in Plus",
-      "unlimited_ocr": "Unbegrenzte OCR-Scans",
+      "unlimited_ocr": "Unbegrenzt Belege scannen",
       "ai_assistant": "KI-Steuerassistent",
       "e1_generation": "E1-Formular Generierung",
-      "advanced_reports": "Erweiterte Berichte",
+      "advanced_reports": "Erweiterte Berichte (EA, Bilanz)",
       "priority_support": "Prioritäts-Support",
-      "api_access": "API-Zugriff",
-      "ocr": "OCR-Scanning"
+      "ocr": "Belege scannen & erkennen"
     },
     "buttons": {
       "get_started": "Loslegen",
@@ -73,6 +74,20 @@
     "canceling": "Wird gekündigt",
     "ends_on": "Endet am {{date}}",
     "cancel_notice": "Ihr Abonnement wird am Ende der aktuellen Periode gekündigt",
+    "credits_title": "Credits",
+    "credits_available": "Verfügbare Credits",
+    "overage_mode": "Overage",
+    "overage_on": "An",
+    "overage_off": "Aus",
+    "overage_unavailable": "Nicht verfügbar",
+    "overage_suspended": "Pausiert",
+    "overage_rate": "{{rate}} / Credit",
+    "overage_estimate": "Schätzung {{amount}}",
+    "overage_toggle_error": "Overage-Modus konnte nicht aktualisiert werden.",
+    "overage_payment_due_title": "Overage pausiert",
+    "overage_payment_due_message": "Overage ist pausiert, bis die offene Rechnung in Stripe beglichen ist.",
+    "resolve_billing": "Abrechnung klären",
+    "billing_portal_error": "Das Abrechnungsportal konnte nicht geöffnet werden.",
     "usage_title": "Nutzung in dieser Periode",
     "unlimited": "Unbegrenzt",
     "quota_exceeded": "Überschritten",
@@ -106,7 +121,7 @@
     },
     "resources": {
       "transactions": "Transaktionen",
-      "ocr_scans": "OCR-Scans",
+      "ocr_scans": "Beleg-Scans",
       "ai_conversations": "KI-Gespräche"
     }
   },
@@ -117,7 +132,7 @@
     "quota_exceeded": "Kontingent überschritten",
     "quota_warning": "Limit wird erreicht ({{percent}}%)",
     "transactions": "Transaktionen",
-    "ocr_scans": "OCR-Scans",
+    "ocr_scans": "Beleg-Scans",
     "ai_conversations": "KI-Gespräche"
   },
   "upgrade": {
@@ -132,8 +147,8 @@
       "pro": "Pro"
     },
     "features": {
-      "ocr_scanning": "OCR-Scanning",
-      "unlimited_ocr": "Unbegrenzte OCR",
+      "ocr_scanning": "Belege scannen",
+      "unlimited_ocr": "Unbegrenzt Belege scannen",
       "ai_assistant": "KI-Steuerassistent",
       "e1_generation": "E1-Formular Generierung",
       "advanced_reports": "Erweiterte Berichte",
@@ -143,13 +158,13 @@
     "benefits": {
       "plus": {
         "1": "Unbegrenzte Transaktionen",
-        "2": "20 OCR-Scans pro Monat",
+        "2": "20 Beleg-Scans pro Monat",
         "3": "Vollständige Steuerberechnungen",
         "4": "Mehrsprachiger Support",
         "5": "USt & SVS Berechnungen"
       },
       "pro": {
-        "1": "Unbegrenzte OCR-Scans",
+        "1": "Unbegrenzt Belege scannen",
         "2": "KI-gestützte Steuerberatung",
         "3": "Automatische E1-Formular Generierung",
         "4": "Erweiterte Analysen und Berichte",

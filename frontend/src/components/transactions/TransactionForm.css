@@ -326,3 +326,169 @@
   color: #4b5563;
   line-height: 1.5;
 }
+
+/* Line Items Section */
+.line-items-section {
+  margin-bottom: 20px;
+  padding: 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.75rem;
+}
+
+.line-items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.line-items-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #166534;
+}
+
+.btn-add-line-item {
+  background: none;
+  border: 1px dashed #86efac;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  color: #16a34a;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-line-item:hover {
+  background: #dcfce7;
+  border-color: #4ade80;
+}
+
+.line-items-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line-item-edit-row {
+  background: white;
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.line-item-edit-main {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.line-item-input {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.line-item-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.line-item-desc-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.line-item-amount-input {
+  width: 100px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.btn-remove-line-item {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.btn-remove-line-item:hover {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.line-item-edit-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.line-item-select {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  background: white;
+}
+
+.line-item-select:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.line-item-deductible-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.line-item-deductible-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #16a34a;
+}
+
+.deductible-yes {
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.deductible-no {
+  color: #6b7280;
+}
+
+@media (max-width: 768px) {
+  .line-item-edit-main {
+    flex-wrap: wrap;
+  }
+
+  .line-item-desc-input {
+    width: 100%;
+  }
+
+  .line-item-amount-input {
+    flex: 1;
+  }
+
+  .line-item-edit-meta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -7,6 +7,7 @@ interface DashboardData {
   paidTax: number;
   remainingTax: number;
   netIncome: number;
+  pendingReviewCount?: number;
   vatThresholdDistance?: number;
   estimatedRefund?: number;
   withheldTax?: number;
@@ -43,6 +44,8 @@ interface SavingsSuggestion {
   description: string;
   potentialSavings: number;
   actionLink: string;
+  type?: string;
+  documentType?: string;
 }
 
 interface DashboardState {

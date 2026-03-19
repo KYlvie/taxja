@@ -4,12 +4,16 @@ Uses RAG (knowledge base + user data + LLM) when OPENAI_API_KEY is configured,
 falls back to rule-based responses otherwise.
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+import json
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, File, Form, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.db.base import get_db
 from app.core.security import get_current_user
+from app.api.deps import require_feature
+from app.services.feature_gate_service import Feature
+from app.services.credit_service import CreditService, InsufficientCreditsError
 from app.models.user import User
 from app.models.chat_message import MessageRole
 from app.schemas.ai_assistant import (
@@ -23,6 +27,43 @@ from app.services.chat_history_service import get_chat_history_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _deduct_ai_conversation_credits(db: Session, user_id: int):
+    """Deduct credits for one AI conversation or raise HTTP 402."""
+    credit_service = CreditService(db, redis_client=None)
+    try:
+        deduction = credit_service.check_and_deduct(
+            user_id=user_id,
+            operation="ai_conversation",
+        )
+    except InsufficientCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits: {e.required} required, {e.available} available",
+        ) from e
+
+    return credit_service, deduction
+
+
+def _refund_ai_conversation_credits(
+    db: Session,
+    credit_service: CreditService,
+    user_id: int,
+    refund_key: str,
+) -> None:
+    """Persist AI credit refunds when processing fails after chat history was saved."""
+    try:
+        credit_service.refund_credits(
+            user_id=user_id,
+            operation="ai_conversation",
+            reason="processing_failed",
+            refund_key=refund_key,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to persist AI credit refund for user %s", user_id)
 
 # Disclaimers appended to every response
 DISCLAIMERS = {
@@ -179,16 +220,50 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
     return defaults.get(language, defaults["de"])
 
 
+def _format_ai_context(context: dict | None) -> str:
+    """Turn structured page/document context into a compact prompt block."""
+    if not context:
+        return ""
+
+    allowed_keys = [
+        "page",
+        "documentId",
+        "document_type_detected",
+        "document_type",
+        "suggestion_type",
+        "candidate_month",
+        "payroll_signal",
+        "year",
+        "user_employer_profile",
+    ]
+    parts: list[str] = []
+    for key in allowed_keys:
+        value = context.get(key)
+        if value in (None, "", [], {}):
+            continue
+        parts.append(f"{key}: {value}")
+
+    if not parts:
+        return ""
+
+    return "Workflow context:\n" + "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    dependencies=[Depends(require_feature(Feature.AI_ASSISTANT))],
+)
 def chat_with_assistant(
     *,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     message_in: ChatMessageCreate,
+    response: Response,
 ):
     """
     Send a message to the AI Tax Assistant.
@@ -201,7 +276,33 @@ def chat_with_assistant(
     """
     from app.services.ai_orchestrator import AIOrchestrator
 
+    # --- Credit deduction ---
+    credit_service, deduction = _deduct_ai_conversation_credits(
+        db, current_user.id
+    )
+
     chat_service = get_chat_history_service(db)
+
+    enhanced_message = message_in.message
+    context_block = _format_ai_context(message_in.context)
+    if context_block:
+        enhanced_message = f"{context_block}\n\nUser request:\n{message_in.message}"
+
+    # Inject suggestion context if provided (for suggestion-aware chat responses)
+    if message_in.suggestion_context:
+        sc = message_in.suggestion_context
+        suggestion_context_block = (
+            f"\n[Suggestion Context]\n"
+            f"The user has a pending '{sc.suggestion_type}' suggestion "
+            f"from document #{sc.document_id}.\n"
+            f"Key data: {sc.summary}\n"
+        )
+        if sc.pending_questions:
+            suggestion_context_block += f"Unanswered questions: {', '.join(sc.pending_questions)}\n"
+        suggestion_context_block += (
+            "Answer the user's question in the context of this specific document/suggestion.\n"
+        )
+        enhanced_message = suggestion_context_block + "\n" + enhanced_message
 
     # Save user message
     user_message = chat_service.save_message(
@@ -222,11 +323,20 @@ def chat_with_assistant(
 
     # Run through orchestrator
     orchestrator = AIOrchestrator(db=db, user_id=current_user.id)
-    result = orchestrator.handle_message(
-        message=message_in.message,
-        language=message_in.language,
-        conversation_history=conversation_history,
-    )
+    try:
+        result = orchestrator.handle_message(
+            message=enhanced_message,
+            language=message_in.language,
+            conversation_history=conversation_history,
+        )
+    except Exception:
+        _refund_ai_conversation_credits(
+            db=db,
+            credit_service=credit_service,
+            user_id=current_user.id,
+            refund_key=f"refund:ai:{current_user.id}:{user_message.id}",
+        )
+        raise
 
     # Save assistant message
     assistant_message = chat_service.save_message(
@@ -234,6 +344,10 @@ def chat_with_assistant(
         role=MessageRole.ASSISTANT,
         content=result.text,
         language=message_in.language,
+    )
+
+    response.headers["X-Credits-Remaining"] = str(
+        deduction.balance_after.available_without_overage
     )
 
     return ChatResponse(
@@ -275,7 +389,7 @@ def _build_user_context(db: Session, user: User) -> str:
     ).scalar() or 0
     
     context_parts = [
-        f"Benutzer: {user.email}",
+        f"Benutzer: user_{user.id}",
         f"Steuerjahr: {year}",
         f"Einkommen (YTD): €{income_total:,.2f}",
         f"Ausgaben (YTD): €{expense_total:,.2f}",
@@ -319,3 +433,150 @@ def clear_chat_history(
     """Clear all chat history for the current user."""
     chat_service = get_chat_history_service(db)
     chat_service.clear_history(user_id=current_user.id)
+
+
+@router.post(
+    "/chat-with-file",
+    response_model=ChatResponse,
+    dependencies=[Depends(require_feature(Feature.AI_ASSISTANT))],
+)
+async def chat_with_file(
+    *,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    message: str = Form(default=""),
+    language: str = Form(default="de"),
+    context: str = Form(default=""),
+    response: Response = None,
+):
+    """
+    Send a message with an attached file to the AI Tax Assistant.
+    Supports images (JPG/PNG) and PDFs — runs OCR to extract text,
+    then passes the content to the AI orchestrator alongside the user message.
+    """
+    # Whitelist supported languages
+    if language not in ("de", "en", "zh"):
+        language = "de"
+
+    from app.services.ai_orchestrator import AIOrchestrator
+
+    credit_service, deduction = _deduct_ai_conversation_credits(
+        db, current_user.id
+    )
+
+    ALLOWED_TYPES = {
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+    }
+    MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type: {file.content_type}",
+        )
+
+    file_content = await file.read()
+    if len(file_content) > MAX_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large. Maximum size is 10 MB.",
+        )
+
+    # Try to extract text from the file
+    extracted_text = ""
+    try:
+        if file.content_type in (
+            "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf",
+        ):
+            from app.services.ocr_engine import OCREngine
+            engine = OCREngine()
+            ocr_result = engine.process_document(file_content, mime_type=file.content_type)
+            extracted_text = getattr(ocr_result, "raw_text", "") or ""
+        elif file.content_type == "text/csv":
+            extracted_text = file_content.decode("utf-8", errors="replace")[:5000]
+    except Exception as e:
+        logger.warning("Failed to extract text from uploaded file: %s", e)
+        extracted_text = ""
+
+    # Build the combined message
+    file_context = f"[Attached file: {file.filename}]"
+    if extracted_text:
+        # Truncate to avoid overwhelming the model
+        truncated = extracted_text[:3000]
+        file_context += f"\n\nExtracted content:\n{truncated}"
+
+    parsed_context = None
+    if context.strip():
+        try:
+            parsed_context = json.loads(context)
+        except json.JSONDecodeError:
+            parsed_context = None
+
+    combined_message = f"{file_context}\n\n{message}" if message.strip() else file_context
+    context_block = _format_ai_context(parsed_context)
+    if context_block:
+        combined_message = f"{context_block}\n\n{combined_message}"
+
+    chat_service = get_chat_history_service(db)
+
+    # Save user message
+    user_message = chat_service.save_message(
+        user_id=current_user.id,
+        role=MessageRole.USER,
+        content=combined_message,
+        language=language,
+    )
+
+    # Get conversation history
+    recent_msgs = chat_service.get_conversation_history(
+        user_id=current_user.id, limit=6, offset=0
+    )
+    conversation_history = [
+        {"role": msg.role.value, "content": msg.content}
+        for msg in reversed(recent_msgs)
+    ]
+
+    # Run through orchestrator
+    orchestrator = AIOrchestrator(db=db, user_id=current_user.id)
+    try:
+        result = orchestrator.handle_message(
+            message=combined_message,
+            language=language,
+            conversation_history=conversation_history,
+        )
+    except Exception:
+        _refund_ai_conversation_credits(
+            db=db,
+            credit_service=credit_service,
+            user_id=current_user.id,
+            refund_key=f"refund:ai-file:{current_user.id}:{user_message.id}",
+        )
+        raise
+
+    # Save assistant response
+    assistant_message = chat_service.save_message(
+        user_id=current_user.id,
+        role=MessageRole.ASSISTANT,
+        content=result.text,
+        language=language,
+    )
+
+    if response is not None:
+        response.headers["X-Credits-Remaining"] = str(
+            deduction.balance_after.available_without_overage
+        )
+
+    return ChatResponse(
+        message=result.text,
+        message_id=assistant_message.id,
+        timestamp=assistant_message.created_at,
+        intent=result.intent.value if result.intent else None,
+        data=result.data,
+        suggestions=result.suggestions,
+    )

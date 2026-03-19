@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch, MagicMock
 from uuid import uuid4
 from decimal import Decimal
 from datetime import datetime
+from celery.exceptions import Retry as CeleryRetry
 
 from app.models.historical_import import (
     HistoricalImportUpload,
@@ -51,19 +52,36 @@ def mock_document():
     return document
 
 
+@pytest.fixture
+def mock_task():
+    """Mock bound Celery task instance."""
+    task = Mock()
+    task.request = Mock()
+    task.request.id = "test-task-id"
+    task.request.retries = 0
+    task.max_retries = 3
+    task.retry = Mock(side_effect=CeleryRetry("Retry triggered"))
+    return task
+
+
+def invoke_historical_import_ocr(task, upload_id: str):
+    """Call the bound historical import OCR task with an explicit fake task object."""
+    from app.tasks.ocr_tasks import process_historical_import_ocr
+
+    return process_historical_import_ocr.run.__func__(task, upload_id)
+
+
 class TestProcessHistoricalImportOCR:
     """Test suite for process_historical_import_ocr task"""
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
-    @patch("app.tasks.ocr_tasks.E1FormExtractor")
+    @patch("app.services.e1_form_extractor.E1FormExtractor")
     def test_successful_e1_form_extraction(
-        self, mock_e1_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
+        self, mock_e1_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document, mock_task
     ):
         """Test successful E1 form OCR and extraction"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -100,7 +118,7 @@ class TestProcessHistoricalImportOCR:
         mock_e1_extractor.return_value = extractor_instance
 
         # Execute task
-        result = process_historical_import_ocr(None, str(mock_upload.id))
+        result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify result
         assert result["upload_id"] == str(mock_upload.id)
@@ -114,16 +132,14 @@ class TestProcessHistoricalImportOCR:
         assert mock_upload.extraction_confidence == Decimal("0.85")
         assert mock_upload.requires_review is False
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
-    @patch("app.tasks.ocr_tasks.BescheidExtractor")
+    @patch("app.services.bescheid_extractor.BescheidExtractor")
     def test_low_confidence_requires_review(
-        self, mock_bescheid_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
+        self, mock_bescheid_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document, mock_task
     ):
         """Test that low confidence extraction triggers review requirement"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -157,7 +173,7 @@ class TestProcessHistoricalImportOCR:
         mock_bescheid_extractor.return_value = extractor_instance
 
         # Execute task
-        result = process_historical_import_ocr(None, str(mock_upload.id))
+        result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify review is required
         assert result["requires_review"] is True
@@ -165,16 +181,14 @@ class TestProcessHistoricalImportOCR:
         assert mock_upload.status == ImportStatus.REVIEW_REQUIRED
         assert mock_upload.requires_review is True
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
-    @patch("app.tasks.ocr_tasks.KaufvertragExtractor")
+    @patch("app.services.kaufvertrag_extractor.KaufvertragExtractor")
     def test_kaufvertrag_extraction(
-        self, mock_kaufvertrag_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
+        self, mock_kaufvertrag_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document, mock_task
     ):
         """Test Kaufvertrag extraction with lower confidence threshold"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -208,17 +222,15 @@ class TestProcessHistoricalImportOCR:
         mock_kaufvertrag_extractor.return_value = extractor_instance
 
         # Execute task
-        result = process_historical_import_ocr(None, str(mock_upload.id))
+        result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify Kaufvertrag passes with 0.65 confidence (threshold is 0.6)
         assert result["requires_review"] is False
         assert result["status"] == ImportStatus.EXTRACTED.value
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    def test_saldenliste_skips_ocr(self, mock_session, mock_upload, mock_document):
+    @patch("app.db.base.SessionLocal")
+    def test_saldenliste_skips_ocr(self, mock_session, mock_upload, mock_document, mock_task):
         """Test that Saldenliste skips OCR and marks as extracted"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -230,13 +242,13 @@ class TestProcessHistoricalImportOCR:
         ]
 
         # Mock storage service (should not be called for Saldenliste)
-        with patch("app.tasks.ocr_tasks.StorageService") as mock_storage:
+        with patch("app.services.storage_service.StorageService") as mock_storage:
             storage_instance = Mock()
             storage_instance.download_file.return_value = b"fake_csv_bytes"
             mock_storage.return_value = storage_instance
 
             # Execute task
-            result = process_historical_import_ocr(None, str(mock_upload.id))
+            result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
             # Verify Saldenliste is marked as extracted with high confidence
             assert result["status"] == ImportStatus.EXTRACTED.value
@@ -244,26 +256,22 @@ class TestProcessHistoricalImportOCR:
             assert result["requires_review"] is False
             assert "file_path" in result["extracted_data"]
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    def test_invalid_upload_id(self, mock_session):
+    @patch("app.db.base.SessionLocal")
+    def test_invalid_upload_id(self, mock_session, mock_task):
         """Test handling of invalid upload_id format"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         db = Mock()
         mock_session.return_value = db
 
         # Execute task with invalid UUID
-        result = process_historical_import_ocr(None, "invalid-uuid")
+        result = invoke_historical_import_ocr(mock_task, "invalid-uuid")
 
         # Verify error response
         assert "error" in result
         assert result["error"] == "Invalid upload_id format"
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    def test_upload_not_found(self, mock_session):
+    @patch("app.db.base.SessionLocal")
+    def test_upload_not_found(self, mock_session, mock_task):
         """Test handling of non-existent upload"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         db = Mock()
         mock_session.return_value = db
         db.query.return_value.filter.return_value.first.return_value = None
@@ -271,18 +279,16 @@ class TestProcessHistoricalImportOCR:
         upload_id = str(uuid4())
 
         # Execute task
-        result = process_historical_import_ocr(None, upload_id)
+        result = invoke_historical_import_ocr(mock_task, upload_id)
 
         # Verify error response
         assert "error" in result
         assert result["error"] == "Upload not found"
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     def test_storage_error_with_retry(self, mock_storage, mock_session, mock_upload, mock_document):
         """Test retry logic for transient storage errors"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -299,26 +305,25 @@ class TestProcessHistoricalImportOCR:
 
         # Create mock task with retry capability
         mock_task = Mock()
+        mock_task.request = Mock()
         mock_task.request.retries = 0
         mock_task.max_retries = 3
-        mock_task.retry = Mock(side_effect=Exception("Retry triggered"))
+        mock_task.retry = Mock(side_effect=CeleryRetry("Retry triggered"))
 
         # Execute task and expect retry
-        with pytest.raises(Exception, match="Retry triggered"):
-            process_historical_import_ocr(mock_task, str(mock_upload.id))
+        with pytest.raises(CeleryRetry):
+            invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify retry was called
         mock_task.retry.assert_called_once()
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
     def test_ocr_failure_updates_status(
         self, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
     ):
         """Test that OCR failure updates upload status to FAILED"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -343,23 +348,21 @@ class TestProcessHistoricalImportOCR:
         mock_task.max_retries = 3
 
         # Execute task
-        result = process_historical_import_ocr(mock_task, str(mock_upload.id))
+        result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify upload status was updated to FAILED
         assert mock_upload.status == ImportStatus.FAILED
         assert len(mock_upload.errors) > 0
         assert "OCR processing failed" in result["error"]
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
-    @patch("app.tasks.ocr_tasks.E1FormExtractor")
+    @patch("app.services.e1_form_extractor.E1FormExtractor")
     def test_extraction_failure_updates_status(
-        self, mock_e1_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
+        self, mock_e1_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document, mock_task
     ):
         """Test that extraction failure updates upload status to FAILED"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -386,23 +389,21 @@ class TestProcessHistoricalImportOCR:
         mock_e1_extractor.return_value = extractor_instance
 
         # Execute task
-        result = process_historical_import_ocr(None, str(mock_upload.id))
+        result = invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify upload status was updated to FAILED
         assert mock_upload.status == ImportStatus.FAILED
         assert len(mock_upload.errors) > 0
         assert "Data extraction failed" in result["error"]
 
-    @patch("app.tasks.ocr_tasks.SessionLocal")
-    @patch("app.tasks.ocr_tasks.StorageService")
+    @patch("app.db.base.SessionLocal")
+    @patch("app.services.storage_service.StorageService")
     @patch("app.tasks.ocr_tasks.OCREngine")
-    @patch("app.tasks.ocr_tasks.E1FormExtractor")
+    @patch("app.services.e1_form_extractor.E1FormExtractor")
     def test_task_id_stored_in_upload(
         self, mock_e1_extractor, mock_ocr_engine, mock_storage, mock_session, mock_upload, mock_document
     ):
         """Test that Celery task ID is stored in upload record"""
-        from app.tasks.ocr_tasks import process_historical_import_ocr
-
         # Setup mocks
         db = Mock()
         mock_session.return_value = db
@@ -435,7 +436,7 @@ class TestProcessHistoricalImportOCR:
         mock_task.request.id = "test-task-id-12345"
 
         # Execute task
-        process_historical_import_ocr(mock_task, str(mock_upload.id))
+        invoke_historical_import_ocr(mock_task, str(mock_upload.id))
 
         # Verify task ID was stored
         assert mock_upload.ocr_task_id == "test-task-id-12345"

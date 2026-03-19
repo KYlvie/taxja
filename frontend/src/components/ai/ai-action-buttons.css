@@ -1,0 +1,61 @@
+/* Shared AI Action Button Styles — Task 2 (FR-18)
+ *
+ * Consistent button styling across all AI surfaces:
+ * ChatSuggestionCard, ChatFollowUpQuestion, ChatProactiveAction,
+ * ConfirmDialog, SuggestionCards.
+ */
+
+.ai-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.ai-action-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-primary, #6366f1);
+}
+
+/* Confirm / Primary */
+.ai-action-btn--confirm {
+  background: var(--color-primary, #6366f1);
+  color: #fff;
+}
+.ai-action-btn--confirm:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* Dismiss / Ghost */
+.ai-action-btn--dismiss {
+  background: transparent;
+  color: var(--color-text-secondary, #64748b);
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+.ai-action-btn--dismiss:hover:not(:disabled) {
+  background: var(--color-surface-strong, #f1f5f9);
+}
+
+/* Loading state */
+.ai-action-btn--loading,
+.ai-action-btn:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Spin animation for loader */
+.ai-action-btn .animate-spin {
+  animation: aiActionSpin 1s linear infinite;
+}
+
+@keyframes aiActionSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

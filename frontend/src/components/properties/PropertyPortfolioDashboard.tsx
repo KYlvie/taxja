@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePropertyStore } from '../../stores/propertyStore';
 import { PropertyStatus } from '../../types/property';
+import SubpageBackLink from '../common/SubpageBackLink';
 import {
   BarChart,
   Bar,
@@ -171,6 +172,7 @@ export const PropertyPortfolioDashboard: React.FC = () => {
   return (
     <div className="portfolio-dashboard">
       <div className="dashboard-header">
+        <SubpageBackLink to="/advanced" />
         <h1>{t('properties.portfolio.title')}</h1>
         <p className="subtitle">{t('properties.portfolio.subtitle')}</p>
       </div>

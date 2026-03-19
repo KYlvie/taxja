@@ -343,6 +343,11 @@ class GDPRService:
             deleted_counts['classification_corrections'] = self.db.query(ClassificationCorrection).filter(
                 ClassificationCorrection.user_id == user_id
             ).delete()
+
+            from app.models.user_classification_rule import UserClassificationRule
+            deleted_counts['classification_rules'] = self.db.query(UserClassificationRule).filter(
+                UserClassificationRule.user_id == user_id
+            ).delete()
             
             deleted_counts['loss_carryforwards'] = self.db.query(LossCarryforward).filter(
                 LossCarryforward.user_id == user_id

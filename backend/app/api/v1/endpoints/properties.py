@@ -1,4 +1,5 @@
 """Property management API endpoints"""
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import date
 from uuid import UUID
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.db.base import get_db
 from app.models.user import User
 from app.core.security import get_current_user
+from app.api.deps import require_feature
+from app.services.feature_gate_service import Feature
 from app.schemas.property import (
     PropertyCreate,
     PropertyUpdate,
@@ -17,16 +20,26 @@ from app.schemas.property import (
     PropertyMetrics,
     HistoricalDepreciationPreview,
     BackfillDepreciationResult,
-    AnnualDepreciationResponse
+    AnnualDepreciationResponse,
+    AssetCreate,
+    AssetResponse,
+    AssetListResponse,
 )
 from app.services.property_service import PropertyService
 from app.services.historical_depreciation_service import HistoricalDepreciationService
 from app.services.annual_depreciation_service import AnnualDepreciationService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
-@router.post("", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PropertyResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_feature(Feature.PROPERTY_MANAGEMENT))],
+)
 def create_property(
     property_data: PropertyCreate,
     db: Session = Depends(get_db),
@@ -193,6 +206,47 @@ def list_properties(
     )
 
 
+# ---------------------------------------------------------------------------
+# Asset (non-real-estate) endpoints — MUST be before /{property_id} routes
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/assets",
+    response_model=AssetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_asset(
+    asset_data: AssetCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a non-real-estate depreciable asset (vehicle, equipment, etc.)."""
+    try:
+        service = PropertyService(db)
+        asset = service.create_asset(current_user.id, asset_data)
+        return asset
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Asset creation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/assets",
+    response_model=AssetListResponse,
+)
+def list_assets(
+    include_archived: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all non-real-estate assets for the current user."""
+    service = PropertyService(db)
+    assets = service.list_assets(current_user.id, include_archived)
+    return AssetListResponse(total=len(assets), assets=assets)
+
+
 @router.get("/{property_id}", response_model=PropertyDetailResponse)
 def get_property(
     property_id: UUID,
@@ -352,42 +406,70 @@ def update_property(
         )
 
 
-@router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.get("/{property_id}/rental-contracts")
+def get_rental_contracts(
+    property_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all rental income contracts linked to a property."""
+    from app.models.property import Property
+    service = PropertyService(db)
+    try:
+        contracts = service.get_rental_contracts(property_id, current_user.id)
+        return [
+            {
+                "id": c.id,
+                "description": c.description,
+                "amount": float(c.amount),
+                "unit_percentage": float(c.unit_percentage) if c.unit_percentage else None,
+                "start_date": c.start_date.isoformat() if c.start_date else None,
+                "end_date": c.end_date.isoformat() if c.end_date else None,
+                "is_active": c.is_active,
+                "frequency": c.frequency.value if c.frequency else None,
+                "source_document_id": c.source_document_id,
+            }
+            for c in contracts
+        ]
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/{property_id}/recalculate-rental", response_model=PropertyResponse)
+def recalculate_rental_percentage(
+    property_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recalculate rental_percentage and property_type from active rental contracts."""
+    service = PropertyService(db)
+    try:
+        return service.recalculate_rental_percentage(property_id, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.delete("/{property_id}")
 def delete_property(
     property_id: UUID,
+    force: bool = Query(False, description="Force delete even if linked data exists"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Delete a property.
     
-    **Path Parameters:**
-    - **property_id**: UUID of the property to delete
-    
-    **Restrictions:**
-    - Property can only be deleted if it has NO linked transactions
-    - If transactions exist, you must either:
-      1. Unlink all transactions first, or
-      2. Archive the property instead (use POST /properties/{property_id}/archive)
-    
-    **Returns:**
-    - 204 No Content on success
-    - 400 Bad Request if property has linked transactions
-    - 404 Not Found if property doesn't exist
-    - 403 Forbidden if property doesn't belong to user
+    If force=False and linked data exists, returns 200 with impact summary.
+    If force=True, unlinks transactions and deletes recurring/loans, then deletes property.
     """
     service = PropertyService(db)
     
     try:
-        service.delete_property(property_id, current_user.id)
-        return None
+        result = service.delete_property(property_id, current_user.id, force=force)
+        if not result["deleted"]:
+            return result  # 200 with impact summary
+        return None  # will be 200 with empty body
     except ValueError as e:
-        # Check if it's a "has transactions" error
-        if "linked transaction" in str(e).lower():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e)
-            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
@@ -1230,15 +1312,10 @@ def get_income_statement(
     property_service = PropertyService(db)
     report_service = PropertyReportService(db)
     
-    # Validate ownership
-    property = property_service.get_property(property_id, current_user.id)
-    if not property:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Property {property_id} not found"
-        )
-    
     try:
+        # Validate ownership (raises ValueError if not found)
+        property_service.get_property(property_id, current_user.id)
+        
         report_data = report_service.generate_income_statement(
             str(property_id),
             start_date=start_date,
@@ -1247,8 +1324,15 @@ def get_income_statement(
         return report_data
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating income statement: {str(e)}"
         )
 
 
@@ -1344,15 +1428,10 @@ def get_depreciation_schedule(
     property_service = PropertyService(db)
     report_service = PropertyReportService(db)
     
-    # Validate ownership
-    property = property_service.get_property(property_id, current_user.id)
-    if not property:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Property {property_id} not found"
-        )
-    
     try:
+        # Validate ownership (raises ValueError if not found)
+        property_service.get_property(property_id, current_user.id)
+        
         report_data = report_service.generate_depreciation_schedule(
             str(property_id),
             include_future=include_future,
@@ -1361,8 +1440,15 @@ def get_depreciation_schedule(
         return report_data
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating depreciation schedule: {str(e)}"
         )
 
 
@@ -1837,3 +1923,5 @@ def bulk_link_transactions(
     except Exception as e:
         logger.error(f"Bulk transaction linking failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to link transactions: {str(e)}")
+
+

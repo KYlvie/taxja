@@ -138,23 +138,25 @@
 }
 
 .role-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
   margin-top: 6px;
 }
 
 .role-checkbox-label {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 10px 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   transition: all 0.15s ease;
   user-select: none;
+  text-align: center;
 }
 
 .role-checkbox-label:has(input:checked) {
@@ -177,4 +179,101 @@
   margin-top: var(--space-6, 24px);
   padding-top: var(--space-6, 24px);
   border-top: 2px solid var(--color-border, #e5e7eb);
+}
+
+/* Danger zone sections (cancel subscription, delete account) */
+.danger-zone {
+  margin-top: var(--space-6, 24px);
+  padding: 24px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.danger-zone h2 {
+  color: var(--color-danger, #ef4444);
+}
+
+.danger-text {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+.btn-warning {
+  padding: 8px 20px;
+  background: var(--color-warning, #f59e0b);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.btn-danger {
+  padding: 8px 20px;
+  background: var(--color-danger, #ef4444);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirm-box {
+  background: var(--color-bg);
+  border: 1px solid var(--color-danger, #ef4444);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.confirm-box p {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.delete-confirm-input {
+  width: 100%;
+  max-width: 300px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+}
+
+.subscription-info .plan-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: var(--color-primary-50, rgba(99, 102, 241, 0.1));
+  color: var(--color-primary);
+  border-radius: var(--radius-full, 999px);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.cancel-notice {
+  color: var(--color-warning, #f59e0b);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
 }

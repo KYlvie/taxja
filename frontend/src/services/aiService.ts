@@ -1,5 +1,6 @@
 import api from './api';
 import i18n from 'i18next';
+import { normalizeLanguage } from '../utils/locale';
 
 export interface ChatMessage {
   id: string;
@@ -22,17 +23,37 @@ export interface ContextData {
 
 class AIService {
   private getLanguage(): string {
-    return i18n.language?.substring(0, 2) || 'de';
+    return normalizeLanguage(i18n.resolvedLanguage || i18n.language);
   }
 
-  async sendMessage(message: string, _contextData?: ContextData): Promise<ChatResponse> {
+  async sendMessage(message: string, contextData?: ContextData): Promise<ChatResponse> {
     const response = await api.post('/ai/chat', {
       message,
       language: this.getLanguage(),
+      context: contextData,
     }, {
       timeout: 120000,  // 120s — Ollama on CPU can be slow
     });
     // Backend returns { message, message_id, timestamp }
+    return {
+      content: response.data.message,
+      timestamp: response.data.timestamp,
+    };
+  }
+
+  async sendMessageWithFile(message: string, file: File, contextData?: ContextData): Promise<ChatResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('message', message || '');
+    formData.append('language', this.getLanguage());
+    if (contextData) {
+      formData.append('context', JSON.stringify(contextData));
+    }
+
+    const response = await api.post('/ai/chat-with-file', formData, {
+      timeout: 120000,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return {
       content: response.data.message,
       timestamp: response.data.timestamp,

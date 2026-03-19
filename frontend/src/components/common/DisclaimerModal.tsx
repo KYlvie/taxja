@@ -12,97 +12,114 @@ const DisclaimerModal = ({ isOpen, onAccept }: DisclaimerModalProps) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hasScrolled, setHasScrolled] = useState(false);
 
   if (!isOpen) return null;
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const element = e.currentTarget;
-    const isAtBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 50;
-    if (isAtBottom && !hasScrolled) {
-      setHasScrolled(true);
-    }
-  };
 
   const handleAccept = async () => {
     setLoading(true);
     setError('');
-
     try {
       await userService.acceptDisclaimer();
       onAccept();
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('common.error'));
+      const detail = err.response?.data?.detail;
+      if (detail) setError(detail);
+      else if (!err.response) setError(t('disclaimer.errorNetwork'));
+      else setError(t('disclaimer.errorGeneric'));
     } finally {
       setLoading(false);
     }
   };
 
+  const items = [
+    {
+      num: 1,
+      label: t('disclaimer.section1Title'),
+      text: t('disclaimer.section1Content'),
+    },
+    {
+      num: 2,
+      label: t('disclaimer.section2Title'),
+      text: t('disclaimer.section2Content'),
+    },
+    {
+      num: 3,
+      label: t('disclaimer.section3Title'),
+      text: null,
+      list: [
+        t('disclaimer.limitation1'),
+        t('disclaimer.limitation2'),
+        t('disclaimer.limitation3'),
+        t('disclaimer.limitation4'),
+      ],
+    },
+    {
+      num: 4,
+      label: t('disclaimer.section4Title'),
+      text: t('disclaimer.section4Content'),
+    },
+    {
+      num: 5,
+      label: t('disclaimer.section5Title'),
+      text: t('disclaimer.section5Content'),
+    },
+    {
+      num: 6,
+      label: t('disclaimer.section6Title'),
+      text: t('disclaimer.section6Content'),
+    },
+  ];
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-container disclaimer-modal">
-        <div className="modal-header">
-          <h2>{t('disclaimer.title')}</h2>
-        </div>
+    <div className="dcl-overlay" role="dialog" aria-modal="true">
+      {/* Animated background orbs */}
+      <div className="dcl-orb dcl-orb-1" />
+      <div className="dcl-orb dcl-orb-2" />
+      <div className="dcl-orb dcl-orb-3" />
+      <div className="dcl-mesh" />
 
-        <div className="modal-body" onScroll={handleScroll}>
-          <div className="disclaimer-content">
-            <div className="disclaimer-warning">
-              <strong>⚠️ {t('disclaimer.importantNotice')}</strong>
+      <div className="dcl-dialog">
+        <div className="dcl-glow" />
+
+        <div className="dcl-inner">
+          <div className="dcl-header">
+            <div className="dcl-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 9v4m0 4h.01" />
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <span>{t('disclaimer.importantNotice', 'Important')}</span>
             </div>
-
-            <h3>{t('disclaimer.section1Title')}</h3>
-            <p>{t('disclaimer.section1Content')}</p>
-
-            <h3>{t('disclaimer.section2Title')}</h3>
-            <p>{t('disclaimer.section2Content')}</p>
-
-            <h3>{t('disclaimer.section3Title')}</h3>
-            <ul>
-              <li>{t('disclaimer.limitation1')}</li>
-              <li>{t('disclaimer.limitation2')}</li>
-              <li>{t('disclaimer.limitation3')}</li>
-              <li>{t('disclaimer.limitation4')}</li>
-            </ul>
-
-            <h3>{t('disclaimer.section4Title')}</h3>
-            <p>{t('disclaimer.section4Content')}</p>
-
-            <h3>{t('disclaimer.section5Title')}</h3>
-            <p>{t('disclaimer.section5Content')}</p>
-
-            <h3>{t('disclaimer.section6Title')}</h3>
-            <p>{t('disclaimer.section6Content')}</p>
-
-            <div className="disclaimer-footer-notice">
-              <p><strong>{t('disclaimer.footerNotice')}</strong></p>
-              <p>{t('disclaimer.steuerberaterNotice')}</p>
-            </div>
-
-            {!hasScrolled && (
-              <div className="scroll-indicator">
-                ↓ {t('disclaimer.scrollToBottom')}
-              </div>
-            )}
+            <h2>{t('disclaimer.title')}</h2>
           </div>
-        </div>
 
-        {error && <div className="error-message">{error}</div>}
+          <div className="dcl-body">
+            {items.map((item, i) => (
+              <div key={i} className="dcl-item" style={{ animationDelay: `${i * 0.08}s` }}>
+                <div className="dcl-item-num">{item.num}</div>
+                <div className="dcl-item-content">
+                  <div className="dcl-item-label">{item.label}</div>
+                  {item.text && <p>{item.text}</p>}
+                  {item.list && (
+                    <ul>
+                      {item.list.map((li, j) => (
+                        <li key={j}>{li}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
 
-        <div className="modal-footer">
-          <p className="acceptance-notice">
-            {t('disclaimer.acceptanceNotice')}
-          </p>
-          <button
-            onClick={handleAccept}
-            className="btn-primary"
-            disabled={loading || !hasScrolled}
-          >
-            {loading ? t('common.loading') : t('disclaimer.acceptAndContinue')}
-          </button>
-          {!hasScrolled && (
-            <p className="scroll-hint">{t('disclaimer.scrollHint')}</p>
-          )}
+          {error && <div className="dcl-error">{error}</div>}
+
+          <div className="dcl-footer">
+            <p>{t('disclaimer.acceptanceNotice')}</p>
+            <button onClick={handleAccept} className="dcl-btn" disabled={loading}>
+              {loading ? <span className="dcl-spinner" /> : t('disclaimer.acceptAndContinue')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

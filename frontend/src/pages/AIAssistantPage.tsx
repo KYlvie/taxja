@@ -8,8 +8,13 @@ const AIAssistantPage = () => {
   return (
     <div className="ai-assistant-page">
       <div className="page-header">
-        <h1>🤖 {t('ai.taxjaAssistant')}</h1>
-        <p className="page-description">{t('ai.pageDescription', 'Fragen Sie den KI-Steuerassistenten zu österreichischem Steuerrecht, Absetzbarkeit und Optimierungen.')}</p>
+        <h1>{t('ai.taxjaAssistant')}</h1>
+        <p className="page-description">
+          {t(
+            'ai.pageDescription',
+            'Ask the AI tax assistant about Austrian tax rules, deductibility, and optimization options.'
+          )}
+        </p>
       </div>
       <div className="ai-chat-fullpage">
         <ChatInterface />

@@ -1,0 +1,269 @@
+services:
+  # ==========================================================================
+  # PostgreSQL — 100K users, 16GB RAM container
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: taxja-postgres
+    environment:
+      POSTGRES_USER: taxja
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taxja
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: "8"
+        reservations:
+          memory: 8G
+          cpus: "4"
+    shm_size: '4g'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taxja"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # PgBouncer — connection pooling (critical for 100K users)
+  # Backend connects here, NOT directly to postgres.
+  # ==========================================================================
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: taxja-pgbouncer
+    environment:
+      DATABASE_URL: postgres://taxja:${POSTGRES_PASSWORD}@postgres:5432/taxja
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 80
+      MIN_POOL_SIZE: 20
+      RESERVE_POOL_SIZE: 20
+      RESERVE_POOL_TIMEOUT: 3
+      SERVER_IDLE_TIMEOUT: 600
+      SERVER_LIFETIME: 3600
+      SERVER_CONNECT_TIMEOUT: 5
+      QUERY_TIMEOUT: 120
+      CLIENT_IDLE_TIMEOUT: 300
+      LOG_CONNECTIONS: 0
+      LOG_DISCONNECTIONS: 0
+    ports:
+      - "6432:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ==========================================================================
+  # Redis — session cache, rate limiting, dashboard cache
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: taxja-redis
+    command: >
+      redis-server
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 300 100
+      --save 60 10000
+      --appendonly yes
+      --appendfsync everysec
+      --tcp-backlog 511
+      --timeout 300
+      --tcp-keepalive 60
+      --hz 10
+      --activedefrag yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # MinIO — document storage (OCR receipts, invoices)
+  # ==========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: taxja-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ==========================================================================
+  # Backend API — gunicorn multi-worker (8 workers for 100K users)
+  # ==========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taxja-backend
+    environment:
+      POSTGRES_SERVER: pgbouncer
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: taxja
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taxja
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      GROQ_ENABLED: ${GROQ_ENABLED:-false}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "8"
+        reservations:
+          memory: 4G
+          cpus: "4"
+    command: >
+      gunicorn app.main:app
+      --worker-class uvicorn.workers.UvicornWorker
+      --workers 8
+      --bind 0.0.0.0:8000
+      --timeout 120
+      --keep-alive 5
+      --max-requests 10000
+      --max-requests-jitter 1000
+      --graceful-timeout 30
+      --backlog 2048
+      --access-logfile -
+
+  # ==========================================================================
+  # Celery Worker — OCR/ML background tasks
+  # ==========================================================================
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taxja-celery-worker
+    environment:
+      POSTGRES_SERVER: pgbouncer
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: taxja
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taxja
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      - pgbouncer
+      - redis
+      - minio
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4"
+    command: >
+      celery -A app.celery_app worker
+      --loglevel=info
+      --concurrency=8
+      --max-tasks-per-child=200
+      -Q default,ocr,ml
+
+  # ==========================================================================
+  # Celery Beat — periodic tasks (cleanup, recurring transactions)
+  # ==========================================================================
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taxja-celery-beat
+    environment:
+      POSTGRES_SERVER: pgbouncer
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: taxja
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: taxja
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    command: >
+      celery -A app.celery_app beat
+      --loglevel=info
+
+  # ==========================================================================
+  # Nginx — reverse proxy, static files, rate limiting, SSL
+  # ==========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: taxja-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

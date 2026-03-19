@@ -4,13 +4,16 @@ Bank Import API Endpoints
 Endpoints for importing transactions from bank statements.
 """
 
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, Depends, Response, UploadFile, File, Form, HTTPException, status
 from typing import Optional
+from sqlalchemy.orm import Session
 
 from app.services.bank_import_service import BankImportService, ImportFormat
 from app.services.csv_parser import BankFormat
+from app.services.credit_service import CreditService, InsufficientCreditsError
 from app.models.user import User
 from app.core.security import get_current_user
+from app.db.base import get_db
 
 
 router = APIRouter()
@@ -25,6 +28,8 @@ async def import_transactions(
     skip_duplicates: bool = Form(True, description="Skip duplicate transactions"),
     bank_format: Optional[BankFormat] = Form(None, description="Specific bank format for CSV"),
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    response: Response = None,
 ):
     """
     Import transactions from bank statement file
@@ -59,6 +64,19 @@ async def import_transactions(
                 detail="File must have .mt940, .sta, or .txt extension for MT940 format"
             )
     
+    # --- Credit deduction ---
+    credit_service = CreditService(db, redis_client=None)
+    try:
+        deduction = credit_service.check_and_deduct(
+            user_id=current_user.id,
+            operation="bank_import",
+        )
+    except InsufficientCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits: {e.required} required, {e.available} available",
+        )
+
     # Read file content
     try:
         content = await file.read()
@@ -79,7 +97,7 @@ async def import_transactions(
         )
     
     # Import transactions
-    import_service = BankImportService()
+    import_service = BankImportService(db=db)
     
     try:
         result = import_service.import_transactions(
@@ -97,6 +115,10 @@ async def import_transactions(
             detail=f"Import failed: {str(e)}"
         )
     
+    response.headers["X-Credits-Remaining"] = str(
+        deduction.balance_after.available_without_overage
+    )
+
     return {
         "success": True,
         "message": f"Imported {result.imported_count} of {result.total_count} transactions",
@@ -143,7 +165,7 @@ async def preview_import(
         )
     
     # Preview import
-    import_service = BankImportService()
+    import_service = BankImportService(db=None)
     
     try:
         preview = import_service.preview_import(

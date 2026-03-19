@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './UserSubscriptionList.css';
 
 interface UserSubscription {
@@ -21,15 +22,16 @@ interface UserSubscriptionListProps {
 const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
   onGrantTrial,
   onChangePlan,
-  onExtend
+  onExtend,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 20;
+  const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
     fetchSubscriptions();
@@ -41,12 +43,12 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
       const params = new URLSearchParams({
         page: currentPage.toString(),
         limit: itemsPerPage.toString(),
-        ...(searchTerm && { search: searchTerm })
+        ...(searchTerm && { search: searchTerm }),
       });
 
       const response = await fetch(`/api/v1/admin/subscriptions?${params}`);
       const data = await response.json();
-      
+
       setSubscriptions(data.items || []);
       setTotalPages(Math.ceil((data.total || 0) / itemsPerPage));
     } catch (error) {
@@ -56,17 +58,29 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
     }
   };
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+  const getPlanLabel = (plan: string) => {
+    const key = `pricing.plans.${plan}.name`;
+    const label = t(key);
+    return label === key ? plan.toUpperCase() : label;
+  };
+
+  const getStatusLabel = (status: string) => {
+    const key = `admin.status.${status}`;
+    const label = t(key);
+    return label === key ? status : label;
+  };
+
+  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
     setCurrentPage(1);
   };
 
   const handleGrantTrial = async (userId: number) => {
     if (!confirm(t('admin.confirm.grant_trial'))) return;
-    
+
     try {
       await fetch(`/api/v1/admin/subscriptions/${userId}/grant-trial`, {
-        method: 'POST'
+        method: 'POST',
       });
       fetchSubscriptions();
       onGrantTrial?.(userId);
@@ -83,10 +97,10 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
       await fetch(`/api/v1/admin/subscriptions/${userId}/change-plan`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: parseInt(newPlanId) })
+        body: JSON.stringify({ plan_id: parseInt(newPlanId, 10) }),
       });
       fetchSubscriptions();
-      onChangePlan?.(userId, parseInt(newPlanId));
+      onChangePlan?.(userId, parseInt(newPlanId, 10));
     } catch (error) {
       console.error('Failed to change plan:', error);
     }
@@ -100,10 +114,10 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
       await fetch(`/api/v1/admin/subscriptions/${userId}/extend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: parseInt(days) })
+        body: JSON.stringify({ days: parseInt(days, 10) }),
       });
       fetchSubscriptions();
-      onExtend?.(userId, parseInt(days));
+      onExtend?.(userId, parseInt(days, 10));
     } catch (error) {
       console.error('Failed to extend subscription:', error);
     }
@@ -111,7 +125,7 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
 
   const getStatusBadge = (status: string) => {
     const statusClass = status.toLowerCase().replace('_', '-');
-    return <span className={`status-badge ${statusClass}`}>{status}</span>;
+    return <span className={`status-badge ${statusClass}`}>{getStatusLabel(status)}</span>;
   };
 
   if (loading && subscriptions.length === 0) {
@@ -150,38 +164,44 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
                 <td>{sub.email}</td>
                 <td>
                   <span className={`plan-badge ${sub.plan_type}`}>
-                    {sub.plan_type.toUpperCase()}
+                    {getPlanLabel(sub.plan_type)}
                   </span>
                 </td>
                 <td>{getStatusBadge(sub.status)}</td>
                 <td>
-                  {new Date(sub.current_period_end).toLocaleDateString()}
+                  {new Date(sub.current_period_end).toLocaleDateString(locale)}
                   {sub.cancel_at_period_end && (
-                    <span className="cancel-notice"> (Canceling)</span>
+                    <span className="cancel-notice">
+                      {' '}
+                      ({t('admin.subscriptions.canceling')})
+                    </span>
                   )}
                 </td>
                 <td>
                   <div className="action-buttons">
                     <button
+                      type="button"
                       onClick={() => handleGrantTrial(sub.user_id)}
                       className="btn-small"
                       title={t('admin.actions.grant_trial')}
                     >
-                      Trial
+                      {t('admin.actions.grant_trial_short')}
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleChangePlan(sub.user_id)}
                       className="btn-small"
                       title={t('admin.actions.change_plan')}
                     >
-                      Change
+                      {t('admin.actions.change_plan_short')}
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleExtend(sub.user_id)}
                       className="btn-small"
                       title={t('admin.actions.extend')}
                     >
-                      Extend
+                      {t('admin.actions.extend_short')}
                     </button>
                   </div>
                 </td>
@@ -194,7 +214,8 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
       {totalPages > 1 && (
         <div className="pagination">
           <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             disabled={currentPage === 1}
           >
             {t('common.previous')}
@@ -203,7 +224,8 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
             {t('common.page')} {currentPage} / {totalPages}
           </span>
           <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            type="button"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
             disabled={currentPage === totalPages}
           >
             {t('common.next')}

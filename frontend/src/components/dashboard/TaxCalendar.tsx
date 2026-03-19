@@ -67,7 +67,7 @@ const TaxCalendar = ({ deadlines }: TaxCalendarProps) => {
       <div className="tax-calendar">
         <h3>{t('dashboard.taxCalendar')}</h3>
         <div className="no-deadlines">
-          <p>✅ {t('dashboard.noUpcomingDeadlines')}</p>
+          <p>âœ… {t('dashboard.noUpcomingDeadlines')}</p>
         </div>
       </div>
     );

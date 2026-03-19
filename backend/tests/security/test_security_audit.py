@@ -1,19 +1,13 @@
 """Security audit tests for Task 36.5"""
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import text
 
-from app.main import app
 from app.core.config import settings
-
-
-client = TestClient(app)
 
 
 class TestSQLInjection:
     """Test for SQL injection vulnerabilities"""
     
-    def test_sql_injection_in_transaction_filter(self):
+    def test_sql_injection_in_transaction_filter(self, client):
         """Test SQL injection in transaction filtering"""
         # Attempt SQL injection in query parameters
         malicious_inputs = [
@@ -33,7 +27,7 @@ class TestSQLInjection:
             assert response.status_code in [401, 403, 422], \
                 f"SQL injection not properly handled: {malicious_input}"
     
-    def test_sql_injection_in_search(self):
+    def test_sql_injection_in_search(self, client):
         """Test SQL injection in search endpoints"""
         malicious_inputs = [
             "'; DROP TABLE documents--",
@@ -53,7 +47,7 @@ class TestSQLInjection:
 class TestXSS:
     """Test for Cross-Site Scripting (XSS) vulnerabilities"""
     
-    def test_xss_in_transaction_description(self):
+    def test_xss_in_transaction_description(self, client):
         """Test XSS in transaction description"""
         xss_payloads = [
             "<script>alert('XSS')</script>",
@@ -85,13 +79,13 @@ class TestXSS:
 class TestAuthentication:
     """Test authentication and authorization"""
     
-    def test_protected_endpoints_require_auth(self):
+    def test_protected_endpoints_require_auth(self, client):
         """Test that protected endpoints require authentication"""
         protected_endpoints = [
             "/api/v1/transactions",
             "/api/v1/documents",
-            "/api/v1/tax/calculate",
-            "/api/v1/reports",
+            "/api/v1/tax/refund-estimate?tax_year=2026",
+            "/api/v1/reports/audit-checklist?tax_year=2026",
             "/api/v1/dashboard",
         ]
         
@@ -100,7 +94,7 @@ class TestAuthentication:
             assert response.status_code in [401, 403], \
                 f"Endpoint {endpoint} should require authentication"
     
-    def test_invalid_token_rejected(self):
+    def test_invalid_token_rejected(self, client):
         """Test that invalid tokens are rejected"""
         invalid_tokens = [
             "invalid_token",
@@ -116,7 +110,7 @@ class TestAuthentication:
             )
             assert response.status_code in [401, 403]
     
-    def test_expired_token_rejected(self):
+    def test_expired_token_rejected(self, client):
         """Test that expired tokens are rejected"""
         # This would require generating an expired token
         # For now, just test with an obviously invalid token
@@ -130,15 +124,14 @@ class TestAuthentication:
 class TestDataEncryption:
     """Test data encryption"""
     
-    @pytest.mark.asyncio
-    async def test_sensitive_fields_encrypted(self, async_db_session):
+    def test_sensitive_fields_encrypted(self):
         """Test that sensitive fields are encrypted in database"""
         # This test would check that tax_number, vat_number, etc. are encrypted
         # For now, just verify the encryption key is set
         assert settings.ENCRYPTION_KEY, "Encryption key must be configured"
         assert len(settings.ENCRYPTION_KEY) >= 32, "Encryption key must be at least 32 bytes"
     
-    def test_passwords_hashed(self):
+    def test_passwords_hashed(self, client):
         """Test that passwords are hashed, not stored in plaintext"""
         # Attempt to create user with password
         response = client.post(
@@ -159,7 +152,7 @@ class TestDataEncryption:
 class TestRateLimiting:
     """Test rate limiting"""
     
-    def test_rate_limit_on_auth_endpoint(self):
+    def test_rate_limit_on_auth_endpoint(self, client):
         """Test rate limiting on authentication endpoint"""
         # Make multiple rapid requests
         responses = []
@@ -181,19 +174,19 @@ class TestRateLimiting:
 class TestSecurityHeaders:
     """Test security headers"""
     
-    def test_hsts_header_present(self):
+    def test_hsts_header_present(self, client):
         """Test that HSTS header is present"""
         response = client.get("/health")
         assert "strict-transport-security" in response.headers, \
             "HSTS header should be present"
     
-    def test_csp_header_present(self):
+    def test_csp_header_present(self, client):
         """Test that Content-Security-Policy header is present"""
         response = client.get("/health")
         assert "content-security-policy" in response.headers, \
             "CSP header should be present"
     
-    def test_x_frame_options_header(self):
+    def test_x_frame_options_header(self, client):
         """Test that X-Frame-Options header is present"""
         response = client.get("/health")
         assert "x-frame-options" in response.headers, \
@@ -201,14 +194,14 @@ class TestSecurityHeaders:
         assert response.headers["x-frame-options"].upper() == "DENY", \
             "X-Frame-Options should be DENY"
     
-    def test_x_content_type_options_header(self):
+    def test_x_content_type_options_header(self, client):
         """Test that X-Content-Type-Options header is present"""
         response = client.get("/health")
         assert "x-content-type-options" in response.headers, \
             "X-Content-Type-Options header should be present"
         assert response.headers["x-content-type-options"] == "nosniff"
     
-    def test_no_server_header(self):
+    def test_no_server_header(self, client):
         """Test that server header is removed"""
         response = client.get("/health")
         # Server header should be removed or not reveal version info
@@ -220,7 +213,7 @@ class TestSecurityHeaders:
 class TestCORS:
     """Test CORS configuration"""
     
-    def test_cors_headers_present(self):
+    def test_cors_headers_present(self, client):
         """Test that CORS headers are properly configured"""
         response = client.options(
             "/api/v1/transactions",
@@ -234,7 +227,7 @@ class TestCORS:
         assert "access-control-allow-origin" in response.headers or \
                response.status_code == 405  # Method not allowed is also acceptable
     
-    def test_cors_credentials_allowed(self):
+    def test_cors_credentials_allowed(self, client):
         """Test that credentials are allowed in CORS"""
         response = client.get(
             "/health",
@@ -249,7 +242,7 @@ class TestCORS:
 class TestInputValidation:
     """Test input validation"""
     
-    def test_invalid_email_rejected(self):
+    def test_invalid_email_rejected(self, client):
         """Test that invalid email formats are rejected"""
         invalid_emails = [
             "notanemail",
@@ -270,7 +263,7 @@ class TestInputValidation:
             assert response.status_code == 422, \
                 f"Invalid email should be rejected: {email}"
     
-    def test_negative_amounts_rejected(self):
+    def test_negative_amounts_rejected(self, client):
         """Test that negative amounts are rejected"""
         response = client.post(
             "/api/v1/transactions",
@@ -286,7 +279,7 @@ class TestInputValidation:
         # Should reject negative amounts
         assert response.status_code in [401, 422]
     
-    def test_future_dates_rejected(self):
+    def test_future_dates_rejected(self, client):
         """Test that future dates are rejected"""
         response = client.post(
             "/api/v1/transactions",
@@ -319,7 +312,7 @@ class TestSessionSecurity:
 class TestFileUploadSecurity:
     """Test file upload security"""
     
-    def test_file_size_limit(self):
+    def test_file_size_limit(self, client):
         """Test that file size limits are enforced"""
         # Create a large fake file
         large_file = b"x" * (11 * 1024 * 1024)  # 11 MB
@@ -333,7 +326,7 @@ class TestFileUploadSecurity:
         # Should reject files over 10MB
         assert response.status_code in [401, 413, 422]
     
-    def test_invalid_file_type_rejected(self):
+    def test_invalid_file_type_rejected(self, client):
         """Test that invalid file types are rejected"""
         invalid_files = [
             ("test.exe", b"fake exe", "application/x-msdownload"),

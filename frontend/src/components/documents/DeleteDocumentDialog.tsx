@@ -32,6 +32,17 @@ interface RelatedData {
       amount: number;
       frequency: string;
     };
+    recurring_transactions?: Array<{
+      id: number;
+      description: string;
+      amount: number;
+      frequency: string;
+      is_active: boolean;
+    }>;
+    linked_mietvertrag?: {
+      document_id: number;
+      file_name: string;
+    };
   };
 }
 
@@ -44,10 +55,26 @@ const DeleteDocumentDialog = ({
   const [relatedData, setRelatedData] = useState<RelatedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedMode, setSelectedMode] = useState<'document_only' | 'with_data'>('document_only');
+  const [showContent, setShowContent] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showButtons, setShowButtons] = useState(false);
 
   useEffect(() => {
     loadRelatedData();
   }, [documentId]);
+
+  useEffect(() => {
+    if (!loading) {
+      setIsTyping(true);
+      const t1 = setTimeout(() => {
+        setIsTyping(false);
+        setShowContent(true);
+        const t2 = setTimeout(() => setShowButtons(true), 300);
+        return () => clearTimeout(t2);
+      }, 600);
+      return () => clearTimeout(t1);
+    }
+  }, [loading]);
 
   const loadRelatedData = async () => {
     try {
@@ -77,11 +104,25 @@ const DeleteDocumentDialog = ({
 
   if (loading) {
     return (
-      <div className="modal-overlay">
-        <div className="modal-content delete-dialog">
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <p>{t('common.loading')}</p>
+      <div className="cfd-overlay" role="dialog" aria-modal="true">
+        <div className="cfd-dialog ddd-dialog">
+          <div className="cfd-header">
+            <div className="cfd-avatar">
+              <span className="cfd-avatar-icon">🤖</span>
+              <span className="cfd-avatar-pulse" />
+            </div>
+            <div className="cfd-header-info">
+              <span className="cfd-assistant-name">Taxja AI</span>
+              <span className="cfd-status">{t('ai.typing', '正在输入...')}</span>
+            </div>
+          </div>
+          <div className="cfd-chat">
+            <div className="cfd-bubble-row">
+              <div className="cfd-bubble-avatar">🤖</div>
+              <div className="cfd-bubble cfd-bubble--danger">
+                <div className="cfd-typing-dots"><span /><span /><span /></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -89,125 +130,133 @@ const DeleteDocumentDialog = ({
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-content delete-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>{t('documents.deleteDialog.title')}</h2>
-          <button className="modal-close" onClick={onCancel}>
-            ✕
-          </button>
-        </div>
-
-        <div className="modal-body">
-          {relatedData?.has_related_data && (
-            <div className="related-data-section">
-              <p className="warning-text">{t('documents.deleteDialog.hasRelatedData')}</p>
-              
-              {relatedData.related_data.property && (
-                <div className="related-item">
-                  <strong>{t('documents.deleteDialog.property')}:</strong>
-                  <div className="related-details">
-                    <div>{relatedData.related_data.property.address}</div>
-                    <div className="related-meta">
-                      {formatCurrency(relatedData.related_data.property.purchase_price)} • {formatDate(relatedData.related_data.property.purchase_date)}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {relatedData.related_data.recurring_transaction && (
-                <div className="related-item">
-                  <strong>{t('documents.deleteDialog.recurringTransaction')}:</strong>
-                  <div className="related-details">
-                    <div>{relatedData.related_data.recurring_transaction.description}</div>
-                    <div className="related-meta">
-                      {formatCurrency(relatedData.related_data.recurring_transaction.amount)} • {relatedData.related_data.recurring_transaction.frequency}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {relatedData.related_data.transactions && relatedData.related_data.transactions.length > 0 && (
-                <div className="related-item">
-                  <strong>{t('documents.deleteDialog.transactions')} ({relatedData.related_data.transactions.length}):</strong>
-                  <div className="related-details">
-                    {relatedData.related_data.transactions.slice(0, 3).map((txn) => (
-                      <div key={txn.id} className="transaction-item">
-                        <span>{txn.description}</span>
-                        <span className="transaction-amount">{formatCurrency(txn.amount)}</span>
-                      </div>
-                    ))}
-                    {relatedData.related_data.transactions.length > 3 && (
-                      <div className="more-items">
-                        +{relatedData.related_data.transactions.length - 3} {t('common.more')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="delete-options">
-            <h3>{t('documents.deleteDialog.deleteOptions')}</h3>
-
-            <label className={`delete-option ${selectedMode === 'document_only' ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="deleteMode"
-                value="document_only"
-                checked={selectedMode === 'document_only'}
-                onChange={() => setSelectedMode('document_only')}
-              />
-              <div className="option-content">
-                <div className="option-title">
-                  ✅ {t('documents.deleteDialog.documentOnly')}
-                </div>
-                <div className="option-description">
-                  {t('documents.deleteDialog.documentOnlyDesc')}
-                </div>
-              </div>
-            </label>
-
-            <label className={`delete-option destructive ${selectedMode === 'with_data' ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="deleteMode"
-                value="with_data"
-                checked={selectedMode === 'with_data'}
-                onChange={() => setSelectedMode('with_data')}
-              />
-              <div className="option-content">
-                <div className="option-title">
-                  🗑️ {t('documents.deleteDialog.withData')}
-                </div>
-                <div className="option-description">
-                  {t('documents.deleteDialog.withDataDesc')}
-                </div>
-              </div>
-            </label>
+    <div className="cfd-overlay" onClick={onCancel} role="dialog" aria-modal="true">
+      <div className="cfd-dialog ddd-dialog" onClick={(e) => e.stopPropagation()}>
+        {/* AI Assistant header */}
+        <div className="cfd-header">
+          <div className="cfd-avatar">
+            <span className="cfd-avatar-icon">🤖</span>
+            <span className="cfd-avatar-pulse" />
           </div>
-
-          {selectedMode === 'with_data' && (
-            <div className="warning-box">
-              {t('documents.deleteDialog.warning')}
-            </div>
-          )}
-
-          {selectedMode === 'document_only' && relatedData?.has_related_data && (
-            <div className="info-box">
-              {t('documents.deleteDialog.recommendation')}
-            </div>
-          )}
+          <div className="cfd-header-info">
+            <span className="cfd-assistant-name">Taxja AI</span>
+            <span className="cfd-status">
+              {isTyping ? t('ai.typing', '正在输入...') : t('ai.online', '在线')}
+            </span>
+          </div>
         </div>
 
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onCancel}>
+        {/* Chat area */}
+        <div className="cfd-chat ddd-chat">
+          <div className="cfd-bubble-row">
+            <div className="cfd-bubble-avatar">🤖</div>
+            <div className="cfd-bubble cfd-bubble--danger">
+              {isTyping ? (
+                <div className="cfd-typing-dots"><span /><span /><span /></div>
+              ) : showContent ? (
+                <div className="ddd-content">
+                  <div className="cfd-bubble-title">🗑️ {t('documents.deleteDialog.title')}</div>
+
+                  {relatedData?.has_related_data && (
+                    <div className="ddd-related">
+                      <p className="ddd-warning-text">{t('documents.deleteDialog.hasRelatedData')}</p>
+                      {relatedData.related_data.property && (
+                        <div className="ddd-related-item">
+                          <strong>{t('documents.deleteDialog.property')}:</strong>
+                          <span>{relatedData.related_data.property.address}</span>
+                          <span className="ddd-meta">
+                            {formatCurrency(relatedData.related_data.property.purchase_price)} • {formatDate(relatedData.related_data.property.purchase_date)}
+                          </span>
+                        </div>
+                      )}
+                      {relatedData.related_data.linked_mietvertrag && (
+                        <div className="ddd-related-item">
+                          <strong>{t('documents.deleteDialog.linkedMietvertrag', '关联租赁合同')}:</strong>
+                          <span>📄 {relatedData.related_data.linked_mietvertrag.file_name}</span>
+                          <span className="ddd-meta ddd-meta--warn">
+                            {t('documents.deleteDialog.linkedMietvertragWarn', '选择"删除关联"将一并删除此租赁合同')}
+                          </span>
+                        </div>
+                      )}
+                      {relatedData.related_data.recurring_transactions && relatedData.related_data.recurring_transactions.length > 0 && (
+                        <div className="ddd-related-item">
+                          <strong>{t('documents.deleteDialog.recurringTransactions', '定期交易')} ({relatedData.related_data.recurring_transactions.length}):</strong>
+                          {relatedData.related_data.recurring_transactions.map((r) => (
+                            <div key={r.id} className="ddd-txn">
+                              <span>{r.description}</span>
+                              <span>{formatCurrency(r.amount)} • {r.frequency}{r.is_active ? '' : ` (${t('common.expired', '已过期')})`}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {relatedData.related_data.recurring_transaction && (
+                        <div className="ddd-related-item">
+                          <strong>{t('documents.deleteDialog.recurringTransaction')}:</strong>
+                          <span>{relatedData.related_data.recurring_transaction.description}</span>
+                          <span className="ddd-meta">
+                            {formatCurrency(relatedData.related_data.recurring_transaction.amount)} • {relatedData.related_data.recurring_transaction.frequency}
+                          </span>
+                        </div>
+                      )}
+                      {relatedData.related_data.transactions && relatedData.related_data.transactions.length > 0 && (
+                        <div className="ddd-related-item">
+                          <strong>{t('documents.deleteDialog.transactions')} ({relatedData.related_data.transactions.length}):</strong>
+                          {relatedData.related_data.transactions.slice(0, 3).map((txn) => (
+                            <div key={txn.id} className="ddd-txn">
+                              <span>{txn.description}</span>
+                              <span>{formatCurrency(txn.amount)}</span>
+                            </div>
+                          ))}
+                          {relatedData.related_data.transactions.length > 3 && (
+                            <span className="ddd-meta">+{relatedData.related_data.transactions.length - 3} {t('common.more', 'more')}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="ddd-options">
+                    <label className={`ddd-option ${selectedMode === 'document_only' ? 'ddd-option--selected' : ''}`}>
+                      <input type="radio" name="deleteMode" value="document_only"
+                        checked={selectedMode === 'document_only'}
+                        onChange={() => setSelectedMode('document_only')} />
+                      <div>
+                        <div className="ddd-option-title">✅ {t('documents.deleteDialog.documentOnly')}</div>
+                        <div className="ddd-option-desc">{t('documents.deleteDialog.documentOnlyDesc')}</div>
+                      </div>
+                    </label>
+                    <label className={`ddd-option ddd-option--danger ${selectedMode === 'with_data' ? 'ddd-option--selected' : ''}`}>
+                      <input type="radio" name="deleteMode" value="with_data"
+                        checked={selectedMode === 'with_data'}
+                        onChange={() => setSelectedMode('with_data')} />
+                      <div>
+                        <div className="ddd-option-title">🗑️ {t('documents.deleteDialog.withData')}</div>
+                        <div className="ddd-option-desc">{t('documents.deleteDialog.withDataDesc')}</div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {selectedMode === 'with_data' && (
+                    <div className="ddd-warn-box">⚠️ {t('documents.deleteDialog.warning')}</div>
+                  )}
+                  {selectedMode === 'document_only' && relatedData?.has_related_data && (
+                    <div className="ddd-info-box">💡 {t('documents.deleteDialog.recommendation')}</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className={`cfd-actions${showButtons ? ' cfd-actions--visible' : ''}`}>
+          <button className="cfd-btn cfd-btn--cancel" onClick={onCancel}>
             {t('documents.deleteDialog.cancel')}
           </button>
           <button
-            className={`btn ${selectedMode === 'with_data' ? 'btn-danger' : 'btn-primary'}`}
+            className={`cfd-btn ${selectedMode === 'with_data' ? 'cfd-btn--danger' : 'cfd-btn--info'}`}
             onClick={handleConfirm}
+            disabled={!showButtons}
           >
             {selectedMode === 'document_only'
               ? t('documents.deleteDialog.confirmDocumentOnly')

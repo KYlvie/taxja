@@ -95,7 +95,7 @@ class BackupService:
         Returns:
             Dictionary with backup information
         """
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
         backup_name = f"taxja_db_backup_{timestamp}"
 
         try:

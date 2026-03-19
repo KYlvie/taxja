@@ -87,3 +87,81 @@ def check_property_status_changes_task():
     
     finally:
         db.close()
+
+
+@shared_task(name="sync_expired_rental_contracts")
+def sync_expired_rental_contracts_task():
+    """
+    Catch-up task: find rental contracts that have expired (end_date < today)
+    but whose linked property still has stale rental_percentage / property_type.
+
+    This handles cases where:
+    - The daily generate task was missed or failed
+    - Existing data was created before the auto-recalculate logic was added
+    - Manual edits left the property in an inconsistent state
+
+    Should run daily, after generate_recurring_transactions.
+    """
+    import logging
+    from app.models.property import Property, PropertyStatus
+    from app.models.recurring_transaction import (
+        RecurringTransaction,
+        RecurringTransactionType,
+    )
+    from app.services.property_service import PropertyService
+
+    logger = logging.getLogger(__name__)
+    db: Session = SessionLocal()
+
+    try:
+        today = date.today()
+
+        # Find rental contracts that are expired but still marked active
+        expired_active = (
+            db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+                RecurringTransaction.is_active == True,
+                RecurringTransaction.end_date.isnot(None),
+                RecurringTransaction.end_date < today,
+            )
+            .all()
+        )
+
+        deactivated_count = 0
+        recalculated_props = set()
+
+        for rt in expired_active:
+            rt.is_active = False
+            deactivated_count += 1
+
+            if rt.property_id:
+                recalculated_props.add((rt.property_id, rt.user_id))
+
+        if deactivated_count > 0:
+            db.commit()
+
+        ps = PropertyService(db)
+        recalc_count = 0
+        for prop_id, user_id in recalculated_props:
+            try:
+                ps.recalculate_rental_percentage(prop_id, user_id)
+                recalc_count += 1
+            except Exception as e:
+                logger.warning(
+                    f"Failed to recalculate rental_percentage for property "
+                    f"{prop_id}: {e}"
+                )
+
+        return {
+            "success": True,
+            "contracts_deactivated": deactivated_count,
+            "properties_recalculated": recalc_count,
+        }
+
+    except Exception as e:
+        logger.error(f"sync_expired_rental_contracts failed: {e}")
+        return {"success": False, "error": str(e)}
+
+    finally:
+        db.close()

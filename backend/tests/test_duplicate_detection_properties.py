@@ -189,7 +189,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_exact_duplicate_always_detected(
         self,
         amount: Decimal,
@@ -239,7 +239,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         base_description=st.text(min_size=10, max_size=50, alphabet=st.characters(whitelist_categories=('Lu', 'Ll')))
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_similar_description_detected_as_duplicate(
         self,
         amount: Decimal,
@@ -304,7 +304,7 @@ class TestProperty18DuplicateDetection:
         date2=date_strategy(min_days_ago=179, max_days_ago=0),
         description=description_strategy()
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_different_date_not_duplicate(
         self,
         amount: Decimal,
@@ -358,7 +358,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_different_amount_not_duplicate(
         self,
         amount1: Decimal,
@@ -412,7 +412,7 @@ class TestProperty18DuplicateDetection:
         description1=st.text(min_size=10, max_size=50, alphabet=st.characters(whitelist_categories=('Lu',))),
         description2=st.text(min_size=10, max_size=50, alphabet=st.characters(whitelist_categories=('Ll',)))
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_dissimilar_description_not_duplicate(
         self,
         amount: Decimal,
@@ -471,7 +471,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_duplicate_detection_is_deterministic(
         self,
         amount: Decimal,
@@ -533,7 +533,11 @@ class TestProperty18DuplicateDetection:
             max_size=10
         )
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow],
+    )
     def test_batch_duplicate_detection_consistency(
         self,
         transactions_data: list,
@@ -606,7 +610,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_user_isolation_in_duplicate_detection(
         self,
         amount: Decimal,
@@ -666,7 +670,7 @@ class TestProperty18DuplicateDetection:
         amount=decimal_strategy(min_value=0.01, max_value=10000),
         transaction_date=date_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_none_descriptions_are_duplicates(
         self,
         amount: Decimal,
@@ -715,7 +719,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_one_none_description_not_duplicate(
         self,
         amount: Decimal,
@@ -764,7 +768,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_exclude_id_prevents_self_duplicate(
         self,
         amount: Decimal,
@@ -816,7 +820,7 @@ class TestProperty18DuplicateDetection:
         description=description_strategy(),
         num_duplicates=st.integers(min_value=2, max_value=5)
     )
-    @settings(max_examples=30, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=30, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_multiple_duplicates_detection(
         self,
         amount: Decimal,
@@ -881,7 +885,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=description_strategy()
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_decimal_precision_in_duplicate_detection(
         self,
         base_amount: Decimal,
@@ -935,7 +939,7 @@ class TestProperty18DuplicateDetection:
         transaction_date=date_strategy(),
         description=st.text(min_size=5, max_size=50, alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow])
     def test_case_insensitive_description_matching(
         self,
         amount: Decimal,

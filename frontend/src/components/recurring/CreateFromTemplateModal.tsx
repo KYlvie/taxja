@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { RecurringTemplate } from '../../types/template';
 import { templateService } from '../../services/templateService';
@@ -25,6 +26,7 @@ export const CreateFromTemplateModal: React.FC<CreateFromTemplateModalProps> = (
   onSuccess,
 }) => {
   const { t, i18n } = useTranslation();
+  const { alert: showAlert } = useConfirm();
   const [templates, setTemplates] = useState<RecurringTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<RecurringTemplate | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,7 +69,7 @@ export const CreateFromTemplateModal: React.FC<CreateFromTemplateModalProps> = (
       resetModal();
     } catch (error) {
       console.error('Failed to create from template:', error);
-      alert(t('recurring.errors.createFailed'));
+      await showAlert(t('recurring.errors.createFailed'), { variant: 'danger' });
     } finally {
       setLoading(false);
     }

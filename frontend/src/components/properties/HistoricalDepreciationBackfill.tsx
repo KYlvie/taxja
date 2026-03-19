@@ -165,7 +165,7 @@ const HistoricalDepreciationBackfill = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {backfillResult.transactions_created.map((txn) => (
+                        {backfillResult.transactions_created?.map((txn) => (
                           <tr key={txn.year}>
                             <td>{txn.year}</td>
                             <td className="amount">{formatCurrency(txn.amount)}</td>
@@ -176,7 +176,7 @@ const HistoricalDepreciationBackfill = ({
                     </table>
                   </div>
                 </div>
-              ) : preview && preview.years.length > 0 ? (
+              ) : preview && preview.years && preview.years.length > 0 ? (
                 // Preview view
                 <div className="backfill-preview">
                   <div className="warning-box">
@@ -244,7 +244,7 @@ const HistoricalDepreciationBackfill = ({
                 <button className="btn btn-primary" onClick={handleCloseModal}>
                   {t('common.close')}
                 </button>
-              ) : preview && preview.years.length > 0 ? (
+              ) : preview && preview.years && preview.years.length > 0 ? (
                 // Preview state - cancel and confirm buttons
                 <>
                   <button

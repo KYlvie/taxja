@@ -32,6 +32,10 @@ class RecurringTransactionCreate(RecurringTransactionBase):
     recurring_type: RecurringTransactionType
     property_id: Optional[str] = None
     loan_id: Optional[int] = None
+    unit_percentage: Optional[Decimal] = Field(
+        None, ge=Decimal("0.01"), le=Decimal("100.00"),
+        description="Percentage of the property this rental unit represents (e.g. 33% for one apartment in a building)"
+    )
 
 
 class RecurringTransactionUpdate(BaseModel):
@@ -39,10 +43,58 @@ class RecurringTransactionUpdate(BaseModel):
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     amount: Optional[Decimal] = Field(None, gt=0)
     frequency: Optional[RecurrenceFrequency] = None
+    start_date: Optional[date] = None
     end_date: Optional[date] = None
     day_of_month: Optional[int] = Field(None, ge=1, le=31)
     notes: Optional[str] = Field(None, max_length=1000)
     is_active: Optional[bool] = None
+    unit_percentage: Optional[Decimal] = Field(
+        None, ge=Decimal("0.01"), le=Decimal("100.00"),
+        description="Percentage of the property this rental unit represents"
+    )
+
+
+class RecurringTransactionUpdateAndRegenerate(BaseModel):
+    """Schema for updating recurring transaction and regenerating future transactions"""
+    description: Optional[str] = Field(None, min_length=1, max_length=500)
+    amount: Optional[Decimal] = Field(None, gt=0)
+    frequency: Optional[RecurrenceFrequency] = None
+    end_date: Optional[date] = None
+    day_of_month: Optional[int] = Field(None, ge=1, le=31)
+    notes: Optional[str] = Field(None, max_length=1000)
+    category: Optional[str] = Field(None, min_length=1, max_length=100)
+    apply_from: Optional[date] = None  # Regenerate from this date forward
+
+
+class ConvertToRecurringRequest(BaseModel):
+    """Schema for converting a single transaction to a recurring one"""
+    frequency: RecurrenceFrequency = RecurrenceFrequency.MONTHLY
+    start_date: date
+    end_date: Optional[date] = None
+    day_of_month: Optional[int] = Field(None, ge=1, le=31)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+    class RecurringTransactionUpdateAndRegenerate(BaseModel):
+        """Schema for updating a recurring transaction and regenerating future transactions"""
+        description: Optional[str] = Field(None, min_length=1, max_length=500)
+        amount: Optional[Decimal] = Field(None, gt=0)
+        frequency: Optional[RecurrenceFrequency] = None
+        end_date: Optional[date] = None
+        day_of_month: Optional[int] = Field(None, ge=1, le=31)
+        notes: Optional[str] = Field(None, max_length=1000)
+        category: Optional[str] = Field(None, min_length=1, max_length=100)
+        apply_from: Optional[date] = None  # Regenerate transactions from this date
+
+
+    class ConvertToRecurringRequest(BaseModel):
+        """Schema for converting a single transaction to a recurring one"""
+        frequency: RecurrenceFrequency = RecurrenceFrequency.MONTHLY
+        start_date: date
+        end_date: Optional[date] = None
+        day_of_month: Optional[int] = Field(None, ge=1, le=31)
+        notes: Optional[str] = Field(None, max_length=1000)
+
+
 
 
 class RecurringTransactionResponse(RecurringTransactionBase):
@@ -57,6 +109,8 @@ class RecurringTransactionResponse(RecurringTransactionBase):
     paused_at: Optional[datetime] = None
     last_generated_date: Optional[date] = None
     next_generation_date: Optional[date] = None
+    unit_percentage: Optional[Decimal] = None
+    source_document_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
@@ -77,6 +131,10 @@ class RentalIncomeRecurringCreate(BaseModel):
     start_date: date
     end_date: Optional[date] = None
     day_of_month: int = Field(1, ge=1, le=31)
+    unit_percentage: Optional[Decimal] = Field(
+        None, ge=Decimal("0.01"), le=Decimal("100.00"),
+        description="Percentage of the property this rental unit represents"
+    )
 
 
 class LoanInterestRecurringCreate(BaseModel):

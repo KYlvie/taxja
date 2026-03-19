@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, ComponentType } from 'react';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import { useAuthStore } from '../../stores/authStore';
 import UpgradePrompt from './UpgradePrompt';
 
 export type Feature =
@@ -19,7 +20,10 @@ export type Feature =
   | 'unlimited_transactions'
   | 'multi_language'
   | 'vat_calc'
-  | 'svs_calc';
+  | 'svs_calc'
+  | 'bank_import'
+  | 'property_management'
+  | 'recurring_suggestions';
 
 export type PlanType = 'free' | 'plus' | 'pro';
 
@@ -45,10 +49,17 @@ export function withFeatureGate<P extends object>(
 ) {
   return function FeatureGatedComponent(props: P) {
     const { currentPlan } = useSubscriptionStore();
+    const user = useAuthStore((state) => state.user);
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
     const [hasAccess, setHasAccess] = useState(false);
     
     useEffect(() => {
+      // Admin users bypass all feature gates
+      if (user?.is_admin) {
+        setHasAccess(true);
+        return;
+      }
+
       if (!currentPlan) {
         setHasAccess(false);
         return;
@@ -67,7 +78,7 @@ export function withFeatureGate<P extends object>(
       if (!access) {
         setShowUpgradePrompt(true);
       }
-    }, [currentPlan]);
+    }, [currentPlan, user]);
     
     if (!hasAccess) {
       if (config.fallback) {
@@ -106,6 +117,10 @@ export function withFeatureGate<P extends object>(
  */
 export function useFeatureAccess(feature: Feature): boolean {
   const { currentPlan } = useSubscriptionStore();
+  const user = useAuthStore((state) => state.user);
+  
+  // Admin users bypass all feature gates
+  if (user?.is_admin) return true;
   
   if (!currentPlan) return false;
   
@@ -191,6 +206,9 @@ function checkFeatureAccess(
     multi_language: 'plus',
     vat_calc: 'plus',
     svs_calc: 'plus',
+    bank_import: 'plus',
+    property_management: 'plus',
+    recurring_suggestions: 'plus',
   };
   
   const requiredPlan = featureRequirements[feature];

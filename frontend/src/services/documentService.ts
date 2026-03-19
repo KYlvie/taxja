@@ -1,20 +1,69 @@
 import api from './api';
 import { Document, DocumentFilter, OCRReviewData } from '../types/document';
 
+export interface AssetSuggestionConfirmationPayload {
+  put_into_use_date?: string;
+  business_use_percentage?: number;
+  is_used_asset?: boolean;
+  first_registration_date?: string;
+  prior_owner_usage_years?: number;
+  gwg_elected?: boolean;
+  depreciation_method?: 'linear' | 'degressive';
+  degressive_afa_rate?: number;
+  useful_life_years?: number;
+}
+
 export const documentService = {
   // Upload single document
   uploadDocument: async (
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    propertyId?: string
   ): Promise<Document> => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await api.post<Document>('/documents/upload', formData, {
+    const url = propertyId
+      ? `/documents/upload?property_id=${encodeURIComponent(propertyId)}`
+      : '/documents/upload';
+
+    const response = await api.post<Document>(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
       timeout: 120000, // 2min — OCR processing runs synchronously
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total && onProgress) {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          onProgress(percentCompleted);
+        }
+      },
+    });
+
+    return response.data;
+  },
+
+  uploadImageGroup: async (
+    files: File[],
+    onProgress?: (progress: number) => void,
+    propertyId?: string
+  ): Promise<Document> => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    const url = propertyId
+      ? `/documents/upload-image-group?property_id=${encodeURIComponent(propertyId)}`
+      : '/documents/upload-image-group';
+
+    const response = await api.post<Document>(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000,
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const percentCompleted = Math.round(
@@ -197,9 +246,162 @@ export const documentService = {
     return response.data;
   },
 
+  // Confirm recurring expense creation from invoice/insurance OCR suggestion
+  confirmRecurringExpense: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-recurring-expense`);
+    return response.data;
+  },
+
+  // Confirm loan creation from Kreditvertrag OCR suggestion
+  confirmLoan: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-loan`);
+    return response.data;
+  },
+
+  // Confirm asset creation from vehicle/equipment Kaufvertrag OCR suggestion
+  confirmAsset: async (id: number, confirmation?: AssetSuggestionConfirmationPayload): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-asset`, confirmation || {});
+    return response.data;
+  },
+
   // Dismiss an import suggestion
   dismissSuggestion: async (id: number): Promise<any> => {
     const response = await api.post(`/documents/${id}/dismiss-suggestion`);
     return response.data;
   },
+
+  // Confirm tax filing data from OCR suggestion (L16, L1, E1a, E1b, etc.)
+  confirmTaxData: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-tax-data`);
+    return response.data;
+  },
+
+  // Retry OCR processing (re-process document)
+  retryOcr: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/retry-ocr`, null, { timeout: 120000 });
+    return response.data;
+  },
+
+  // Batch import selected bank transactions from Kontoauszug OCR
+  confirmBankTransactions: async (id: number, transactionIndices: number[]): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-bank-transactions`, {
+      transaction_indices: transactionIndices,
+    });
+    return response.data;
+  },
+
+  // =========================================================================
+  // AI Unified Interaction — Process Status & Follow-Up
+  // =========================================================================
+
+  /**
+   * Get current processing phase for a document.
+   * Frontend polls this to show real-time progress in the chat panel.
+   * Returns ui_state, idempotency_key (backend-generated), phase timestamps, etc.
+   */
+  getProcessStatus: async (id: number, lang: string = 'en'): Promise<ProcessStatusResponse> => {
+    const response = await api.get<ProcessStatusResponse>(
+      `/documents/${id}/process-status`,
+      { params: { lang } }
+    );
+    return response.data;
+  },
+
+  /**
+   * Submit user answers to follow-up questions for a document suggestion.
+   * Supports: full answers, partial answers, use_defaults mode.
+   * Enforces optimistic concurrency via suggestion_version (409 on mismatch).
+   */
+  submitFollowUp: async (
+    id: number,
+    answers: Record<string, any>,
+    options?: {
+      useDefaults?: boolean;
+      suggestionVersion?: number;
+    }
+  ): Promise<FollowUpAnswerResponse> => {
+    const response = await api.post<FollowUpAnswerResponse>(
+      `/documents/${id}/follow-up`,
+      {
+        answers,
+        use_defaults: options?.useDefaults ?? false,
+        suggestion_version: options?.suggestionVersion ?? null,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Generic action confirm — dispatches based on ActionDescriptor from backend.
+   * No per-type switch needed; the action contract is self-describing.
+   */
+  executeAction: async (
+    endpoint: string,
+    method: string = 'POST',
+    payload?: Record<string, any>
+  ): Promise<any> => {
+    const config = { timeout: 30000 };
+    let response;
+    if (method === 'POST') {
+      response = await api.post(endpoint, payload || {}, config);
+    } else if (method === 'PUT') {
+      response = await api.put(endpoint, payload || {}, config);
+    } else if (method === 'DELETE') {
+      response = await api.delete(endpoint, config);
+    } else {
+      throw new Error(`Unsupported method: ${method}`);
+    }
+    return response.data;
+  },
 };
+
+// =============================================================================
+// Response Types for AI Unified Interaction
+// =============================================================================
+
+export interface ProcessStatusResponse {
+  phase: string;
+  document_type: string | null;
+  message: string;
+  ui_state: 'processing' | 'needs_input' | 'ready_to_confirm' | 'confirmed' | 'dismissed' | 'error';
+  suggestion: Record<string, any> | null;
+  phase_started_at: string | null;
+  phase_updated_at: string | null;
+  current_phase_attempt: number;
+  suggestion_version: number | null;
+  idempotency_key: string;
+  action: ActionDescriptorResponse | null;
+  follow_up_questions: FollowUpQuestionResponse[] | null;
+}
+
+export interface ActionDescriptorResponse {
+  kind: string;
+  target_id: string;
+  endpoint: string;
+  method: string;
+  payload?: Record<string, any>;
+  confirm_label?: Record<string, string>;
+  dismiss_label?: Record<string, string>;
+  detail_label?: Record<string, string>;
+}
+
+export interface FollowUpQuestionResponse {
+  id: string;
+  question: Record<string, string>;
+  input_type: string;
+  options?: any[];
+  default_value?: any;
+  required: boolean;
+  field_key: string;
+  help_text?: Record<string, string>;
+  validation?: Record<string, any>;
+}
+
+export interface FollowUpAnswerResponse {
+  status: string;
+  ui_state: string;
+  suggestion_version: number;
+  remaining_questions: number;
+  remaining_question_list: any[];
+  applied_defaults: Record<string, any>;
+}

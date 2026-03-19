@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 import { RecurringSuggestionCard } from './RecurringSuggestionCard';
 import api from '../../services/api';
 
@@ -18,12 +19,13 @@ interface Suggestion {
 
 export const RecurringSuggestionsList: React.FC = () => {
   const { t } = useTranslation();
+  const { alert: showAlert } = useConfirm();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setDismissedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadSuggestions();
+    void loadSuggestions();
   }, []);
 
   const loadSuggestions = async () => {
@@ -32,11 +34,10 @@ export const RecurringSuggestionsList: React.FC = () => {
       const response = await api.get('/recurring-suggestions/suggestions', {
         params: {
           lookback_months: 6,
-          min_confidence: 0.7
-        }
+          min_confidence: 0.7,
+        },
       });
-      
-      // Filter out already automated suggestions
+
       const filtered = response.data.filter((s: Suggestion) => !s.already_automated);
       setSuggestions(filtered);
     } catch (error) {
@@ -55,35 +56,27 @@ export const RecurringSuggestionsList: React.FC = () => {
         category: suggestion.category,
         frequency: suggestion.frequency,
         suggested_day_of_month: suggestion.suggested_day_of_month,
-        property_id: suggestion.property_id
+        property_id: suggestion.property_id,
       });
 
-      // Remove from list
-      setSuggestions(prev => prev.filter(s => s.description !== suggestion.description));
-      
-      // Show success message
-      alert(t('recurring.suggestions.acceptSuccess'));
+      setSuggestions((prev) => prev.filter((s) => s.description !== suggestion.description));
+      await showAlert(t('recurring.suggestions.acceptSuccess'), { variant: 'success' });
     } catch (error) {
       throw error;
     }
   };
 
   const handleDismiss = (suggestion: Suggestion, index: number) => {
-    // Add to dismissed set
     const key = `${suggestion.description}-${suggestion.amount}`;
-    setDismissedIds(prev => new Set(prev).add(key));
-    
-    // Remove from list
-    setSuggestions(prev => prev.filter((_, i) => i !== index));
-    
-    // Call API to dismiss (optional, for future reference)
+    setDismissedIds((prev) => new Set(prev).add(key));
+    setSuggestions((prev) => prev.filter((_, i) => i !== index));
     api.post(`/recurring-suggestions/${index}/dismiss`).catch(console.error);
   };
 
   if (loading) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin text-4xl mb-2">⏳</div>
+        <div className="animate-spin text-4xl mb-2">{'\u23F3'}</div>
         <p className="text-gray-600">{t('recurring.suggestions.loading')}</p>
       </div>
     );
@@ -92,11 +85,9 @@ export const RecurringSuggestionsList: React.FC = () => {
   if (suggestions.length === 0) {
     return (
       <div className="text-center py-8 bg-gray-50 rounded-lg">
-        <div className="text-4xl mb-2">✓</div>
+        <div className="text-4xl mb-2">{'\u2713'}</div>
         <p className="text-gray-600">{t('recurring.suggestions.noSuggestions')}</p>
-        <p className="text-sm text-gray-500 mt-1">
-          {t('recurring.suggestions.noSuggestionsHint')}
-        </p>
+        <p className="text-sm text-gray-500 mt-1">{t('recurring.suggestions.noSuggestionsHint')}</p>
       </div>
     );
   }
@@ -107,11 +98,8 @@ export const RecurringSuggestionsList: React.FC = () => {
         <h2 className="text-lg font-semibold">
           {t('recurring.suggestions.title')} ({suggestions.length})
         </h2>
-        <button
-          onClick={loadSuggestions}
-          className="text-sm text-blue-600 hover:text-blue-700"
-        >
-          🔄 {t('common.refresh')}
+        <button onClick={() => void loadSuggestions()} className="text-sm text-blue-600 hover:text-blue-700">
+          {'\u21BB'} {t('common.refresh')}
         </button>
       </div>
 

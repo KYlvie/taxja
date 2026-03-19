@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { dashboardService } from '../../services/dashboardService';
+import { normalizeLanguage } from '../../utils/locale';
 import './IncomeTypeHint.css';
 
 interface Suggestion {
@@ -18,10 +19,11 @@ interface IncomeProfile {
 }
 
 const IncomeTypeHint = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<IncomeProfile | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const currentLanguage = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
     const fetch = async () => {
@@ -33,7 +35,7 @@ const IncomeTypeHint = () => {
       }
     };
     fetch();
-  }, []);
+  }, [currentLanguage]);
 
   if (!profile || profile.suggestions.length === 0 || dismissed) {
     return null;

@@ -1,9 +1,11 @@
 """Unit tests for DataReconciliationService"""
 import pytest
 from decimal import Decimal
-from uuid import uuid4
-from datetime import datetime
+from sqlalchemy import ARRAY as GenericARRAY
+from sqlalchemy import JSON
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.compiler import compiles
+from app.db.base import Base
 from app.services.data_reconciliation_service import DataReconciliationService
 from app.models.historical_import import (
     HistoricalImportSession,
@@ -13,8 +15,58 @@ from app.models.historical_import import (
     ImportStatus,
     ImportSessionStatus,
 )
-from app.models.user import User
-from app.models.document import Document
+from app.models.user import User, UserType
+from app.models.document import Document, DocumentType
+
+
+@compiles(GenericARRAY, "sqlite")
+def compile_array_sqlite(_type, _compiler, **_kw):
+    """Allow generic ARRAY columns in historical import models on SQLite."""
+    return "JSON"
+
+
+@pytest.fixture
+def db_session(db: Session):
+    """Use the isolated SQLite test database and create historical import tables."""
+    bind = db.get_bind()
+    tables = [
+        HistoricalImportSession.__table__,
+        HistoricalImportUpload.__table__,
+        ImportConflict.__table__,
+    ]
+
+    patched_types = [
+        (HistoricalImportSession.__table__.c.tax_years, HistoricalImportSession.__table__.c.tax_years.type),
+        (HistoricalImportUpload.__table__.c.transactions_created, HistoricalImportUpload.__table__.c.transactions_created.type),
+        (HistoricalImportUpload.__table__.c.properties_created, HistoricalImportUpload.__table__.c.properties_created.type),
+        (HistoricalImportUpload.__table__.c.properties_linked, HistoricalImportUpload.__table__.c.properties_linked.type),
+    ]
+    for column, _original_type in patched_types:
+        column.type = JSON()
+
+    patched_defaults = []
+    for table in tables:
+        for column in table.columns:
+            if column.server_default is None:
+                continue
+            default_text = (
+                str(column.server_default.arg)
+                if hasattr(column.server_default, "arg")
+                else str(column.server_default)
+            )
+            if "gen_random_uuid" in default_text:
+                patched_defaults.append((column, column.server_default))
+                column.server_default = None
+
+    try:
+        Base.metadata.create_all(bind=bind, tables=tables, checkfirst=True)
+    finally:
+        for column, original_type in patched_types:
+            column.type = original_type
+        for column, server_default in patched_defaults:
+            column.server_default = server_default
+
+    yield db
 
 
 @pytest.fixture
@@ -28,9 +80,9 @@ def test_user(db_session: Session):
     """Create test user"""
     user = User(
         email="test@example.com",
-        hashed_password="hashed",
-        first_name="Test",
-        last_name="User",
+        password_hash="hashed",
+        name="Test User",
+        user_type=UserType.EMPLOYEE,
     )
     db_session.add(user)
     db_session.commit()
@@ -44,7 +96,7 @@ def test_session(db_session: Session, test_user: User):
     session = HistoricalImportSession(
         user_id=test_user.id,
         status=ImportSessionStatus.ACTIVE,
-        tax_years=[2023],
+        tax_years="[2023]",
     )
     db_session.add(session)
     db_session.commit()
@@ -57,14 +109,27 @@ def test_document(db_session: Session, test_user: User):
     """Create test document"""
     doc = Document(
         user_id=test_user.id,
-        filename="test.pdf",
+        document_type=DocumentType.OTHER,
         file_path="/test/test.pdf",
-        file_type="application/pdf",
+        file_name="test.pdf",
+        mime_type="application/pdf",
     )
     db_session.add(doc)
     db_session.commit()
     db_session.refresh(doc)
     return doc
+
+
+def _build_upload(**overrides) -> HistoricalImportUpload:
+    """Create a SQLite-friendly historical upload for reconciliation tests."""
+    defaults = {
+        "transactions_created": "[]",
+        "properties_created": "[]",
+        "properties_linked": "[]",
+        "errors": [],
+    }
+    defaults.update(overrides)
+    return HistoricalImportUpload(**defaults)
 
 
 class TestDetectConflicts:
@@ -80,7 +145,7 @@ class TestDetectConflicts:
     ):
         """Test detection of employment income conflict between E1 and Bescheid"""
         # Create E1 upload with employment income
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -93,7 +158,7 @@ class TestDetectConflicts:
         db_session.add(e1_upload)
 
         # Create Bescheid upload with different employment income (>1% difference)
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -107,7 +172,7 @@ class TestDetectConflicts:
         db_session.commit()
 
         # Detect conflicts
-        conflicts = reconciliation_service.detect_conflicts(str(test_session.id))
+        conflicts = reconciliation_service.detect_conflicts(test_session.id)
 
         # Verify conflict detected
         assert len(conflicts) == 1
@@ -128,7 +193,7 @@ class TestDetectConflicts:
     ):
         """Test no conflict when difference is within 1% threshold"""
         # Create E1 upload
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -141,7 +206,7 @@ class TestDetectConflicts:
         db_session.add(e1_upload)
 
         # Create Bescheid upload with similar amount (within 1%)
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -155,7 +220,7 @@ class TestDetectConflicts:
         db_session.commit()
 
         # Detect conflicts
-        conflicts = reconciliation_service.detect_conflicts(str(test_session.id))
+        conflicts = reconciliation_service.detect_conflicts(test_session.id)
 
         # Verify no conflict detected
         assert len(conflicts) == 0
@@ -170,7 +235,7 @@ class TestDetectConflicts:
     ):
         """Test detection of rental income conflict"""
         # Create E1 upload with rental income
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -183,7 +248,7 @@ class TestDetectConflicts:
         db_session.add(e1_upload)
 
         # Create Bescheid upload with different rental income
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -197,7 +262,7 @@ class TestDetectConflicts:
         db_session.commit()
 
         # Detect conflicts
-        conflicts = reconciliation_service.detect_conflicts(str(test_session.id))
+        conflicts = reconciliation_service.detect_conflicts(test_session.id)
 
         # Verify conflict detected
         assert len(conflicts) == 1
@@ -213,7 +278,7 @@ class TestDetectConflicts:
     ):
         """Test no conflict when documents are from different tax years"""
         # Create E1 upload for 2023
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -226,7 +291,7 @@ class TestDetectConflicts:
         db_session.add(e1_upload)
 
         # Create Bescheid upload for 2022
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -240,7 +305,7 @@ class TestDetectConflicts:
         db_session.commit()
 
         # Detect conflicts
-        conflicts = reconciliation_service.detect_conflicts(str(test_session.id))
+        conflicts = reconciliation_service.detect_conflicts(test_session.id)
 
         # Verify no conflict (different years)
         assert len(conflicts) == 0
@@ -255,7 +320,7 @@ class TestDetectConflicts:
     ):
         """Test no conflict when extracted data is missing"""
         # Create E1 upload without extracted data
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -268,7 +333,7 @@ class TestDetectConflicts:
         db_session.add(e1_upload)
 
         # Create Bescheid upload
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -282,7 +347,7 @@ class TestDetectConflicts:
         db_session.commit()
 
         # Detect conflicts
-        conflicts = reconciliation_service.detect_conflicts(str(test_session.id))
+        conflicts = reconciliation_service.detect_conflicts(test_session.id)
 
         # Verify no conflict (missing data)
         assert len(conflicts) == 0
@@ -349,7 +414,7 @@ class TestSuggestResolution:
     ):
         """Test that Bescheid is prioritized over E1"""
         # Create E1 upload
-        e1_upload = HistoricalImportUpload(
+        e1_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -361,7 +426,7 @@ class TestSuggestResolution:
         db_session.add(e1_upload)
 
         # Create Bescheid upload
-        bescheid_upload = HistoricalImportUpload(
+        bescheid_upload = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -402,7 +467,7 @@ class TestSuggestResolution:
     ):
         """Test resolution based on confidence when no Bescheid"""
         # Create two E1 uploads with different confidence
-        e1_upload_1 = HistoricalImportUpload(
+        e1_upload_1 = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -413,7 +478,7 @@ class TestSuggestResolution:
         )
         db_session.add(e1_upload_1)
 
-        e1_upload_2 = HistoricalImportUpload(
+        e1_upload_2 = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -454,7 +519,7 @@ class TestSuggestResolution:
     ):
         """Test manual merge when confidence is similar"""
         # Create two uploads with similar confidence
-        upload_1 = HistoricalImportUpload(
+        upload_1 = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,
@@ -465,7 +530,7 @@ class TestSuggestResolution:
         )
         db_session.add(upload_1)
 
-        upload_2 = HistoricalImportUpload(
+        upload_2 = _build_upload(
             session_id=test_session.id,
             user_id=test_user.id,
             document_id=test_document.id,

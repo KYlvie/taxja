@@ -70,15 +70,6 @@ if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
         from app.main import app as fastapi_app
         from app.db.base import Base, get_db
 
-        # Test database URL (SQLite for simple unit tests)
-        SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-
-        engine = create_engine(
-            SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-        )
-        TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
         def _create_sqlite_tables(engine, metadata):
             """Create tables in SQLite, stripping PostgreSQL-specific features."""
             # Exclude tables that use PostgreSQL ARRAY type
@@ -104,8 +95,11 @@ if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
                             patched.append((col, col.server_default))
                             col.server_default = None
             try:
-                for table in tables_to_create:
-                    table.create(bind=engine, checkfirst=True)
+                metadata.create_all(
+                    bind=engine,
+                    tables=tables_to_create,
+                    checkfirst=True,
+                )
             finally:
                 # Restore server defaults
                 for col, server_default in patched:
@@ -113,27 +107,30 @@ if not os.environ.get('PYTEST_PROPERTY_TESTS_ONLY') and _app_available:
 
 
         @pytest.fixture(scope="function")
-        def db():
+        def db(tmp_path):
             """
             Create test database (SQLite).
 
             Note: For E2E tests requiring PostgreSQL features (enums, UUID),
             use the db_session fixture from tests.fixtures.database instead.
             """
+            db_path = tmp_path / "test.db"
+            engine = create_engine(
+                f"sqlite:///{db_path}",
+                connect_args={"check_same_thread": False},
+            )
+            TestingSessionLocal = sessionmaker(
+                autocommit=False,
+                autoflush=False,
+                bind=engine,
+            )
             _create_sqlite_tables(engine, Base.metadata)
             db = TestingSessionLocal()
             try:
                 yield db
             finally:
                 db.close()
-                # Drop only the tables that were created (excluding PostgreSQL ARRAY tables)
-                excluded = {
-                    'historical_import_sessions', 'historical_import_uploads',
-                    'import_conflicts', 'import_metrics',
-                }
-                for t in reversed(Base.metadata.sorted_tables):
-                    if t.name not in excluded:
-                        t.drop(bind=engine, checkfirst=True)
+                engine.dispose()
 
 
         @pytest.fixture(scope="function")

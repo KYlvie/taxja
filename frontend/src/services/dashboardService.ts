@@ -1,4 +1,8 @@
 import api from './api';
+import i18n from '../i18n';
+import { normalizeLanguage } from '../utils/locale';
+
+const getCurrentLanguage = () => normalizeLanguage(i18n.resolvedLanguage || i18n.language);
 
 export const dashboardService = {
   getDashboardData: async (year?: number) => {
@@ -6,18 +10,24 @@ export const dashboardService = {
     return response.data;
   },
 
-  getSuggestions: async () => {
-    const response = await api.get('/dashboard/suggestions');
+  getSuggestions: async (year?: number) => {
+    const response = await api.get('/dashboard/suggestions', {
+      params: { tax_year: year, language: getCurrentLanguage() },
+    });
     return response.data;
   },
 
-  getCalendar: async () => {
-    const response = await api.get('/dashboard/calendar');
+  getCalendar: async (year?: number) => {
+    const response = await api.get('/dashboard/calendar', {
+      params: { tax_year: year, language: getCurrentLanguage() },
+    });
     return response.data;
   },
 
   getIncomeProfile: async (year?: number) => {
-    const response = await api.get('/dashboard/income-profile', { params: { tax_year: year } });
+    const response = await api.get('/dashboard/income-profile', {
+      params: { tax_year: year, language: getCurrentLanguage() },
+    });
     return response.data;
   },
 
@@ -35,6 +45,18 @@ export const dashboardService = {
 
   getPropertyMetrics: async (year?: number) => {
     const response = await api.get('/dashboard/property-metrics', {
+      params: { tax_year: year },
+    });
+    return response.data;
+  },
+
+  getAlerts: async () => {
+    const response = await api.get('/dashboard/alerts');
+    return response.data;
+  },
+
+  getHealthCheck: async (year?: number) => {
+    const response = await api.get('/dashboard/health-check', {
       params: { tax_year: year },
     });
     return response.data;

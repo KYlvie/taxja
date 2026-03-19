@@ -2,60 +2,61 @@
   "name": "Taxja - Austrian Tax Management",
   "short_name": "Taxja",
   "description": "Automated tax management for Austrian taxpayers. Track income, expenses, calculate taxes, and generate reports.",
-  "theme_color": "#1976d2",
-  "background_color": "#ffffff",
+  "theme_color": "#10213a",
+  "background_color": "#f2f8fd",
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
   "start_url": "/",
-  "categories": ["finance", "productivity", "business"],
+  "categories": [
+    "finance",
+    "productivity",
+    "business"
+  ],
   "lang": "de-AT",
   "dir": "ltr",
   "icons": [
     {
-      "src": "/pwa-64x64.png",
-      "sizes": "64x64",
-      "type": "image/png"
+      "src": "/icons/icon-48.webp",
+      "type": "image/webp",
+      "sizes": "48x48",
+      "purpose": "any maskable"
     },
     {
-      "src": "/pwa-192x192.png",
+      "src": "/icons/icon-72.webp",
+      "type": "image/webp",
+      "sizes": "72x72",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-96.webp",
+      "type": "image/webp",
+      "sizes": "96x96",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-128.webp",
+      "type": "image/webp",
+      "sizes": "128x128",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192.webp",
+      "type": "image/webp",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
-      "src": "/pwa-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
+      "src": "/icons/icon-256.webp",
+      "type": "image/webp",
+      "sizes": "256x256",
+      "purpose": "any maskable"
     },
     {
-      "src": "/pwa-512x512.png",
+      "src": "/icons/icon-512.webp",
+      "type": "image/webp",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/pwa-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshots/dashboard.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Dashboard overview with tax calculations"
-    },
-    {
-      "src": "/screenshots/mobile-dashboard.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Mobile dashboard view"
+      "purpose": "any maskable"
     }
   ],
   "shortcuts": [
@@ -63,37 +64,19 @@
       "name": "Add Transaction",
       "short_name": "New Transaction",
       "description": "Quickly add a new income or expense transaction",
-      "url": "/transactions/new",
-      "icons": [
-        {
-          "src": "/icons/add-transaction.png",
-          "sizes": "96x96"
-        }
-      ]
+      "url": "/transactions/new"
     },
     {
       "name": "Upload Document",
       "short_name": "Upload",
       "description": "Upload and scan a receipt or invoice",
-      "url": "/documents/upload",
-      "icons": [
-        {
-          "src": "/icons/upload-document.png",
-          "sizes": "96x96"
-        }
-      ]
+      "url": "/documents/upload"
     },
     {
       "name": "Dashboard",
       "short_name": "Dashboard",
       "description": "View your tax overview",
-      "url": "/dashboard",
-      "icons": [
-        {
-          "src": "/icons/dashboard.png",
-          "sizes": "96x96"
-        }
-      ]
+      "url": "/dashboard"
     }
   ],
   "share_target": {
@@ -104,7 +87,10 @@
       "files": [
         {
           "name": "document",
-          "accept": ["image/*", "application/pdf"]
+          "accept": [
+            "image/*",
+            "application/pdf"
+          ]
         }
       ]
     }

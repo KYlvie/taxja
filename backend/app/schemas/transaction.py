@@ -150,6 +150,20 @@ class TransactionCreate(TransactionBase):
         return self
 
 
+class LineItemUpdate(BaseModel):
+    """Schema for creating/updating a line item within a transaction."""
+    id: Optional[int] = None  # None = new item, set = update existing
+    description: str = Field(..., min_length=1, max_length=500)
+    amount: Decimal = Field(..., gt=0)
+    quantity: int = Field(1, ge=1)
+    category: Optional[str] = None
+    is_deductible: bool = False
+    deduction_reason: Optional[str] = Field(None, max_length=500)
+    vat_rate: Optional[Decimal] = Field(None, ge=0, le=1)
+    vat_amount: Optional[Decimal] = Field(None, ge=0)
+    sort_order: int = 0
+
+
 class TransactionUpdate(BaseModel):
     """Transaction update schema (all fields optional)"""
     type: Optional[TransactionType] = None
@@ -165,6 +179,14 @@ class TransactionUpdate(BaseModel):
     document_id: Optional[int] = None
     reviewed: Optional[bool] = None
     locked: Optional[bool] = None
+    # Line items (full replacement when provided)
+    line_items: Optional[list[LineItemUpdate]] = None
+    # Recurring fields
+    is_recurring: Optional[bool] = None
+    recurring_frequency: Optional[str] = None
+    recurring_start_date: Optional[date] = None
+    recurring_end_date: Optional[date] = None
+    recurring_day_of_month: Optional[int] = Field(None, ge=1, le=31)
     
     @field_validator('type')
     @classmethod
@@ -234,12 +256,42 @@ class TransactionUpdate(BaseModel):
         return v
 
 
+class TransactionLineItemResponse(BaseModel):
+    """Line item within a transaction."""
+    id: int
+    description: str
+    amount: Decimal
+    quantity: int = 1
+    category: Optional[str] = None
+    is_deductible: bool = False
+    deduction_reason: Optional[str] = None
+    vat_rate: Optional[Decimal] = None
+    vat_amount: Optional[Decimal] = None
+    classification_method: Optional[str] = None
+    classification_confidence: Optional[Decimal] = None
+    sort_order: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class TransactionLineItemUpdate(BaseModel):
+    """Schema for updating a single line item."""
+    description: Optional[str] = Field(None, max_length=500)
+    amount: Optional[Decimal] = Field(None, gt=0)
+    quantity: Optional[int] = Field(None, ge=1)
+    category: Optional[str] = Field(None, max_length=100)
+    is_deductible: Optional[bool] = None
+    deduction_reason: Optional[str] = Field(None, max_length=500)
+
+
 class TransactionResponse(TransactionBase):
     """Transaction response schema"""
     id: int
     user_id: int
     property_id: Optional[str] = None
     classification_confidence: Optional[Decimal] = None
+    classification_method: Optional[str] = None
     needs_review: bool = False
     import_source: Optional[str] = None
     is_recurring: bool = False
@@ -254,8 +306,20 @@ class TransactionResponse(TransactionBase):
     is_system_generated: bool = False
     reviewed: bool = False
     locked: bool = False
+    source_recurring_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    line_items: list[TransactionLineItemResponse] = []
+    deductible_amount: Optional[Decimal] = None
+    non_deductible_amount: Optional[Decimal] = None
+
+    @field_validator("property_id", mode="before")
+    @classmethod
+    def coerce_uuid_to_str(cls, v):
+        """Coerce UUID to string for JSON serialization"""
+        if v is not None:
+            return str(v)
+        return v
 
     @field_validator(
         "needs_review", "is_recurring", "recurring_is_active",
@@ -265,6 +329,20 @@ class TransactionResponse(TransactionBase):
     def coerce_none_to_false(cls, v):
         """Coerce None to False for boolean fields that may be NULL in DB"""
         return v if v is not None else False
+
+    @model_validator(mode="after")
+    def extract_source_recurring_id(self):
+        """Extract recurring template ID from parent_recurring_id or description pattern"""
+        if self.source_recurring_id is not None:
+            return self
+        if self.parent_recurring_id:
+            self.source_recurring_id = self.parent_recurring_id
+        elif self.description:
+            import re
+            match = re.search(r"recurring #(\d+)", self.description)
+            if match:
+                self.source_recurring_id = int(match.group(1))
+        return self
 
     class Config:
         from_attributes = True

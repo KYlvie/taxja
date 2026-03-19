@@ -21,10 +21,20 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.document import Document, DocumentType as DBDocumentType
+from app.services.document_metering_service import (
+    DocumentMeteringService,
+    PhaseCheckpointType,
+)
 from app.services.document_classifier import DocumentClassifier, DocumentType as OCRDocumentType
 from app.services.ocr_engine import OCREngine, OCRResult
+from app.services.processing_decision_service import (
+    ProcessingAction,
+    ProcessingDecisionService,
+    ProcessingPhase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +105,9 @@ class PipelineResult:
     confidence_level: ConfidenceLevel = ConfidenceLevel.LOW
     processing_time_ms: float = 0.0
     audit_log: List[Dict[str, Any]] = field(default_factory=list)
+    phase_checkpoints: List[Dict[str, Any]] = field(default_factory=list)
+    current_state: str = "processing_phase_1"
+    processing_decision: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
     @property
@@ -115,6 +128,9 @@ class PipelineResult:
                 parts.append("Immobilie angelegt")
             elif s.get("type") == "create_recurring_income":
                 parts.append("Mieteinnahme angelegt")
+            elif s.get("type") == "create_asset":
+                asset_name = s.get("data", {}).get("name") or "Asset"
+                parts.append(f"Anlagegut angelegt: {asset_name}")
             elif s.get("transaction_id"):
                 amt = s.get("amount", "?")
                 desc = s.get("description", "")
@@ -137,6 +153,7 @@ class PipelineResult:
             "suggestions": self.suggestions,
             "error": self.error,
             "user_message": self.user_message,
+            "current_state": self.current_state,
         }
         if self.classification:
             result["classification"] = asdict(self.classification)
@@ -147,6 +164,8 @@ class PipelineResult:
                 "corrected_fields": self.validation.corrected_fields,
             }
         result["audit_log"] = self.audit_log
+        result["phase_checkpoints"] = self.phase_checkpoints
+        result["processing_decision"] = self.processing_decision
         return result
 
 
@@ -160,6 +179,25 @@ OCR_TO_DB_TYPE_MAP = {
     OCRDocumentType.RENTAL_CONTRACT: DBDocumentType.RENTAL_CONTRACT,
     OCRDocumentType.E1_FORM: DBDocumentType.E1_FORM,
     OCRDocumentType.EINKOMMENSTEUERBESCHEID: DBDocumentType.EINKOMMENSTEUERBESCHEID,
+    OCRDocumentType.L1_FORM: DBDocumentType.L1_FORM,
+    OCRDocumentType.L1K_BEILAGE: DBDocumentType.L1K_BEILAGE,
+    OCRDocumentType.L1AB_BEILAGE: DBDocumentType.L1AB_BEILAGE,
+    OCRDocumentType.E1A_BEILAGE: DBDocumentType.E1A_BEILAGE,
+    OCRDocumentType.E1B_BEILAGE: DBDocumentType.E1B_BEILAGE,
+    OCRDocumentType.E1KV_BEILAGE: DBDocumentType.E1KV_BEILAGE,
+    OCRDocumentType.U1_FORM: DBDocumentType.U1_FORM,
+    OCRDocumentType.U30_FORM: DBDocumentType.U30_FORM,
+    OCRDocumentType.JAHRESABSCHLUSS: DBDocumentType.JAHRESABSCHLUSS,
+    OCRDocumentType.SPENDENBESTAETIGUNG: DBDocumentType.SPENDENBESTAETIGUNG,
+    OCRDocumentType.VERSICHERUNGSBESTAETIGUNG: DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+    OCRDocumentType.KINDERBETREUUNGSKOSTEN: DBDocumentType.KINDERBETREUUNGSKOSTEN,
+    OCRDocumentType.FORTBILDUNGSKOSTEN: DBDocumentType.FORTBILDUNGSKOSTEN,
+    OCRDocumentType.PENDLERPAUSCHALE: DBDocumentType.PENDLERPAUSCHALE,
+    OCRDocumentType.KIRCHENBEITRAG: DBDocumentType.KIRCHENBEITRAG,
+    OCRDocumentType.GRUNDBUCHAUSZUG: DBDocumentType.GRUNDBUCHAUSZUG,
+    OCRDocumentType.BETRIEBSKOSTENABRECHNUNG: DBDocumentType.BETRIEBSKOSTENABRECHNUNG,
+    OCRDocumentType.GEWERBESCHEIN: DBDocumentType.GEWERBESCHEIN,
+    OCRDocumentType.KONTOAUSZUG: DBDocumentType.KONTOAUSZUG,
     OCRDocumentType.UNKNOWN: DBDocumentType.OTHER,
 }
 
@@ -174,6 +212,7 @@ AUTO_CREATE_THRESHOLDS = {
     DBDocumentType.INVOICE: 0.3,
 }
 DEFAULT_AUTO_CREATE_THRESHOLD = 0.3
+AUTO_CREATE_THRESHOLD_DEFAULT = DEFAULT_AUTO_CREATE_THRESHOLD
 
 # Keep backward compat for tests
 CONFIRMATION_REQUIRED_TYPES = set()  # Empty — nothing requires confirmation anymore
@@ -193,10 +232,56 @@ class DocumentPipelineOrchestrator:
     Philosophy: do everything automatically, let user edit/undo later.
     """
 
+    # DB document types that generate tax filing data suggestions
+    TAX_FORM_DB_TYPES = {
+        DBDocumentType.LOHNZETTEL,
+        DBDocumentType.L1_FORM,
+        DBDocumentType.L1K_BEILAGE,
+        DBDocumentType.L1AB_BEILAGE,
+        DBDocumentType.E1A_BEILAGE,
+        DBDocumentType.E1B_BEILAGE,
+        DBDocumentType.E1KV_BEILAGE,
+        DBDocumentType.U1_FORM,
+        DBDocumentType.U30_FORM,
+        DBDocumentType.JAHRESABSCHLUSS,
+        DBDocumentType.SVS_NOTICE,
+        DBDocumentType.PROPERTY_TAX,
+        DBDocumentType.BANK_STATEMENT,
+    }
+
+    # Map DB type to import_suggestion type string
+    TAX_FORM_SUGGESTION_TYPE_MAP = {
+        DBDocumentType.LOHNZETTEL: "import_lohnzettel",
+        DBDocumentType.L1_FORM: "import_l1",
+        DBDocumentType.L1K_BEILAGE: "import_l1k",
+        DBDocumentType.L1AB_BEILAGE: "import_l1ab",
+        DBDocumentType.E1A_BEILAGE: "import_e1a",
+        DBDocumentType.E1B_BEILAGE: "import_e1b",
+        DBDocumentType.E1KV_BEILAGE: "import_e1kv",
+        DBDocumentType.U1_FORM: "import_u1",
+        DBDocumentType.U30_FORM: "import_u30",
+        DBDocumentType.JAHRESABSCHLUSS: "import_jahresabschluss",
+        DBDocumentType.SVS_NOTICE: "import_svs",
+        DBDocumentType.PROPERTY_TAX: "import_grundsteuer",
+        DBDocumentType.BANK_STATEMENT: "import_bank_statement",
+    }
+
     def __init__(self, db: Session):
         self.db = db
         self.ocr_engine = OCREngine()
         self.classifier = DocumentClassifier()
+        self.processing_decision_service = ProcessingDecisionService()
+        self.document_metering_service = DocumentMeteringService()
+
+    def _get_processing_decision_service(self) -> ProcessingDecisionService:
+        if not hasattr(self, "processing_decision_service") or self.processing_decision_service is None:
+            self.processing_decision_service = ProcessingDecisionService()
+        return self.processing_decision_service
+
+    def _get_document_metering_service(self) -> DocumentMeteringService:
+        if not hasattr(self, "document_metering_service") or self.document_metering_service is None:
+            self.document_metering_service = DocumentMeteringService()
+        return self.document_metering_service
 
     # ---- Main entry point ----
 
@@ -215,18 +300,40 @@ class DocumentPipelineOrchestrator:
         """
         start_time = datetime.utcnow()
         result = PipelineResult(document_id=document_id)
+        metering_service = self._get_document_metering_service()
+        phase_1_checkpoint = metering_service.begin_phase(
+            phase=ProcessingPhase.PHASE_1,
+            checkpoint=PhaseCheckpointType.FIRST_RESULT,
+            entry_stage=PipelineStage.CLASSIFY.value,
+            metadata={"document_id": document_id},
+        )
+        phase_2_checkpoint = None
 
         try:
             # Load document
             document = self.db.query(Document).filter(Document.id == document_id).first()
             if not document:
                 result.error = f"Document {document_id} not found"
+                result.phase_checkpoints.append(
+                    metering_service.fail_phase(
+                        phase_1_checkpoint,
+                        exit_stage=result.stage_reached.value,
+                        error=result.error,
+                    )
+                )
                 return result
 
             # Stage 1: OCR + Classification
             ocr_result = self._stage_ocr(document, result)
             if ocr_result is None:
                 result.stage_reached = PipelineStage.CLASSIFY
+                result.phase_checkpoints.append(
+                    metering_service.fail_phase(
+                        phase_1_checkpoint,
+                        exit_stage=result.stage_reached.value,
+                        error=result.error or "ocr_failed",
+                    )
+                )
                 return self._finalize(result, document, start_time)
 
             # Stage 2: Classification arbitration
@@ -248,8 +355,48 @@ class DocumentPipelineOrchestrator:
                     f"{list(validation.corrected_fields.keys())}"
                 )
 
+            result.phase_checkpoints.append(
+                metering_service.complete_phase(
+                    phase_1_checkpoint,
+                    exit_stage=PipelineStage.VALIDATE.value,
+                    metadata={
+                        "document_type": db_type.value,
+                        "classification_method": (
+                            result.classification.method if result.classification else None
+                        ),
+                        "extracted_field_count": len(result.extracted_data or {}),
+                        "validation_error_count": validation.error_count,
+                        "validation_warning_count": validation.warning_count,
+                    },
+                )
+            )
+            result.current_state = "first_result_available"
+            self._persist_checkpoint_state(document, result, commit=True)
+
+            phase_2_checkpoint = metering_service.begin_phase(
+                phase=ProcessingPhase.PHASE_2,
+                checkpoint=PhaseCheckpointType.FINALIZATION,
+                entry_stage=PipelineStage.SUGGEST.value,
+                metadata={"document_type": db_type.value},
+            )
+            result.phase_checkpoints.append(phase_2_checkpoint.model_dump(mode="json"))
+            result.current_state = "finalizing"
+            self._persist_checkpoint_state(document, result, commit=True)
+
             # Stage 5: Build suggestions AND auto-create
             self._stage_suggest(document, db_type, ocr_result, result)
+
+            result.phase_checkpoints.append(
+                metering_service.complete_phase(
+                    phase_2_checkpoint,
+                    exit_stage=PipelineStage.SUGGEST.value,
+                    metadata={
+                        "suggestion_count": len(result.suggestions),
+                        "processing_decision": result.processing_decision,
+                    },
+                )
+            )
+            result.current_state = "completed"
 
             # Determine overall confidence
             result.confidence_level = self._assess_confidence(
@@ -267,7 +414,17 @@ class DocumentPipelineOrchestrator:
         except Exception as e:
             logger.error(f"Pipeline failed for document {document_id}: {e}", exc_info=True)
             result.error = str(e)
-            result.stage_reached = PipelineStage.CLASSIFY
+            self.db.rollback()
+            failed_checkpoint = phase_2_checkpoint or phase_1_checkpoint
+            result.phase_checkpoints.append(
+                metering_service.fail_phase(
+                    failed_checkpoint,
+                    exit_stage=result.stage_reached.value,
+                    error=result.error,
+                )
+            )
+            if phase_2_checkpoint is not None:
+                result.current_state = "phase_2_failed"
             return self._finalize(result, document if 'document' in dir() else None, start_time)
 
     # ---- Stage 1: OCR ----
@@ -456,6 +613,7 @@ class DocumentPipelineOrchestrator:
             DBDocumentType.RECEIPT: self._validate_receipt,
             DBDocumentType.PURCHASE_CONTRACT: self._validate_kaufvertrag,
             DBDocumentType.RENTAL_CONTRACT: self._validate_mietvertrag,
+            DBDocumentType.LOAN_CONTRACT: self._validate_kreditvertrag,
         }
         validator = validators.get(db_type)
         if validator:
@@ -550,12 +708,22 @@ class DocumentPipelineOrchestrator:
         validation: ValidationResult,
     ):
         """Fill in smart defaults for missing fields so auto-create can proceed."""
-        # Missing date → today
-        if not data.get("date") and "date" not in validation.corrected_fields:
+        purchase_contract_kind = data.get("purchase_contract_kind")
+
+        # Missing date → today (but use the correct date field per document type)
+        # Kaufvertrag uses purchase_date, Mietvertrag uses start_date, others use date
+        if db_type == DBDocumentType.PURCHASE_CONTRACT:
+            date_field = "purchase_date"
+        elif db_type == DBDocumentType.RENTAL_CONTRACT:
+            date_field = "start_date"
+        else:
+            date_field = "date"
+
+        if not data.get(date_field) and date_field not in validation.corrected_fields:
             today = date.today().isoformat()
-            validation.corrected_fields["date"] = today
+            validation.corrected_fields[date_field] = today
             validation.issues.append(ValidationIssue(
-                field="date", issue=f"No date found, auto-set to {today}", severity="info",
+                field=date_field, issue=f"No date found, auto-set to {today}", severity="info",
             ))
 
         # Missing merchant → "Unbekannt"
@@ -569,7 +737,7 @@ class DocumentPipelineOrchestrator:
                 ))
 
         # Kaufvertrag: missing address → "Adresse nicht erkannt"
-        if db_type == DBDocumentType.PURCHASE_CONTRACT:
+        if db_type == DBDocumentType.PURCHASE_CONTRACT and purchase_contract_kind != "asset":
             if not data.get("property_address"):
                 validation.corrected_fields["property_address"] = "Adresse nicht erkannt"
                 validation.issues.append(ValidationIssue(
@@ -696,6 +864,15 @@ class DocumentPipelineOrchestrator:
 
     def _validate_kaufvertrag(self, data: Dict[str, Any], validation: ValidationResult):
         """Validate Kaufvertrag-specific fields. Auto-fill where possible."""
+        if data.get("purchase_contract_kind") == "asset":
+            if not data.get("purchase_price"):
+                validation.issues.append(ValidationIssue(
+                    field="purchase_price",
+                    issue="No purchase price found",
+                    severity="error",
+                ))
+            return
+
         if not data.get("purchase_price"):
             # This is a genuine error — can't create property without price
             validation.issues.append(ValidationIssue(
@@ -810,45 +987,169 @@ class DocumentPipelineOrchestrator:
             except (ValueError, TypeError):
                 pass
 
+    def _validate_kreditvertrag(self, data: Dict[str, Any], validation: ValidationResult):
+        """Validate Kreditvertrag-specific fields."""
+        if not data.get("loan_amount"):
+            validation.issues.append(ValidationIssue(
+                field="loan_amount",
+                issue="No loan amount found",
+                severity="error",
+            ))
+
+        if not data.get("interest_rate"):
+            validation.issues.append(ValidationIssue(
+                field="interest_rate",
+                issue="No interest rate found",
+                severity="error",
+            ))
+
+        # Informational checks on loan_amount range
+        loan_amount = data.get("loan_amount")
+        if loan_amount:
+            try:
+                amt = float(loan_amount)
+                if amt < 1000:
+                    validation.issues.append(ValidationIssue(
+                        field="loan_amount",
+                        issue=f"Loan amount seems unusually low: €{amt:.2f}",
+                        severity="info",
+                    ))
+                elif amt > 10_000_000:
+                    validation.issues.append(ValidationIssue(
+                        field="loan_amount",
+                        issue=f"Loan amount seems unusually high: €{amt:.2f}",
+                        severity="info",
+                    ))
+            except (ValueError, TypeError):
+                pass
+
+        # Informational check on interest_rate range
+        interest_rate = data.get("interest_rate")
+        if interest_rate:
+            try:
+                rate = float(interest_rate)
+                if rate < 0:
+                    validation.issues.append(ValidationIssue(
+                        field="interest_rate",
+                        issue=f"Interest rate is negative: {rate}%",
+                        severity="warning",
+                    ))
+                elif rate > 20:
+                    validation.issues.append(ValidationIssue(
+                        field="interest_rate",
+                        issue=f"Interest rate seems unusually high: {rate}%",
+                        severity="info",
+                    ))
+            except (ValueError, TypeError):
+                pass
+
     # ---- Stage 5: Auto-create ----
 
     def _stage_suggest(
         self, document: Document, db_type: DBDocumentType,
         ocr_result: OCRResult, result: PipelineResult,
     ):
-        """
-        Build suggestions AND auto-create records for ALL document types.
-
-        Philosophy: do it now, let user edit/undo later.
-        - Kaufvertrag → auto-create property
-        - Mietvertrag → auto-create recurring income
-        - Receipt/Invoice → auto-create transaction(s)
-        """
+        """Execute explicit Phase-2 actions for the classified document."""
         result.stage_reached = PipelineStage.SUGGEST
+        decision = self._get_processing_decision_service().build_phase_two_decision(
+            db_type,
+            tax_form_types=set(self.TAX_FORM_DB_TYPES),
+        )
+        result.processing_decision = decision.model_dump(mode="json")
 
-        if db_type == DBDocumentType.PURCHASE_CONTRACT:
+        for action in [*decision.primary_actions, *decision.secondary_actions]:
+            self._execute_processing_action(
+                action=action,
+                document=document,
+                db_type=db_type,
+                ocr_result=ocr_result,
+                result=result,
+            )
+
+    def _execute_processing_action(
+        self,
+        *,
+        action: ProcessingAction,
+        document: Document,
+        db_type: DBDocumentType,
+        ocr_result: OCRResult,
+        result: PipelineResult,
+    ) -> None:
+        """Run a single explicit Phase-2 action and append/log any outcomes."""
+        del ocr_result  # Phase-2 actions consume persisted result state via helpers.
+
+        if action == ProcessingAction.PURCHASE_CONTRACT:
+            # TODO(v1.4-followup): property persistence still bypasses the asset-path
+            # quality gate. Whole-pipeline gate unification is not done yet.
             suggestion = self._build_kaufvertrag_suggestion(document, result)
             if suggestion:
                 result.suggestions.append(suggestion)
                 self._log_audit(result, "auto-create", "Auto-created property from Kaufvertrag")
+            return
 
-        elif db_type == DBDocumentType.RENTAL_CONTRACT:
+        if action == ProcessingAction.RENTAL_CONTRACT:
+            # TODO(v1.4-followup): recurring-income persistence still uses its own
+            # document-type-specific branch; quality-gate authority is asset-path only.
             suggestion = self._build_mietvertrag_suggestion(document, result)
             if suggestion:
                 result.suggestions.append(suggestion)
                 self._log_audit(result, "auto-create", "Auto-created recurring income from Mietvertrag")
+            return
 
-        else:
-            # Receipt/Invoice/Other → auto-create transaction(s)
+        if action == ProcessingAction.LOAN_CONTRACT:
+            suggestion = self._build_kreditvertrag_suggestion(document, result)
+            if suggestion:
+                result.suggestions.append(suggestion)
+                self._log_audit(result, "suggest", "Built loan suggestion from Kreditvertrag")
+            return
+
+        if action == ProcessingAction.INSURANCE_RECURRING:
+            suggestion = self._build_versicherung_suggestion(document, result)
+            if suggestion:
+                result.suggestions.append(suggestion)
+                self._log_audit(
+                    result,
+                    "suggest",
+                    "Built insurance recurring suggestion from Versicherungsbestätigung",
+                )
+            return
+
+        if action == ProcessingAction.TAX_FORM_IMPORT:
+            suggestion = self._build_tax_form_suggestion(document, db_type, result)
+            if suggestion:
+                result.suggestions.append(suggestion)
+                self._log_audit(
+                    result,
+                    "suggest",
+                    f"Built tax data suggestion from {db_type.value}",
+                )
+            return
+
+        if action == ProcessingAction.TRANSACTION_SUGGESTIONS:
+            # TODO(v1.4-followup): transaction auto-create still runs outside the
+            # asset-path quality gate. Whole-pipeline unification is not complete.
             transaction_suggestions = self._build_transaction_suggestions(
                 document, db_type, result
             )
             result.suggestions.extend(transaction_suggestions)
             if transaction_suggestions:
                 self._log_audit(
-                    result, "auto-create",
-                    f"Auto-created {len(transaction_suggestions)} transaction(s)"
+                    result,
+                    "auto-create",
+                    f"Auto-created {len(transaction_suggestions)} transaction(s)",
                 )
+            return
+
+        if action == ProcessingAction.ASSET_SUGGESTION:
+            asset_suggestion = self._build_asset_suggestion(document, result)
+            if asset_suggestion:
+                result.suggestions.append(asset_suggestion)
+                message = (
+                    "Built asset suggestion from Kaufvertrag"
+                    if db_type == DBDocumentType.PURCHASE_CONTRACT
+                    else "Built asset suggestion from expense document"
+                )
+                self._log_audit(result, "suggest", message)
 
     def _build_kaufvertrag_suggestion(
         self, document: Document, result: PipelineResult
@@ -889,6 +1190,13 @@ class DocumentPipelineOrchestrator:
             if not suggestion:
                 return None
 
+            data = suggestion.get("data", {})
+
+            # If no property matched, keep as pending — user needs to create/link property first
+            if data.get("no_property_match"):
+                suggestion["status"] = "pending"
+                return suggestion
+
             # Auto-confirm: create the recurring income immediately
             try:
                 from app.tasks.ocr_tasks import create_recurring_from_suggestion
@@ -897,6 +1205,8 @@ class DocumentPipelineOrchestrator:
                 )
                 suggestion["status"] = "auto-created"
                 suggestion["recurring_id"] = create_result.get("recurring_id")
+                suggestion["is_partial_match"] = create_result.get("is_partial_match", False)
+                suggestion["unit_percentage"] = create_result.get("unit_percentage")
             except Exception as e:
                 logger.warning(f"Auto-create recurring failed, keeping as suggestion: {e}")
                 suggestion["status"] = "pending"
@@ -904,6 +1214,139 @@ class DocumentPipelineOrchestrator:
             return suggestion
         except Exception as e:
             logger.warning(f"Mietvertrag suggestion failed: {e}")
+            return None
+
+    def _build_kreditvertrag_suggestion(
+        self, document: Document, result: PipelineResult
+    ) -> Optional[Dict[str, Any]]:
+        """Build loan suggestion from Kreditvertrag. Does NOT auto-create — user must confirm."""
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        try:
+            suggestion_dict = _build_kreditvertrag_suggestion(self.db, document, result)
+            suggestion = suggestion_dict.get("import_suggestion")
+            if not suggestion:
+                return None
+
+            return suggestion
+        except Exception as e:
+            logger.warning(f"Kreditvertrag suggestion failed: {e}")
+            return None
+
+    def _build_versicherung_suggestion(
+        self, document: Document, result: PipelineResult
+    ) -> Optional[Dict[str, Any]]:
+        """Build insurance recurring suggestion from Versicherungsbestätigung. Does NOT auto-create — user must confirm."""
+        from app.tasks.ocr_tasks import _build_versicherung_suggestion
+
+        try:
+            suggestion_dict = _build_versicherung_suggestion(self.db, document, result)
+            suggestion = suggestion_dict.get("import_suggestion")
+            if not suggestion:
+                return None
+            return suggestion
+        except Exception as e:
+            logger.warning(f"Versicherung suggestion failed: {e}")
+            return None
+
+    def _build_asset_suggestion(
+        self, document: Document, result: PipelineResult
+    ) -> Optional[Dict[str, Any]]:
+        """Build asset suggestion and auto-create only when confidence is high and complete."""
+        from app.tasks.ocr_tasks import (
+            _build_asset_outcome_payload,
+            _build_asset_suggestion,
+        )
+
+        try:
+            suggestion_dict = _build_asset_suggestion(self.db, document, result)
+            suggestion = suggestion_dict.get("import_suggestion")
+            auto_create_payload = suggestion_dict.get("auto_create_payload")
+
+            if auto_create_payload:
+                try:
+                    from app.tasks.ocr_tasks import create_asset_from_suggestion
+
+                    create_result = create_asset_from_suggestion(
+                        self.db,
+                        document,
+                        auto_create_payload.get("data", {}),
+                        trigger_source="system",
+                    )
+                    auto_create_payload["status"] = "auto-created"
+                    auto_create_payload["asset_id"] = create_result.get("asset_id")
+                    return auto_create_payload
+                except Exception as e:
+                    logger.warning(f"Auto-create asset failed, keeping as suggestion: {e}")
+                    self.db.rollback()
+                    self.db.refresh(document)
+                    fallback_suggestion = {
+                        **auto_create_payload,
+                        "status": "pending",
+                    }
+                    fallback_suggestion.setdefault("data", {})
+                    fallback_suggestion["data"]["decision"] = "create_asset_suggestion"
+                    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+                    updated_ocr["import_suggestion"] = fallback_suggestion
+                    updated_ocr["asset_outcome"] = _build_asset_outcome_payload(
+                        status="pending_confirmation",
+                        decision="create_asset_suggestion",
+                        source="system_fallback",
+                        quality_gate_decision=auto_create_payload.get("data", {}).get(
+                            "quality_gate_decision"
+                        ),
+                    )
+                    document.ocr_result = updated_ocr
+                    flag_modified(document, "ocr_result")
+                    self.db.flush()
+                    return fallback_suggestion
+
+            if not suggestion:
+                return None
+
+            return suggestion
+        except Exception as e:
+            logger.warning(f"Asset suggestion failed: {e}")
+            return None
+
+    def _build_tax_form_suggestion(
+        self, document: Document, db_type: DBDocumentType, result: PipelineResult
+    ) -> Optional[Dict[str, Any]]:
+        """Build import suggestion for tax form documents (L16, L1, E1a, E1b, etc.).
+
+        Stores extracted data in import_suggestion for user confirmation via
+        the confirm-tax-data endpoint.
+        """
+        try:
+            ocr_result = document.ocr_result or {}
+            extracted_data = ocr_result.get("extracted_data", {})
+
+            if not extracted_data:
+                return None
+
+            suggestion_type = self.TAX_FORM_SUGGESTION_TYPE_MAP.get(db_type)
+            if not suggestion_type:
+                return None
+
+            suggestion = {
+                "type": suggestion_type,
+                "status": "pending",
+                "data": extracted_data,
+                "confidence": ocr_result.get("confidence_score", 0.0),
+            }
+
+            # Store in document.ocr_result.import_suggestion
+            import json as _json
+            updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+            updated_ocr["import_suggestion"] = suggestion
+            document.ocr_result = updated_ocr
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(document, "ocr_result")
+
+            return suggestion
+
+        except Exception as e:
+            logger.warning(f"Tax form suggestion failed for {db_type.value}: {e}")
             return None
 
     def _build_transaction_suggestions(
@@ -922,15 +1365,25 @@ class DocumentPipelineOrchestrator:
             service = OCRTransactionService(self.db)
 
             # Check for multi-receipt data
+            primary_receipt = result.extracted_data
             additional_receipts = result.extracted_data.get("_additional_receipts", [])
             receipt_count = result.extracted_data.get("_receipt_count", 1)
+
+            if not additional_receipts:
+                multiple_receipts = result.extracted_data.get("multiple_receipts", [])
+                if isinstance(multiple_receipts, list) and multiple_receipts:
+                    primary_receipt = multiple_receipts[0]
+                    additional_receipts = multiple_receipts[1:]
+                    receipt_count = result.extracted_data.get(
+                        "receipt_count", len(multiple_receipts)
+                    )
 
             if receipt_count > 1 and additional_receipts:
                 logger.info(
                     f"Multi-receipt document {document.id}: creating {receipt_count} transactions"
                 )
                 suggestions = self._create_multi_receipt_transactions(
-                    document, service, result.extracted_data, additional_receipts
+                    document, service, primary_receipt, additional_receipts
                 )
             else:
                 suggestions = service.create_split_suggestions(
@@ -942,9 +1395,17 @@ class DocumentPipelineOrchestrator:
                 s["needs_review"] = False  # Don't nag the user
                 try:
                     s["document_id"] = document.id
-                    txn = service.create_transaction_from_suggestion(s, document.user_id)
-                    s["transaction_id"] = txn.id
-                    s["status"] = "auto-created"
+                    creation_result = service.create_transaction_from_suggestion_with_result(
+                        s, document.user_id
+                    )
+                    s["transaction_id"] = creation_result.transaction.id
+                    if creation_result.created:
+                        s["status"] = "auto-created"
+                    else:
+                        s["status"] = "duplicate-skipped"
+                        s["is_duplicate"] = True
+                        s["duplicate_of_id"] = creation_result.duplicate_of_id
+                        s["duplicate_confidence"] = creation_result.duplicate_confidence
                 except Exception as e:
                     logger.warning(f"Auto-create transaction failed for doc {document.id}: {e}")
                     s["status"] = "pending"
@@ -989,11 +1450,11 @@ class DocumentPipelineOrchestrator:
             suggestion = {
                 "document_id": document.id,
                 "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
-                "transaction_type": "EXPENSE",
+                "transaction_type": "expense",
                 "amount": str(amount),
                 "date": date_str,
                 "description": description,
-                "category": "other_expense",
+                "category": "other",
                 "is_deductible": False,
                 "deduction_reason": None,
                 "confidence": float(receipt_data.get("amount_confidence", 0.8)),
@@ -1035,6 +1496,269 @@ class DocumentPipelineOrchestrator:
         else:
             return ConfidenceLevel.LOW
 
+    # =========================================================================
+    # Follow-Up Question Generation (Tasks 4-6)
+    # =========================================================================
+
+    def _enrich_suggestions_with_follow_ups(self, result: PipelineResult) -> None:
+        """
+        Enrich suggestions with follow-up questions for missing data and version tracking.
+
+        For asset suggestions: asks about put_into_use_date, business_use_percentage, etc.
+        For property suggestions: asks about building_value_ratio, building_year, etc.
+        All questions are trilingual (de/en/zh) with helpText for non-obvious fields.
+        """
+        for suggestion in (result.suggestions or []):
+            if not suggestion or not isinstance(suggestion, dict):
+                continue
+
+            # Skip auto-created/confirmed suggestions — they don't need follow-ups
+            if suggestion.get("status") in ("auto-created", "confirmed", "dismissed"):
+                continue
+
+            # Add version tracking for optimistic concurrency
+            if "version" not in suggestion:
+                suggestion["version"] = 0
+
+            suggestion_type = suggestion.get("type", "")
+            data = suggestion.get("data", {})
+
+            follow_up_questions = []
+
+            if suggestion_type == "create_asset":
+                follow_up_questions = self._build_asset_follow_up_questions(data)
+            elif suggestion_type == "create_property":
+                follow_up_questions = self._build_property_follow_up_questions(data)
+
+            if follow_up_questions:
+                suggestion["follow_up_questions"] = follow_up_questions
+                # If there are required follow-up questions, set status to needs_input
+                has_required = any(q.get("required") for q in follow_up_questions)
+                if has_required and suggestion.get("status") == "pending":
+                    suggestion["status"] = "pending"  # Keep pending, frontend derives needs_input from presence of questions
+
+    def _build_asset_follow_up_questions(self, data: Dict[str, Any]) -> list:
+        """Build follow-up questions for asset suggestions with missing required fields."""
+        questions = []
+
+        # Required: put_into_use_date
+        if not data.get("put_into_use_date"):
+            questions.append({
+                "id": "put_into_use_date",
+                "question": {
+                    "de": "Wann haben Sie diesen Gegenstand betrieblich in Nutzung genommen?",
+                    "en": "When did you start using this item for business?",
+                    "zh": "您何时开始将此物品用于业务？",
+                },
+                "input_type": "date",
+                "required": True,
+                "field_key": "put_into_use_date",
+                "default_value": None,
+                "help_text": {
+                    "de": "Das Datum, an dem Sie den Gegenstand betrieblich nutzen, nicht das Kaufdatum.",
+                    "en": "The date you started using this for business, not the purchase date.",
+                    "zh": "您开始将此物品用于业务的日期，不是购买日期。",
+                },
+            })
+
+        # Required: business_use_percentage
+        if not data.get("business_use_percentage"):
+            questions.append({
+                "id": "business_use_pct",
+                "question": {
+                    "de": "Wie hoch ist der betriebliche Nutzungsanteil in Prozent?",
+                    "en": "What percentage of use is for business?",
+                    "zh": "业务使用比例是多少？",
+                },
+                "input_type": "number",
+                "required": True,
+                "field_key": "business_use_percentage",
+                "default_value": 100,
+                "validation": {"min": 1, "max": 100},
+                "help_text": {
+                    "de": "100% wenn ausschließlich betrieblich genutzt. Bei gemischter Nutzung den betrieblichen Anteil angeben.",
+                    "en": "100% if used exclusively for business. For mixed use, enter the business portion.",
+                    "zh": "如果完全用于业务则填100%。混合使用时填写业务占比。",
+                },
+            })
+
+        # Conditional: is_used_asset (for vehicles)
+        asset_category = data.get("asset_category", "").lower()
+        is_vehicle = any(kw in asset_category for kw in ("fahrzeug", "vehicle", "auto", "pkw", "kfz", "car"))
+        if is_vehicle and data.get("is_used_asset") is None:
+            questions.append({
+                "id": "is_used_asset",
+                "question": {
+                    "de": "Ist dies ein Gebrauchtfahrzeug?",
+                    "en": "Is this a used vehicle?",
+                    "zh": "这是二手车辆吗？",
+                },
+                "input_type": "boolean",
+                "required": False,
+                "field_key": "is_used_asset",
+                "default_value": False,
+                "help_text": {
+                    "de": "Gebrauchtfahrzeuge haben eine verkürzte Nutzungsdauer für die AfA.",
+                    "en": "Used vehicles have a shorter useful life for depreciation purposes.",
+                    "zh": "二手车辆的折旧年限较短。",
+                },
+            })
+
+        # Optional: depreciation_method
+        if not data.get("depreciation_method"):
+            questions.append({
+                "id": "depreciation_method",
+                "question": {
+                    "de": "Welche Abschreibungsmethode möchten Sie verwenden?",
+                    "en": "Which depreciation method would you like to use?",
+                    "zh": "您希望使用哪种折旧方法？",
+                },
+                "input_type": "select",
+                "required": False,
+                "field_key": "depreciation_method",
+                "default_value": "linear",
+                "options": [
+                    {"value": "linear", "label": {"de": "Linear (Standard)", "en": "Linear (Standard)", "zh": "直线法（标准）"}},
+                    {"value": "degressive", "label": {"de": "Degressiv", "en": "Degressive", "zh": "递减法"}},
+                ],
+                "help_text": {
+                    "de": "Linear ist der Standard. Degressive AfA ist nur in bestimmten Fällen möglich.",
+                    "en": "Linear is the default. Degressive depreciation is only available in certain cases.",
+                    "zh": "直线法是默认方式。递减法仅在特定情况下可用。",
+                },
+            })
+
+        return questions
+
+    def _build_property_follow_up_questions(self, data: Dict[str, Any]) -> list:
+        """Build follow-up questions for property suggestions with missing fields."""
+        questions = []
+
+        # Required: building_value_ratio
+        if not data.get("building_value_ratio"):
+            questions.append({
+                "id": "building_ratio",
+                "question": {
+                    "de": "Wie ist das Gebäude-zu-Grund-Verhältnis?",
+                    "en": "What is the building-to-land value ratio?",
+                    "zh": "建筑与土地的价值比例是多少？",
+                },
+                "input_type": "select",
+                "required": True,
+                "field_key": "building_value_ratio",
+                "default_value": "0.7",
+                "options": [
+                    {"value": "0.7", "label": "70/30 (Standard)"},
+                    {"value": "0.6", "label": "60/40"},
+                    {"value": "0.8", "label": "80/20"},
+                    {"value": "custom", "label": {"de": "Eigener Wert...", "en": "Custom value...", "zh": "自定义..."}},
+                ],
+                "help_text": {
+                    "de": "Standard ist 70% Gebäude / 30% Grund. Verwenden Sie Ihr Liegenschaftsgutachten falls vorhanden.",
+                    "en": "Standard is 70% building / 30% land. Use your Liegenschaftsgutachten if available.",
+                    "zh": "标准比例为70%建筑/30%土地。如有物业评估报告请使用实际数据。",
+                },
+            })
+
+        # Optional: building_year
+        if not data.get("building_year"):
+            questions.append({
+                "id": "building_year",
+                "question": {
+                    "de": "Wann wurde das Gebäude errichtet?",
+                    "en": "When was the building constructed?",
+                    "zh": "建筑何时建成？",
+                },
+                "input_type": "number",
+                "required": False,
+                "field_key": "building_year",
+                "default_value": None,
+                "validation": {"min": 1800, "max": 2030},
+                "help_text": {
+                    "de": "Das Baujahr beeinflusst den AfA-Satz (1,5% oder 2% p.a.).",
+                    "en": "The construction year affects the depreciation rate (1.5% or 2% p.a.).",
+                    "zh": "建造年份影响折旧率（每年1.5%或2%）。",
+                },
+            })
+
+        # Optional: intended_use
+        if not data.get("intended_use"):
+            questions.append({
+                "id": "intended_use",
+                "question": {
+                    "de": "Wie wird die Immobilie genutzt?",
+                    "en": "How is the property used?",
+                    "zh": "房产如何使用？",
+                },
+                "input_type": "select",
+                "required": False,
+                "field_key": "intended_use",
+                "default_value": "rental",
+                "options": [
+                    {"value": "rental", "label": {"de": "Vermietung", "en": "Rental", "zh": "出租"}},
+                    {"value": "own_use", "label": {"de": "Eigennutzung", "en": "Own use", "zh": "自用"}},
+                    {"value": "mixed", "label": {"de": "Gemischt", "en": "Mixed", "zh": "混合使用"}},
+                ],
+                "help_text": {
+                    "de": "Nur bei Vermietung oder betrieblicher Nutzung können Kosten steuerlich abgesetzt werden.",
+                    "en": "Only rental or business use allows tax deductions on costs.",
+                    "zh": "仅出租或业务使用的费用可以税前扣除。",
+                },
+            })
+
+        return questions
+
+    def _build_validation_payload(self, result: PipelineResult) -> Optional[Dict[str, Any]]:
+        if not result.validation or not result.validation.issues:
+            return None
+        return {
+            "is_valid": result.validation.is_valid,
+            "issues": [
+                {"field": i.field, "issue": i.issue, "severity": i.severity}
+                for i in result.validation.issues
+            ],
+        }
+
+    def _persist_checkpoint_state(
+        self,
+        document: Document,
+        result: PipelineResult,
+        *,
+        commit: bool,
+    ) -> None:
+        """Persist visible checkpoint state without overwriting existing OCR contracts."""
+        ocr_result = (
+            self._make_json_safe(dict(document.ocr_result))
+            if isinstance(document.ocr_result, dict)
+            else {}
+        )
+        if result.extracted_data:
+            ocr_result.update(self._make_json_safe(result.extracted_data))
+
+        validation_payload = self._build_validation_payload(result)
+        if validation_payload:
+            ocr_result["_validation"] = validation_payload
+
+        ocr_result["_pipeline"] = self._get_document_metering_service().build_pipeline_metadata(
+            result=result
+        )
+
+        document.ocr_result = self._make_json_safe(ocr_result)
+        if result.raw_text:
+            document.raw_text = result.raw_text
+        if result.classification:
+            document.confidence_score = result.classification.confidence
+        try:
+            flag_modified(document, "ocr_result")
+        except Exception:
+            pass
+
+        if commit:
+            self.db.commit()
+            self.db.refresh(document)
+        else:
+            self.db.flush()
+
     # ---- Persistence ----
 
     def _finalize(
@@ -1050,49 +1774,106 @@ class DocumentPipelineOrchestrator:
             return result
 
         try:
-            # Update document with OCR results
+            # Merge into the latest persisted OCR result so terminal asset state
+            # and other checkpoint contracts survive finalization.
+            ocr_result = (
+                self._make_json_safe(dict(document.ocr_result))
+                if isinstance(document.ocr_result, dict)
+                else {}
+            )
             if result.extracted_data:
-                document.ocr_result = self._make_json_safe(result.extracted_data)
+                ocr_result.update(self._make_json_safe(result.extracted_data))
             if result.raw_text:
                 document.raw_text = result.raw_text
             if result.classification:
                 document.confidence_score = result.classification.confidence
+            elif result.error:
+                # Pipeline failed before/during classification — mark as 0.0
+                # so the frontend doesn't keep polling (Requirement 6.5)
+                document.confidence_score = 0.0
 
-            document.processed_at = datetime.utcnow()
+            if result.current_state == "completed":
+                document.processed_at = datetime.utcnow()
 
             # Store pipeline metadata in ocr_result
-            ocr_result = document.ocr_result if isinstance(document.ocr_result, dict) else {}
-            ocr_result["_pipeline"] = {
-                "stage_reached": result.stage_reached.value,
-                "confidence_level": result.confidence_level.value,
-                "needs_review": result.needs_review,
-                "processing_time_ms": result.processing_time_ms,
-            }
+            ocr_result["_pipeline"] = self._get_document_metering_service().build_pipeline_metadata(
+                result=result
+            )
 
             # Store validation issues
-            if result.validation and result.validation.issues:
-                ocr_result["_validation"] = {
-                    "is_valid": result.validation.is_valid,
-                    "issues": [
-                        {"field": i.field, "issue": i.issue, "severity": i.severity}
-                        for i in result.validation.issues
-                    ],
-                }
+            validation_payload = self._build_validation_payload(result)
+            if validation_payload:
+                ocr_result["_validation"] = validation_payload
+
+            # Enrich suggestions with follow-up questions and version before storing
+            self._enrich_suggestions_with_follow_ups(result)
 
             # Store suggestions
             if result.suggestions:
-                # For Kaufvertrag/Mietvertrag, store as import_suggestion
+                import_suggestion_types = {
+                    "create_property",
+                    "create_recurring_income",
+                    "create_loan",
+                    "create_loan_repayment",
+                    "create_recurring_expense",
+                    "create_insurance_recurring",
+                }
+
                 for s in result.suggestions:
-                    if s and s.get("type") in ("create_property", "create_recurring_income"):
+                    if not s:
+                        continue
+
+                    if s.get("type") == "create_asset":
+                        status = s.get("status")
+                        if status == "pending":
+                            ocr_result["import_suggestion"] = s
+                            if not ocr_result.get("asset_outcome"):
+                                ocr_result["asset_outcome"] = {
+                                    "contract_version": "v1",
+                                    "type": "create_asset",
+                                    "status": "pending_confirmation",
+                                    "decision": s.get("data", {}).get(
+                                        "decision", "create_asset_suggestion"
+                                    ),
+                                    "asset_id": None,
+                                    "source": "quality_gate",
+                                    "quality_gate_decision": s.get("data", {}).get(
+                                        "quality_gate_decision"
+                                    ),
+                                }
+                        else:
+                            existing_suggestion = ocr_result.get("import_suggestion")
+                            if (
+                                isinstance(existing_suggestion, dict)
+                                and existing_suggestion.get("type") == "create_asset"
+                            ):
+                                ocr_result.pop("import_suggestion", None)
+                            if status == "auto-created" and not ocr_result.get("asset_outcome"):
+                                ocr_result["asset_outcome"] = {
+                                    "contract_version": "v1",
+                                    "type": "create_asset",
+                                    "status": "auto_created",
+                                    "decision": s.get("data", {}).get(
+                                        "decision", "create_asset_auto"
+                                    ),
+                                    "asset_id": s.get("asset_id"),
+                                    "source": "quality_gate",
+                                    "quality_gate_decision": s.get("data", {}).get(
+                                        "quality_gate_decision"
+                                    ),
+                                }
+                        continue
+
+                    if s.get("type") in import_suggestion_types:
                         ocr_result["import_suggestion"] = s
-                    elif s:
+                    else:
                         # Transaction suggestions
                         ocr_result["transaction_suggestion"] = s
 
                 # Store tax_analysis for transaction suggestions
                 tx_suggestions = [
                     s for s in result.suggestions
-                    if s and s.get("type") not in ("create_property", "create_recurring_income")
+                    if s and s.get("type") not in (import_suggestion_types | {"create_asset"})
                 ]
                 if tx_suggestions:
                     ocr_result["tax_analysis"] = {
@@ -1120,6 +1901,10 @@ class DocumentPipelineOrchestrator:
                     }
 
             document.ocr_result = self._make_json_safe(ocr_result)
+            try:
+                flag_modified(document, "ocr_result")
+            except Exception:
+                pass
             self.db.commit()
 
         except Exception as e:
@@ -1182,10 +1967,11 @@ class DocumentPipelineOrchestrator:
             try:
                 # Ensure document_id is set
                 suggestion["document_id"] = document_id
-                transaction = service.create_transaction_from_suggestion(
+                creation_result = service.create_transaction_from_suggestion_with_result(
                     suggestion, user_id
                 )
-                created_ids.append(transaction.id)
+                if creation_result.created:
+                    created_ids.append(creation_result.transaction.id)
             except Exception as e:
                 logger.warning(
                     f"Failed to create transaction from suggestion for doc {document_id}: {e}"

@@ -547,54 +547,54 @@ class TestDeductionComprehensive:
     # -- Commuting (Pendlerpauschale) --
 
     def test_commuting_small_20km(self, deduction_calc):
-        """Kleines Pendlerpauschale 20-40km: €58/month + €120 Pendlereuro."""
+        """Kleines Pendlerpauschale 20-40km: base_annual only (Pendlereuro separate)."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=20, public_transport_available=True
         )
-        # Base: 58 * 12 = 696, Pendlereuro: 20 * 6 = 120, Total: 816
-        assert result.amount == Decimal("816.00")
+        # Base: 58 * 12 = 696 (Pendlereuro 20*6=120 in breakdown, not in amount)
+        assert result.amount == Decimal("696.00")
 
     def test_commuting_small_45km(self, deduction_calc):
-        """Kleines Pendlerpauschale 40-60km: €113/month + €270 Pendlereuro."""
+        """Kleines Pendlerpauschale 40-60km: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=45, public_transport_available=True
         )
-        assert result.amount == Decimal("1626.00")  # 113*12 + 45*6
+        assert result.amount == Decimal("1356.00")  # 113*12
 
     def test_commuting_small_65km(self, deduction_calc):
-        """Kleines Pendlerpauschale 60km+: €168/month + €390 Pendlereuro."""
+        """Kleines Pendlerpauschale 60km+: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=65, public_transport_available=True
         )
-        assert result.amount == Decimal("2406.00")  # 168*12 + 65*6
+        assert result.amount == Decimal("2016.00")  # 168*12
 
     def test_commuting_large_5km(self, deduction_calc):
-        """Großes Pendlerpauschale 2-20km: €31/month + €30 Pendlereuro."""
+        """Großes Pendlerpauschale 2-20km: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=5, public_transport_available=False
         )
-        assert result.amount == Decimal("402.00")  # 31*12 + 5*6
+        assert result.amount == Decimal("372.00")  # 31*12
 
     def test_commuting_large_25km(self, deduction_calc):
-        """Großes Pendlerpauschale 20-40km: €123/month + €150 Pendlereuro."""
+        """Großes Pendlerpauschale 20-40km: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=25, public_transport_available=False
         )
-        assert result.amount == Decimal("1626.00")  # 123*12 + 25*6
+        assert result.amount == Decimal("1476.00")  # 123*12
 
     def test_commuting_large_50km(self, deduction_calc):
-        """Großes Pendlerpauschale 40-60km: €214/month + €300 Pendlereuro."""
+        """Großes Pendlerpauschale 40-60km: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=50, public_transport_available=False
         )
-        assert result.amount == Decimal("2868.00")  # 214*12 + 50*6
+        assert result.amount == Decimal("2568.00")  # 214*12
 
     def test_commuting_large_80km(self, deduction_calc):
-        """Großes Pendlerpauschale 60km+: €306/month + €480 Pendlereuro."""
+        """Großes Pendlerpauschale 60km+: base_annual only."""
         result = deduction_calc.calculate_commuting_allowance(
             distance_km=80, public_transport_available=False
         )
-        assert result.amount == Decimal("4152.00")  # 306*12 + 80*6
+        assert result.amount == Decimal("3672.00")  # 306*12
 
     def test_commuting_below_minimum_small(self, deduction_calc):
         """Less than 20km with public transport: not eligible."""
@@ -666,16 +666,16 @@ class TestDeductionComprehensive:
     # -- Alleinverdiener/Alleinerzieher --
 
     def test_alleinverdiener_sole_earner_two_children(self, deduction_calc):
-        """Sole earner with 2 children: €612 + 1*€273 = €885."""
+        """Sole earner with 2 children: €828 (2026 BMF tiered)."""
         family = FamilyInfo(num_children=2, is_sole_earner=True)
         result = deduction_calc.calculate_alleinverdiener(family)
-        assert result.amount == Decimal("885.00")
+        assert result.amount == Decimal("828.00")
 
     def test_alleinerzieher_single_parent_three_children(self, deduction_calc):
-        """Single parent with 3 children: €612 + 2*€273 = €1,158."""
+        """Single parent with 3 children: €828 + 1*€273 = €1,101."""
         family = FamilyInfo(num_children=3, is_single_parent=True)
         result = deduction_calc.calculate_alleinverdiener(family)
-        assert result.amount == Decimal("1158.00")
+        assert result.amount == Decimal("1101.00")
 
     def test_alleinverdiener_not_eligible_no_children(self, deduction_calc):
         """Not eligible without children."""
@@ -710,12 +710,13 @@ class TestDeductionComprehensive:
             family_info=family,
             is_employee=True,
         )
-        # Commuting: 58*12 + 30*6 = 696 + 180 = 876
+        # Income deductions only:
+        # Commuting: base_annual = 58*12 = 696 (Pendlereuro separate)
         # Home office: 300
-        # Family: 70.90*12*2 = 1701.60 + 612 (single parent) = 2313.60
         # Employee: 132 (Werbungskostenpauschale)
-        # Total: 876 + 300 + 2313.60 + 132 = 3621.60
-        assert result.amount == Decimal("3621.60")
+        # Family items NOT in amount (Kinderabsetzbetrag informational, AEAB is tax credit)
+        # Total: 696 + 300 + 132 = 1128.00
+        assert result.amount == Decimal("1128.00")
         # Verify tax credits are in breakdown (not in amount)
         assert "verkehrsabsetzbetrag" in result.breakdown
         assert "familienbonus_amount" in result.breakdown
@@ -1246,8 +1247,8 @@ class TestEndToEndScenarios:
         # Verify deductions include all components
         assert deductions.amount > Decimal("0")
         assert "commuting_allowance" in deductions.breakdown
-        assert "home_office" in deductions.breakdown
-        assert "family_deductions" in deductions.breakdown
+        assert "telearbeit" in deductions.breakdown
+        assert "kinderabsetzbetrag_info" in deductions.breakdown
         assert "familienbonus_amount" in deductions.breakdown
         assert "alleinverdiener_amount" in deductions.breakdown
 
@@ -1258,7 +1259,7 @@ class TestEndToEndScenarios:
 
         assert verkehrsabsetzbetrag == Decimal("496.00")
         assert familienbonus == Decimal("4000.32")  # 2 * 2000.16
-        assert alleinverdiener == Decimal("885.00")  # 612 + 273
+        assert alleinverdiener == Decimal("828.00")  # 2026 BMF tiered: 2 children
 
         # Income tax before credits
         taxable = gross - deductions.amount
@@ -1475,7 +1476,8 @@ class TestTaxRateConstants:
         assert calc.FAMILIENBONUS_UNDER_18 == Decimal("2000.16")
         assert calc.FAMILIENBONUS_18_24 == Decimal("700.08")
         assert calc.ALLEINVERDIENER_BASE == Decimal("612.00")
-        assert calc.ALLEINVERDIENER_PER_CHILD == Decimal("273.00")
+        assert calc.ALLEINVERDIENER_2_CHILDREN == Decimal("828.00")
+        assert calc.ALLEINVERDIENER_PER_EXTRA_CHILD == Decimal("273.00")
 
     def test_gewinnfreibetrag_defaults(self):
         config = SelfEmployedConfig()

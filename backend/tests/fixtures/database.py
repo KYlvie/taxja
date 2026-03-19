@@ -126,6 +126,40 @@ def drop_test_enums(engine):
         conn.commit()
 
 
+def reset_test_schema(engine):
+    """
+    Reset tables and enum types in the public schema.
+
+    This avoids stale table definitions when model metadata changes and also
+    sidesteps PostgreSQL drop-order issues caused by cyclic foreign keys.
+    """
+    with engine.connect() as conn:
+        conn.execute(text("""
+            DO $$
+            DECLARE
+                r RECORD;
+            BEGIN
+                FOR r IN (
+                    SELECT tablename
+                    FROM pg_tables
+                    WHERE schemaname = 'public'
+                ) LOOP
+                    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.tablename);
+                END LOOP;
+
+                FOR r IN (
+                    SELECT t.typname
+                    FROM pg_type t
+                    JOIN pg_namespace n ON n.oid = t.typnamespace
+                    WHERE t.typtype = 'e' AND n.nspname = 'public'
+                ) LOOP
+                    EXECUTE format('DROP TYPE IF EXISTS public.%I CASCADE', r.typname);
+                END LOOP;
+            END $$;
+        """))
+        conn.commit()
+
+
 @pytest.fixture(scope="function")
 def db_engine():
     """
@@ -135,14 +169,15 @@ def db_engine():
     Scope is function-level to ensure clean state for each test.
     """
     engine = create_engine(TEST_DATABASE_URL)
-    
-    # Create enums first
-    create_test_enums(engine)
+
+    # Start from a clean schema and let current SQLAlchemy metadata recreate
+    # the exact tables and enum types needed by the test.
+    reset_test_schema(engine)
     
     yield engine
     
     # Cleanup
-    drop_test_enums(engine)
+    reset_test_schema(engine)
     engine.dispose()
 
 
@@ -162,7 +197,7 @@ def db_session(db_engine) -> Generator[Session, None, None]:
             db_session.add(user)
             db_session.commit()
     """
-    # Create all tables
+    # Create all tables from current metadata
     Base.metadata.create_all(bind=db_engine)
     
     # Create session
@@ -174,9 +209,9 @@ def db_session(db_engine) -> Generator[Session, None, None]:
     finally:
         # Cleanup
         session.close()
-        
-        # Drop all tables to ensure clean state for next test
-        Base.metadata.drop_all(bind=db_engine)
+
+        # Reset full schema state to avoid stale tables/enums across tests.
+        reset_test_schema(db_engine)
 
 
 @pytest.fixture(scope="function")

@@ -29,6 +29,35 @@
   box-shadow: 0 0 0 3px var(--color-primary-100);
 }
 
+@media (max-width: 768px) {
+  .language-select {
+    min-width: 86px;
+    padding: 7px 26px 7px 10px;
+    font-size: 12px;
+  }
+}
+
+/* On homepage nav — subtle, borderless style */
+.hp-nav-r .language-select {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3, var(--color-text-secondary));
+  font-weight: 600;
+  padding: 6px 26px 6px 10px;
+  font-size: 0.82rem;
+}
+
+.hp-nav-r .language-select:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: transparent;
+  color: var(--text-1, var(--color-text));
+}
+
+.hp-nav-r .language-select:focus {
+  box-shadow: none;
+  border-color: var(--color-border);
+}
+
 /* On auth pages (dark background), make it stand out */
 .language-switcher-top-right .language-select {
   background: rgba(255, 255, 255, 0.15);

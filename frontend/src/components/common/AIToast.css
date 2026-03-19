@@ -1,0 +1,153 @@
+/* AI Toast — chat-bubble style notifications */
+
+.ai-toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 400px;
+}
+
+.ai-toast {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px 18px;
+  border-radius: 4px 16px 16px 16px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow:
+    0 8px 32px -4px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(99, 102, 241, 0.08);
+  pointer-events: auto;
+  animation: aiToastIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  max-width: 400px;
+}
+
+.ai-toast:hover {
+  transform: translateX(-4px);
+}
+
+.ai-toast.ai-toast--exiting {
+  animation: aiToastOut 0.3s ease forwards;
+}
+
+/* Variant borders */
+.ai-toast--success {
+  border-left: 3px solid #10b981;
+}
+
+.ai-toast--error {
+  border-left: 3px solid #ef4444;
+}
+
+.ai-toast--warning {
+  border-left: 3px solid #f59e0b;
+}
+
+.ai-toast--info {
+  border-left: 3px solid var(--color-primary, #6366f1);
+}
+
+/* Avatar */
+.ai-toast-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(6, 182, 212, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Message text */
+.ai-toast-message {
+  flex: 1;
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+/* Close hint */
+.ai-toast-close {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #94a3b8);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ai-toast:hover .ai-toast-close {
+  opacity: 1;
+}
+
+/* Progress bar (auto-dismiss timer) */
+.ai-toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 0 0 0 16px;
+  animation: aiToastProgress linear forwards;
+}
+
+.ai-toast-progress--success { background: #10b981; }
+.ai-toast-progress--error { background: #ef4444; }
+.ai-toast-progress--warning { background: #f59e0b; }
+.ai-toast-progress--info { background: var(--color-primary, #6366f1); }
+
+@keyframes aiToastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Animations */
+@keyframes aiToastIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes aiToastOut {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px) scale(0.92);
+  }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .ai-toast-container {
+    right: 12px;
+    left: 12px;
+    top: 12px;
+    max-width: none;
+  }
+
+  .ai-toast {
+    max-width: none;
+  }
+}

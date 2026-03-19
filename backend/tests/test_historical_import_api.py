@@ -4,10 +4,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 from io import BytesIO
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.main import app
+from app.db.base import get_db
+from app.models.document import Document, DocumentType
 from app.models.user import User, UserType
 from app.models.historical_import import (
     HistoricalImportSession,
@@ -18,6 +21,12 @@ from app.models.historical_import import (
     ImportConflict,
 )
 from app.core.security import get_password_hash, create_access_token
+
+
+@pytest.fixture
+def db(db_session: Session) -> Session:
+    """Use the shared PostgreSQL-backed session for historical import tests."""
+    return db_session
 
 
 @pytest.fixture
@@ -43,9 +52,19 @@ def auth_headers(test_user: User) -> dict:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """Create test client"""
-    return TestClient(app)
+def client(db: Session) -> TestClient:
+    """Create test client bound to the shared test DB session."""
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -63,11 +82,29 @@ def test_session(db: Session, test_user: User) -> HistoricalImportSession:
 
 
 @pytest.fixture
-def test_upload(db: Session, test_user: User) -> HistoricalImportUpload:
+def test_document(db: Session, test_user: User) -> Document:
+    """Create a backing document for historical import uploads."""
+    document = Document(
+        user_id=test_user.id,
+        document_type=DocumentType.E1_FORM,
+        file_path="historical-import/tests/test.pdf",
+        file_name="test.pdf",
+        file_hash="test-hash",
+        file_size=128,
+        mime_type="application/pdf",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@pytest.fixture
+def test_upload(db: Session, test_user: User, test_document: Document) -> HistoricalImportUpload:
     """Create a test upload"""
     upload = HistoricalImportUpload(
         user_id=test_user.id,
-        document_id=1,
+        document_id=test_document.id,
         document_type=HistoricalDocumentType.E1_FORM,
         tax_year=2023,
         status=ImportStatus.EXTRACTED,
@@ -91,7 +128,7 @@ class TestUploadEndpoint:
         files = {"file": ("test.pdf", BytesIO(pdf_content), "application/pdf")}
         data = {"document_type": "e1_form", "tax_year": 2023}
 
-        with pytest.mock.patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
+        with patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
             mock_task.delay.return_value.id = "test-task-id"
 
             response = client.post(
@@ -120,7 +157,7 @@ class TestUploadEndpoint:
             "session_id": str(test_session.id),
         }
 
-        with pytest.mock.patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
+        with patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
             mock_task.delay.return_value.id = "test-task-id"
 
             response = client.post(
@@ -144,7 +181,7 @@ class TestUploadEndpoint:
         files = {"file": ("saldenliste.csv", BytesIO(csv_content), "text/csv")}
         data = {"document_type": "saldenliste", "tax_year": 2023}
 
-        with pytest.mock.patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
+        with patch("app.tasks.ocr_tasks.process_historical_import_ocr") as mock_task:
             mock_task.delay.return_value.id = "test-task-id"
 
             response = client.post(
@@ -565,14 +602,27 @@ class TestGetSessionEndpoint:
         auth_headers: dict,
         test_session: HistoricalImportSession,
         test_upload: HistoricalImportUpload,
+        test_document: Document,
         db: Session,
     ):
         """Test getting session with conflicts"""
         # Create another upload
+        upload2_document = Document(
+            user_id=test_session.user_id,
+            document_type=DocumentType.EINKOMMENSTEUERBESCHEID,
+            file_path="historical-import/tests/upload2.pdf",
+            file_name="upload2.pdf",
+            file_hash="test-hash-2",
+            file_size=256,
+            mime_type="application/pdf",
+        )
+        db.add(upload2_document)
+        db.flush()
+
         upload2 = HistoricalImportUpload(
             session_id=test_session.id,
             user_id=test_session.user_id,
-            document_id=2,
+            document_id=upload2_document.id,
             document_type=HistoricalDocumentType.BESCHEID,
             tax_year=2023,
             status=ImportStatus.EXTRACTED,
@@ -915,9 +965,21 @@ class TestAuthorizationAndSecurity:
         db.add(session)
         db.commit()
 
+        user2_document = Document(
+            user_id=user2.id,
+            document_type=DocumentType.E1_FORM,
+            file_path="historical-import/tests/user2.pdf",
+            file_name="user2.pdf",
+            file_hash="user2-hash",
+            file_size=128,
+            mime_type="application/pdf",
+        )
+        db.add(user2_document)
+        db.commit()
+
         upload = HistoricalImportUpload(
             user_id=user2.id,
-            document_id=1,
+            document_id=user2_document.id,
             document_type=HistoricalDocumentType.E1_FORM,
             tax_year=2023,
             status=ImportStatus.EXTRACTED,

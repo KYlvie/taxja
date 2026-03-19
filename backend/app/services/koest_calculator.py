@@ -4,7 +4,7 @@ Körperschaftsteuer (KöSt) Calculator for Austrian GmbH
 GmbH taxation differs fundamentally from Einzelunternehmen (ESt):
 - KöSt: flat 23% on corporate profit (since 2024, previously 25%)
 - KESt: 27.5% on dividend distributions to shareholders
-- Mindestkörperschaftsteuer: €500/quarter (€2,000/year) regardless of profit
+- Mindestkörperschaftsteuer: €500/year for GmbH/FlexKap (since 2024), €3,500/year for AG
 - No progressive tax brackets — flat rate only
 - No Grundfreibetrag, no Pendlerpauschale, no Familienbonus at corporate level
   (these apply to the Geschäftsführer's personal ESt if applicable)
@@ -35,14 +35,17 @@ KOEST_RATE = Decimal("0.23")  # Default / current rate
 # KESt on dividends: 27.5%
 KEST_RATE = Decimal("0.275")
 
-# Mindestkörperschaftsteuer: €500/quarter = €2,000/year
-# Applies from the 4th year after incorporation (first 4 years: reduced rates)
-MINDEST_KOEST_ANNUAL = Decimal("2000.00")
-MINDEST_KOEST_QUARTERLY = Decimal("500.00")
+# Mindestkörperschaftsteuer (since 2024-01-01, AbgÄG 2023):
+# GmbH / FlexKapG: €500/year (€125/quarter) — unified, no more tiered by age
+# AG: €3,500/year (€875/quarter)
+# Pre-2024 (old rules): years 1-5 €500, years 6-10 €1,000, 11+ €2,000
+# Source: KStG §24 Abs 4, USP.gv.at, WKO
+MINDEST_KOEST_GMBH = Decimal("500.00")      # since 2024, all GmbH/FlexKap
+MINDEST_KOEST_AG = Decimal("3500.00")        # AG unchanged
 
-# Reduced Mindestkörperschaftsteuer for first years:
-# Year 1-5 after incorporation: €500/year (since 2024; was previously tiered)
-# Pre-2024: Year 1-5: €500/year, Year 6-10: €1,000/year
+# Legacy constants for backwards compatibility
+MINDEST_KOEST_ANNUAL = Decimal("500.00")     # GmbH since 2024
+MINDEST_KOEST_QUARTERLY = Decimal("125.00")
 MINDEST_KOEST_FIRST_YEARS = Decimal("500.00")
 
 
@@ -112,11 +115,8 @@ class KoEstCalculator:
         rate = get_koest_rate(tax_year)
         koest_amount = max(profit * rate, Decimal("0")).quantize(Decimal("0.01"))
 
-        # 2. Mindestkörperschaftsteuer
-        if years_since_incorporation <= 4:
-            mindest_koest = MINDEST_KOEST_FIRST_YEARS
-        else:
-            mindest_koest = MINDEST_KOEST_ANNUAL
+        # 2. Mindestkörperschaftsteuer (since 2024: unified €500/year for GmbH/FlexKap)
+        mindest_koest = MINDEST_KOEST_GMBH
 
         # Effective KöSt = max(calculated, minimum)
         effective_koest = max(koest_amount, mindest_koest) if profit >= 0 else mindest_koest

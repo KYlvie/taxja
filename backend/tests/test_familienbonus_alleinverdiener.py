@@ -39,20 +39,23 @@ def engine(tax_config):
 
 class TestFamilienbonusConstants:
     def test_under_18_value(self, calculator):
-        assert calculator.FAMILIENBONUS_UNDER_18 == Decimal('2000.00')
+        assert calculator.FAMILIENBONUS_UNDER_18 == Decimal('2000.16')
 
     def test_18_to_24_value(self, calculator):
-        assert calculator.FAMILIENBONUS_18_24 == Decimal('700.00')
+        assert calculator.FAMILIENBONUS_18_24 == Decimal('700.08')
 
 
 # ── Alleinverdiener constants ─────────────────────────────────────────────────
 
 class TestAlleinverdienerConstants:
     def test_base_value(self, calculator):
-        assert calculator.ALLEINVERDIENER_BASE == Decimal('520.00')
+        assert calculator.ALLEINVERDIENER_BASE == Decimal('612.00')
 
-    def test_per_child_value(self, calculator):
-        assert calculator.ALLEINVERDIENER_PER_CHILD == Decimal('704.00')
+    def test_2_children_value(self, calculator):
+        assert calculator.ALLEINVERDIENER_2_CHILDREN == Decimal('828.00')
+
+    def test_per_extra_child_value(self, calculator):
+        assert calculator.ALLEINVERDIENER_PER_EXTRA_CHILD == Decimal('273.00')
 
 
 # ── calculate_familienbonus ───────────────────────────────────────────────────
@@ -66,30 +69,30 @@ class TestCalculateFamilienbonus:
     def test_one_child_under_18(self, calculator):
         info = FamilyInfo(num_children=1, children_under_18=1)
         result = calculator.calculate_familienbonus(info)
-        assert result.amount == Decimal('2000.00')
+        assert result.amount == Decimal('2000.16')
 
     def test_two_children_under_18(self, calculator):
         info = FamilyInfo(num_children=2, children_under_18=2)
         result = calculator.calculate_familienbonus(info)
-        assert result.amount == Decimal('4000.00')
+        assert result.amount == Decimal('4000.32')
 
     def test_one_child_18_to_24(self, calculator):
         info = FamilyInfo(num_children=1, children_18_to_24=1)
         result = calculator.calculate_familienbonus(info)
-        assert result.amount == Decimal('700.00')
+        assert result.amount == Decimal('700.08')
 
     def test_mixed_ages(self, calculator):
         info = FamilyInfo(num_children=3, children_under_18=2, children_18_to_24=1)
         result = calculator.calculate_familienbonus(info)
-        assert result.amount == Decimal('4700.00')  # 2×2000 + 1×700
+        assert result.amount == Decimal('4700.40')  # 2×2000.16 + 1×700.08
 
     def test_breakdown_structure(self, calculator):
         info = FamilyInfo(num_children=2, children_under_18=1, children_18_to_24=1)
         result = calculator.calculate_familienbonus(info)
         assert result.breakdown['children_under_18'] == 1
         assert result.breakdown['children_18_to_24'] == 1
-        assert result.breakdown['bonus_under_18_total'] == Decimal('2000.00')
-        assert result.breakdown['bonus_18_24_total'] == Decimal('700.00')
+        assert result.breakdown['bonus_under_18_total'] == Decimal('2000.16')
+        assert result.breakdown['bonus_18_24_total'] == Decimal('700.08')
 
 
 # ── calculate_alleinverdiener ─────────────────────────────────────────────────
@@ -108,27 +111,27 @@ class TestCalculateAlleinverdiener:
     def test_single_parent_one_child(self, calculator):
         info = FamilyInfo(num_children=1, is_single_parent=True, children_under_18=1)
         result = calculator.calculate_alleinverdiener(info)
-        assert result.amount == Decimal('520.00')
+        assert result.amount == Decimal('612.00')
 
     def test_single_parent_two_children(self, calculator):
         info = FamilyInfo(num_children=2, is_single_parent=True, children_under_18=2)
         result = calculator.calculate_alleinverdiener(info)
-        assert result.amount == Decimal('1224.00')  # 520 + 704
+        assert result.amount == Decimal('828.00')  # 2026 BMF tiered
 
     def test_single_parent_three_children(self, calculator):
         info = FamilyInfo(num_children=3, is_single_parent=True, children_under_18=3)
         result = calculator.calculate_alleinverdiener(info)
-        assert result.amount == Decimal('1928.00')  # 520 + 2×704
+        assert result.amount == Decimal('1101.00')  # 828 + 273*(3-2)
 
     def test_sole_earner_one_child(self, calculator):
         info = FamilyInfo(num_children=1, is_sole_earner=True, children_under_18=1)
         result = calculator.calculate_alleinverdiener(info)
-        assert result.amount == Decimal('520.00')
+        assert result.amount == Decimal('612.00')
 
     def test_sole_earner_two_children(self, calculator):
         info = FamilyInfo(num_children=2, is_sole_earner=True, children_under_18=2)
         result = calculator.calculate_alleinverdiener(info)
-        assert result.amount == Decimal('1224.00')
+        assert result.amount == Decimal('828.00')
 
     def test_breakdown_type_single_parent(self, calculator):
         info = FamilyInfo(num_children=1, is_single_parent=True, children_under_18=1)
@@ -148,13 +151,13 @@ class TestTotalDeductionsIntegration:
         info = FamilyInfo(num_children=1, children_under_18=1)
         result = calculator.calculate_total_deductions(family_info=info)
         assert 'familienbonus_amount' in result.breakdown
-        assert result.breakdown['familienbonus_amount'] == Decimal('2000.00')
+        assert result.breakdown['familienbonus_amount'] == Decimal('2000.16')
 
     def test_alleinverdiener_in_breakdown(self, calculator):
         info = FamilyInfo(num_children=1, is_single_parent=True, children_under_18=1)
         result = calculator.calculate_total_deductions(family_info=info)
         assert 'alleinverdiener_amount' in result.breakdown
-        assert result.breakdown['alleinverdiener_amount'] == Decimal('520.00')
+        assert result.breakdown['alleinverdiener_amount'] == Decimal('612.00')
 
     def test_no_familienbonus_without_children(self, calculator):
         info = FamilyInfo(num_children=0)
@@ -172,8 +175,8 @@ class TestTotalDeductionsIntegration:
             children_under_18=2
         )
         result = calculator.calculate_total_deductions(family_info=info)
-        assert result.breakdown['familienbonus_amount'] == Decimal('4000.00')
-        assert result.breakdown['alleinverdiener_amount'] == Decimal('1224.00')
+        assert result.breakdown['familienbonus_amount'] == Decimal('4000.32')
+        assert result.breakdown['alleinverdiener_amount'] == Decimal('828.00')
 
 
 # ── Tax engine integration ────────────────────────────────────────────────────
@@ -194,8 +197,6 @@ class TestTaxEngineFamilienbonusIntegration:
             user_type=UserType.EMPLOYEE,
             family_info=FamilyInfo(num_children=0),
         )
-        # With Familienbonus, tax should be lower (Kinderabsetzbetrag also helps,
-        # but the €2000 credit is the dominant factor)
         assert with_bonus.income_tax.total_tax < without_bonus.income_tax.total_tax
 
     def test_alleinverdiener_reduces_tax(self, engine):
@@ -284,7 +285,7 @@ class TestFamilienbonusProperties:
         )
         result = calculator.calculate_familienbonus(info)
         expected = (
-            Decimal('2000') * under_18 + Decimal('700') * age_18_24
+            Decimal('2000.16') * under_18 + Decimal('700.08') * age_18_24
         ).quantize(Decimal('0.01'))
         assert result.amount == expected
 
@@ -306,9 +307,13 @@ class TestFamilienbonusProperties:
         result = calculator.calculate_alleinverdiener(info)
         eligible = (is_single_parent or is_sole_earner) and num_children > 0
         if eligible:
-            expected = (
-                Decimal('520') + Decimal('704') * max(0, num_children - 1)
-            ).quantize(Decimal('0.01'))
+            # 2026 BMF tiered: 1 child=612, 2 children=828, 3+=828+273*(n-2)
+            if num_children == 1:
+                expected = Decimal('612.00')
+            elif num_children == 2:
+                expected = Decimal('828.00')
+            else:
+                expected = (Decimal('828.00') + Decimal('273.00') * (num_children - 2)).quantize(Decimal('0.01'))
             assert result.amount == expected
         else:
             assert result.amount == Decimal('0.00')

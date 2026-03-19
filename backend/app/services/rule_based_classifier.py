@@ -1,6 +1,24 @@
 """Rule-based transaction classifier for Austrian merchants and patterns"""
+import re
 from decimal import Decimal
 from typing import Optional
+
+# Minimum keyword length for plain substring matching.
+# Shorter keywords use word-boundary regex to avoid false positives
+# (e.g. "drei" matching "dreieck", "a1" matching "ba1ance").
+_MIN_SUBSTR_LEN = 5
+
+
+def _keyword_matches(keyword: str, text: str) -> bool:
+    """Check if *keyword* appears in *text* as a meaningful token.
+
+    For short keywords (< _MIN_SUBSTR_LEN chars) we require word boundaries
+    so that e.g. "drei" won't match "dreieck" and "a1" won't match "sa1do".
+    Longer keywords are safe with plain ``in`` checks.
+    """
+    if len(keyword) >= _MIN_SUBSTR_LEN:
+        return keyword in text
+    return bool(re.search(r'(?<!\w)' + re.escape(keyword) + r'(?!\w)', text))
 
 
 class ClassificationResult:
@@ -158,6 +176,30 @@ class RuleBasedClassifier:
         # home office
         "home office": "home_office", "homeoffice": "home_office",
         "schreibtisch": "home_office",
+        # cleaning
+        "reinigungsmittel": "cleaning", "spülmittel": "cleaning",
+        "desinfektionsmittel": "cleaning", "hygienemittel": "cleaning",
+        # clothing (work clothing)
+        "arbeitskleidung": "clothing", "schürze": "clothing",
+        "arbeitsschuhe": "clothing", "schutzkleidung": "clothing",
+        "sicherheitsschuhe": "clothing", "kochuniform": "clothing",
+        # software
+        "lizenz": "software", "software": "software",
+        "adobe": "software", "microsoft": "software",
+        "hosting": "software", "cloud": "software",
+        "saas": "software", "abonnement": "software",
+        # shipping
+        "versandkosten": "shipping", "verpackungsmaterial": "shipping",
+        "fulfillment": "shipping", "frankierung": "shipping",
+        # fuel
+        "diesel": "fuel", "benzin": "fuel",
+        "tankstelle": "fuel", "treibstoff": "fuel",
+        # education
+        "fortbildung": "education", "weiterbildung": "education",
+        "seminar": "education", "kurs": "education",
+        "zertifizierung": "education", "schulung": "education",
+        "fachliteratur": "education", "fachbuch": "education",
+        "konferenz": "education", "kongress": "education",
         # groceries
         "lebensmittel": "groceries", "nahrung": "groceries",
         # property management fees
@@ -187,7 +229,7 @@ class RuleBasedClassifier:
 
     def _classify_income(self, description):
         for kw, cat in self.INCOME_KEYWORDS.items():
-            if kw in description:
+            if _keyword_matches(kw, description):
                 return ClassificationResult(cat, Decimal("0.85"), "income")
         return ClassificationResult("employment", Decimal("0.3"), "income")
 
@@ -202,13 +244,31 @@ class RuleBasedClassifier:
             "hausverwaltung": "property_management_fees",
             "immobilienverwaltung": "property_management_fees",
             "verwaltungskosten": "property_management_fees",
+            # Chimney sweep / building maintenance
+            "rauchfangkehrer": "maintenance",
+            "kaminkehrer": "maintenance",
+            "schornsteinfeger": "maintenance",
+            "kaminfeger": "maintenance",
+            # Property taxes and municipal fees
+            "nachtigungstaxe": "property_tax",
+            "nächtigungstaxe": "property_tax",
+            "ortstaxe": "property_tax",
+            "kurtaxe": "property_tax",
+            "kommunalsteuer": "property_tax",
+            # Municipal utility fees
+            "kanalbenutzungsgebühr": "utilities",
+            "kanalgebühr": "utilities",
+            "wasserbezugsgebühr": "utilities",
+            "wassergebühr": "utilities",
+            "müllabfuhr": "utilities",
+            "abfallgebühr": "utilities",
         }
         
         for kw, cat in property_specific_keywords.items():
-            if kw in description:
+            if _keyword_matches(kw, description):
                 return ClassificationResult(cat, Decimal("0.85"), "expense")
         
-        is_online = any(r in description for r in ONLINE_RETAILERS)
+        is_online = any(_keyword_matches(r, description) for r in ONLINE_RETAILERS)
         if not is_online:
             for db, conf in [
                 (self.SUPERMARKETS, Decimal("0.90")),
@@ -221,10 +281,10 @@ class RuleBasedClassifier:
                 (self.GAS_STATIONS, Decimal("0.85")),
             ]:
                 for merchant, category in db.items():
-                    if merchant in description:
+                    if _keyword_matches(merchant, description):
                         return ClassificationResult(category, conf, "expense")
         for kw, cat in self.PRODUCT_KEYWORDS.items():
-            if kw in description:
+            if _keyword_matches(kw, description):
                 return ClassificationResult(cat, Decimal("0.80"), "expense")
         return ClassificationResult("other", Decimal("0.3"), "expense")
 

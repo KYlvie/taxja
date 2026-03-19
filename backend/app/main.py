@@ -19,24 +19,31 @@ from app.api.v1.router import api_router
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
-    await cache.connect()
-    await rate_limiter.connect()
-    print("✓ Cache and rate limiter connected")
+    try:
+        await cache.connect()
+        await rate_limiter.connect()
+        print("[OK] Cache and rate limiter connected")
+    except Exception as e:
+        print(f"[WARN] Cache/rate limiter connection failed (Redis not running?): {e}")
+        print("[OK] Continuing without cache — app will work, just slower")
 
     # Pre-load SentenceTransformer embedding model to avoid cold-start delay
     try:
         from app.services.vector_db_service import get_vector_db_service
         _vdb = get_vector_db_service()
-        print(f"✓ Vector DB + embedding model pre-loaded ({_vdb.embedding_model.get_sentence_embedding_dimension()}d)")
+        print(f"[OK] Vector DB + embedding model pre-loaded ({_vdb.embedding_model.get_sentence_embedding_dimension()}d)")
     except Exception as e:
-        print(f"⚠ Vector DB pre-load skipped: {e}")
+        print(f"[WARN] Vector DB pre-load skipped: {e}")
 
     yield
     
     # Shutdown
-    await cache.disconnect()
-    await rate_limiter.disconnect()
-    print("✓ Cache and rate limiter disconnected")
+    try:
+        await cache.disconnect()
+        await rate_limiter.disconnect()
+        print("[OK] Cache and rate limiter disconnected")
+    except Exception:
+        pass
 
 
 app = FastAPI(

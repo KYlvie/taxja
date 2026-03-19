@@ -1,4 +1,12 @@
-"""Feature gate service for subscription-based access control"""
+"""Feature gate service for subscription-based access control.
+
+v1 Credit migration: user-side feature access is now determined by credit
+sufficiency (via CreditService.check_sufficient), with the old plan-hierarchy
+mapping retained as a fallback during the transition period.
+
+System-side processing gates (risk control, quality control) remain unchanged
+and are NOT migrated to the credit layer.
+"""
 from typing import Optional
 from enum import Enum
 from sqlalchemy.orm import Session
@@ -8,6 +16,7 @@ import json
 
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.plan import Plan, PlanType
+from app.models.user import User
 from app.core.config import settings
 
 
@@ -16,18 +25,21 @@ logger = logging.getLogger(__name__)
 
 class Feature(str, Enum):
     """Feature enumeration for gated features"""
-    # Basic features (Free tier)
+    # Free tier — basic functionality everyone gets
     BASIC_TAX_CALC = "basic_tax_calc"
     TRANSACTION_ENTRY = "transaction_entry"
-    
+    OCR_SCANNING = "ocr_scanning"        # Free users get limited OCR (quota-controlled)
+    MULTI_LANGUAGE = "multi_language"     # Language selection is basic UX
+
     # Plus tier features
     UNLIMITED_TRANSACTIONS = "unlimited_transactions"
-    OCR_SCANNING = "ocr_scanning"
     FULL_TAX_CALC = "full_tax_calc"
-    MULTI_LANGUAGE = "multi_language"
     VAT_CALC = "vat_calc"
     SVS_CALC = "svs_calc"
-    
+    BANK_IMPORT = "bank_import"
+    PROPERTY_MANAGEMENT = "property_management"
+    RECURRING_SUGGESTIONS = "recurring_suggestions"
+
     # Pro tier features
     UNLIMITED_OCR = "unlimited_ocr"
     AI_ASSISTANT = "ai_assistant"
@@ -38,59 +50,172 @@ class Feature(str, Enum):
 
 
 class FeatureGateService:
-    """Service for feature-based access control with Redis caching"""
-    
+    """Service for feature-based access control with Redis caching.
+
+    v1 Credit migration
+    --------------------
+    User-side entitlement is now determined by credit sufficiency:
+    ``check_feature_access`` delegates to ``CreditService.check_sufficient``.
+
+    The old ``_FEATURE_MIN_PLAN`` hierarchy is retained as a fallback for
+    features that have no CreditCostConfig entry yet (transition period).
+
+    System-side processing gates (risk, quality) are separate — see
+    ``check_processing_gate``.
+    """
+
     CACHE_TTL = 300  # 5 minutes
     CACHE_KEY_PREFIX = "feature_gate:user:"
-    
+
     def __init__(self, db: Session, redis_client: Optional[redis.Redis] = None):
         """
         Initialize feature gate service.
-        
+
         Args:
             db: SQLAlchemy database session
             redis_client: Redis client for caching (optional)
         """
         self.db = db
         self.redis_client = redis_client
-    
+
+    # ------------------------------------------------------------------
+    # Feature → CreditCostConfig operation mapping
+    # ------------------------------------------------------------------
+    # Maps Feature enum values to the operation name used in CreditCostConfig.
+    # Features not listed here have no credit cost and fall back to the old
+    # plan-hierarchy check during the transition period.
+    _FEATURE_CREDIT_OPERATION = {
+        Feature.OCR_SCANNING: "ocr_scan",
+        Feature.UNLIMITED_OCR: "ocr_scan",
+        Feature.AI_ASSISTANT: "ai_conversation",
+        Feature.TRANSACTION_ENTRY: "transaction_entry",
+        Feature.UNLIMITED_TRANSACTIONS: "transaction_entry",
+        Feature.BANK_IMPORT: "bank_import",
+        Feature.E1_GENERATION: "e1_generation",
+        Feature.BASIC_TAX_CALC: "tax_calc",
+        Feature.FULL_TAX_CALC: "tax_calc",
+        Feature.VAT_CALC: "tax_calc",
+        Feature.SVS_CALC: "tax_calc",
+    }
+
+    # ------------------------------------------------------------------
+    # Legacy plan-hierarchy mapping (fallback during transition)
+    # ------------------------------------------------------------------
+    _FEATURE_MIN_PLAN = {
+        # Free tier — everyone gets these
+        Feature.BASIC_TAX_CALC: PlanType.FREE,
+        Feature.TRANSACTION_ENTRY: PlanType.FREE,
+        Feature.OCR_SCANNING: PlanType.FREE,
+        Feature.MULTI_LANGUAGE: PlanType.FREE,
+        # Plus tier
+        Feature.UNLIMITED_TRANSACTIONS: PlanType.PLUS,
+        Feature.FULL_TAX_CALC: PlanType.PLUS,
+        Feature.VAT_CALC: PlanType.PLUS,
+        Feature.SVS_CALC: PlanType.PLUS,
+        Feature.BANK_IMPORT: PlanType.PLUS,
+        Feature.PROPERTY_MANAGEMENT: PlanType.PLUS,
+        Feature.RECURRING_SUGGESTIONS: PlanType.PLUS,
+        # Pro tier
+        Feature.UNLIMITED_OCR: PlanType.PRO,
+        Feature.AI_ASSISTANT: PlanType.PRO,
+        Feature.E1_GENERATION: PlanType.PRO,
+        Feature.ADVANCED_REPORTS: PlanType.PRO,
+        Feature.PRIORITY_SUPPORT: PlanType.PRO,
+        Feature.API_ACCESS: PlanType.PRO,
+    }
+
+    _PLAN_LEVEL = {
+        PlanType.FREE: 0,
+        PlanType.PLUS: 1,
+        PlanType.PRO: 2,
+    }
+
     def check_feature_access(self, user_id: int, feature: Feature) -> bool:
-        """
-        Check if user has access to a specific feature.
-        
-        Per Requirement 2.1: Feature access based on subscription plan.
-        Per Requirement 2.5: Use Redis cache for performance.
-        
+        """Check if user has access to a specific feature.
+
+        v1 Credit migration: delegates to ``CreditService.check_sufficient``
+        when the feature has a corresponding CreditCostConfig operation.
+        Falls back to the legacy plan-hierarchy check when no credit
+        operation mapping exists (transition period).
+
         Args:
             user_id: ID of the user
             feature: Feature to check access for
-            
+
         Returns:
             True if user has access to feature, False otherwise
         """
         try:
-            # Get user's plan (with caching)
-            plan = self.get_user_plan(user_id)
-            
-            if not plan:
-                logger.warning(f"No plan found for user {user_id}, defaulting to Free tier")
-                # Default to Free tier if no plan found
-                plan = self._get_free_plan()
-            
-            # Check if plan has the feature
-            has_access = plan.has_feature(feature.value)
-            
-            logger.debug(
-                f"Feature access check: user={user_id}, feature={feature.value}, "
-                f"plan={plan.plan_type.value}, access={has_access}"
-            )
-            
-            return has_access
-            
+            # Admin users have access to all features
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user and getattr(user, "is_admin", False):
+                return True
+
+            # --- Credit-based check (primary path) ---
+            operation = self._FEATURE_CREDIT_OPERATION.get(feature)
+            if operation is not None:
+                from app.services.credit_service import CreditService
+
+                credit_service = CreditService(self.db, self.redis_client)
+                has_access = credit_service.check_sufficient(
+                    user_id, operation, quantity=1, allow_overage=True
+                )
+                logger.debug(
+                    "Feature access (credit): user=%s, feature=%s, "
+                    "operation=%s, access=%s",
+                    user_id, feature.value, operation, has_access,
+                )
+                return has_access
+
+            # --- Fallback: legacy plan-hierarchy check ---
+            return self._check_plan_hierarchy(user_id, feature)
+
         except Exception as e:
             logger.error(f"Error checking feature access for user {user_id}: {e}")
             # Fail open to Free tier features on error
-            return feature in [Feature.BASIC_TAX_CALC, Feature.TRANSACTION_ENTRY]
+            return feature in [
+                Feature.BASIC_TAX_CALC,
+                Feature.TRANSACTION_ENTRY,
+                Feature.OCR_SCANNING,
+            ]
+
+    def check_processing_gate(self, user_id: int, gate: str) -> bool:
+        """System-side processing gate (risk / quality control).
+
+        This is NOT a billing check — it controls automation depth,
+        risk gating, and manual review decisions.  Unaffected by the
+        credit migration.
+
+        Returns True if the processing gate allows the operation.
+        Subclasses or future implementations can override with real logic.
+        """
+        # v1: always allow — real processing gates live in their
+        # respective service modules (e.g. create_asset_auto checks).
+        return True
+
+    def _check_plan_hierarchy(self, user_id: int, feature: Feature) -> bool:
+        """Legacy plan-hierarchy check (fallback during transition)."""
+        plan = self.get_user_plan(user_id)
+
+        if not plan:
+            logger.warning(
+                f"No plan found for user {user_id}, defaulting to Free tier"
+            )
+            plan = self._get_free_plan()
+
+        user_level = self._PLAN_LEVEL.get(plan.plan_type, 0)
+        required_plan = self._FEATURE_MIN_PLAN.get(feature, PlanType.PRO)
+        required_level = self._PLAN_LEVEL.get(required_plan, 2)
+
+        has_access = user_level >= required_level
+
+        logger.debug(
+            "Feature access (plan fallback): user=%s, feature=%s, "
+            "plan=%s, required=%s, access=%s",
+            user_id, feature.value, plan.plan_type.value,
+            required_plan.value, has_access,
+        )
+        return has_access
     
     def get_user_plan(self, user_id: int) -> Optional[Plan]:
         """
@@ -154,39 +279,14 @@ class FeatureGateService:
     def get_required_plan_for_feature(self, feature: Feature) -> PlanType:
         """
         Get the minimum plan type required for a feature.
-        
+
         Args:
             feature: Feature to check
-            
+
         Returns:
             Minimum PlanType required for the feature
         """
-        # Pro tier features
-        pro_features = [
-            Feature.UNLIMITED_OCR,
-            Feature.AI_ASSISTANT,
-            Feature.E1_GENERATION,
-            Feature.ADVANCED_REPORTS,
-            Feature.PRIORITY_SUPPORT,
-            Feature.API_ACCESS,
-        ]
-        
-        # Plus tier features
-        plus_features = [
-            Feature.UNLIMITED_TRANSACTIONS,
-            Feature.OCR_SCANNING,
-            Feature.FULL_TAX_CALC,
-            Feature.MULTI_LANGUAGE,
-            Feature.VAT_CALC,
-            Feature.SVS_CALC,
-        ]
-        
-        if feature in pro_features:
-            return PlanType.PRO
-        elif feature in plus_features:
-            return PlanType.PLUS
-        else:
-            return PlanType.FREE
+        return self._FEATURE_MIN_PLAN.get(feature, PlanType.PRO)
     
     def _get_active_subscription(self, user_id: int) -> Optional[Subscription]:
         """
@@ -244,8 +344,10 @@ class FeatureGateService:
                 features={
                     Feature.BASIC_TAX_CALC.value: True,
                     Feature.TRANSACTION_ENTRY.value: True,
+                    Feature.OCR_SCANNING.value: True,
+                    Feature.MULTI_LANGUAGE.value: True,
                 },
-                quotas={"transactions": 50}
+                quotas={"transactions": 30, "ocr_scans": 3}
             )
         
         return plan

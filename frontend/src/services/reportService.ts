@@ -134,7 +134,7 @@ export interface TaxFormField {
 }
 
 export interface TaxFormData {
-  form_type: 'E1' | 'L1' | 'K1';
+  form_type: 'E1' | 'L1' | 'K1' | 'E1a' | 'E1b' | 'L1k' | 'U1' | 'UVA';
   form_name_de: string;
   form_name_en: string;
   form_name_zh: string;
@@ -154,6 +154,38 @@ export interface TaxFormData {
   disclaimer_zh: string;
   finanzonline_url: string;
   form_download_url: string;
+  // E1b specific: per-property data
+  properties?: Array<{
+    property_id: string;
+    address: string;
+    fields: TaxFormField[];
+    summary: Record<string, number>;
+  }>;
+  aggregate_summary?: Record<string, number>;
+  // L1k specific: per-child data
+  children?: Array<{
+    name: string;
+    birth_date: string;
+    fields: TaxFormField[];
+  }>;
+}
+
+export interface EligibleForm {
+  form_type: string;
+  name_de: string;
+  name_en: string;
+  name_zh: string;
+  description_de: string;
+  description_en: string;
+  description_zh: string;
+  category: string;
+  has_template?: boolean;
+  tax_year?: number;
+}
+
+export interface EligibleFormsResponse {
+  forms: EligibleForm[];
+  user_type: string;
 }
 
 // ── Saldenliste mit VJ (Balance List with Prior Year Comparison) types ──
@@ -398,6 +430,64 @@ const reportService = {
   downloadTaxFormPDF: async (taxYear: number): Promise<Blob> => {
     const response = await api.post('/reports/tax-form-pdf', {
       tax_year: taxYear,
+    }, { responseType: 'blob' });
+    return response.data;
+  },
+
+  // Get eligible forms for current user
+  getEligibleForms: async (taxYear?: number): Promise<EligibleFormsResponse> => {
+    const params = taxYear ? { tax_year: taxYear } : {};
+    const response = await api.get('/reports/eligible-forms', { params });
+    return response.data;
+  },
+
+  // Generate E1a Beilage (sole proprietor)
+  generateE1aForm: async (taxYear: number): Promise<TaxFormData> => {
+    const response = await api.post('/reports/tax-form-e1a', {
+      tax_year: taxYear,
+    });
+    return response.data;
+  },
+
+  // Generate E1b Beilage (per-property rental)
+  generateE1bForm: async (taxYear: number, propertyId?: string): Promise<TaxFormData> => {
+    const response = await api.post('/reports/tax-form-e1b', {
+      tax_year: taxYear,
+      property_id: propertyId || null,
+    });
+    return response.data;
+  },
+
+  // Generate L1k Beilage (employee with children)
+  generateL1kForm: async (taxYear: number): Promise<TaxFormData> => {
+    const response = await api.post('/reports/tax-form-l1k', {
+      tax_year: taxYear,
+    });
+    return response.data;
+  },
+
+  // Generate U1 annual VAT return
+  generateU1Form: async (taxYear: number): Promise<TaxFormData> => {
+    const response = await api.post('/reports/tax-form-u1', {
+      tax_year: taxYear,
+    });
+    return response.data;
+  },
+
+  // Generate UVA (VAT pre-return) annual summary
+  generateUvaForm: async (taxYear: number): Promise<TaxFormData> => {
+    const response = await api.post('/reports/uva-annual', {
+      tax_year: taxYear,
+    });
+    return response.data;
+  },
+
+  // Download filled PDF for any form type
+  downloadFilledFormPDF: async (formType: string, taxYear: number, propertyId?: number): Promise<Blob> => {
+    const response = await api.post('/reports/tax-form-pdf', {
+      form_type: formType,
+      tax_year: taxYear,
+      property_id: propertyId || null,
     }, { responseType: 'blob' });
     return response.data;
   },

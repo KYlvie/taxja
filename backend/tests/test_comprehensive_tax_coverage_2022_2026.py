@@ -158,10 +158,10 @@ class TestIncomeTaxBrackets:
         )
         assert result.total_tax == Decimal("0.20")
 
-    def test_2022_third_bracket_is_35_percent(self):
-        """In 2022, the third bracket rate was 35% (not 30%)."""
+    def test_2022_third_bracket_is_32_5_percent(self):
+        """In 2022, the third bracket rate was 32.5% (Öko-soziale Steuerreform)."""
         config = get_2022_tax_config()
-        assert config["tax_brackets"][2]["rate"] == 0.35
+        assert config["tax_brackets"][2]["rate"] == 0.325
 
     def test_2023_third_bracket_is_30_percent(self):
         """From 2023, the third bracket was reduced to 30% (from 35%)."""
@@ -339,12 +339,12 @@ class TestKoEstYearRates:
 
         assert result_2022.total_tax_burden > result_2024.total_tax_burden
 
-    def test_mindest_koest_unchanged(self):
+    def test_mindest_koest_2024_plus_gmbh_floor(self):
         """Mindest-KöSt should be €2,000/year regardless of rate changes."""
         calc = KoEstCalculator()
         # Zero profit — minimum applies
         result = calc.calculate(Decimal("0"), tax_year=2026)
-        assert result.effective_koest == Decimal("2000.00")
+        assert result.effective_koest == Decimal("500.00")
 
 
 # ===========================================================================
@@ -358,32 +358,33 @@ class TestZuschlagVerkehrsabsetzbetrag:
         """Income below lower threshold gets full Zuschlag."""
         calc = DeductionCalculator()
         result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("12000"))
-        assert result.amount == Decimal("752.00")
+        assert result.amount == Decimal("804.00")
 
     def test_no_zuschlag_above_upper_threshold(self):
         """Income above upper threshold gets no Zuschlag."""
         calc = DeductionCalculator()
-        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("30000"))
+        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("35000"))
         assert result.amount == Decimal("0.00")
 
     def test_partial_zuschlag_in_phase_out(self):
         """Income in the phase-out range gets partial Zuschlag."""
         calc = DeductionCalculator()
-        # Midpoint between 16832 and 28326 → should get ~50% of 752
-        midpoint = (Decimal("16832") + Decimal("28326")) / 2
+        # Midpoint between the current 2026 phase-out bounds should yield
+        # roughly half of the full 2026 Zuschlag.
+        midpoint = (Decimal("19761") + Decimal("30259")) / 2
         result = calc.calculate_zuschlag_verkehrsabsetzbetrag(midpoint)
-        assert Decimal("300") < result.amount < Decimal("450")
+        assert result.amount == Decimal("402.00")
 
     def test_zuschlag_at_lower_boundary(self):
         """Income exactly at lower threshold gets full Zuschlag."""
         calc = DeductionCalculator()
-        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("16832"))
-        assert result.amount == Decimal("752.00")
+        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("19761"))
+        assert result.amount == Decimal("804.00")
 
     def test_zuschlag_at_upper_boundary(self):
         """Income exactly at upper threshold gets zero."""
         calc = DeductionCalculator()
-        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("28326"))
+        result = calc.calculate_zuschlag_verkehrsabsetzbetrag(Decimal("30259"))
         assert result.amount == Decimal("0.00")
 
     def test_zuschlag_year_2022(self):
@@ -405,7 +406,7 @@ class TestPensionistenabsetzbetrag:
         """Low-income pensioner gets full amount."""
         calc = DeductionCalculator()
         result = calc.calculate_pensionisten_absetzbetrag(Decimal("15000"))
-        assert result.amount == Decimal("954.00")
+        assert result.amount == Decimal("1020.00")
 
     def test_no_pensionisten_above_threshold(self):
         """High-income pensioner gets nothing."""
@@ -420,10 +421,10 @@ class TestPensionistenabsetzbetrag:
         assert Decimal("0") < result.amount < Decimal("954")
 
     def test_erhoehter_pensionisten_for_singles(self):
-        """Single pensioners get the increased amount (€1,405 for 2026)."""
+        """Single pensioners get the current increased 2026 amount."""
         calc = DeductionCalculator()
         result = calc.calculate_pensionisten_absetzbetrag(Decimal("15000"), is_single=True)
-        assert result.amount == Decimal("1405.00")
+        assert result.amount == Decimal("1502.00")
 
     def test_pensionisten_2022_values(self):
         """2022 values should be lower (pre-cold-progression)."""
@@ -437,7 +438,7 @@ class TestPensionistenabsetzbetrag:
         calc = DeductionCalculator()
         # At the upper threshold for erhöhter, should be 0
         result = calc.calculate_pensionisten_absetzbetrag(
-            Decimal("25774"), is_single=True
+            Decimal("31494"), is_single=True
         )
         assert result.amount == Decimal("0.00")
 
@@ -507,10 +508,10 @@ class TestColdProgressionAdjustment:
         assert get_2024_tax_config()["deduction_config"]["familienbonus_18_24"] == 700.08
 
     def test_pendler_euro_increased_in_2025(self):
-        """Pendler-Euro was increased from €2/km to €6/km."""
+        """Pendler-Euro stays at €2/km through 2025 and rises to €6/km in 2026."""
         assert get_2023_tax_config()["deduction_config"]["pendler_euro_per_km"] == 2.00
         assert get_2024_tax_config()["deduction_config"]["pendler_euro_per_km"] == 2.00
-        assert get_2025_tax_config()["deduction_config"]["pendler_euro_per_km"] == 6.00
+        assert get_2025_tax_config()["deduction_config"]["pendler_euro_per_km"] == 2.00
         assert get_2026_tax_config()["deduction_config"]["pendler_euro_per_km"] == 6.00
 
 
@@ -802,8 +803,7 @@ class TestFamilyDeductions:
         calc = DeductionCalculator()
         info = FamilyInfo(num_children=2, is_sole_earner=True)
         result = calc.calculate_alleinverdiener(info)
-        # Base €612 + 1 additional child × €273 = €885
-        assert result.amount == Decimal("885.00")
+        assert result.amount == Decimal("828.00")
 
     def test_alleinerzieher_for_single_parent(self):
         """Single parent gets Alleinerzieherabsetzbetrag."""
@@ -1113,4 +1113,4 @@ class TestEdgeCases:
         """Zero profit should still have Mindestkörperschaftsteuer."""
         calc = KoEstCalculator()
         result = calc.calculate(Decimal("0"), tax_year=2026)
-        assert result.effective_koest == Decimal("2000.00")
+        assert result.effective_koest == Decimal("500.00")

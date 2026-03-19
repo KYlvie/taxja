@@ -35,12 +35,19 @@ class RateLimiter:
         self.default_window = default_window
     
     async def connect(self):
-        """Connect to Redis"""
-        self.redis_client = await redis.from_url(
-            self.redis_url,
-            encoding="utf-8",
-            decode_responses=True
-        )
+        """Connect to Redis. Fails gracefully if Redis is not available."""
+        import asyncio
+        try:
+            self.redis_client = redis.from_url(
+                self.redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+            )
+            await asyncio.wait_for(self.redis_client.ping(), timeout=3)
+        except Exception:
+            self.redis_client = None
     
     async def disconnect(self):
         """Disconnect from Redis"""

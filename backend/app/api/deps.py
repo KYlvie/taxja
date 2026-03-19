@@ -115,6 +115,10 @@ def require_feature(feature: Feature):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
     ) -> User:
+        # Admin users bypass all feature gates
+        if getattr(current_user, "is_admin", False):
+            return current_user
+
         redis_client = get_redis_client()
         feature_gate = FeatureGateService(db, redis_client)
         
@@ -157,6 +161,10 @@ def require_plan(min_plan: PlanType):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
     ) -> User:
+        # Admin users bypass all plan restrictions
+        if getattr(current_user, "is_admin", False):
+            return current_user
+
         redis_client = get_redis_client()
         feature_gate = FeatureGateService(db, redis_client)
         
@@ -221,6 +229,10 @@ def check_quota(resource_type: ResourceType, amount: int = 1):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
     ) -> User:
+        # Admin users bypass all quota limits
+        if getattr(current_user, "is_admin", False):
+            return current_user
+
         redis_client = get_redis_client()
         usage_tracker = UsageTrackerService(db, redis_client)
         

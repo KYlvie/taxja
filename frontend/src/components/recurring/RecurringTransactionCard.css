@@ -55,6 +55,11 @@
   color: #6b7280;
 }
 
+.status-stopped {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
 .card-details {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -131,6 +136,15 @@
 
 .btn-edit:hover {
   background-color: #2563eb;
+}
+
+.btn-document {
+  background-color: #8b5cf6;
+  color: white;
+}
+
+.btn-document:hover {
+  background-color: #7c3aed;
 }
 
 .btn-delete {

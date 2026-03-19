@@ -4,6 +4,7 @@ Parses Saldenliste CSV/Excel files into structured account data.
 Supports multiple formats: BMD, RZL, and custom formats.
 """
 import csv
+import io
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -88,6 +89,7 @@ class SaldenlisteParser:
     # Debit/Credit columns
     DEBIT_COLUMNS = ["soll", "debit", "sollsaldo", "debit_balance"]
     CREDIT_COLUMNS = ["haben", "credit", "habensaldo", "credit_balance"]
+    CSV_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 
     def parse_csv(self, file_path: str, tax_year: int) -> SaldenlisteData:
         """
@@ -108,53 +110,52 @@ class SaldenlisteParser:
             raise ValueError(f"File not found: {file_path}")
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                if not reader.fieldnames:
-                    raise ValueError("CSV file has no headers")
+            reader = self._open_csv_reader(file_path)
+            if not reader.fieldnames:
+                raise ValueError("CSV file has no headers")
 
-                # Normalize column names (lowercase, strip whitespace)
-                normalized_headers = {
-                    col.lower().strip().replace(" ", "_"): col for col in reader.fieldnames
-                }
+            # Normalize column names (lowercase, strip whitespace)
+            normalized_headers = {
+                col.lower().strip().replace(" ", "_"): col for col in reader.fieldnames
+            }
 
-                # Detect format based on headers
-                format_detected = self._detect_format_from_headers(list(normalized_headers.keys()))
+            # Detect format based on headers
+            format_detected = self._detect_format_from_headers(list(normalized_headers.keys()))
 
-                # Find column mappings
-                account_col = self._find_column(normalized_headers, self.ACCOUNT_NUMBER_COLUMNS)
-                name_col = self._find_column(normalized_headers, self.ACCOUNT_NAME_COLUMNS)
+            # Find column mappings
+            account_col = self._find_column(normalized_headers, self.ACCOUNT_NUMBER_COLUMNS)
+            name_col = self._find_column(normalized_headers, self.ACCOUNT_NAME_COLUMNS)
 
-                if not account_col or not name_col:
-                    raise ValueError(
-                        f"Required columns not found. Need account number and name columns. "
-                        f"Found headers: {list(reader.fieldnames)}"
-                    )
-
-                # Try to find balance columns (either single balance or debit/credit)
-                balance_col = self._find_column(normalized_headers, self.BALANCE_COLUMNS)
-                debit_col = self._find_column(normalized_headers, self.DEBIT_COLUMNS)
-                credit_col = self._find_column(normalized_headers, self.CREDIT_COLUMNS)
-
-                if not balance_col and not (debit_col or credit_col):
-                    raise ValueError(
-                        "No balance columns found. Need either 'balance' or 'debit'/'credit' columns"
-                    )
-
-                accounts = []
-                for row in reader:
-                    account = self._parse_csv_row(
-                        row, account_col, name_col, balance_col, debit_col, credit_col
-                    )
-                    if account:
-                        accounts.append(account)
-
-                return SaldenlisteData(
-                    tax_year=tax_year,
-                    accounts=accounts,
-                    confidence=self._calculate_confidence(accounts),
-                    format_detected=format_detected,
+            if not account_col or not name_col:
+                raise ValueError(
+                    f"Required columns not found. Need account number and name columns. "
+                    f"Found headers: {list(reader.fieldnames)}"
                 )
+
+            # Try to find balance columns (either single balance or debit/credit)
+            balance_col = self._find_column(normalized_headers, self.BALANCE_COLUMNS)
+            debit_col = self._find_column(normalized_headers, self.DEBIT_COLUMNS)
+            credit_col = self._find_column(normalized_headers, self.CREDIT_COLUMNS)
+
+            if not balance_col and not (debit_col or credit_col):
+                raise ValueError(
+                    "No balance columns found. Need either 'balance' or 'debit'/'credit' columns"
+                )
+
+            accounts = []
+            for row in reader:
+                account = self._parse_csv_row(
+                    row, account_col, name_col, balance_col, debit_col, credit_col
+                )
+                if account:
+                    accounts.append(account)
+
+            return SaldenlisteData(
+                tax_year=tax_year,
+                accounts=accounts,
+                confidence=self._calculate_confidence(accounts),
+                format_detected=format_detected,
+            )
 
         except Exception as e:
             raise ValueError(f"Failed to parse CSV file: {str(e)}") from e
@@ -264,11 +265,10 @@ class SaldenlisteParser:
 
         try:
             if suffix == ".csv":
-                with open(file_path, "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    if reader.fieldnames:
-                        headers = [col.lower().strip() for col in reader.fieldnames]
-                        return self._detect_format_from_headers(headers)
+                reader = self._open_csv_reader(file_path)
+                if reader.fieldnames:
+                    headers = [col.lower().strip() for col in reader.fieldnames]
+                    return self._detect_format_from_headers(headers)
 
             elif suffix in [".xlsx", ".xls"]:
                 workbook = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
@@ -376,6 +376,16 @@ class SaldenlisteParser:
                 if all(isinstance(cell.value, str) for cell in non_empty[:3]):
                     return row
         return None
+
+    def _open_csv_reader(self, file_path: str) -> csv.DictReader:
+        """Open CSV files with a small encoding fallback set for Austrian exports."""
+        raw_bytes = Path(file_path).read_bytes()
+        for encoding in self.CSV_ENCODINGS:
+            try:
+                return csv.DictReader(io.StringIO(raw_bytes.decode(encoding)))
+            except UnicodeDecodeError:
+                continue
+        raise ValueError("Unable to decode CSV file with supported encodings")
 
     def _parse_csv_row(
         self,
@@ -497,8 +507,12 @@ class SaldenlisteParser:
 
             # Handle German number format (comma as decimal separator)
             if "," in cleaned and "." in cleaned:
-                # Format like 1.234,56 (German)
-                cleaned = cleaned.replace(".", "").replace(",", ".")
+                if cleaned.rfind(",") > cleaned.rfind("."):
+                    # Format like 1.234,56 (German)
+                    cleaned = cleaned.replace(".", "").replace(",", ".")
+                else:
+                    # Format like 1,234.56 (US)
+                    cleaned = cleaned.replace(",", "")
             elif "," in cleaned:
                 # Format like 1234,56 (German)
                 cleaned = cleaned.replace(",", ".")

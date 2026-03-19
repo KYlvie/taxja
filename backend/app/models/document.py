@@ -20,6 +20,25 @@ class DocumentType(str, Enum):
     SVS_NOTICE = "svs_notice"  # SVS contribution notice
     EINKOMMENSTEUERBESCHEID = "einkommensteuerbescheid"  # Annual income tax assessment
     E1_FORM = "e1_form"  # E1 tax declaration form
+    L1_FORM = "l1_form"  # L1 employee tax return form
+    L1K_BEILAGE = "l1k_beilage"  # L1k child supplement form
+    L1AB_BEILAGE = "l1ab_beilage"  # L1ab deductions supplement form
+    E1A_BEILAGE = "e1a_beilage"  # E1a self-employment income supplement
+    E1B_BEILAGE = "e1b_beilage"  # E1b rental income supplement
+    E1KV_BEILAGE = "e1kv_beilage"  # E1kv capital gains supplement
+    U1_FORM = "u1_form"  # U1 annual VAT declaration
+    U30_FORM = "u30_form"  # U30 VAT advance return (UVA)
+    JAHRESABSCHLUSS = "jahresabschluss"  # Annual financial statement
+    SPENDENBESTAETIGUNG = "spendenbestaetigung"  # Donation confirmation (Spendenbestätigung)
+    VERSICHERUNGSBESTAETIGUNG = "versicherungsbestaetigung"  # Insurance confirmation
+    KINDERBETREUUNGSKOSTEN = "kinderbetreuungskosten"  # Childcare cost receipt
+    FORTBILDUNGSKOSTEN = "fortbildungskosten"  # Continuing education cost receipt
+    PENDLERPAUSCHALE = "pendlerpauschale"  # Commuter allowance confirmation
+    KIRCHENBEITRAG = "kirchenbeitrag"  # Church tax confirmation
+    GRUNDBUCHAUSZUG = "grundbuchauszug"  # Land registry extract
+    BETRIEBSKOSTENABRECHNUNG = "betriebskostenabrechnung"  # Operating cost statement
+    GEWERBESCHEIN = "gewerbeschein"  # Trade license
+    KONTOAUSZUG = "kontoauszug"  # Bank account statement (Kontoauszug)
     OTHER = "other"
 
 
@@ -39,6 +58,7 @@ class Document(Base):
     # File storage information
     file_path = Column(String(500), nullable=False)  # S3/MinIO path
     file_name = Column(String(255), nullable=False)
+    file_hash = Column(String(64), nullable=True, index=True)  # SHA-256 of uploaded file bytes
     file_size = Column(Integer, nullable=True)  # Size in bytes
     mime_type = Column(String(100), nullable=True)
     
@@ -50,6 +70,9 @@ class Document(Base):
     # Foreign key to transaction (optional, set after transaction is created)
     transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
     
+    # Parent document (for multi-form PDF splitting)
+    parent_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
+
     # Archival status
     is_archived = Column(Boolean, default=False, nullable=False)
     archived_at = Column(DateTime, nullable=True)

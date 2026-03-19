@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 import taxConfigService, { TaxConfigSummary } from '../../services/taxConfigService';
 import './TaxConfigAdmin.css';
 
 const TaxConfigAdmin = () => {
+  const { t } = useTranslation();
+  const { confirm: showConfirm } = useConfirm();
   const [configs, setConfigs] = useState<TaxConfigSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +43,7 @@ const TaxConfigAdmin = () => {
   const handleClone = async (sourceYear: number) => {
     const target = parseInt(cloneTarget);
     if (!target || target < 2020 || target > 2099) {
-      setError('请输入有效年份 (2020-2099)');
+      setError(t('taxConfig.invalidYear'));
       return;
     }
     try {
@@ -53,7 +57,8 @@ const TaxConfigAdmin = () => {
   };
 
   const handleDelete = async (year: number) => {
-    if (!window.confirm(`确定删除 ${year} 年的税务配置？此操作不可撤销。`)) return;
+    const ok = await showConfirm(t('taxConfig.confirmDelete', { year }), { variant: 'danger', confirmText: t('common.delete') });
+    if (!ok) return;
     try {
       await taxConfigService.deleteConfig(year);
       if (selectedYear === year) {
@@ -73,15 +78,13 @@ const TaxConfigAdmin = () => {
 
   const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
-  if (loading) return <div className="tax-config-admin loading">加载中...</div>;
+  if (loading) return <div className="tax-config-admin loading">{t('taxConfig.loading')}</div>;
 
   return (
     <div className="tax-config-admin">
       <div className="page-header">
-        <h1>🏛️ 税务配置管理</h1>
-        <p className="page-subtitle">
-          管理各年度的奥地利税务参数。新增年份时，建议从最近年份克隆后修改。
-        </p>
+        <h1>🏛️ {t('taxConfig.title')}</h1>
+        <p className="page-subtitle">{t('taxConfig.subtitle')}</p>
       </div>
 
       {error && (
@@ -93,16 +96,16 @@ const TaxConfigAdmin = () => {
 
       <div className="config-layout">
         <div className="config-list">
-          <h2>已配置年份</h2>
+          <h2>{t('taxConfig.configuredYears')}</h2>
           <table className="config-table">
             <thead>
               <tr>
-                <th>年份</th>
-                <th>免税额</th>
-                <th>税级数</th>
-                <th>小企业门槛</th>
-                <th>更新时间</th>
-                <th>操作</th>
+                <th>{t('taxConfig.year')}</th>
+                <th>{t('taxConfig.exemption')}</th>
+                <th>{t('taxConfig.bracketCount')}</th>
+                <th>{t('taxConfig.smallBizThreshold')}</th>
+                <th>{t('taxConfig.updatedAt')}</th>
+                <th>{t('taxConfig.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -123,12 +126,12 @@ const TaxConfigAdmin = () => {
                     <button
                       className="btn-sm btn-clone"
                       onClick={() => { setSelectedYear(c.tax_year); setShowCloneModal(true); }}
-                      title="克隆到新年份"
+                      title={t('taxConfig.clone')}
                     >📋</button>
                     <button
                       className="btn-sm btn-delete"
                       onClick={() => handleDelete(c.tax_year)}
-                      title="删除"
+                      title={t('common.delete')}
                     >🗑️</button>
                   </td>
                 </tr>
@@ -137,20 +140,24 @@ const TaxConfigAdmin = () => {
           </table>
           {configs.length === 0 && (
             <p style={{ textAlign: 'center', color: '#888', padding: 20 }}>
-              数据库中没有税务配置。请运行 seed 脚本初始化。
+              {t('taxConfig.noConfigs')}
             </p>
           )}
         </div>
 
         {detail && (
           <div className="config-detail">
-            <h2>{detail.tax_year} 年税务配置</h2>
+            <h2>{t('taxConfig.yearConfig', { year: detail.tax_year })}</h2>
 
             <div className="detail-section">
-              <h3>所得税级距</h3>
+              <h3>{t('taxConfig.incomeBrackets')}</h3>
               <table className="bracket-table">
                 <thead>
-                  <tr><th>下限</th><th>上限</th><th>税率</th></tr>
+                  <tr>
+                    <th>{t('taxConfig.lowerBound')}</th>
+                    <th>{t('taxConfig.upperBound')}</th>
+                    <th>{t('taxConfig.taxRate')}</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {detail.tax_brackets.map((b: any, i: number) => (
@@ -165,36 +172,146 @@ const TaxConfigAdmin = () => {
             </div>
 
             <div className="detail-section">
-              <h3>增值税 (USt)</h3>
+              <h3>{t('taxConfig.vat')}</h3>
               <div className="detail-grid">
-                <span>标准税率:</span><span>{fmtPct(detail.vat_rates.standard)}</span>
-                <span>住宅税率:</span><span>{fmtPct(detail.vat_rates.residential)}</span>
-                <span>小企业门槛:</span><span>{fmt(detail.vat_rates.small_business_threshold)}</span>
-                <span>容差门槛:</span><span>{fmt(detail.vat_rates.tolerance_threshold)}</span>
+                <span>{t('taxConfig.vatStandard')}:</span><span>{fmtPct(detail.vat_rates.standard)}</span>
+                <span>{t('taxConfig.vatResidential')}:</span><span>{fmtPct(detail.vat_rates.residential)}</span>
+                <span>{t('taxConfig.vatSmallBiz')}:</span><span>{fmt(detail.vat_rates.small_business_threshold)}</span>
+                <span>{t('taxConfig.vatTolerance')}:</span><span>{fmt(detail.vat_rates.tolerance_threshold)}</span>
               </div>
             </div>
 
             <div className="detail-section">
-              <h3>社会保险 (SVS)</h3>
+              <h3>{t('taxConfig.svs')}</h3>
               <div className="detail-grid">
-                <span>养老金:</span><span>{fmtPct(detail.svs_rates.pension)}</span>
-                <span>医疗保险:</span><span>{fmtPct(detail.svs_rates.health)}</span>
-                <span>意外保险:</span><span>{fmt(detail.svs_rates.accident_fixed)}/月</span>
-                <span>最低基数:</span><span>{fmt(detail.svs_rates.gsvg_min_base_monthly)}/月</span>
-                <span>最高基数:</span><span>{fmt(detail.svs_rates.max_base_monthly)}/月</span>
+                <span>{t('taxConfig.svsPension')}:</span><span>{fmtPct(detail.svs_rates.pension)}</span>
+                <span>{t('taxConfig.svsHealth')}:</span><span>{fmtPct(detail.svs_rates.health)}</span>
+                <span>{t('taxConfig.svsAccident')}:</span><span>{fmt(detail.svs_rates.accident_fixed)}{t('taxConfig.perMonth')}</span>
+                {detail.svs_rates.supplementary_pension != null && (
+                  <><span>{t('taxConfig.svsSupplementaryPension')}:</span><span>{fmtPct(detail.svs_rates.supplementary_pension)}</span></>
+                )}
+                <span>{t('taxConfig.svsMinBase')}:</span><span>{fmt(detail.svs_rates.gsvg_min_base_monthly)}{t('taxConfig.perMonth')}</span>
+                {detail.svs_rates.gsvg_min_income_yearly != null && (
+                  <><span>{t('taxConfig.svsMinIncomeYearly')}:</span><span>{fmt(detail.svs_rates.gsvg_min_income_yearly)}{t('taxConfig.perYear')}</span></>
+                )}
+                {detail.svs_rates.neue_min_monthly != null && (
+                  <><span>{t('taxConfig.svsNeueMinMonthly')}:</span><span>{fmt(detail.svs_rates.neue_min_monthly)}{t('taxConfig.perMonth')}</span></>
+                )}
+                <span>{t('taxConfig.svsMaxBase')}:</span><span>{fmt(detail.svs_rates.max_base_monthly)}{t('taxConfig.perMonth')}</span>
               </div>
             </div>
 
+            {detail.deduction_config && (
+              <div className="detail-section">
+                <h3>{t('taxConfig.deductions')}</h3>
+                <div className="detail-grid">
+                  {detail.deduction_config.home_office != null && (
+                    <><span>{t('taxConfig.homeOffice')}:</span><span>{fmt(detail.deduction_config.home_office)}</span></>
+                  )}
+                  {detail.deduction_config.werbungskostenpauschale != null && (
+                    <><span>{t('taxConfig.werbungskostenpauschale')}:</span><span>{fmt(detail.deduction_config.werbungskostenpauschale)}</span></>
+                  )}
+                  {detail.deduction_config.sonderausgabenpauschale != null && (
+                    <><span>{t('taxConfig.sonderausgabenpauschale')}:</span><span>{fmt(detail.deduction_config.sonderausgabenpauschale)}</span></>
+                  )}
+                  {detail.deduction_config.verkehrsabsetzbetrag != null && (
+                    <><span>{t('taxConfig.verkehrsabsetzbetrag')}:</span><span>{fmt(detail.deduction_config.verkehrsabsetzbetrag)}</span></>
+                  )}
+                  {detail.deduction_config.zuschlag_verkehrsabsetzbetrag != null && (
+                    <><span>{t('taxConfig.zuschlagVerkehr')}:</span><span>{fmt(detail.deduction_config.zuschlag_verkehrsabsetzbetrag)}</span></>
+                  )}
+                  {detail.deduction_config.zuschlag_income_lower != null && (
+                    <><span>{t('taxConfig.zuschlagIncomeLower')}:</span><span>{fmt(detail.deduction_config.zuschlag_income_lower)}</span></>
+                  )}
+                  {detail.deduction_config.zuschlag_income_upper != null && (
+                    <><span>{t('taxConfig.zuschlagIncomeUpper')}:</span><span>{fmt(detail.deduction_config.zuschlag_income_upper)}</span></>
+                  )}
+                  {detail.deduction_config.child_deduction_monthly != null && (
+                    <><span>{t('taxConfig.childDeduction')}:</span><span>{fmt(detail.deduction_config.child_deduction_monthly)}</span></>
+                  )}
+                  {detail.deduction_config.familienbonus_under_18 != null && (
+                    <><span>{t('taxConfig.familienbonusUnder18')}:</span><span>{fmt(detail.deduction_config.familienbonus_under_18)}</span></>
+                  )}
+                  {detail.deduction_config.familienbonus_18_24 != null && (
+                    <><span>{t('taxConfig.familienbonus18_24')}:</span><span>{fmt(detail.deduction_config.familienbonus_18_24)}</span></>
+                  )}
+                  {detail.deduction_config.single_parent_deduction != null && (
+                    <><span>{t('taxConfig.singleParentDeduction')}:</span><span>{fmt(detail.deduction_config.single_parent_deduction)}</span></>
+                  )}
+                  {detail.deduction_config.alleinverdiener_base != null && (
+                    <><span>{t('taxConfig.alleinverdienerBase')}:</span><span>{fmt(detail.deduction_config.alleinverdiener_base)}</span></>
+                  )}
+                  {detail.deduction_config.alleinverdiener_per_child != null && (
+                    <><span>{t('taxConfig.alleinverdienerPerChild')}:</span><span>{fmt(detail.deduction_config.alleinverdiener_per_child)}</span></>
+                  )}
+                  {detail.deduction_config.pensionisten_absetzbetrag != null && (
+                    <><span>{t('taxConfig.pensionistenAbsetzbetrag')}:</span><span>{fmt(detail.deduction_config.pensionisten_absetzbetrag)}</span></>
+                  )}
+                  {detail.deduction_config.pensionisten_income_lower != null && (
+                    <><span>{t('taxConfig.pensionistenIncomeLower')}:</span><span>{fmt(detail.deduction_config.pensionisten_income_lower)}</span></>
+                  )}
+                  {detail.deduction_config.pensionisten_income_upper != null && (
+                    <><span>{t('taxConfig.pensionistenIncomeUpper')}:</span><span>{fmt(detail.deduction_config.pensionisten_income_upper)}</span></>
+                  )}
+                  {detail.deduction_config.erhoehter_pensionisten != null && (
+                    <><span>{t('taxConfig.erhoehterPensionisten')}:</span><span>{fmt(detail.deduction_config.erhoehter_pensionisten)}</span></>
+                  )}
+                  {detail.deduction_config.erhoehter_pensionisten_upper != null && (
+                    <><span>{t('taxConfig.erhoehterPensionistenUpper')}:</span><span>{fmt(detail.deduction_config.erhoehter_pensionisten_upper)}</span></>
+                  )}
+                  {detail.deduction_config.pendler_euro_per_km != null && (
+                    <><span>{t('taxConfig.pendlerEuro')}:</span><span>€ {detail.deduction_config.pendler_euro_per_km.toFixed(2)}</span></>
+                  )}
+                  {detail.deduction_config.basic_exemption_rate != null && (
+                    <><span>{t('taxConfig.basicExemptionRate')}:</span><span>{fmtPct(detail.deduction_config.basic_exemption_rate)}</span></>
+                  )}
+                  {detail.deduction_config.basic_exemption_max != null && (
+                    <><span>{t('taxConfig.basicExemptionMax')}:</span><span>{fmt(detail.deduction_config.basic_exemption_max)}</span></>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {detail.deduction_config?.commuting_brackets && (
+              <div className="detail-section">
+                <h3>{t('taxConfig.commuting')}</h3>
+                {Object.entries(detail.deduction_config.commuting_brackets as Record<string, Record<string, number>>).map(([size, brackets]) => (
+                  <div key={size} style={{ marginBottom: '0.5rem' }}>
+                    <h4>{size === 'small' ? t('taxConfig.commutingSmall') : t('taxConfig.commutingLarge')}</h4>
+                    <div className="detail-grid">
+                      {Object.entries(brackets).map(([km, amount]) => (
+                        <><span key={km}>{t('taxConfig.kmRange', { km })}:</span><span>{fmt(amount)}{t('taxConfig.perMonth')}</span></>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {detail.deduction_config?.self_employed && (
               <div className="detail-section">
-                <h3>自雇人士</h3>
+                <h3>{t('taxConfig.selfEmployedDetails')}</h3>
                 <div className="detail-grid">
-                  <span>基本免税率:</span>
+                  <span>{t('taxConfig.grundfreibetragProfitLimit')}:</span>
+                  <span>{fmt(detail.deduction_config.self_employed.grundfreibetrag_profit_limit)}</span>
+                  <span>{t('taxConfig.grundfreibetragRate')}:</span>
                   <span>{fmtPct(detail.deduction_config.self_employed.grundfreibetrag_rate)}</span>
-                  <span>基本免税上限:</span>
+                  <span>{t('taxConfig.grundfreibetragMax')}:</span>
                   <span>{fmt(detail.deduction_config.self_employed.grundfreibetrag_max)}</span>
-                  <span>小企业门槛:</span>
+                  <span>{t('taxConfig.maxTotalFreibetrag')}:</span>
+                  <span>{fmt(detail.deduction_config.self_employed.max_total_freibetrag)}</span>
+                  <span>{t('taxConfig.flatRateTurnoverLimit')}:</span>
+                  <span>{fmt(detail.deduction_config.self_employed.flat_rate_turnover_limit)}</span>
+                  <span>{t('taxConfig.flatRateGeneral')}:</span>
+                  <span>{fmtPct(detail.deduction_config.self_employed.flat_rate_general)}</span>
+                  <span>{t('taxConfig.flatRateConsulting')}:</span>
+                  <span>{fmtPct(detail.deduction_config.self_employed.flat_rate_consulting)}</span>
+                  <span>{t('taxConfig.kleinunternehmerThreshold')}:</span>
                   <span>{fmt(detail.deduction_config.self_employed.kleinunternehmer_threshold)}</span>
+                  <span>{t('taxConfig.kleinunternehmerTolerance')}:</span>
+                  <span>{fmt(detail.deduction_config.self_employed.kleinunternehmer_tolerance)}</span>
+                  <span>{t('taxConfig.ustVoranmeldungThreshold')}:</span>
+                  <span>{fmt(detail.deduction_config.self_employed.ust_voranmeldung_monthly_threshold)}</span>
                 </div>
               </div>
             )}
@@ -205,10 +322,10 @@ const TaxConfigAdmin = () => {
       {showCloneModal && selectedYear && (
         <div className="modal-overlay" onClick={() => setShowCloneModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3>克隆 {selectedYear} 年配置</h3>
-            <p>将 {selectedYear} 年的所有税务参数复制到新年份，然后您可以修改具体数值。</p>
+            <h3>{t('taxConfig.cloneTitle', { year: selectedYear })}</h3>
+            <p>{t('taxConfig.cloneDesc', { year: selectedYear })}</p>
             <div className="form-group">
-              <label htmlFor="clone-target">目标年份</label>
+              <label htmlFor="clone-target">{t('taxConfig.targetYear')}</label>
               <input
                 id="clone-target"
                 type="number"
@@ -221,10 +338,10 @@ const TaxConfigAdmin = () => {
             </div>
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setShowCloneModal(false)}>
-                取消
+                {t('common.cancel')}
               </button>
               <button className="btn btn-primary" onClick={() => handleClone(selectedYear)}>
-                克隆
+                {t('taxConfig.clone')}
               </button>
             </div>
           </div>

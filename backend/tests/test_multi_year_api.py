@@ -6,18 +6,10 @@ Tests the tax_year query parameter in the GET /api/v1/transactions endpoint.
 import pytest
 from datetime import date
 from decimal import Decimal
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from app.main import app
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User
 from app.core.security import create_access_token
-
-
-@pytest.fixture
-def client():
-    """Create test client"""
-    return TestClient(app)
 
 
 @pytest.fixture
@@ -38,7 +30,7 @@ def test_user(db: Session) -> User:
 @pytest.fixture
 def auth_headers(test_user: User):
     """Create authentication headers"""
-    access_token = create_access_token(subject=test_user.email)
+    access_token = create_access_token(data={"sub": test_user.email})
     return {"Authorization": f"Bearer {access_token}"}
 
 
@@ -95,8 +87,8 @@ def multi_year_transactions(db: Session, test_user: User):
             user_id=test_user.id,
             type=TransactionType.EXPENSE,
             amount=Decimal("400.00"),
-            transaction_date=date(2026, 11, 25),
-            description="2026 Q4 Expense",
+            transaction_date=date(2026, 3, 15),
+            description="2026 Q1 Expense",
             expense_category=ExpenseCategory.TRAVEL
         ),
     ]
@@ -112,7 +104,7 @@ class TestMultiYearAPI:
     """Test multi-year data isolation via API"""
     
     def test_get_transactions_with_tax_year_2024(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test GET /api/v1/transactions with tax_year=2024"""
         response = client.get(
@@ -134,7 +126,7 @@ class TestMultiYearAPI:
             assert txn_date.year == 2024
     
     def test_get_transactions_with_tax_year_2025(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test GET /api/v1/transactions with tax_year=2025"""
         response = client.get(
@@ -156,7 +148,7 @@ class TestMultiYearAPI:
             assert txn_date.year == 2025
     
     def test_get_transactions_with_tax_year_2026(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test GET /api/v1/transactions with tax_year=2026"""
         response = client.get(
@@ -178,7 +170,7 @@ class TestMultiYearAPI:
             assert txn_date.year == 2026
     
     def test_get_transactions_without_tax_year(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test GET /api/v1/transactions without tax_year (should return all)"""
         response = client.get(
@@ -194,7 +186,7 @@ class TestMultiYearAPI:
         assert len(data["transactions"]) == 6
     
     def test_tax_year_with_other_filters(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test tax_year combined with other filters"""
         # Filter by tax_year=2025 and type=income
@@ -217,7 +209,7 @@ class TestMultiYearAPI:
         assert data["transactions"][0]["description"] == "2025 Q1 Income"
     
     def test_tax_year_with_date_range(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test tax_year combined with date_from/date_to"""
         # Filter by tax_year=2026 and date_from
@@ -226,20 +218,20 @@ class TestMultiYearAPI:
             headers=auth_headers,
             params={
                 "tax_year": 2026,
-                "date_from": "2026-06-01"
+                "date_from": "2026-02-01"
             }
         )
         
         assert response.status_code == 200
         data = response.json()
         
-        # Should have 1 transaction (Q4 expense in November)
+        # Should have 1 transaction (expense after February)
         assert data["total"] == 1
         assert len(data["transactions"]) == 1
-        assert data["transactions"][0]["description"] == "2026 Q4 Expense"
+        assert data["transactions"][0]["description"] == "2026 Q1 Expense"
     
     def test_tax_year_empty_result(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test tax_year with no matching transactions"""
         response = client.get(
@@ -256,7 +248,7 @@ class TestMultiYearAPI:
         assert len(data["transactions"]) == 0
     
     def test_tax_year_invalid_value(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test tax_year with invalid value"""
         # Test with year too low
@@ -278,7 +270,7 @@ class TestMultiYearAPI:
         assert response.status_code == 422  # Validation error
     
     def test_tax_year_pagination(
-        self, client: TestClient, auth_headers: dict, db: Session, test_user: User
+        self, client, auth_headers: dict, db: Session, test_user: User, multi_year_transactions
     ):
         """Test tax_year with pagination"""
         # Create many transactions for 2025
@@ -333,7 +325,7 @@ class TestMultiYearAPI:
         assert data["page"] == 2
     
     def test_tax_year_sorting(
-        self, client: TestClient, auth_headers: dict, multi_year_transactions
+        self, client, auth_headers: dict, multi_year_transactions
     ):
         """Test tax_year with sorting"""
         # Sort by amount ascending

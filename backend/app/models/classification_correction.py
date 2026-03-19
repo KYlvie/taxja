@@ -23,7 +23,12 @@ class ClassificationCorrection(Base):
     
     # Corrected classification
     correct_category = Column(String, nullable=False)
-    
+
+    # Source of the correction — used to filter training data.
+    # Values: "human_verified", "llm_verified", "llm_unverified", "system_default"
+    # ML retraining should only use "human_verified" and "llm_verified".
+    source = Column(String(30), nullable=True, default="human_verified")
+
     # Metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     

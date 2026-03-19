@@ -43,6 +43,7 @@ class UserIntent(str, Enum):
     WHAT_IF = "what_if"                      # What-if simulation
     EXPLAIN_DOCUMENT = "explain_doc"         # Explain an OCR result
     SUMMARIZE_STATUS = "summarize_status"    # "What's my tax situation?"
+    SYSTEM_HELP = "system_help"              # "How do I use this?" → built-in guide
     UNKNOWN = "unknown"                      # Fallback → RAG
 
 
@@ -149,6 +150,10 @@ _INTENT_PATTERNS: Dict[UserIntent, List[tuple]] = {
         (r"(erklär|explain).*(dokument|document|beleg|receipt)", 0.90),
         (r"(解释|说明).*(文档|发票|收据|dokument)", 0.90),
         (r"(was steht|what does).*(dokument|document|rechnung|invoice)", 0.85),
+        (r"(was bedeut|what do).*(kz|kennzahl|feld|field)", 0.90),
+        (r"(kz|kennzahl).*(bedeut|mean|heißt|是什么)", 0.90),
+        (r"(lohnzettel|l16|l1k?|e1[abk]?|u1|u30|jahresabschluss|svs|grundsteuer|kontoauszug).*(erklär|explain|解释|说明|是什么)", 0.85),
+        (r"(erklär|explain|解释|说明).*(lohnzettel|l16|l1k?|e1[abk]?|u1|u30|jahresabschluss|svs|grundsteuer|kontoauszug)", 0.85),
     ],
     UserIntent.SUMMARIZE_STATUS: [
         (r"(zusammenfass|summary|überblick|overview).*(steuer|tax)", 0.90),
@@ -157,6 +162,25 @@ _INTENT_PATTERNS: Dict[UserIntent, List[tuple]] = {
         (r"(meine|my|我的).*(steuer.*situation|tax.*situation|税务.*情况)", 0.90),
         (r"(wie stehe ich|where do i stand).*(steuer|tax)", 0.85),
         (r"(wie stehe ich steuerlich|税务情况|税务状况)", 0.85),
+    ],
+    UserIntent.SYSTEM_HELP: [
+        # Chinese: "在哪里/怎么/如何" + system action keywords
+        (r"(在哪|在哪里|哪里可以|怎么|如何|怎样).*(添加|新增|创建|上传|导入|导出|删除|修改|编辑|查看|管理|设置|配置)", 0.95),
+        (r"(添加|新增|创建|上传|导入|导出|删除|修改|编辑|查看|管理|设置|配置).*(在哪|在哪里|怎么|如何|怎样)", 0.95),
+        (r"(在哪|怎么|如何).*(资产|房产|交易|文档|发票|收据|报告|报表|合同|贷款)", 0.95),
+        (r"(资产|房产|交易|文档|发票|收据|报告|报表|合同|贷款).*(在哪|怎么.*[添删改查])", 0.95),
+        (r"(怎么用|如何使用|使用方法|操作指南|帮助|功能介绍|系统.*怎么)", 0.95),
+        (r"(这个系统|这个平台|这个app|taxja).*(怎么|如何|能做什么|有什么功能)", 0.95),
+        (r"(教我|告诉我).*(怎么用|如何|怎么操作)", 0.90),
+        # German: "wo/wie" + system action keywords
+        (r"(wo kann ich|wo finde ich|wie kann ich|wie geht|wie lade ich|wie erstelle ich|wie lösche ich|wie bearbeite ich).*(hinzufügen|erstellen|hochladen|hoch|löschen|bearbeiten|anzeigen|verwalten|einstellen)", 0.95),
+        (r"(wo|wie).*(immobilie|transaktion|dokument|rechnung|beleg|bericht|vertrag|kredit).*(hinzufügen|erstellen|hochladen|anlegen)", 0.95),
+        (r"(wie funktioniert|wie benutze ich|anleitung|hilfe|funktionen)", 0.95),
+        # English: "where/how" + system action keywords
+        (r"(where can i|where do i|how can i|how do i|how to).*(add|create|upload|delete|edit|view|manage|set up|configure)", 0.95),
+        (r"(where|how).*(property|transaction|document|invoice|receipt|report|contract|loan).*(add|create|upload)", 0.95),
+        (r"(how does.*work|how to use|help|tutorial|guide|features)", 0.90),
+        (r"(what can.*do|what features|show me how)", 0.90),
     ],
 }
 
@@ -195,6 +219,7 @@ def detect_intent(message: str, user_context: Optional[Dict] = None) -> IntentRe
             UserIntent.SUMMARIZE_STATUS,
             UserIntent.EXPLAIN_DOCUMENT,
             UserIntent.CLASSIFY_TRANSACTION,
+            UserIntent.SYSTEM_HELP,
         }
 
         def _sort_key(r: IntentResult):
@@ -204,6 +229,14 @@ def detect_intent(message: str, user_context: Optional[Dict] = None) -> IntentRe
 
         matches.sort(key=_sort_key)
         best = matches[0]
+
+    # ③ LLM fallback for intent detection when regex matching is weak.
+    # Only fires when no regex pattern matched at all (best came from the
+    # "no matches" branch or confidence is very low).
+    if best.confidence < 0.6 and best.intent == UserIntent.TAX_QA:
+        llm_intent = _llm_intent_fallback(msg)
+        if llm_intent is not None:
+            best = llm_intent
 
     # If nothing matched well, default to TAX_QA (general question)
     if best.confidence < 0.5:
@@ -280,6 +313,106 @@ def _extract_numeric_params(message: str) -> Dict[str, Any]:
         params["year"] = int(year_match.group(1))
 
     return params
+
+
+# ---------------------------------------------------------------------------
+# ③ LLM-based intent fallback (called only when regex fails)
+# ---------------------------------------------------------------------------
+
+# Simple in-memory cache so repeated similar questions don't re-call LLM.
+# Keyed on MD5 of the first 100 chars of the message (not just 5 words)
+# to avoid collisions between semantically different questions.
+_intent_cache: Dict[str, IntentResult] = {}
+_INTENT_CACHE_MAX_SIZE = 1000
+
+_INTENT_CLASSIFICATION_PROMPT = (
+    "Classify the user's question into exactly ONE of these intents:\n"
+    "- calculate_tax: Calculate income tax\n"
+    "- calculate_vat: Calculate VAT / Umsatzsteuer\n"
+    "- calculate_svs: Calculate social insurance (SVS/GSVG)\n"
+    "- calculate_kest: Calculate capital gains tax (KESt)\n"
+    "- calculate_immoest: Calculate real estate gains tax\n"
+    "- classify_tx: Classify a transaction into a category\n"
+    "- check_deduct: Check if an expense is tax-deductible\n"
+    "- optimize_tax: Tax saving tips / optimization\n"
+    "- what_if: What-if scenario / simulation\n"
+    "- explain_doc: Explain a document or receipt\n"
+    "- summarize_status: Summarize tax situation\n"
+    "- system_help: How to use this system / app navigation / feature guide\n"
+    "- tax_qa: General tax question\n\n"
+    "Reply with ONLY the intent name, nothing else."
+)
+
+_INTENT_NAME_MAP = {
+    "calculate_tax": UserIntent.CALCULATE_TAX,
+    "calculate_vat": UserIntent.CALCULATE_VAT,
+    "calculate_svs": UserIntent.CALCULATE_SVS,
+    "calculate_kest": UserIntent.CALCULATE_KEST,
+    "calculate_immoest": UserIntent.CALCULATE_IMMOEST,
+    "classify_tx": UserIntent.CLASSIFY_TRANSACTION,
+    "check_deduct": UserIntent.CHECK_DEDUCTIBILITY,
+    "optimize_tax": UserIntent.OPTIMIZE_TAX,
+    "what_if": UserIntent.WHAT_IF,
+    "explain_doc": UserIntent.EXPLAIN_DOCUMENT,
+    "summarize_status": UserIntent.SUMMARIZE_STATUS,
+    "system_help": UserIntent.SYSTEM_HELP,
+    "tax_qa": UserIntent.TAX_QA,
+}
+
+
+def _llm_intent_fallback(message: str) -> Optional[IntentResult]:
+    """
+    Use a cheap LLM call to classify intent when regex patterns fail.
+
+    Results are cached by MD5 of the first 100 characters of the message
+    to avoid collisions between semantically different questions while
+    still deduplicating identical or near-identical inputs.
+    """
+    import hashlib
+    cache_key = hashlib.md5(message[:100].lower().strip().encode()).hexdigest()[:16]
+
+    if cache_key in _intent_cache:
+        return _intent_cache[cache_key]
+
+    try:
+        from app.services.llm_service import get_llm_service
+        llm = get_llm_service()
+        if not llm.is_available:
+            return None
+
+        response = llm.generate_simple(
+            system_prompt=_INTENT_CLASSIFICATION_PROMPT,
+            user_prompt=message[:200],
+            temperature=0.0,
+            max_tokens=20,
+        )
+
+        if not response:
+            return None
+
+        intent_name = response.strip().lower().replace('"', "").replace("'", "")
+        intent = _INTENT_NAME_MAP.get(intent_name)
+        if intent is None:
+            # Try partial match
+            for key, val in _INTENT_NAME_MAP.items():
+                if key in intent_name:
+                    intent = val
+                    break
+
+        if intent is None or intent == UserIntent.TAX_QA:
+            return None  # Don't override with TAX_QA — that's already the default
+
+        result = IntentResult(intent=intent, confidence=0.80)
+        # Evict cache if it grows too large
+        if len(_intent_cache) >= _INTENT_CACHE_MAX_SIZE:
+            _intent_cache.clear()
+        _intent_cache[cache_key] = result
+        logger.info("LLM intent fallback: '%s' → %s", message[:50], intent.value)
+        return result
+
+    except Exception as e:
+        logger.debug("LLM intent fallback failed: %s", e)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -437,19 +570,26 @@ class ToolRegistry:
     def classify_transaction(
         self, description: str, amount: float, tx_type: str = "expense"
     ) -> Dict[str, Any]:
-        """Classify a transaction."""
+        """Classify a transaction with user context for LLM fallback."""
         from app.services.transaction_classifier import TransactionClassifier
+        from app.models.user import User
 
         classifier = TransactionClassifier(db=self.db)
+
         class _FakeTx:
             pass
+
         tx = _FakeTx()
         tx.description = description
         tx.amount = Decimal(str(amount))
         tx.type = tx_type
         tx.id = 0
+        tx.user_id = self.user_id
 
-        result = classifier.classify_transaction(tx)
+        # Load user for context-aware classification
+        user = self.db.query(User).filter(User.id == self.user_id).first()
+
+        result = classifier.classify_transaction(tx, user)
         return {
             "description": description,
             "predicted_category": result.category,
@@ -742,6 +882,16 @@ _SUGGESTIONS: Dict[UserIntent, Dict[str, List[str]]] = {
         "en": ["Calculate tax", "Optimization suggestions", "Upload documents"],
         "zh": ["计算税额", "优化建议", "上传文档"],
     },
+    UserIntent.EXPLAIN_DOCUMENT: {
+        "de": ["Was bedeuten die KZ-Felder?", "Ist dieses Dokument korrekt?", "Steuer berechnen"],
+        "en": ["What do the KZ fields mean?", "Is this document correct?", "Calculate tax"],
+        "zh": ["KZ字段是什么意思？", "这个文档正确吗？", "计算税额"],
+    },
+    UserIntent.SYSTEM_HELP: {
+        "de": ["Wie lade ich Dokumente hoch?", "Wie berechne ich meine Steuer?", "Wie verwalte ich Immobilien?"],
+        "en": ["How do I upload documents?", "How do I calculate my tax?", "How do I manage properties?"],
+        "zh": ["怎么上传文档？", "怎么计算税额？", "怎么管理房产？"],
+    },
 }
 
 
@@ -773,6 +923,48 @@ DISCLAIMERS = {
 
 
 # ---------------------------------------------------------------------------
+# System Help — fallback overview (detailed help handled by AI triage/Groq)
+# ---------------------------------------------------------------------------
+
+_SYSTEM_OVERVIEW: Dict[str, str] = {
+    "zh": (
+        "👋 **欢迎使用 Taxja！**\n\n"
+        "这是一个奥地利税务管理平台，主要功能：\n\n"
+        "📄 **文档** — 上传发票、收据、合同，AI 自动识别和分类\n"
+        "💰 **交易** — 管理收入和支出，AI 自动分类税务类别\n"
+        "🏠 **房产** — 管理不动产和其他资产，自动计算折旧\n"
+        "🧮 **税务工具** — 所得税、增值税、社保计算和模拟\n"
+        "📊 **报告** — 自动生成税务报告\n"
+        "🤖 **AI 助手** — 就是我！可以回答税务问题和操作指导\n\n"
+        "有什么具体想了解的吗？"
+    ),
+    "de": (
+        "👋 **Willkommen bei Taxja!**\n\n"
+        "Eine Steuerverwaltungsplattform für Österreich:\n\n"
+        "📄 **Dokumente** — Rechnungen, Belege, Verträge hochladen (KI-Erkennung)\n"
+        "💰 **Transaktionen** — Einnahmen/Ausgaben verwalten (KI-Klassifizierung)\n"
+        "🏠 **Immobilien** — Immobilien & Anlagen verwalten (automatische AfA)\n"
+        "🧮 **Steuer-Tools** — ESt, USt, SVS berechnen & simulieren\n"
+        "📊 **Berichte** — Automatische Steuerberichte\n"
+        "🤖 **KI-Assistent** — Das bin ich! Steuerfragen & Bedienungshilfe\n\n"
+        "Was möchten Sie wissen?"
+    ),
+    "en": (
+        "👋 **Welcome to Taxja!**\n\n"
+        "An Austrian tax management platform:\n\n"
+        "📄 **Documents** — Upload invoices, receipts, contracts (AI recognition)\n"
+        "💰 **Transactions** — Manage income/expenses (AI classification)\n"
+        "🏠 **Properties** — Manage real estate & assets (auto depreciation)\n"
+        "🧮 **Tax Tools** — Income tax, VAT, SVS calculations & simulations\n"
+        "📊 **Reports** — Auto-generated tax reports\n"
+        "🤖 **AI Assistant** — That's me! Tax questions & usage guidance\n\n"
+        "What would you like to know?"
+    ),
+}
+
+
+
+# ---------------------------------------------------------------------------
 # Main orchestrator class
 # ---------------------------------------------------------------------------
 
@@ -800,14 +992,59 @@ class AIOrchestrator:
         tax_year: Optional[int] = None,
     ) -> OrchestratorResponse:
         """
-        Main entry point. Processes a user message and returns a response.
+        Main entry point — single Groq call handles everything.
+
+        Flow:
+        1. AI triage (one Groq call) → classifies + answers system help
+           OR returns tax intent with params.
+        2. If tax intent returned → dispatch directly (no second LLM call needed).
+        3. Fallback to regex detect_intent if triage fails.
         """
         if tax_year is None:
             tax_year = datetime.now().year
 
+        # ① Single Groq call: triage + classify + answer system help
+        try:
+            from app.services.local_ai_triage import get_ai_triage
+            triage = get_ai_triage()
+            result = triage.process(message, language)
+
+            if result["type"] == "system_help":
+                return OrchestratorResponse(
+                    text=result["answer"],
+                    intent=UserIntent.SYSTEM_HELP,
+                    suggestions=_get_suggestions(UserIntent.SYSTEM_HELP, language),
+                )
+
+            if result["type"] == "tax":
+                # Groq already classified the intent — map to UserIntent
+                intent_name = result.get("intent", "tax_qa")
+                from app.services.local_ai_triage import get_intent_map
+                intent = get_intent_map().get(intent_name, UserIntent.TAX_QA)
+                params = result.get("params", {})
+                intent_result = IntentResult(
+                    intent=intent, confidence=0.90, params=params
+                )
+                logger.info(
+                    "AI triage intent: %s (params=%s)", intent.value, params
+                )
+                try:
+                    return self._dispatch(
+                        intent_result, message, language,
+                        conversation_history or [], tax_year,
+                    )
+                except Exception as exc:
+                    logger.exception("Dispatch failed after triage: %s", exc)
+                    return self._handle_rag(
+                        message, language, conversation_history or [], tax_year
+                    )
+        except Exception as e:
+            logger.debug("AI triage skipped: %s", e)
+
+        # ② Fallback: regex + LLM intent detection (if triage failed)
         intent_result = detect_intent(message)
         logger.info(
-            "Intent detected: %s (confidence=%.2f, params=%s)",
+            "Intent detected (fallback): %s (confidence=%.2f, params=%s)",
             intent_result.intent.value,
             intent_result.confidence,
             intent_result.params,
@@ -819,7 +1056,6 @@ class AIOrchestrator:
             )
         except Exception as exc:
             logger.exception("Orchestrator dispatch failed: %s", exc)
-            # Fallback to RAG on any tool error
             return self._handle_rag(message, language, conversation_history or [], tax_year)
 
     # ------------------------------------------------------------------
@@ -848,6 +1084,7 @@ class AIOrchestrator:
             UserIntent.WHAT_IF: self._handle_what_if,
             UserIntent.SUMMARIZE_STATUS: self._handle_summarize,
             UserIntent.EXPLAIN_DOCUMENT: self._handle_explain_document,
+            UserIntent.SYSTEM_HELP: self._handle_system_help,
         }
 
         handler = handlers.get(intent.intent)
@@ -994,9 +1231,25 @@ class AIOrchestrator:
         if len(amounts) >= 2:
             base, scenario = amounts[0], amounts[1]
         elif amount:
-            # Use user's actual income as base if available
-            summary = self.tools.get_financial_summary(year)
-            base = amount * 0.8  # rough estimate
+            # Use user's actual income as base from transaction history
+            try:
+                from sqlalchemy import func as sa_func, extract as sa_extract
+                from app.models.transaction import Transaction, TransactionType
+
+                actual_income = (
+                    self.tools.db.query(
+                        sa_func.coalesce(sa_func.sum(Transaction.amount), 0)
+                    )
+                    .filter(
+                        Transaction.user_id == self.tools.user_id,
+                        sa_extract("year", Transaction.transaction_date) == year,
+                        Transaction.type == TransactionType.INCOME,
+                    )
+                    .scalar()
+                )
+                base = float(actual_income) if actual_income else amount * 0.8
+            except Exception:
+                base = amount * 0.8
             scenario = amount
         else:
             return self._ask_for_params(
@@ -1026,8 +1279,73 @@ class AIOrchestrator:
     def _handle_explain_document(
         self, intent: IntentResult, message: str, lang: str, history: list, year: int
     ) -> OrchestratorResponse:
-        # Delegate to RAG — document context should be in conversation history
-        return self._handle_rag(message, lang, history, year)
+        # Try to load document data from conversation context or message
+        extra = None
+        try:
+            # Check if a documentId was passed in the conversation history context
+            doc_id = None
+            for h in reversed(history):
+                content = h.get("content", "")
+                if "documentId:" in content:
+                    import re as _re
+                    m = _re.search(r"documentId:\s*(\d+)", content)
+                    if m:
+                        doc_id = int(m.group(1))
+                        break
+
+            if doc_id:
+                from app.models.document import Document as DocModel
+                doc = (
+                    self.db.query(DocModel)
+                    .filter(DocModel.id == doc_id, DocModel.user_id == self.user_id)
+                    .first()
+                )
+                if doc and doc.ocr_result:
+                    import json
+                    ocr_data = doc.ocr_result
+                    if isinstance(ocr_data, str):
+                        ocr_data = json.loads(ocr_data)
+                    # Build a compact summary of the extracted data
+                    doc_type = doc.document_type.value if doc.document_type else "unknown"
+                    suggestion = ocr_data.get("import_suggestion", {})
+                    suggestion_type = suggestion.get("type", "")
+                    suggestion_data = suggestion.get("data", {})
+                    # Filter out internal keys
+                    display_data = {
+                        k: v for k, v in suggestion_data.items()
+                        if k not in ("raw_fields", "status") and v is not None
+                    }
+                    extra = (
+                        f"Document type: {doc_type}\n"
+                        f"Suggestion type: {suggestion_type}\n"
+                        f"Extracted data: {json.dumps(display_data, ensure_ascii=False, default=str)[:1500]}\n\n"
+                        "Please explain what this document contains, what the extracted fields mean "
+                        "in the context of Austrian tax law, and what the user should do with it."
+                    )
+        except Exception as exc:
+            logger.debug("Failed to load document for explain: %s", exc)
+
+        return self._handle_rag(message, lang, history, year, extra_context=extra)
+
+    # ------------------------------------------------------------------
+    # System Help (built-in usage guide)
+    # ------------------------------------------------------------------
+
+    def _handle_system_help(
+        self,
+        intent: IntentResult,
+        message: str,
+        language: str,
+        history: List[Dict[str, str]],
+        year: int,
+    ) -> OrchestratorResponse:
+        """Fallback system help — returns overview. Detailed help is handled by AI triage."""
+        text = _SYSTEM_OVERVIEW.get(language, _SYSTEM_OVERVIEW["de"])
+        return OrchestratorResponse(
+            text=text,
+            intent=UserIntent.SYSTEM_HELP,
+            suggestions=_get_suggestions(UserIntent.SYSTEM_HELP, language),
+        )
 
     # ------------------------------------------------------------------
     # RAG fallback (general Q&A)
@@ -1053,7 +1371,7 @@ class AIOrchestrator:
         llm = get_llm_service()
 
         # 1. Full RAG (LLM + vector search) — skip for Ollama-only (too slow on CPU)
-        if llm.is_available and user and not llm._use_ollama:
+        if llm.is_available and user and not llm.is_ollama_mode:
             try:
                 from app.services.rag_service import RAGService
                 rag = RAGService(self.db)
@@ -1069,7 +1387,7 @@ class AIOrchestrator:
 
         # 2. Direct LLM call (no vector search, just LLM with user data)
         #    Used when Full RAG fails (e.g. ChromaDB/SentenceTransformer not available)
-        if text is None and llm.is_available and not llm._use_ollama:
+        if text is None and llm.is_available and not llm.is_ollama_mode:
             try:
                 financial_summary = ""
                 if user:
@@ -1096,7 +1414,7 @@ class AIOrchestrator:
                 logger.warning("Direct LLM call failed: %s", exc)
 
         # 3. Lightweight local RAG (Ollama-based, CPU)
-        if text is None and llm._use_ollama:
+        if text is None and llm.is_ollama_mode:
             try:
                 from app.services.lightweight_rag_service import get_lightweight_tax_rag
                 lightweight = get_lightweight_tax_rag()

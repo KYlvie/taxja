@@ -33,6 +33,21 @@ export enum ExpenseCategory {
   OTHER = 'other',
 }
 
+export interface LineItem {
+  id?: number;
+  description: string;
+  amount: number;
+  quantity: number;
+  category?: string;
+  is_deductible: boolean;
+  deduction_reason?: string;
+  vat_rate?: number;
+  vat_amount?: number;
+  classification_method?: string;
+  classification_confidence?: number;
+  sort_order: number;
+}
+
 export interface Transaction {
   id: number;
   type: TransactionType;
@@ -43,6 +58,8 @@ export interface Transaction {
   is_deductible: boolean;
   deduction_reason?: string;
   is_system_generated?: boolean;
+  needs_review?: boolean;
+  ai_review_notes?: string;
   reviewed?: boolean;
   locked?: boolean;
   property_id?: string;
@@ -50,6 +67,11 @@ export interface Transaction {
   vat_amount?: number;
   document_id?: number;
   classification_confidence?: number;
+  classification_method?: string;
+  // Line items
+  line_items?: LineItem[];
+  deductible_amount?: number;
+  non_deductible_amount?: number;
   // Recurring fields
   is_recurring?: boolean;
   recurring_frequency?: string;
@@ -60,6 +82,7 @@ export interface Transaction {
   recurring_next_date?: string;
   recurring_last_generated?: string;
   parent_recurring_id?: number;
+  source_recurring_id?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -72,6 +95,7 @@ export interface TransactionFilters {
   search?: string;
   is_deductible?: boolean;
   is_recurring?: boolean;
+  needs_review?: boolean;
 }
 
 export interface TransactionFormData {

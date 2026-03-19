@@ -16,10 +16,9 @@ const DataExport = () => {
     setSuccess(false);
 
     try {
-      // Backend now returns the JSON file directly
       const response = await reportService.exportUserDataDirect();
       downloadBlob(response, 'taxja-user-data.json');
-      
+
       setSuccess(true);
       setShowConfirmation(false);
     } catch (err: any) {
@@ -72,14 +71,14 @@ const DataExport = () => {
 
       {error && (
         <div className="alert alert-error">
-          <span className="icon">⚠️</span>
+          <span className="icon">{'\u26A0'}</span>
           {error}
         </div>
       )}
 
       {success && (
         <div className="alert alert-success">
-          <span className="icon">✓</span>
+          <span className="icon">{'\u2713'}</span>
           {t('reports.export.success')}
         </div>
       )}
@@ -121,7 +120,7 @@ const DataExport = () => {
 
       <div className="export-footer">
         <div className="security-notice">
-          <span className="icon">🔒</span>
+          <span className="icon">{'\uD83D\uDD12'}</span>
           <div>
             <strong>{t('reports.export.securityTitle')}</strong>
             <p>{t('reports.export.securityText')}</p>

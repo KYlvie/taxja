@@ -17,12 +17,20 @@ class RedisCache:
         self.default_ttl = 3600  # 1 hour default TTL
     
     async def connect(self):
-        """Connect to Redis"""
-        self.redis_client = await redis.from_url(
-            settings.REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True
-        )
+        """Connect to Redis. Fails gracefully if Redis is not available."""
+        import asyncio
+        try:
+            self.redis_client = redis.from_url(
+                settings.REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+            )
+            # Test the connection with a short timeout
+            await asyncio.wait_for(self.redis_client.ping(), timeout=3)
+        except Exception:
+            self.redis_client = None
     
     async def disconnect(self):
         """Disconnect from Redis"""

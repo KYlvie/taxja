@@ -13,7 +13,7 @@ class OCRConfig:
     TESSERACT_CONFIG = '--oem 3 --psm 6 -l deu+eng'
     
     # Confidence threshold for OCR results
-    CONFIDENCE_THRESHOLD = 0.6
+    CONFIDENCE_THRESHOLD = 0.9
     
     # Image preprocessing settings
     IMAGE_MAX_WIDTH = 2000

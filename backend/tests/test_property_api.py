@@ -1,23 +1,16 @@
 """Tests for Property API endpoints"""
 import pytest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.main import app
+from app.models.plan import BillingCycle, Plan, PlanType
 from app.models.user import User, UserType
 from app.models.property import Property, PropertyType, PropertyStatus
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.core.security import create_access_token
-
-
-@pytest.fixture
-def client():
-    """Create test client"""
-    return TestClient(app)
-
 
 @pytest.fixture
 def test_user(db: Session):
@@ -36,9 +29,37 @@ def test_user(db: Session):
 
 
 @pytest.fixture
-def auth_headers(test_user: User):
+def auth_headers(test_user: User, db: Session):
     """Create authentication headers"""
-    token = create_access_token(subject=test_user.email)
+    plus_plan = db.query(Plan).filter(Plan.plan_type == PlanType.PLUS).first()
+    if plus_plan is None:
+        plus_plan = Plan(
+            plan_type=PlanType.PLUS,
+            name="Plus",
+            monthly_price=Decimal("9.99"),
+            yearly_price=Decimal("99.99"),
+            features={"property_management": True},
+            quotas={},
+            monthly_credits=500,
+            overage_price_per_credit=Decimal("0.04"),
+        )
+        db.add(plus_plan)
+        db.commit()
+        db.refresh(plus_plan)
+
+    if test_user.subscription is None:
+        subscription = Subscription(
+            user_id=test_user.id,
+            plan_id=plus_plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            billing_cycle=BillingCycle.MONTHLY,
+            current_period_start=datetime.utcnow(),
+            current_period_end=datetime.utcnow() + timedelta(days=30),
+        )
+        db.add(subscription)
+        db.commit()
+
+    token = create_access_token(data={"sub": test_user.email})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -95,8 +116,8 @@ class TestCreateProperty:
         assert data["purchase_price"] == "250000.00"
         # Check auto-calculated building_value (80%)
         assert data["building_value"] == "200000.00"
-        # Check auto-determined depreciation_rate (2% for 1990)
-        assert data["depreciation_rate"] == "0.0200"
+        # Residential buildings now default to 1.5% AfA
+        assert data["depreciation_rate"] == "0.0150"
         assert data["status"] == "active"
         assert "id" in data
     
@@ -121,7 +142,7 @@ class TestCreateProperty:
         assert response.status_code == 201
         data = response.json()
         assert data["building_value"] == "240000.00"
-        # Check depreciation_rate for pre-1915 building (1.5%)
+        # Residential buildings use 1.5% AfA regardless of construction year
         assert data["depreciation_rate"] == "0.0150"
     
     def test_create_property_validation_errors(self, client, auth_headers):
@@ -283,14 +304,14 @@ class TestGetProperty:
         db.commit()
         
         # Create token for other user
-        token = create_access_token(subject=other_user.email)
+        token = create_access_token(data={"sub": other_user.email})
         headers = {"Authorization": f"Bearer {token}"}
         
         response = client.get(
             f"/api/v1/properties/{test_property.id}",
             headers=headers
         )
-        assert response.status_code == 403
+        assert response.status_code == 404
 
 
 class TestUpdateProperty:
@@ -326,10 +347,22 @@ class TestDeleteProperty:
             f"/api/v1/properties/{test_property.id}",
             headers=auth_headers
         )
-        assert response.status_code == 204
-    
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted"] is False
+        assert data["impact"]["transaction_count"] == 0
+        assert data["impact"]["recurring_count"] == 0
+        assert data["impact"]["loan_count"] == 0
+
+        force_response = client.delete(
+            f"/api/v1/properties/{test_property.id}?force=true",
+            headers=auth_headers
+        )
+        assert force_response.status_code == 200
+
     def test_delete_property_with_transactions(self, client, auth_headers, db, test_property, test_user):
-        """Test that property with transactions cannot be deleted"""
+        """Test that property deletion first returns an impact summary"""
         # Create a transaction linked to property
         transaction = Transaction(
             user_id=test_user.id,
@@ -347,8 +380,10 @@ class TestDeleteProperty:
             f"/api/v1/properties/{test_property.id}",
             headers=auth_headers
         )
-        assert response.status_code == 400
-        assert "linked transaction" in response.json()["detail"].lower()
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted"] is False
+        assert data["impact"]["transaction_count"] == 1
 
 
 class TestArchiveProperty:

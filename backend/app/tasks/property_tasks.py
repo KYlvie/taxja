@@ -79,6 +79,28 @@ def generate_annual_depreciation_task(
         if year is None:
             year = datetime.now().year
         
+        # DEPRECATED: Depreciation is now calculated on-the-fly from property data
+        # by AfACalculator when generating reports. No need to create transactions.
+        logger.info(
+            f"[DEPRECATED] Annual depreciation task called for year {year}. "
+            f"Depreciation is now calculated on-the-fly. Skipping transaction generation."
+        )
+        return {
+            'year': year,
+            'deprecated': True,
+            'message': 'Depreciation is now calculated on-the-fly from property data. '
+                       'No transactions are generated.',
+            'properties_processed': 0,
+            'transactions_created': 0,
+            'properties_skipped': 0,
+            'total_amount': 0.0,
+            'users_affected': 0,
+            'errors': [],
+            'task_id': self.request.id,
+            'completed_at': datetime.now().isoformat()
+        }
+
+        # --- Original code below (kept for reference, unreachable) ---
         logger.info(f"Starting annual depreciation generation for year {year}")
         
         # Initialize service

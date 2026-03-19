@@ -37,7 +37,7 @@ const EAReport = () => {
       const data = await reportService.generateEAReport(taxYear, lang);
       setReport(data);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Reclassification failed');
+      setError(err.response?.data?.detail || t('eaReport.reclassificationFailed'));
     } finally {
       setReclassifying(false);
     }
@@ -55,13 +55,13 @@ const EAReport = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Taxja-EA-Rechnung-${taxYear}.pdf`;
+      link.download = `Taxja-EA-Report-${taxYear}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'PDF download failed');
+      setError(err.response?.data?.detail || t('eaReport.pdfDownloadFailed'));
     }
   };
 
@@ -80,23 +80,23 @@ const EAReport = () => {
           {loading ? t('common.loading') : t('reports.ea.generate')}
         </button>
         {report && (
-          <button className="btn btn-secondary" onClick={handlePrint}>
-            🖨️ {t('reports.ea.print')}
-          </button>
+          <>
+            <button className="btn btn-secondary" onClick={handlePrint}>
+              🖨️ {t('reports.ea.print')}
+            </button>
+            <button className="btn btn-primary" onClick={handleDownloadPDF}>
+              📥 {t('reports.ea.downloadPDF')}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={handleReclassify}
+              disabled={reclassifying}
+              title={t('reports.ea.reclassifyHint', 'Re-run AI classification and deductibility checks, then regenerate report')}
+            >
+              {reclassifying ? '⏳...' : '🔄'} {t('reports.ea.reclassify', 'Reclassify')}
+            </button>
+          </>
         )}
-        {report && (
-          <button className="btn btn-primary" onClick={handleDownloadPDF}>
-            📥 {t('reports.ea.downloadPDF')}
-          </button>
-        )}
-        <button
-          className="btn btn-secondary"
-          onClick={handleReclassify}
-          disabled={reclassifying}
-          title={t('reports.ea.reclassifyHint', 'Re-run classification and deductibility checks on all transactions')}
-        >
-          {reclassifying ? '⏳...' : '🔄'} {t('reports.ea.reclassify', 'Reclassify')}
-        </button>
       </div>
 
       <YearWarning taxYear={taxYear} />
@@ -105,10 +105,10 @@ const EAReport = () => {
       {report && (
         <div className="ea-report-content" id="ea-print-area">
           <div className="ea-header">
-            <h2>Einnahmen-Ausgaben-Rechnung {report.tax_year}</h2>
+            <h2>{t('eaReport.title')} {report.tax_year}</h2>
             <div className="ea-meta">
               <span>{report.user_name}</span>
-              {report.tax_number && <span>StNr: {report.tax_number}</span>}
+              {report.tax_number && <span>{t('eaReport.taxNumber')}: {report.tax_number}</span>}
               <span>{t('reports.ea.generated')}: {report.generated_at}</span>
             </div>
           </div>

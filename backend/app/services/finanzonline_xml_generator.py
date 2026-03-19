@@ -270,6 +270,69 @@ class FinanzOnlineXMLGenerator:
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")
     
+    def generate_from_form_data(self, form_data: Dict) -> str:
+        """Generate FinanzOnline XML from E1/L1 form data (KZ-based).
+
+        This method accepts the output of e1_form_service.generate_tax_form_data()
+        and produces an XML file with all Kennzahlen properly mapped.
+
+        Args:
+            form_data: Output from generate_tax_form_data() with 'fields', 'summary', etc.
+
+        Returns:
+            Formatted XML string
+        """
+        form_type = form_data.get("form_type", "E1")
+        tax_year = form_data.get("tax_year", 2025)
+
+        if form_type == "E1":
+            root_tag = "Einkommensteuererklärung"
+        elif form_type == "L1":
+            root_tag = "Arbeitnehmerveranlagung"
+        elif form_type == "K1":
+            root_tag = "Körperschaftsteuererklärung"
+        else:
+            root_tag = "Steuererklärung"
+
+        root = ET.Element(root_tag)
+        root.set("Jahr", str(tax_year))
+        root.set("Version", "2026.1")
+        root.set("xmlns", "http://www.bmf.gv.at/egovportal/finanzonline")
+
+        # Taxpayer info
+        taxpayer = ET.SubElement(root, "Steuerpflichtiger")
+        if form_data.get("tax_number"):
+            stnr = ET.SubElement(taxpayer, "Steuernummer")
+            stnr.text = self._sanitize_xml_text(str(form_data["tax_number"]))
+        if form_data.get("user_name"):
+            name = ET.SubElement(taxpayer, "Name")
+            name.text = self._sanitize_xml_text(str(form_data["user_name"]))
+
+        # Kennzahlen — grouped by section
+        sections: Dict[str, list] = {}
+        for field in form_data.get("fields", []):
+            sec = field.get("section", "other")
+            sections.setdefault(sec, []).append(field)
+
+        for section_name, fields in sections.items():
+            section_elem = ET.SubElement(root, section_name.replace(" ", "_"))
+            for field in fields:
+                kz_elem = ET.SubElement(section_elem, "KZ")
+                kz_elem.set("nr", str(field["kz"]))
+                if field.get("label_de"):
+                    kz_elem.set("bezeichnung", field["label_de"])
+                kz_elem.text = self._format_amount(field.get("value", 0))
+
+        # Summary
+        summary = form_data.get("summary", {})
+        if summary:
+            summary_elem = ET.SubElement(root, "Zusammenfassung")
+            for key, val in summary.items():
+                item = ET.SubElement(summary_elem, key)
+                item.text = self._format_amount(val)
+
+        return self._prettify_xml(root)
+
     def validate(self, xml_string: str, schema_path: Optional[str] = None) -> bool:
         """
         Validate XML against FinanzOnline schema.

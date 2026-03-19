@@ -42,34 +42,45 @@ def sample_property():
     prop.building_value = Decimal("280000.00")
     prop.land_value = Decimal("70000.00")
     prop.construction_year = 1985
-    prop.depreciation_rate = Decimal("0.0200")
+    prop.depreciation_rate = Decimal("0.0150")
+    prop.asset_type = "real_estate"
     prop.status = PropertyStatus.ACTIVE
     prop.sale_date = None
     return prop
+
+
+def _set_real_estate_context(
+    calculator: AfACalculator,
+    accumulated: Decimal = Decimal("0"),
+    rental_percentage: Decimal = Decimal("100"),
+):
+    """Stub accumulated depreciation and rental history for real-estate tests."""
+    calculator.get_accumulated_depreciation = Mock(return_value=accumulated)
+    calculator._get_rental_percentage_for_year = Mock(return_value=rental_percentage)
 
 
 class TestDetermineDepreciationRate:
     """Test depreciation rate determination based on construction year"""
     
     def test_pre_1915_building_gets_1_5_percent(self, calculator):
-        """Buildings constructed before 1915 should get 1.5% depreciation rate"""
+        """Residential buildings constructed before 1915 use 1.5%."""
         rate = calculator.determine_depreciation_rate(1900)
         assert rate == Decimal("0.015")
     
-    def test_1915_building_gets_2_percent(self, calculator):
-        """Buildings constructed in 1915 should get 2.0% depreciation rate"""
+    def test_1915_building_gets_1_5_percent(self, calculator):
+        """The old 1915 cutoff no longer applies for residential buildings."""
         rate = calculator.determine_depreciation_rate(1915)
-        assert rate == Decimal("0.020")
+        assert rate == Decimal("0.015")
     
-    def test_post_1915_building_gets_2_percent(self, calculator):
-        """Buildings constructed after 1915 should get 2.0% depreciation rate"""
+    def test_post_1915_building_gets_1_5_percent(self, calculator):
+        """Residential buildings constructed after 1915 still use 1.5%."""
         rate = calculator.determine_depreciation_rate(1985)
-        assert rate == Decimal("0.020")
+        assert rate == Decimal("0.015")
     
-    def test_unknown_construction_year_defaults_to_2_percent(self, calculator):
-        """Unknown construction year should default to 2.0% depreciation rate"""
+    def test_unknown_construction_year_defaults_to_1_5_percent(self, calculator):
+        """Unknown residential construction year defaults to 1.5%."""
         rate = calculator.determine_depreciation_rate(None)
-        assert rate == Decimal("0.020")
+        assert rate == Decimal("0.015")
     
     def test_edge_case_1914(self, calculator):
         """1914 should get 1.5% rate (before 1915)"""
@@ -82,88 +93,68 @@ class TestCalculateAnnualDepreciation:
     
     def test_full_year_depreciation(self, calculator, sample_property, mock_db):
         """Calculate depreciation for a full year of ownership"""
-        # Mock accumulated depreciation query to return 0
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator)
         
         # Calculate for year 2021 (full year)
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         
-        # Expected: 280,000 * 0.02 = 5,600.00
-        assert depreciation == Decimal("5600.00")
+        # Expected: 280,000 * 0.015 = 4,200.00
+        assert depreciation == Decimal("4200.00")
     
     def test_partial_first_year_depreciation(self, calculator, sample_property, mock_db):
         """Calculate pro-rated depreciation for first year (purchased mid-year)"""
-        # Mock accumulated depreciation query to return 0
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator)
         
         # Property purchased June 15, 2020 - owned for 7 months (Jun-Dec)
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2020)
         
-        # Expected: (280,000 * 0.02 * 7) / 12 = 3,266.67
-        assert depreciation == Decimal("3266.67")
+        # Expected: (280,000 * 0.015 * 7) / 12 = 2,450.00
+        assert depreciation == Decimal("2450.00")
     
     def test_no_depreciation_before_purchase(self, calculator, sample_property, mock_db):
         """No depreciation for years before property was purchased"""
+        _set_real_estate_context(calculator)
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2019)
         assert depreciation == Decimal("0")
     
     def test_no_depreciation_after_sale(self, calculator, sample_property, mock_db):
         """No depreciation for years after property was sold"""
         sample_property.sale_date = date(2023, 12, 31)
+        _set_real_estate_context(calculator)
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2024)
         assert depreciation == Decimal("0")
     
     def test_stops_at_building_value_limit(self, calculator, sample_property, mock_db):
         """Depreciation stops when accumulated equals building value"""
-        # Mock accumulated depreciation to be at building value
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("280000.00")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator, accumulated=Decimal("280000.00"))
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2025)
         assert depreciation == Decimal("0")
     
     def test_respects_remaining_depreciable_value(self, calculator, sample_property, mock_db):
         """Depreciation limited to remaining depreciable value"""
-        # Mock accumulated depreciation close to building value
-        # Accumulated: 278,000, Remaining: 2,000
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("278000.00")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator, accumulated=Decimal("278000.00"))
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2025)
         
-        # Expected: min(5600, 2000) = 2000.00
+        # Expected: min(4200, 2000) = 2000.00
         assert depreciation == Decimal("2000.00")
     
     def test_mixed_use_property_depreciation(self, calculator, sample_property, mock_db):
         """Mixed-use property depreciates only rental percentage"""
         sample_property.property_type = PropertyType.MIXED_USE
         sample_property.rental_percentage = Decimal("50.00")
-        
-        # Mock accumulated depreciation query to return 0
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator, rental_percentage=Decimal("50"))
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         
-        # Expected: 280,000 * 0.50 * 0.02 = 2,800.00
-        assert depreciation == Decimal("2800.00")
+        # Expected: 280,000 * 0.50 * 0.015 = 2,100.00
+        assert depreciation == Decimal("2100.00")
     
     def test_owner_occupied_no_depreciation(self, calculator, sample_property, mock_db):
         """Owner-occupied properties are not depreciable"""
         sample_property.property_type = PropertyType.OWNER_OCCUPIED
-        
+        _set_real_estate_context(calculator, rental_percentage=Decimal("0"))
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         assert depreciation == Decimal("0")
     
@@ -182,22 +173,22 @@ class TestCalculateProratedDepreciation:
         """Calculate pro-rated depreciation for 6 months"""
         depreciation = calculator.calculate_prorated_depreciation(sample_property, 6)
         
-        # Expected: (280,000 * 0.02 * 6) / 12 = 2,800.00
-        assert depreciation == Decimal("2800.00")
+        # Expected: (280,000 * 0.015 * 6) / 12 = 2,100.00
+        assert depreciation == Decimal("2100.00")
     
     def test_prorated_for_1_month(self, calculator, sample_property):
         """Calculate pro-rated depreciation for 1 month"""
         depreciation = calculator.calculate_prorated_depreciation(sample_property, 1)
         
-        # Expected: (280,000 * 0.02 * 1) / 12 = 466.67
-        assert depreciation == Decimal("466.67")
+        # Expected: (280,000 * 0.015 * 1) / 12 = 350.00
+        assert depreciation == Decimal("350.00")
     
     def test_prorated_for_12_months_equals_annual(self, calculator, sample_property):
         """Pro-rated for 12 months should equal full annual depreciation"""
         depreciation = calculator.calculate_prorated_depreciation(sample_property, 12)
         
-        # Expected: (280,000 * 0.02 * 12) / 12 = 5,600.00
-        assert depreciation == Decimal("5600.00")
+        # Expected: (280,000 * 0.015 * 12) / 12 = 4,200.00
+        assert depreciation == Decimal("4200.00")
     
     def test_prorated_mixed_use_property(self, calculator, sample_property):
         """Pro-rated depreciation for mixed-use property"""
@@ -206,8 +197,8 @@ class TestCalculateProratedDepreciation:
         
         depreciation = calculator.calculate_prorated_depreciation(sample_property, 6)
         
-        # Expected: (280,000 * 0.60 * 0.02 * 6) / 12 = 1,680.00
-        assert depreciation == Decimal("1680.00")
+        # Expected: (280,000 * 0.60 * 0.015 * 6) / 12 = 1,260.00
+        assert depreciation == Decimal("1260.00")
     
     def test_prorated_owner_occupied_no_depreciation(self, calculator, sample_property):
         """Owner-occupied properties have no pro-rated depreciation"""
@@ -221,37 +212,60 @@ class TestGetAccumulatedDepreciation:
     """Test accumulated depreciation query"""
     
     def test_get_accumulated_all_years(self, calculator, mock_db):
-        """Get total accumulated depreciation across all years"""
-        # Mock query to return sum of depreciation transactions
+        """Get accumulated depreciation from purchase year through a target year."""
         mock_query = MagicMock()
         mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("28000.00")
+        sample = Property()
+        sample.id = "550e8400-e29b-41d4-a716-446655440000"
+        sample.asset_type = "real_estate"
+        sample.property_type = PropertyType.RENTAL
+        sample.purchase_date = date(2020, 6, 15)
+        sample.building_value = Decimal("280000.00")
+        sample.depreciation_rate = Decimal("0.0150")
+        sample.construction_year = 1985
+        sample.sale_date = None
+        mock_query.first.return_value = sample
         mock_db.query.return_value = mock_query
-        
-        property_id = "550e8400-e29b-41d4-a716-446655440000"
-        accumulated = calculator.get_accumulated_depreciation(property_id)
-        
-        assert accumulated == Decimal("28000.00")
-    
-    def test_get_accumulated_up_to_year(self, calculator, mock_db):
-        """Get accumulated depreciation up to specific year"""
-        # Mock query to return sum up to 2023
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("16800.00")
-        mock_db.query.return_value = mock_query
+        calculator._get_rental_percentage_for_year = Mock(return_value=Decimal("100"))
         
         property_id = "550e8400-e29b-41d4-a716-446655440000"
         accumulated = calculator.get_accumulated_depreciation(property_id, up_to_year=2023)
         
-        assert accumulated == Decimal("16800.00")
+        assert accumulated == Decimal("15050.00")
     
-    def test_get_accumulated_no_transactions(self, calculator, mock_db):
-        """Return zero if no depreciation transactions exist"""
-        # Mock query to return None (no transactions)
+    def test_get_accumulated_up_to_year(self, calculator, mock_db):
+        """Get accumulated depreciation up to specific year"""
         mock_query = MagicMock()
         mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = None
+        sample = Property()
+        sample.id = "550e8400-e29b-41d4-a716-446655440000"
+        sample.asset_type = "real_estate"
+        sample.property_type = PropertyType.RENTAL
+        sample.purchase_date = date(2020, 6, 15)
+        sample.building_value = Decimal("280000.00")
+        sample.depreciation_rate = Decimal("0.0150")
+        sample.construction_year = 1985
+        sample.sale_date = None
+        mock_query.first.return_value = sample
+        mock_db.query.return_value = mock_query
+        calculator._get_rental_percentage_for_year = Mock(side_effect=[
+            Decimal("100"),
+            Decimal("100"),
+            Decimal("50"),
+            Decimal("50"),
+        ])
+        
+        property_id = "550e8400-e29b-41d4-a716-446655440000"
+        accumulated = calculator.get_accumulated_depreciation(property_id, up_to_year=2023)
+        
+        # 2020: 2450.00, 2021: 4200.00, 2022: 2100.00, 2023: 2100.00
+        assert accumulated == Decimal("10850.00")
+    
+    def test_get_accumulated_no_transactions(self, calculator, mock_db):
+        """Return zero when there is no property or no rental history."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.first.return_value = None
         mock_db.query.return_value = mock_query
         
         property_id = "550e8400-e29b-41d4-a716-446655440000"
@@ -312,14 +326,9 @@ class TestRoundingPrecision:
     
     def test_annual_depreciation_rounds_to_2_decimals(self, calculator, sample_property, mock_db):
         """Annual depreciation should round to 2 decimal places"""
-        # Mock accumulated depreciation
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
-        
-        # Use a rate that produces many decimal places
+        sample_property.asset_type = "equipment"
         sample_property.depreciation_rate = Decimal("0.0173")
+        calculator.get_accumulated_depreciation = Mock(return_value=Decimal("0"))
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         
         # Check that result has exactly 2 decimal places
@@ -339,23 +348,16 @@ class TestEdgeCases:
     def test_zero_building_value(self, calculator, sample_property, mock_db):
         """Handle property with zero building value"""
         sample_property.building_value = Decimal("0")
-        
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        _set_real_estate_context(calculator)
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         assert depreciation == Decimal("0")
     
     def test_very_high_depreciation_rate(self, calculator, sample_property, mock_db):
-        """Handle property with maximum depreciation rate (10%)"""
+        """Non-real-estate assets use the stored depreciation rate."""
+        sample_property.asset_type = "equipment"
         sample_property.depreciation_rate = Decimal("0.10")
-        
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        calculator.get_accumulated_depreciation = Mock(return_value=Decimal("0"))
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         
@@ -363,13 +365,10 @@ class TestEdgeCases:
         assert depreciation == Decimal("28000.00")
     
     def test_very_low_depreciation_rate(self, calculator, sample_property, mock_db):
-        """Handle property with minimum depreciation rate (0.1%)"""
+        """Non-real-estate assets use the stored depreciation rate."""
+        sample_property.asset_type = "equipment"
         sample_property.depreciation_rate = Decimal("0.001")
-        
-        mock_query = MagicMock()
-        mock_query.filter.return_value = mock_query
-        mock_query.scalar.return_value = Decimal("0")
-        mock_db.query.return_value = mock_query
+        calculator.get_accumulated_depreciation = Mock(return_value=Decimal("0"))
         
         depreciation = calculator.calculate_annual_depreciation(sample_property, 2021)
         

@@ -26,22 +26,23 @@
       }
     },
     "features": {
-      "transactions_limit": "50 transactions/month",
+      "transactions_limit": "30 transactions/month",
       "basic_tax_calc": "Basic tax calculation",
-      "german_only": "German language only",
       "unlimited_transactions": "Unlimited transactions",
-      "ocr_limit": "20 OCR scans/month",
+      "ocr_limit": "20 document scans/month",
       "full_tax_calc": "Full tax calculation",
       "multi_language": "Multi-language (DE, EN, ZH)",
       "vat_svs": "VAT & SVS calculations",
+      "property_management": "Property management",
+      "bank_import": "Bank statement import",
+      "recurring_suggestions": "Smart recurring suggestions",
       "everything_plus": "Everything in Plus",
-      "unlimited_ocr": "Unlimited OCR scanning",
+      "unlimited_ocr": "Unlimited document scanning",
       "ai_assistant": "AI Tax Assistant",
       "e1_generation": "E1 form generation",
-      "advanced_reports": "Advanced reports",
+      "advanced_reports": "Advanced reports (EA, Bilanz)",
       "priority_support": "Priority support",
-      "api_access": "API access",
-      "ocr": "OCR scanning"
+      "ocr": "Document scanning"
     },
     "buttons": {
       "get_started": "Get Started",
@@ -73,6 +74,20 @@
     "canceling": "Canceling",
     "ends_on": "Ends {{date}}",
     "cancel_notice": "Your subscription will be canceled at the end of the current period",
+    "credits_title": "Credits",
+    "credits_available": "Available credits",
+    "overage_mode": "Overage",
+    "overage_on": "On",
+    "overage_off": "Off",
+    "overage_unavailable": "Unavailable",
+    "overage_suspended": "Paused",
+    "overage_rate": "{{rate}} / credit",
+    "overage_estimate": "Estimate {{amount}}",
+    "overage_toggle_error": "Failed to update overage mode.",
+    "overage_payment_due_title": "Overage paused",
+    "overage_payment_due_message": "Overage is paused until your unpaid invoice is settled in Stripe.",
+    "resolve_billing": "Resolve billing",
+    "billing_portal_error": "Failed to open billing portal.",
     "usage_title": "Usage This Period",
     "unlimited": "Unlimited",
     "quota_exceeded": "Exceeded",
@@ -106,7 +121,7 @@
     },
     "resources": {
       "transactions": "Transactions",
-      "ocr_scans": "OCR Scans",
+      "ocr_scans": "Document Scans",
       "ai_conversations": "AI Conversations"
     }
   },
@@ -117,7 +132,7 @@
     "quota_exceeded": "Quota exceeded",
     "quota_warning": "Approaching limit ({{percent}}%)",
     "transactions": "Transactions",
-    "ocr_scans": "OCR Scans",
+    "ocr_scans": "Document Scans",
     "ai_conversations": "AI Conversations"
   },
   "upgrade": {
@@ -132,8 +147,8 @@
       "pro": "Pro"
     },
     "features": {
-      "ocr_scanning": "OCR Scanning",
-      "unlimited_ocr": "Unlimited OCR",
+      "ocr_scanning": "Document Scanning",
+      "unlimited_ocr": "Unlimited Document Scanning",
       "ai_assistant": "AI Tax Assistant",
       "e1_generation": "E1 Form Generation",
       "advanced_reports": "Advanced Reports",
@@ -143,13 +158,13 @@
     "benefits": {
       "plus": {
         "1": "Unlimited transactions",
-        "2": "20 OCR scans per month",
+        "2": "20 document scans per month",
         "3": "Full tax calculations",
         "4": "Multi-language support",
         "5": "VAT & SVS calculations"
       },
       "pro": {
-        "1": "Unlimited OCR scanning",
+        "1": "Unlimited document scanning",
         "2": "AI-powered tax assistance",
         "3": "Automatic E1 form generation",
         "4": "Advanced analytics and reports",

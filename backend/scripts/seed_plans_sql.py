@@ -30,11 +30,11 @@ def seed_plans():
                 'Free',
                 0,
                 0,
-                '{"basic_tax_calc": true, "transaction_entry": true}',
-                '{"transactions": 50, "ocr_scans": 0, "ai_conversations": 0}'
+                '{"basic_tax_calc": true, "transaction_entry": true, "ocr_scanning": true, "multi_language": true}',
+                '{"transactions": 30, "ocr_scans": 3, "ai_conversations": 0}'
             )
         """))
-        print("  ✓ Created Free plan (€0/month)")
+        print("  ✓ Created Free plan (€0/month, 3 OCR scans)")
         
         # Insert Plus plan
         db.execute(text("""

@@ -1,7 +1,9 @@
 .periodensaldenliste-report { max-width: 100%; margin: 0 auto; }
 .periodensaldenliste-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
-.periodensaldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; }
-.periodensaldenliste-controls select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+.periodensaldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
+.periodensaldenliste-controls .form-group label { font-size: 0.8rem; color: #6b7280; font-weight: 500; margin-bottom: 0; }
+.periodensaldenliste-controls select { padding: 0 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.9rem; height: 44px; box-sizing: border-box; }
+.periodensaldenliste-controls .btn { height: 44px; min-height: 44px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
 
 .periodensaldenliste-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
 .periodensaldenliste-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #1f2937; padding-bottom: 16px; }

@@ -11,8 +11,13 @@ from uuid import uuid4
 
 from app.services.annual_depreciation_service import AnnualDepreciationService
 from app.models.property import Property, PropertyType, PropertyStatus
+from app.models.recurring_transaction import (
+    RecurringTransaction,
+    RecurringTransactionType,
+    RecurrenceFrequency,
+)
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory
-from app.models.user import User
+from app.models.user import User, UserType
 
 
 @pytest.fixture
@@ -21,13 +26,41 @@ def user(db):
     user = User(
         email="test@example.com",
         name="Test User",
-        hashed_password="hashed_password",
-        user_type="landlord"
+        password_hash="hashed_password",
+        user_type=UserType.EMPLOYEE,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def _add_rental_contract(
+    db,
+    user_id: int,
+    property_id,
+    start_date: date,
+    unit_percentage: Decimal = Decimal("100.00"),
+    amount: Decimal = Decimal("1500.00"),
+) -> RecurringTransaction:
+    contract = RecurringTransaction(
+        user_id=user_id,
+        recurring_type=RecurringTransactionType.RENTAL_INCOME,
+        property_id=property_id,
+        description="Monthly rent",
+        amount=amount,
+        transaction_type="income",
+        category="rental_income",
+        frequency=RecurrenceFrequency.MONTHLY,
+        start_date=start_date,
+        day_of_month=1,
+        is_active=True,
+        unit_percentage=unit_percentage,
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return contract
 
 
 @pytest.fixture
@@ -52,6 +85,7 @@ def active_property(db, user):
     db.add(property)
     db.commit()
     db.refresh(property)
+    _add_rental_contract(db, user.id, property.id, date(2020, 6, 15))
     return property
 
 
@@ -109,7 +143,7 @@ class TestAnnualDepreciationService:
         assert result.properties_processed == 1
         assert result.transactions_created == 1
         assert result.properties_skipped == 0
-        assert result.total_amount == Decimal("5600.00")  # 280000 * 0.02
+        assert result.total_amount == Decimal("4200.00")  # 280000 * 1.5%
         
         # Verify transaction was created
         assert len(result.transactions) == 1
@@ -118,7 +152,7 @@ class TestAnnualDepreciationService:
         assert transaction.user_id == active_property.user_id
         assert transaction.property_id == active_property.id
         assert transaction.type == TransactionType.EXPENSE
-        assert transaction.amount == Decimal("5600.00")
+        assert transaction.amount == Decimal("4200.00")
         assert transaction.transaction_date == date(year, 12, 31)
         assert transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA
         assert transaction.is_deductible is True
@@ -184,8 +218,8 @@ class TestAnnualDepreciationService:
         user2 = User(
             email="user2@example.com",
             name="User Two",
-            hashed_password="hashed_password",
-            user_type="landlord"
+            password_hash="hashed_password",
+            user_type=UserType.EMPLOYEE,
         )
         db.add(user2)
         db.commit()
@@ -208,6 +242,8 @@ class TestAnnualDepreciationService:
         )
         db.add(property2)
         db.commit()
+        db.refresh(property2)
+        _add_rental_contract(db, user2.id, property2.id, date(2021, 1, 1))
         
         year = 2025
         
@@ -220,7 +256,7 @@ class TestAnnualDepreciationService:
         # Verify transactions created for both properties
         assert result.properties_processed == 2
         assert result.transactions_created == 2
-        assert result.total_amount == Decimal("12000.00")  # 5600 + 6400
+        assert result.total_amount == Decimal("9000.00")  # 4200 + 4800
     
     def test_generate_annual_depreciation_for_specific_user(
         self, 
@@ -233,8 +269,8 @@ class TestAnnualDepreciationService:
         user2 = User(
             email="user2@example.com",
             name="User Two",
-            hashed_password="hashed_password",
-            user_type="landlord"
+            password_hash="hashed_password",
+            user_type=UserType.EMPLOYEE,
         )
         db.add(user2)
         db.commit()
@@ -257,6 +293,8 @@ class TestAnnualDepreciationService:
         )
         db.add(property2)
         db.commit()
+        db.refresh(property2)
+        _add_rental_contract(db, user2.id, property2.id, date(2021, 1, 1))
         
         year = 2025
         
@@ -280,28 +318,11 @@ class TestAnnualDepreciationService:
         """Test that fully depreciated properties are skipped"""
         year = 2025
         
-        # Create depreciation transactions that fully depreciate the property
-        # Building value: 280000, so we need 280000 in depreciation
-        for y in range(2020, 2070):  # 50 years * 5600 = 280000
-            transaction = Transaction(
-                user_id=active_property.user_id,
-                property_id=active_property.id,
-                type=TransactionType.EXPENSE,
-                amount=Decimal("5600.00"),
-                transaction_date=date(y, 12, 31),
-                description=f"AfA {active_property.address} ({y})",
-                expense_category=ExpenseCategory.DEPRECIATION_AFA,
-                is_deductible=True,
-                is_system_generated=True,
-                import_source="test",
-                classification_confidence=Decimal("1.0")
-            )
-            db.add(transaction)
-        db.commit()
-        
-        # Try to generate depreciation for 2070
+        # Real-estate accumulated depreciation is now computed mathematically
+        # from purchase year, so a far-future year is enough to reach the limit.
+        year = 2210
         result = annual_depreciation_service.generate_annual_depreciation(
-            year=2070,
+            year=year,
             user_id=active_property.user_id
         )
         
@@ -335,6 +356,14 @@ class TestAnnualDepreciationService:
         )
         db.add(property)
         db.commit()
+        db.refresh(property)
+        _add_rental_contract(
+            db,
+            user.id,
+            property.id,
+            date(2022, 1, 1),
+            unit_percentage=Decimal("50.00"),
+        )
         
         year = 2025
         
@@ -344,9 +373,9 @@ class TestAnnualDepreciationService:
         )
         
         # Verify depreciation is only for rental percentage
-        # 400000 * 0.50 * 0.02 = 4000
+        # 400000 * 0.50 * 0.015 = 3000
         assert result.transactions_created == 1
-        assert result.total_amount == Decimal("4000.00")
+        assert result.total_amount == Decimal("3000.00")
     
     def test_generate_annual_depreciation_owner_occupied_skipped(
         self, 
@@ -407,7 +436,7 @@ class TestAnnualDepreciationService:
         assert result_dict["properties_processed"] == 1
         assert result_dict["transactions_created"] == 1
         assert result_dict["properties_skipped"] == 0
-        assert result_dict["total_amount"] == 5600.00
+        assert result_dict["total_amount"] == 4200.00
         assert len(result_dict["transaction_ids"]) == 1
         assert isinstance(result_dict["skipped_details"], list)
     

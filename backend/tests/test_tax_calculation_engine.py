@@ -137,8 +137,8 @@ class TestTaxCalculationEngineWithDeductions:
         
         # Should have home office deduction of €300 + Werbungskostenpauschale €132
         assert result.deductions.amount == Decimal('432.00')
-        assert 'home_office' in result.deductions.breakdown
-        assert result.deductions.breakdown['home_office_amount'] == Decimal('300.00')
+        assert 'telearbeit' in result.deductions.breakdown
+        assert result.deductions.breakdown['telearbeit_amount'] == Decimal('300.00')
     
     def test_with_family_deductions(self, engine):
         """Test tax calculation with family deductions"""
@@ -151,12 +151,14 @@ class TestTaxCalculationEngineWithDeductions:
             family_info=family_info
         )
         
-        # Should have family deductions
+        # Family-related information is exposed via the current tax-credit
+        # breakdown fields rather than a legacy combined family_deductions key.
         assert result.deductions.amount > Decimal('0.00')
-        assert 'family_deductions' in result.deductions.breakdown
-        
-        # Should include child deduction and single parent deduction
-        family_breakdown = result.deductions.breakdown['family_deductions']
+        assert 'kinderabsetzbetrag_info' in result.deductions.breakdown
+        assert 'alleinverdiener_amount' in result.deductions.breakdown
+
+        # Should include child info and single-parent tax credit data
+        family_breakdown = result.deductions.breakdown['kinderabsetzbetrag_info']
         assert family_breakdown['num_children'] == 2
         assert family_breakdown['is_single_parent'] is True
     
@@ -176,9 +178,9 @@ class TestTaxCalculationEngineWithDeductions:
         
         # Should have all three types of deductions
         assert 'commuting_allowance' in result.deductions.breakdown
-        assert 'home_office' in result.deductions.breakdown
-        assert 'family_deductions' in result.deductions.breakdown
-        
+        assert 'telearbeit' in result.deductions.breakdown
+        assert 'kinderabsetzbetrag_info' in result.deductions.breakdown
+
         # Total deduction should be sum of all
         assert result.deductions.amount > Decimal('1000.00')
 

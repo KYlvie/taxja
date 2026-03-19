@@ -2,43 +2,41 @@ import { useState, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 import { router } from './routes';
 import { useAuthStore } from './stores/authStore';
-import { userService } from './services/userService';
 import DisclaimerModal from './components/common/DisclaimerModal';
+import GlobalConfirmDialog from './components/common/GlobalConfirmDialog';
+import AIToastContainer from './components/common/AIToast';
+import { OfflineBanner } from './components/mobile/OfflineBanner';
 import './i18n';
 import './App.css';
 
 function App() {
   const { isAuthenticated } = useAuthStore();
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-  const [disclaimerChecked, setDisclaimerChecked] = useState(false);
 
   useEffect(() => {
-    const checkDisclaimer = async () => {
-      if (isAuthenticated && !disclaimerChecked) {
-        try {
-          const status = await userService.getDisclaimerStatus();
-          if (!status.accepted) {
-            setShowDisclaimer(true);
-          }
-          setDisclaimerChecked(true);
-        } catch (error) {
-          console.error('Failed to check disclaimer status:', error);
-          setDisclaimerChecked(true);
-        }
+    if (isAuthenticated) {
+      const accepted = sessionStorage.getItem('taxja_disclaimer_accepted');
+      if (!accepted) {
+        setShowDisclaimer(true);
       }
-    };
-
-    checkDisclaimer();
-  }, [isAuthenticated, disclaimerChecked]);
+    } else {
+      sessionStorage.removeItem('taxja_disclaimer_accepted');
+      setShowDisclaimer(false);
+    }
+  }, [isAuthenticated]);
 
   const handleDisclaimerAccept = () => {
+    sessionStorage.setItem('taxja_disclaimer_accepted', '1');
     setShowDisclaimer(false);
   };
 
   return (
     <>
+      <OfflineBanner />
       <RouterProvider router={router} />
       <DisclaimerModal isOpen={showDisclaimer} onAccept={handleDisclaimerAccept} />
+      <GlobalConfirmDialog />
+      <AIToastContainer />
     </>
   );
 }

@@ -26,22 +26,23 @@
       }
     },
     "features": {
-      "transactions_limit": "50笔交易/月",
+      "transactions_limit": "每月30笔交易",
       "basic_tax_calc": "基础税务计算",
-      "german_only": "仅德语",
       "unlimited_transactions": "无限交易",
-      "ocr_limit": "20次OCR扫描/月",
+      "ocr_limit": "每月扫描20张票据",
       "full_tax_calc": "完整税务计算",
-      "multi_language": "多语言（德、英、中）",
+      "multi_language": "多语言（德/英/中）",
       "vat_svs": "增值税和社保计算",
-      "everything_plus": "增强版所有功能",
-      "unlimited_ocr": "无限OCR扫描",
+      "property_management": "房产管理",
+      "bank_import": "银行对账单导入",
+      "recurring_suggestions": "智能周期性交易建议",
+      "everything_plus": "包含Plus版所有功能",
+      "unlimited_ocr": "无限票据扫描",
       "ai_assistant": "AI税务助手",
       "e1_generation": "E1表格生成",
-      "advanced_reports": "高级报表",
+      "advanced_reports": "高级报表（EA、资产负债表）",
       "priority_support": "优先支持",
-      "api_access": "API访问",
-      "ocr": "OCR扫描"
+      "ocr": "票据扫描识别"
     },
     "buttons": {
       "get_started": "开始使用",
@@ -73,6 +74,20 @@
     "canceling": "取消中",
     "ends_on": "结束于 {{date}}",
     "cancel_notice": "您的订阅将在当前周期结束时取消",
+    "credits_title": "积分",
+    "credits_available": "可用积分",
+    "overage_mode": "超额",
+    "overage_on": "已开",
+    "overage_off": "已关",
+    "overage_unavailable": "不可用",
+    "overage_suspended": "已暂停",
+    "overage_rate": "{{rate}} / 积分",
+    "overage_estimate": "预估 {{amount}}",
+    "overage_toggle_error": "更新超额模式失败。",
+    "overage_payment_due_title": "超额功能已暂停",
+    "overage_payment_due_message": "在 Stripe 未支付的超额账单结清之前，超额功能已暂停。",
+    "resolve_billing": "去处理账单",
+    "billing_portal_error": "无法打开账单门户。",
     "usage_title": "本周期使用情况",
     "unlimited": "无限",
     "quota_exceeded": "已超额",
@@ -106,7 +121,7 @@
     },
     "resources": {
       "transactions": "交易",
-      "ocr_scans": "OCR扫描",
+      "ocr_scans": "票据扫描",
       "ai_conversations": "AI对话"
     }
   },
@@ -117,7 +132,7 @@
     "quota_exceeded": "配额已超",
     "quota_warning": "接近限制（{{percent}}%）",
     "transactions": "交易",
-    "ocr_scans": "OCR扫描",
+    "ocr_scans": "票据扫描",
     "ai_conversations": "AI对话"
   },
   "upgrade": {
@@ -132,8 +147,8 @@
       "pro": "专业版"
     },
     "features": {
-      "ocr_scanning": "OCR扫描",
-      "unlimited_ocr": "无限OCR",
+      "ocr_scanning": "票据扫描识别",
+      "unlimited_ocr": "无限票据扫描",
       "ai_assistant": "AI税务助手",
       "e1_generation": "E1表格生成",
       "advanced_reports": "高级报表",
@@ -143,13 +158,13 @@
     "benefits": {
       "plus": {
         "1": "无限交易",
-        "2": "每月20次OCR扫描",
+        "2": "每月20次票据扫描",
         "3": "完整税务计算",
         "4": "多语言支持",
         "5": "增值税和社保计算"
       },
       "pro": {
-        "1": "无限OCR扫描",
+        "1": "无限票据扫描",
         "2": "AI驱动的税务协助",
         "3": "自动E1表格生成",
         "4": "高级分析和报表",

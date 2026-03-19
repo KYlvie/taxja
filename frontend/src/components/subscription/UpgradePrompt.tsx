@@ -43,8 +43,8 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
   
   const getFeatureName = () => {
     const featureNames: Record<string, string> = {
-      ocr_scanning: t('upgrade.features.ocr_scanning', 'OCR Scanning'),
-      unlimited_ocr: t('upgrade.features.unlimited_ocr', 'Unlimited OCR'),
+      ocr_scanning: t('upgrade.features.ocr_scanning', 'Document Scanning'),
+      unlimited_ocr: t('upgrade.features.unlimited_ocr', 'Unlimited Document Scanning'),
       ai_assistant: t('upgrade.features.ai_assistant', 'AI Tax Assistant'),
       e1_generation: t('upgrade.features.e1_generation', 'E1 Form Generation'),
       advanced_reports: t('upgrade.features.advanced_reports', 'Advanced Reports'),
@@ -56,14 +56,14 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
   };
   
   const defaultBenefits = requiredPlan === 'pro' ? [
-    t('upgrade.benefits.pro.1', 'Unlimited OCR scanning'),
+    t('upgrade.benefits.pro.1', 'Unlimited document scanning'),
     t('upgrade.benefits.pro.2', 'AI-powered tax assistance'),
     t('upgrade.benefits.pro.3', 'Automatic E1 form generation'),
     t('upgrade.benefits.pro.4', 'Advanced analytics and reports'),
     t('upgrade.benefits.pro.5', 'Priority customer support'),
   ] : [
     t('upgrade.benefits.plus.1', 'Unlimited transactions'),
-    t('upgrade.benefits.plus.2', '20 OCR scans per month'),
+    t('upgrade.benefits.plus.2', '20 document scans per month'),
     t('upgrade.benefits.plus.3', 'Full tax calculations'),
     t('upgrade.benefits.plus.4', 'Multi-language support'),
     t('upgrade.benefits.plus.5', 'VAT & SVS calculations'),

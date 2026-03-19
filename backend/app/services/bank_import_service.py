@@ -9,6 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from enum import Enum
+from difflib import SequenceMatcher
 
 from app.services.csv_parser import CSVParser, BankFormat
 from app.services.mt940_parser import MT940Parser
@@ -47,7 +48,9 @@ class ImportResult:
             "transactions": [
                 {
                     "id": t.id,
-                    "date": t.date.isoformat(),
+                    "date": (
+                        getattr(t, "transaction_date", None) or getattr(t, "date", None)
+                    ).isoformat(),
                     "amount": str(t.amount),
                     "description": t.description,
                     "category": t.income_category or t.expense_category,
@@ -65,16 +68,21 @@ class BankImportService:
     
     def __init__(
         self,
+        db: Optional["Session"] = None,
         csv_parser: Optional[CSVParser] = None,
         mt940_parser: Optional[MT940Parser] = None,
         classifier: Optional[TransactionClassifier] = None,
         duplicate_detector: Optional[DuplicateDetector] = None,
     ):
         """Initialize bank import service"""
+        self.db = db
         self.csv_parser = csv_parser or CSVParser()
         self.mt940_parser = mt940_parser or MT940Parser()
-        self.classifier = classifier or TransactionClassifier()
-        self.duplicate_detector = duplicate_detector or DuplicateDetector()
+        self.classifier = classifier or TransactionClassifier(db=db)
+        self.duplicate_detector = (
+            duplicate_detector
+            or (DuplicateDetector(db) if db is not None else None)
+        )
     
     def import_transactions(
         self,
@@ -195,22 +203,58 @@ class BankImportService:
             Tuple of (is_duplicate, reason)
         """
         
-        # Create a temporary transaction object for duplicate detection
-        temp_txn = Transaction(
-            date=parsed_txn["date"],
-            amount=abs(parsed_txn["amount"]),
-            description=parsed_txn["description"],
-        )
-        
-        is_duplicate = self.duplicate_detector.is_duplicate(
-            temp_txn,
-            existing_transactions
-        )
-        
-        if is_duplicate:
-            return True, "Same date, amount, and similar description"
-        
+        parsed_date = parsed_txn["date"]
+        parsed_amount = abs(parsed_txn["amount"])
+        parsed_description = parsed_txn["description"]
+
+        for existing_txn in existing_transactions:
+            existing_date = self._get_transaction_date(existing_txn)
+            existing_amount = self._get_transaction_amount(existing_txn)
+            existing_description = self._get_transaction_description(existing_txn)
+
+            if existing_date != parsed_date:
+                continue
+            if existing_amount != parsed_amount:
+                continue
+            if self._descriptions_similar(parsed_description, existing_description):
+                return True, "Same date, amount, and similar description"
+
         return False, None
+
+    def _get_transaction_date(self, transaction: Transaction):
+        return getattr(transaction, "transaction_date", None) or getattr(
+            transaction, "date", None
+        )
+
+    def _get_transaction_amount(self, transaction: Transaction) -> Decimal:
+        amount = getattr(transaction, "amount", Decimal("0"))
+        return abs(Decimal(str(amount)))
+
+    def _get_transaction_description(self, transaction: Transaction) -> str:
+        return getattr(transaction, "description", "") or ""
+
+    def _descriptions_similar(
+        self,
+        desc1: Optional[str],
+        desc2: Optional[str],
+    ) -> bool:
+        if self.duplicate_detector is not None and hasattr(
+            self.duplicate_detector, "_is_similar_description"
+        ):
+            return self.duplicate_detector._is_similar_description(desc1, desc2)
+
+        desc1_normalized = (desc1 or "").strip().lower()
+        desc2_normalized = (desc2 or "").strip().lower()
+
+        if not desc1_normalized and not desc2_normalized:
+            return True
+        if not desc1_normalized or not desc2_normalized:
+            return False
+
+        return (
+            SequenceMatcher(None, desc1_normalized, desc2_normalized).ratio()
+            >= DuplicateDetector.SIMILARITY_THRESHOLD
+        )
     
     def _create_transaction(
         self,
@@ -233,12 +277,11 @@ class BankImportService:
         # Create transaction object
         transaction = Transaction(
             user_id=user.id,
-            date=parsed_txn["date"],
+            transaction_date=parsed_txn["date"],
             amount=amount,
             description=parsed_txn["description"],
             type=transaction_type,
-            tax_year=tax_year,
-            reference=parsed_txn.get("reference"),
+            import_source="csv" if parsed_txn.get("reference") is not None else None,
         )
         
         # Auto-classify if enabled
@@ -248,6 +291,8 @@ class BankImportService:
                 user_context={
                     "user_type": user.user_type,
                     "user_id": user.id,
+                    "business_type": getattr(user, "business_type", "") or "",
+                    "business_industry": getattr(user, "business_industry", "") or "",
                 }
             )
             
@@ -256,9 +301,16 @@ class BankImportService:
             else:
                 transaction.expense_category = classification_result.category
             
-            transaction.is_deductible = classification_result.is_deductible
+            transaction.is_deductible = getattr(
+                classification_result, "is_deductible", False
+            )
             transaction.classification_confidence = classification_result.confidence
-            transaction.needs_review = classification_result.needs_review
+            transaction.classification_method = getattr(
+                classification_result, "method", None
+            )
+            transaction.needs_review = getattr(
+                classification_result, "needs_review", False
+            )
         
         # This would save to database
         # For now, just return the transaction object

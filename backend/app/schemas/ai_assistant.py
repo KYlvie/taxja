@@ -2,15 +2,38 @@
 Pydantic schemas for AI Tax Assistant API.
 """
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from app.models.chat_message import MessageRole
+
+
+class SuggestionContext(BaseModel):
+    """
+    Minimal context for suggestion-aware chat responses.
+    Only carries minimum necessary fields — NOT the full ocr_result or document payload.
+    This keeps LLM prompts predictable and prevents context bloat (NFR-8).
+    """
+    document_id: int
+    suggestion_type: str  # 'create_asset', 'create_property', etc.
+    summary: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Key extracted fields only, e.g. {'item': 'BMW 320d', 'amount': 35000}"
+    )
+    pending_questions: List[str] = Field(
+        default_factory=list,
+        description="Field keys of unanswered follow-up questions, e.g. ['business_use_percentage']"
+    )
 
 
 class ChatMessageCreate(BaseModel):
     """Schema for creating a chat message"""
     message: str = Field(..., min_length=1, max_length=5000, description="User's message")
     language: str = Field(default="de", pattern="^(de|en|zh)$", description="Message language")
+    context: Optional[dict] = Field(default=None, description="Optional page/document context for workflow-aware AI")
+    suggestion_context: Optional[SuggestionContext] = Field(
+        default=None,
+        description="When user asks about a pending suggestion, include minimal context for suggestion-aware answers"
+    )
 
 
 class ChatMessageResponse(BaseModel):

@@ -1,6 +1,6 @@
 """Property-based tests for CSV export/import roundtrip consistency"""
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from decimal import Decimal
 from datetime import date, datetime
 import csv
@@ -140,9 +140,23 @@ class TestCSVRoundtripConsistency:
         
         # Export to CSV
         csv_string = generator.generate_transactions_csv(transactions, include_headers=True)
-        
-        # CSV should not contain the word "None"
-        assert 'None' not in csv_string
+
+        # Optional None-valued fields should serialize as empty strings, not the
+        # Python sentinel string "None". Free-text user fields like description
+        # may legitimately contain the literal text "None", so we assert at the
+        # field level instead of scanning the raw CSV blob.
+        raw_rows = list(csv.DictReader(StringIO(csv_string)))
+        optional_fields = [
+            'deduction_reason',
+            'vat_rate',
+            'vat_amount',
+            'document_id',
+            'classification_confidence',
+        ]
+        for original, raw_row in zip(transactions, raw_rows):
+            for field in optional_fields:
+                if original.get(field) is None:
+                    assert raw_row[field] == ''
         
         # Parse CSV
         imported_transactions = self._parse_csv(csv_string)
@@ -193,6 +207,7 @@ class TestCSVRoundtripConsistency:
             assert isinstance(imported['is_deductible'], bool)
     
     @given(transactions=st.lists(transaction_strategy(), min_size=1, max_size=20))
+    @settings(suppress_health_check=[HealthCheck.too_slow])
     def test_csv_export_is_parseable(self, transactions):
         """
         Property: Exported CSV is always parseable.

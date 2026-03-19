@@ -76,15 +76,17 @@ class Settings(BaseSettings):
     GPT_OSS_MODEL: str = "openai/gpt-oss-120b"
     GPT_OSS_API_KEY: str = "not-needed"  # vLLM default, set if you configure auth
 
-    # Ollama (local LLM)
+    # Ollama (local LLM with vision)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen3:8b"
-    OLLAMA_ENABLED: bool = True
+    OLLAMA_VISION_MODEL: str = "qwen3-vl:8b"
+    OLLAMA_ENABLED: bool = False
 
     # Groq (fast cloud LLM)
     GROQ_ENABLED: bool = False
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_FALLBACK_MODEL: str = "openai/gpt-oss-120b"
 
     # Celery
     CELERY_BROKER_URL: str = ""
@@ -103,6 +105,16 @@ class Settings(BaseSettings):
     HISTORICAL_IMPORT_RETENTION_DAYS: int = 90
     HISTORICAL_IMPORT_MIN_CONFIDENCE: float = 0.7
     HISTORICAL_IMPORT_ENABLE_AUTO_LINK: bool = True
+
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PLUS_MONTHLY_PRICE_ID: str = ""
+    STRIPE_PLUS_YEARLY_PRICE_ID: str = ""
+    STRIPE_PRO_MONTHLY_PRICE_ID: str = ""
+    STRIPE_PRO_YEARLY_PRICE_ID: str = ""
+    STRIPE_OVERAGE_PRODUCT_ID: str = ""
 
     # Email / SMTP
     ENABLE_EMAIL_NOTIFICATIONS: bool = False

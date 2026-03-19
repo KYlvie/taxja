@@ -37,8 +37,16 @@ class AuditLog(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Operation details
-    operation_type = Column(SQLEnum(AuditOperationType), nullable=False, index=True)
-    entity_type = Column(SQLEnum(AuditEntityType), nullable=False, index=True)
+    operation_type = Column(
+        SQLEnum(AuditOperationType, values_callable=lambda enum: [item.value for item in enum]),
+        nullable=False,
+        index=True,
+    )
+    entity_type = Column(
+        SQLEnum(AuditEntityType, values_callable=lambda enum: [item.value for item in enum]),
+        nullable=False,
+        index=True,
+    )
     entity_id = Column(String(100), nullable=False, index=True)  # UUID or integer as string
     
     # Additional details (JSON format for flexibility)

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Property } from '../../types/property';
+import api from '../../services/api';
 import './PropertyReports.css';
 
 interface PropertyReportsProps {
@@ -91,24 +92,18 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
     setActiveReport('income');
 
     try {
-      const response = await fetch(
-        `/api/v1/properties/${property.id}/reports/income-statement?start_date=${startDate}&end_date=${endDate}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
+      const response = await api.get(
+        `/properties/${property.id}/reports/income-statement`,
+        { params: { start_date: startDate, end_date: endDate } }
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to generate income statement');
-      }
-
-      const data = await response.json();
-      setIncomeStatementData(data);
-    } catch (err) {
-      setError(t('properties.reports.errorGenerating'));
-      console.error('Error generating income statement:', err);
+      setIncomeStatementData(response.data);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail 
+        || err?.response?.data?.error?.message 
+        || err?.message 
+        || 'Unknown error';
+      console.error('Error generating income statement:', err?.response?.status, detail, err);
+      setError(`${t('properties.reports.errorGenerating')}: ${detail}`);
     } finally {
       setIsLoading(false);
     }
@@ -120,24 +115,17 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
     setActiveReport('depreciation');
 
     try {
-      const response = await fetch(
-        `/api/v1/properties/${property.id}/reports/depreciation-schedule`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
+      const response = await api.get(
+        `/properties/${property.id}/reports/depreciation-schedule`
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to generate depreciation schedule');
-      }
-
-      const data = await response.json();
-      setDepreciationScheduleData(data);
-    } catch (err) {
-      setError(t('properties.reports.errorGenerating'));
-      console.error('Error generating depreciation schedule:', err);
+      setDepreciationScheduleData(response.data);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail 
+        || err?.response?.data?.error?.message 
+        || err?.message 
+        || 'Unknown error';
+      console.error('Error generating depreciation schedule:', err?.response?.status, detail, err);
+      setError(`${t('properties.reports.errorGenerating')}: ${detail}`);
     } finally {
       setIsLoading(false);
     }

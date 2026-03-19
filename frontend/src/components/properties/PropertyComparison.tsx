@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { propertyService } from '../../services/propertyService';
+import SubpageBackLink from '../common/SubpageBackLink';
 import {
   BarChart,
   Bar,
@@ -153,6 +154,7 @@ export const PropertyComparison: React.FC = () => {
       {/* Header with filters */}
       <div className="comparison-header">
         <div className="header-content">
+          <SubpageBackLink to="/advanced" />
           <h2>{t('properties.portfolio.propertyComparison')}</h2>
           <p className="subtitle">{t('properties.portfolio.propertyComparisonDescription')}</p>
         </div>

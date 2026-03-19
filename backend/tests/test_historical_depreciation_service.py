@@ -6,10 +6,7 @@ import pytest
 from decimal import Decimal
 from datetime import date
 from uuid import uuid4
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
 from app.services.historical_depreciation_service import (
     HistoricalDepreciationService,
     HistoricalDepreciationYear,
@@ -20,24 +17,6 @@ from app.models.transaction import Transaction, TransactionType, ExpenseCategory
 from app.models.user import User
 from app.models.chat_message import ChatMessage  # noqa: F401 - needed for User relationship
 from app.models.document import Document  # noqa: F401 - needed for Property relationship
-
-
-# Test database setup
-TEST_DATABASE_URL = "sqlite:///:memory:"
-
-
-@pytest.fixture
-def db():
-    """Create a test database session"""
-    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(bind=engine)
-    session = SessionLocal()
-    
-    yield session
-    
-    session.close()
-    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -179,16 +158,17 @@ class TestCalculateHistoricalDepreciation:
         first_year = results[0]
         assert first_year.year == 2020
         assert first_year.transaction_date == date(2020, 12, 31)
-        # 280000 * 0.02 * 7/12 = 3266.67
-        assert abs(first_year.amount - Decimal("3266.67")) < Decimal("0.01")
+        # Residential buildings now use 1.5% AfA.
+        # 280000 * 0.015 * 7/12 = 2450.00
+        assert abs(first_year.amount - Decimal("2450.00")) < Decimal("0.01")
         
         # Check second year (2021) - full year
         if len(results) > 1:
             second_year = results[1]
             assert second_year.year == 2021
             assert second_year.transaction_date == date(2021, 12, 31)
-            # 280000 * 0.02 = 5600.00
-            assert second_year.amount == Decimal("5600.00")
+            # 280000 * 0.015 = 4200.00
+            assert second_year.amount == Decimal("4200.00")
     
     def test_property_purchased_current_year(self, service, property_current_year):
         """Test calculation for property purchased in current year"""
@@ -201,8 +181,8 @@ class TestCalculateHistoricalDepreciation:
         assert results[0].year == current_year
         
         # Pro-rated for months owned (March-December = 10 months)
-        # 320000 * 0.02 * 10/12 = 5333.33
-        expected = Decimal("320000") * Decimal("0.02") * 10 / 12
+        # 320000 * 0.015 * 10/12 = 4000.00
+        expected = Decimal("320000") * Decimal("0.015") * 10 / 12
         assert abs(results[0].amount - expected.quantize(Decimal("0.01"))) < Decimal("0.01")
     
     def test_skip_existing_depreciation(self, service, db, property_2020, user):
@@ -325,7 +305,7 @@ class TestBackfillDepreciation:
         db.commit()
         db.refresh(other_user)
         
-        with pytest.raises(PermissionError, match="Property does not belong to user"):
+        with pytest.raises(ValueError, match="Property with id .* not found"):
             service.backfill_depreciation(
                 property_2020.id,
                 other_user.id,
@@ -415,13 +395,13 @@ class TestBackfillDepreciation:
         # Should not exceed building value
         assert total_depreciation <= property.building_value
         
-        # For a property purchased in 2000 with 2% depreciation rate:
-        # - Years owned: 2000 to current year (e.g., 2025 = 26 years)
-        # - Expected depreciation: 80000 * 0.02 * 26 = 41,600
+        # Residential buildings now use 1.5% AfA:
+        # - Years owned: 2000 to current year
+        # - Expected depreciation: 80000 * 0.015 * years_owned
         # - Should be close to this amount
         current_year = date.today().year
         years_owned = current_year - 2000 + 1
-        expected_depreciation = property.building_value * property.depreciation_rate * years_owned
+        expected_depreciation = property.building_value * Decimal("0.015") * years_owned
         
         # Allow for rounding differences
         assert abs(total_depreciation - expected_depreciation) < Decimal("100.00")
@@ -461,6 +441,6 @@ class TestMixedUseProperty:
         year_2023 = next((r for r in results if r.year == 2023), None)
         assert year_2023 is not None
         
-        # 320000 * 0.50 * 0.02 = 3200.00
-        expected = Decimal("320000") * Decimal("0.50") * Decimal("0.02")
+        # 320000 * 0.50 * 0.015 = 2400.00
+        expected = Decimal("320000") * Decimal("0.50") * Decimal("0.015")
         assert year_2023.amount == expected.quantize(Decimal("0.01"))

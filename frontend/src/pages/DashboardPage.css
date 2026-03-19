@@ -1,13 +1,52 @@
+/* ═══ Dashboard Page — Tech Dynamic ═══ */
 .dashboard-page {
   max-width: 1400px;
   margin: 0 auto;
+  padding-bottom: 2rem;
 }
 
+/* --- Header --- */
 .dashboard-header {
+  position: relative;
+  overflow: hidden;
   margin-bottom: 28px;
+  padding: 28px 30px;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(16px);
+  animation: dashboardHeroReveal 700ms cubic-bezier(.22,1,.36,1) both;
+}
+
+/* Dot grid overlay */
+.dashboard-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.12), transparent 80%);
+  pointer-events: none;
+}
+
+/* Animated top border */
+.dashboard-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-accent), transparent);
+  background-size: 300% 100%;
+  animation: dashBorderGlow 5s linear infinite;
+  pointer-events: none;
 }
 
 .dashboard-header-top {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -16,10 +55,11 @@
 
 .dashboard-header h1 {
   margin: 0 0 4px 0;
-  font-size: 1.75rem;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
   color: var(--color-text);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -.03em;
 }
 
 .dashboard-subtitle {
@@ -28,37 +68,40 @@
   color: var(--color-text-muted);
 }
 
+/* --- Year Selector --- */
 .year-selector {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: .5rem;
   flex-shrink: 0;
 }
 
 .year-selector label {
-  font-size: 0.85rem;
+  font-size: .82rem;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .year-selector select {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 8px;
-  background: var(--card-bg, #fff);
-  font-size: 0.9rem;
+  padding: .45rem .85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: .88rem;
   font-weight: 600;
   color: var(--color-text);
   cursor: pointer;
   appearance: auto;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .year-selector select:focus {
   outline: none;
-  border-color: var(--primary, #3b82f6);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
 }
 
+/* --- Loading --- */
 .loading {
   display: flex;
   justify-content: center;
@@ -68,85 +111,25 @@
   color: var(--color-text-muted);
 }
 
-@media (max-width: 768px) {
-  .dashboard-header h1 {
-    font-size: 1.4rem;
-  }
-
-  .dashboard-header-top {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .year-selector {
-    align-self: flex-start;
-  }
-}
-
-/* Quick Start Guide */
-.dashboard-quick-start {
-  background: var(--card-bg, #fff);
-  border: 2px dashed var(--border-color, #e5e7eb);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.dashboard-quick-start h3 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
-}
-
-.quick-start-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 1rem;
-}
-
-.quick-start-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1.25rem 1rem;
-  background: var(--bg-secondary, #f9fafb);
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.quick-start-card:hover {
-  border-color: var(--primary, #3b82f6);
-  background: var(--bg-primary-light, #eff6ff);
-  transform: translateY(-2px);
-}
-
-.quick-start-icon {
-  font-size: 1.75rem;
-}
-
-.quick-start-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text, #111827);
-}
-
-/* Dashboard Summary Cards (GmbH, Property Portfolio) */
+/* --- Summary Cards --- */
 .dashboard-summary-card {
-  background: var(--card-bg, #fff);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+  animation: dashCardReveal 600ms cubic-bezier(.22,1,.36,1) both;
 }
 
 .dashboard-summary-title {
   margin: 0 0 1rem 0;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: -.01em;
 }
 
 .dashboard-summary-header {
@@ -161,41 +144,183 @@
 }
 
 .dashboard-summary-link {
-  font-size: 0.9rem;
-  color: var(--primary, #3b82f6);
+  font-size: .86rem;
+  font-weight: 600;
+  color: var(--color-primary);
   text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
 .dashboard-summary-link:hover {
-  text-decoration: underline;
+  color: var(--color-primary-dark);
 }
 
 .dashboard-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
 
 .dashboard-summary-label {
-  font-size: 0.85rem;
-  color: var(--text-secondary, #6b7280);
-  margin-bottom: 0.25rem;
+  font-size: .8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .dashboard-summary-value {
-  font-size: 1.25rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -.02em;
+}
+
+.dashboard-summary-value.text-danger { color: var(--color-danger); }
+.dashboard-summary-value.text-success { color: var(--color-success); }
+.dashboard-summary-value.text-warning { color: var(--color-warning); }
+
+/* --- Rental Income Warning --- */
+.rental-income-warning {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  background: rgba(254, 243, 199, 0.6);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 14px;
+}
+
+.rental-income-warning .warning-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.rental-income-warning .warning-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rental-income-warning .warning-body strong {
+  display: block;
+  font-size: .9rem;
+  color: var(--color-text);
+}
+
+.rental-income-warning .warning-body p {
+  margin: 3px 0 0;
+  font-size: .83rem;
+  color: #92400e;
+}
+
+.rental-income-warning .warning-action {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  background: var(--color-text);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: .83rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rental-income-warning .warning-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
+}
+
+/* --- Quick Start Guide --- */
+.dashboard-quick-start {
+  background: var(--color-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  margin-bottom: 20px;
+  text-align: center;
+  backdrop-filter: blur(14px);
+  animation: dashCardReveal 600ms cubic-bezier(.22,1,.36,1) both;
+}
+
+.dashboard-quick-start h3 {
+  margin: 0 0 1rem 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.quick-start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.quick-start-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  padding: 1.25rem 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.quick-start-card:hover {
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-start-icon { font-size: 1.75rem; }
+
+.quick-start-label {
+  font-size: .875rem;
   font-weight: 600;
   color: var(--color-text);
 }
 
-.dashboard-summary-value.text-danger {
-  color: var(--danger, #ef4444);
+/* --- Section Spacing --- */
+.dashboard-page .savings-suggestions,
+.dashboard-page .tax-calendar,
+.dashboard-page .trend-charts,
+.dashboard-page .ai-tax-advisor,
+.dashboard-page .what-if-simulator,
+.dashboard-page .flat-rate-comparison {
+  animation: dashCardReveal 600ms cubic-bezier(.22,1,.36,1) both;
 }
 
-.dashboard-summary-value.text-success {
-  color: var(--success, #10b981);
+/* --- Animations --- */
+@keyframes dashboardHeroReveal {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
-.dashboard-summary-value.text-warning {
-  color: var(--warning, #f59e0b);
+@keyframes dashCardReveal {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
+
+@keyframes dashBorderGlow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  .dashboard-header h1 { font-size: 1.35rem; }
+  .dashboard-header { padding: 20px 18px; border-radius: var(--radius-lg); }
+  .dashboard-header-top { flex-direction: column; gap: .75rem; }
+  .year-selector { align-self: flex-start; }
+  .dashboard-summary-card { padding: 18px 16px; border-radius: 16px; }
+  .dashboard-quick-start { padding: 20px 16px; border-radius: 16px; }
+  .rental-income-warning { flex-direction: column; text-align: center; gap: 10px; }
+}
+
+

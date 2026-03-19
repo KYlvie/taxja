@@ -11,6 +11,25 @@ export enum DocumentType {
   LOHNZETTEL = 'lohnzettel',
   EINKOMMENSTEUERBESCHEID = 'einkommensteuerbescheid',
   E1_FORM = 'e1_form',
+  L1_FORM = 'l1_form',
+  L1K_BEILAGE = 'l1k_beilage',
+  L1AB_BEILAGE = 'l1ab_beilage',
+  E1A_BEILAGE = 'e1a_beilage',
+  E1B_BEILAGE = 'e1b_beilage',
+  E1KV_BEILAGE = 'e1kv_beilage',
+  U1_FORM = 'u1_form',
+  U30_FORM = 'u30_form',
+  JAHRESABSCHLUSS = 'jahresabschluss',
+  SPENDENBESTAETIGUNG = 'spendenbestaetigung',
+  VERSICHERUNGSBESTAETIGUNG = 'versicherungsbestaetigung',
+  KINDERBETREUUNGSKOSTEN = 'kinderbetreuungskosten',
+  FORTBILDUNGSKOSTEN = 'fortbildungskosten',
+  PENDLERPAUSCHALE = 'pendlerpauschale',
+  KIRCHENBEITRAG = 'kirchenbeitrag',
+  GRUNDBUCHAUSZUG = 'grundbuchauszug',
+  BETRIEBSKOSTENABRECHNUNG = 'betriebskostenabrechnung',
+  GEWERBESCHEIN = 'gewerbeschein',
+  KONTOAUSZUG = 'kontoauszug',
   OTHER = 'other',
   UNKNOWN = 'unknown',
 }
@@ -44,6 +63,15 @@ export interface ExtractedData {
   purchase_date?: string;
   buyer_name?: string;
   seller_name?: string;
+  purchase_contract_kind?: 'property' | 'asset' | string;
+  asset_name?: string;
+  asset_type?: string;
+  first_registration_date?: string;
+  vehicle_identification_number?: string;
+  license_plate?: string;
+  mileage_km?: number;
+  is_used_asset?: boolean;
+  previous_owners?: number;
   building_value?: number;
   land_value?: number;
   grunderwerbsteuer?: number;
@@ -78,10 +106,18 @@ export interface Document {
   transaction_id?: number;
   created_at: string;
   updated_at: string;
+  uploaded_at?: string;
+  processed_at?: string;
+  message?: string;
+  deduplicated?: boolean;
+  duplicate_of_document_id?: number | null;
 }
 
 export interface UploadProgress {
   file: File;
+  source_files?: File[];
+  upload_mode?: 'single' | 'image_group';
+  page_count?: number;
   progress: number;
   status: 'pending' | 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;

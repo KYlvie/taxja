@@ -1,4 +1,4 @@
-// Property types and interfaces for rental property asset management
+// Property types and interfaces for rental property and depreciable asset management
 
 export enum PropertyType {
   RENTAL = 'rental',
@@ -6,15 +6,58 @@ export enum PropertyType {
   MIXED_USE = 'mixed_use',
 }
 
+export enum AssetCategory {
+  REAL_ESTATE = 'real_estate',
+  VEHICLE = 'vehicle',
+  ELECTRIC_VEHICLE = 'electric_vehicle',
+  COMPUTER = 'computer',
+  PHONE = 'phone',
+  OFFICE_FURNITURE = 'office_furniture',
+  MACHINERY = 'machinery',
+  TOOLS = 'tools',
+  SOFTWARE = 'software',
+  OTHER_EQUIPMENT = 'other_equipment',
+}
+
+/** Default useful life in years per Austrian tax law */
+export const ASSET_USEFUL_LIFE: Record<string, number> = {
+  vehicle: 8,
+  electric_vehicle: 8,
+  computer: 3,
+  phone: 3,
+  office_furniture: 10,
+  machinery: 10,
+  tools: 5,
+  software: 3,
+  other_equipment: 5,
+  real_estate: 50,
+};
+
 export enum PropertyStatus {
   ACTIVE = 'active',
   SOLD = 'sold',
   ARCHIVED = 'archived',
 }
 
+export type ComparisonBasis = 'net' | 'gross';
+export type DepreciationMethod = 'linear' | 'degressive';
+export type UsefulLifeSource = 'law' | 'tax_practice' | 'system_default' | 'user_override';
+export type VatRecoverableStatus = 'likely_yes' | 'likely_no' | 'partial' | 'unclear';
+export type IfbRateSource = 'statutory_window' | 'fallback_default' | 'not_applicable';
+export type AssetRecognitionDecision =
+  | 'expense_only'
+  | 'gwg_suggestion'
+  | 'create_asset_suggestion'
+  | 'create_asset_auto'
+  | 'duplicate_warning'
+  | 'manual_review';
+
 export interface Property {
   id: string; // UUID
   user_id: number;
+  asset_type?: string;
+  sub_category?: string;
+  name?: string;
   property_type: PropertyType;
   rental_percentage: number;
   address: string;
@@ -27,13 +70,39 @@ export interface Property {
   land_value?: number;
   grunderwerbsteuer?: number; // Property transfer tax
   notary_fees?: number;
-  registry_fees?: number; // Eintragungsgebühr
+  registry_fees?: number;
   construction_year?: number;
   depreciation_rate: number;
+  useful_life_years?: number;
+  acquisition_kind?: string;
+  put_into_use_date?: string;
+  is_used_asset?: boolean;
+  first_registration_date?: string;
+  prior_owner_usage_years?: number;
+  business_use_percentage?: number;
+  comparison_basis?: ComparisonBasis;
+  comparison_amount?: number;
+  gwg_eligible?: boolean;
+  gwg_elected?: boolean;
+  depreciation_method?: DepreciationMethod;
+  degressive_afa_rate?: number;
+  useful_life_source?: UsefulLifeSource;
+  income_tax_cost_cap?: number;
+  income_tax_depreciable_base?: number;
+  vat_recoverable_status?: VatRecoverableStatus;
+  ifb_candidate?: boolean;
+  ifb_rate?: number;
+  ifb_rate_source?: IfbRateSource;
+  recognition_decision?: AssetRecognitionDecision;
+  policy_confidence?: number;
+  supplier?: string;
+  accumulated_depreciation?: number;
   status: PropertyStatus;
   sale_date?: string; // ISO date string
   kaufvertrag_document_id?: number; // Purchase contract document
   mietvertrag_document_id?: number; // Rental contract document
+  annual_depreciation?: number;
+  remaining_value?: number;
   created_at: string;
   updated_at: string;
 }
@@ -60,6 +129,8 @@ export interface PropertyUpdate {
   street?: string;
   city?: string;
   postal_code?: string;
+  purchase_date?: string;
+  purchase_price?: number;
   building_value?: number;
   construction_year?: number;
   depreciation_rate?: number;
@@ -110,7 +181,21 @@ export interface PropertyFilters {
   include_archived?: boolean;
 }
 
+export interface RentalContract {
+  id: number;
+  description: string;
+  amount: number;
+  unit_percentage: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  frequency: string | null;
+  source_document_id: number | null;
+}
+
 export interface PropertyFormData {
+  asset_category: 'real_estate' | 'other';
+  // Real estate fields
   property_type: PropertyType;
   rental_percentage: number | string;
   street: string;
@@ -125,4 +210,11 @@ export interface PropertyFormData {
   notary_fees?: number | string;
   registry_fees?: number | string;
   monthly_rent?: number | string;
+  // Non-real-estate asset fields
+  asset_type?: string;
+  asset_name?: string;
+  sub_category?: string;
+  supplier?: string;
+  business_use_percentage?: number | string;
+  useful_life_years?: number | string;
 }

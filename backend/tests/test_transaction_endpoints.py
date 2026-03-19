@@ -4,15 +4,32 @@ from datetime import date, datetime
 from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from app.main import app
+from app.models.credit_balance import CreditBalance
+from app.models.credit_cost_config import CreditCostConfig
 from app.models.user import User, UserType
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.usage_record import UsageRecord
 from app.core.security import get_password_hash, create_access_token
 
 
 @pytest.fixture
 def test_user(db: Session) -> User:
     """Create a test user"""
+    existing_cost = (
+        db.query(CreditCostConfig)
+        .filter(CreditCostConfig.operation == "transaction_entry")
+        .first()
+    )
+    if existing_cost is None:
+        db.add(
+            CreditCostConfig(
+                operation="transaction_entry",
+                credit_cost=1,
+                description="Test transaction entry cost",
+                is_active=True,
+            )
+        )
+
     user = User(
         email="test@example.com",
         password_hash=get_password_hash("TestPassword123"),
@@ -22,6 +39,17 @@ def test_user(db: Session) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    db.add(
+        CreditBalance(
+            user_id=user.id,
+            plan_balance=100,
+            topup_balance=0,
+            overage_enabled=False,
+        )
+    )
+    db.commit()
+
     return user
 
 
@@ -31,15 +59,9 @@ def auth_headers(test_user: User) -> dict:
     access_token = create_access_token(data={"sub": test_user.email})
     return {"Authorization": f"Bearer {access_token}"}
 
-
-@pytest.fixture
-def client() -> TestClient:
-    """Create test client"""
-    return TestClient(app)
-
-
 def test_create_income_transaction(client: TestClient, auth_headers: dict, db: Session):
     """Test creating an income transaction"""
+    starting_usage_records = db.query(UsageRecord).count()
     transaction_data = {
         "type": "income",
         "amount": 3000.50,
@@ -63,6 +85,8 @@ def test_create_income_transaction(client: TestClient, auth_headers: dict, db: S
     assert data["description"] == "Monthly salary"
     assert "id" in data
     assert "created_at" in data
+    assert "X-Credits-Remaining" in response.headers
+    assert db.query(UsageRecord).count() == starting_usage_records
 
 
 def test_create_expense_transaction(client: TestClient, auth_headers: dict, db: Session):
@@ -109,8 +133,7 @@ def test_create_transaction_missing_category(client: TestClient, auth_headers: d
         headers=auth_headers
     )
     
-    assert response.status_code == 400
-    assert "income_category is required" in response.json()["detail"]
+    assert response.status_code == 422
 
 
 def test_create_transaction_invalid_amount(client: TestClient, auth_headers: dict):

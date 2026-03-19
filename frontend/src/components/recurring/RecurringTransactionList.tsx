@@ -1,26 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 import { RecurringTransaction } from '../../types/recurring';
 import { recurringService } from '../../services/recurringService';
 import { RecurringTransactionCard } from './RecurringTransactionCard';
-import { CreateRentalIncomeModal } from './CreateRentalIncomeModal';
-import { CreateLoanInterestModal } from './CreateLoanInterestModal';
+import { CreateRecurringModal } from './CreateRecurringModal';
 import { EditRecurringModal } from './EditRecurringModal';
+import { useRefreshStore } from '../../stores/refreshStore';
 import './RecurringTransactionList.css';
 
 export const RecurringTransactionList: React.FC = () => {
   const { t } = useTranslation();
+  const { confirm: showConfirm } = useConfirm();
+  const recurringVersion = useRefreshStore((s) => s.recurringVersion);
   const [transactions, setTransactions] = useState<RecurringTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all');
-  const [showRentalModal, setShowRentalModal] = useState(false);
-  const [showLoanModal, setShowLoanModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<RecurringTransaction | null>(null);
 
   const loadTransactions = async () => {
     try {
       setLoading(true);
-      const data = await recurringService.list();
+      const data = await recurringService.list(false);
       setTransactions(data.items || []);
     } catch (error) {
       console.error('Failed to load recurring transactions:', error);
@@ -32,10 +34,11 @@ export const RecurringTransactionList: React.FC = () => {
 
   useEffect(() => {
     loadTransactions();
-  }, []);
+  }, [recurringVersion]);
 
   const handlePause = async (id: number) => {
-    if (window.confirm(t('recurring.confirmPause'))) {
+    const ok = await showConfirm(t('recurring.confirmPause'), { variant: 'warning' });
+    if (ok) {
       try {
         await recurringService.pause(id);
         await loadTransactions();
@@ -55,7 +58,8 @@ export const RecurringTransactionList: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm(t('recurring.confirmDelete'))) {
+    const ok2 = await showConfirm(t('recurring.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });
+    if (ok2) {
       try {
         await recurringService.delete(id);
         await loadTransactions();
@@ -88,16 +92,10 @@ export const RecurringTransactionList: React.FC = () => {
         <h1>{t('recurring.title')}</h1>
         <div className="recurring-actions">
           <button
-            onClick={() => setShowRentalModal(true)}
+            onClick={() => setShowCreateModal(true)}
             className="btn-create-rental"
           >
-            💰 {t('recurring.create.rentalIncome')}
-          </button>
-          <button
-            onClick={() => setShowLoanModal(true)}
-            className="btn-create-loan"
-          >
-            🏦 {t('recurring.create.loanInterest')}
+            ➕ {t('recurring.create.title')}
           </button>
         </div>
       </div>
@@ -149,21 +147,11 @@ export const RecurringTransactionList: React.FC = () => {
         </div>
       )}
 
-      {showRentalModal && (
-        <CreateRentalIncomeModal
-          onClose={() => setShowRentalModal(false)}
+      {showCreateModal && (
+        <CreateRecurringModal
+          onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
-            setShowRentalModal(false);
-            loadTransactions();
-          }}
-        />
-      )}
-
-      {showLoanModal && (
-        <CreateLoanInterestModal
-          onClose={() => setShowLoanModal(false)}
-          onSuccess={() => {
-            setShowLoanModal(false);
+            setShowCreateModal(false);
             loadTransactions();
           }}
         />

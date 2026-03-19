@@ -9,14 +9,12 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 from enum import Enum
 
+from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.models.user import User, UserType
 from app.models.transaction import Transaction, TransactionType
 from app.services.tax_calculation_engine import TaxCalculationEngine
-from app.services.income_tax_calculator import IncomeTaxCalculator
-
-
 class FlatRateType(str, Enum):
     """Flat-rate tax types"""
 
@@ -35,6 +33,7 @@ class FlatRateTaxComparator:
     MAX_BASIC_EXEMPTION = Decimal("4950.00")  # Max €4,950
     FLAT_RATE_6_PERCENT = Decimal("0.06")
     FLAT_RATE_13_5_PERCENT = Decimal("0.135")
+    CENTS = Decimal("0.01")
 
     def __init__(self, db: Session):
         self.db = db
@@ -100,16 +99,14 @@ class FlatRateTaxComparator:
     ) -> Dict[str, Any]:
         """Check if user is eligible for flat-rate tax"""
         # Only self-employed can use flat-rate
-        if user.user_type not in [UserType.SELF_EMPLOYED, UserType.GSVG]:
+        if user.user_type not in [UserType.SELF_EMPLOYED, UserType.MIXED]:
             return {
                 "eligible": False,
                 "reason": "Flat-rate tax is only available for self-employed individuals",
             }
 
-        # Calculate profit
-        result = self.tax_engine.calculate_total_tax(user_id, tax_year)
-        profit = result.total_income - result.total_deductible_expenses
-        turnover = result.total_income
+        turnover, deductible_expenses = self._get_income_and_expenses(user_id, tax_year)
+        profit = turnover - deductible_expenses
 
         # Check turnover threshold for Basispauschalierung
         if turnover > self.TURNOVER_THRESHOLD:
@@ -131,18 +128,21 @@ class FlatRateTaxComparator:
         self, user_id: int, tax_year: int
     ) -> Dict[str, Any]:
         """Calculate tax under actual accounting (Einnahmen-Ausgaben-Rechnung)"""
-        result = self.tax_engine.calculate_total_tax(user_id, tax_year)
+        turnover, deductible_expenses = self._get_income_and_expenses(user_id, tax_year)
+        profit = max(turnover - deductible_expenses, Decimal("0.00"))
+        income_tax = self.income_tax_calc.calculate_progressive_tax(profit, tax_year)
+        total_tax = income_tax.total_tax
 
         return {
             "method": "Einnahmen-Ausgaben-Rechnung (Actual Accounting)",
-            "total_income": float(result.total_income),
-            "total_expenses": float(result.total_deductible_expenses),
-            "profit": float(result.total_income - result.total_deductible_expenses),
-            "income_tax": float(result.income_tax),
-            "vat": float(result.vat),
-            "svs": float(result.svs_contributions),
-            "total_tax": float(result.total_tax),
-            "net_income": float(result.net_income),
+            "total_income": float(turnover.quantize(self.CENTS)),
+            "total_expenses": float(deductible_expenses.quantize(self.CENTS)),
+            "profit": float(profit.quantize(self.CENTS)),
+            "income_tax": float(income_tax.total_tax.quantize(self.CENTS)),
+            "vat": 0.0,
+            "svs": 0.0,
+            "total_tax": float(total_tax.quantize(self.CENTS)),
+            "net_income": float((turnover - total_tax).quantize(self.CENTS)),
         }
 
     def _calculate_flat_rate(
@@ -150,8 +150,7 @@ class FlatRateTaxComparator:
     ) -> Dict[str, Any]:
         """Calculate tax under flat-rate system (Pauschalierung)"""
         # Get total turnover (income)
-        result = self.tax_engine.calculate_total_tax(user_id, tax_year)
-        turnover = result.total_income
+        turnover, _ = self._get_income_and_expenses(user_id, tax_year)
 
         # Determine flat rate
         if flat_rate_type == FlatRateType.BASIC_6:
@@ -171,18 +170,17 @@ class FlatRateTaxComparator:
         basic_exemption = min(
             profit * self.BASIC_EXEMPTION_RATE, self.MAX_BASIC_EXEMPTION
         )
-        taxable_profit = profit - basic_exemption
+        taxable_profit = max(profit - basic_exemption, Decimal("0.00"))
 
         # Calculate income tax on taxable profit
         tax_result = self.income_tax_calc.calculate_progressive_tax(
             taxable_profit, tax_year
         )
 
-        # SVS contributions (still based on actual income)
-        svs = result.svs_contributions
-
-        # VAT (same as actual accounting)
-        vat = result.vat
+        # Keep this comparator focused on income-tax comparison until VAT/SVS
+        # are modeled consistently for the current user/profile schema.
+        svs = Decimal("0.00")
+        vat = Decimal("0.00")
 
         total_tax = tax_result.total_tax + svs + vat
         net_income = turnover - total_tax
@@ -190,17 +188,38 @@ class FlatRateTaxComparator:
         return {
             "method": f"Pauschalierung ({rate_label} Flat-Rate)",
             "flat_rate_percentage": rate_label,
-            "total_income": float(turnover),
-            "deemed_expenses": float(deemed_expenses),
-            "profit": float(profit),
-            "basic_exemption": float(basic_exemption),
-            "taxable_profit": float(taxable_profit),
-            "income_tax": float(tax_result.total_tax),
+            "total_income": float(turnover.quantize(self.CENTS)),
+            "deemed_expenses": float(deemed_expenses.quantize(self.CENTS)),
+            "profit": float(profit.quantize(self.CENTS)),
+            "basic_exemption": float(basic_exemption.quantize(self.CENTS)),
+            "taxable_profit": float(taxable_profit.quantize(self.CENTS)),
+            "income_tax": float(tax_result.total_tax.quantize(self.CENTS)),
             "vat": float(vat),
             "svs": float(svs),
-            "total_tax": float(total_tax),
-            "net_income": float(net_income),
+            "total_tax": float(total_tax.quantize(self.CENTS)),
+            "net_income": float(net_income.quantize(self.CENTS)),
         }
+
+    def _get_income_and_expenses(
+        self, user_id: int, tax_year: int
+    ) -> tuple[Decimal, Decimal]:
+        """Aggregate annual turnover and deductible expenses from transactions."""
+        turnover = self.db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.INCOME,
+            extract("year", Transaction.transaction_date) == tax_year,
+        ).scalar()
+
+        deductible_expenses = self.db.query(
+            func.coalesce(func.sum(Transaction.amount), 0)
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.EXPENSE,
+            Transaction.is_deductible.is_(True),
+            extract("year", Transaction.transaction_date) == tax_year,
+        ).scalar()
+
+        return Decimal(str(turnover or 0)), Decimal(str(deductible_expenses or 0))
 
     def _determine_best_method(
         self,

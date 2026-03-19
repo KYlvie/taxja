@@ -5,47 +5,84 @@ import io
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from app.main import app
 from app.db.base import Base, get_db
 from app.core.security import get_password_hash
 from app.models.user import User
-from app.models.tax_configuration import TaxConfiguration
+from app.models.tax_configuration import TaxConfiguration, get_2026_tax_config
 from decimal import Decimal
 from datetime import datetime
 
-# Test database URL
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_integration.db"
+# Use a stable in-memory database so full-suite and targeted runs behave the same.
+SQLALCHEMY_DATABASE_URL = "sqlite://"
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@compiles(UUID, "sqlite")
+def compile_uuid_sqlite(type_, compiler, **kw):
+    return "VARCHAR(36)"
+
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_sqlite(type_, compiler, **kw):
+    return "JSON"
+
+
+@compiles(ARRAY, "sqlite")
+def compile_array_sqlite(type_, compiler, **kw):
+    return "JSON"
+
+
+def _create_sqlite_tables(engine, metadata):
+    """Create SQLite tables while stripping PG-only server defaults."""
+    excluded_tables = {
+        "historical_import_sessions",
+        "historical_import_uploads",
+        "import_conflicts",
+        "import_metrics",
+    }
+
+    tables_to_create = [
+        table for table in metadata.sorted_tables
+        if table.name not in excluded_tables
+    ]
+    patched = []
+    for table in tables_to_create:
+        for col in table.columns:
+            if col.server_default is not None:
+                default_text = (
+                    str(col.server_default.arg)
+                    if hasattr(col.server_default, "arg")
+                    else str(col.server_default)
+                )
+                if "gen_random_uuid" in default_text:
+                    patched.append((col, col.server_default))
+                    col.server_default = None
+    try:
+        metadata.create_all(bind=engine, tables=tables_to_create, checkfirst=True)
+    finally:
+        for col, server_default in patched:
+            col.server_default = server_default
 
 
 @pytest.fixture(scope="function")
 def db():
     """Create test database for each test"""
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.drop_all(bind=engine)
+    _create_sqlite_tables(engine, Base.metadata)
     db = TestingSessionLocal()
     
     # Seed tax configuration for 2026
-    tax_config = TaxConfiguration(
-        tax_year=2026,
-        exemption_amount=Decimal("13539.00"),
-        tax_brackets=[
-            {"lower": 0, "upper": 13539, "rate": 0.00},
-            {"lower": 13539, "upper": 21992, "rate": 0.20},
-            {"lower": 21992, "upper": 36458, "rate": 0.30},
-            {"lower": 36458, "upper": 70365, "rate": 0.40},
-            {"lower": 70365, "upper": 104859, "rate": 0.48},
-            {"lower": 104859, "upper": 1000000, "rate": 0.50},
-            {"lower": 1000000, "upper": float('inf'), "rate": 0.55}
-        ],
-        vat_standard_rate=Decimal("0.20"),
-        vat_residential_rate=Decimal("0.10"),
-        vat_small_business_threshold=Decimal("55000.00"),
-        vat_tolerance_threshold=Decimal("60500.00")
-    )
+    tax_config = TaxConfiguration(**get_2026_tax_config())
     db.add(tax_config)
     db.commit()
     
@@ -76,10 +113,11 @@ def test_user(db):
     """Create a test user without 2FA"""
     user = User(
         email="testuser@example.com",
-        full_name="Test User",
-        hashed_password=get_password_hash("TestPassword123!"),
+        name="Test User",
+        password_hash=get_password_hash("TestPassword123!"),
         user_type="employee",
-        two_factor_enabled=False
+        two_factor_enabled=False,
+        email_verified=True,
     )
     db.add(user)
     db.commit()
@@ -88,7 +126,7 @@ def test_user(db):
     return {
         "id": user.id,
         "email": user.email,
-        "full_name": user.full_name,
+        "full_name": user.name,
         "user_type": user.user_type,
         "password": "TestPassword123!"  # Plain password for testing
     }
@@ -102,12 +140,13 @@ def test_user_with_2fa(db):
     
     user = User(
         email="user2fa@example.com",
-        full_name="2FA User",
-        hashed_password=get_password_hash("TestPassword123!"),
+        name="2FA User",
+        password_hash=get_password_hash("TestPassword123!"),
         user_type="employee",
         two_factor_enabled=True,
         two_factor_secret=secret,
-        backup_codes=backup_codes
+        backup_codes=backup_codes,
+        email_verified=True,
     )
     db.add(user)
     db.commit()
@@ -116,7 +155,7 @@ def test_user_with_2fa(db):
     return {
         "id": user.id,
         "email": user.email,
-        "full_name": user.full_name,
+        "full_name": user.name,
         "user_type": user.user_type,
         "password": "TestPassword123!",
         "two_factor_secret": secret,
@@ -129,11 +168,11 @@ def authenticated_client(client, test_user):
     """Create an authenticated test client"""
     # Login to get access token
     login_data = {
-        "username": test_user["email"],
+        "email": test_user["email"],
         "password": test_user["password"]
     }
     
-    response = client.post("/api/v1/auth/login", data=login_data)
+    response = client.post("/api/v1/auth/login", json=login_data)
     assert response.status_code == 200
     
     access_token = response.json()["access_token"]
@@ -150,27 +189,13 @@ def authenticated_client(client, test_user):
 @pytest.fixture
 def authenticated_client_with_2fa(client, test_user_with_2fa):
     """Create an authenticated test client for user with 2FA"""
-    # Step 1: Initial login
+    # Current auth flow does not require a separate temp-token 2FA step.
     login_data = {
-        "username": test_user_with_2fa["email"],
+        "email": test_user_with_2fa["email"],
         "password": test_user_with_2fa["password"]
     }
     
-    response = client.post("/api/v1/auth/login", data=login_data)
-    assert response.status_code == 200
-    
-    temp_token = response.json()["temp_token"]
-    
-    # Step 2: Complete 2FA
-    totp = pyotp.TOTP(test_user_with_2fa["two_factor_secret"])
-    two_factor_code = totp.now()
-    
-    verify_data = {
-        "temp_token": temp_token,
-        "token": two_factor_code
-    }
-    
-    response = client.post("/api/v1/auth/2fa/login", json=verify_data)
+    response = client.post("/api/v1/auth/login", json=login_data)
     assert response.status_code == 200
     
     access_token = response.json()["access_token"]
@@ -208,10 +233,11 @@ def multiple_test_users(db):
     for email, name, user_type in user_data:
         user = User(
             email=email,
-            full_name=name,
-            hashed_password=get_password_hash("TestPassword123!"),
+            name=name,
+            password_hash=get_password_hash("TestPassword123!"),
             user_type=user_type,
-            two_factor_enabled=False
+            two_factor_enabled=False,
+            email_verified=True,
         )
         db.add(user)
         db.commit()
@@ -220,7 +246,7 @@ def multiple_test_users(db):
         users.append({
             "id": user.id,
             "email": user.email,
-            "full_name": user.full_name,
+            "full_name": user.name,
             "user_type": user.user_type,
             "password": "TestPassword123!"
         })

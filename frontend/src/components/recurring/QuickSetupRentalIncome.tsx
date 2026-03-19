@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { recurringService } from '../../services/recurringService';
 
@@ -23,6 +24,7 @@ export const QuickSetupRentalIncome: React.FC<QuickSetupRentalIncomeProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
+  const { alert: showAlert } = useConfirm();
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       day_of_month: 1,
@@ -43,7 +45,7 @@ export const QuickSetupRentalIncome: React.FC<QuickSetupRentalIncomeProps> = ({
       onSuccess();
     } catch (error) {
       console.error('Failed to setup rental income:', error);
-      alert(t('recurring.errors.createFailed'));
+      await showAlert(t('recurring.errors.createFailed'), { variant: 'danger' });
     } finally {
       setLoading(false);
     }

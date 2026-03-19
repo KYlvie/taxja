@@ -1,5 +1,6 @@
 """OCR processing tasks"""
 from celery import Task, group
+from celery.exceptions import Retry as CeleryRetry
 from typing import List, Dict, Any
 from datetime import datetime, date
 from decimal import Decimal
@@ -7,6 +8,7 @@ import logging
 
 from app.celery_app import celery_app
 from app.services.ocr_engine import OCREngine
+from app.services.credit_service import CreditService
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +30,566 @@ class OCRTask(Task):
     """Base OCR task with error handling"""
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
-        """Handle task failure"""
+        """Handle task failure — refund credits if applicable"""
         logger.error(f"OCR task {task_id} failed: {exc}")
         logger.error(f"Traceback: {einfo}")
+
+        # Refund credits for failed OCR processing
+        document_id = args[0] if args else kwargs.get("document_id")
+        if document_id is not None:
+            try:
+                from app.db.base import SessionLocal
+                from app.models.document import Document
+
+                db = SessionLocal()
+                try:
+                    document = db.query(Document).filter(Document.id == document_id).first()
+                    if document:
+                        credit_service = CreditService(db, redis_client=None)
+                        credit_service.refund_credits(
+                            user_id=document.user_id,
+                            operation="ocr_scan",
+                            reason="ocr_processing_failed",
+                            context_type="document",
+                            context_id=document_id,
+                            refund_key=f"refund:ocr:{document_id}",
+                        )
+                        db.commit()
+                        logger.info(f"Refunded OCR credits for failed document {document_id}")
+                except Exception as refund_err:
+                    db.rollback()
+                    logger.error(
+                        f"Failed to refund credits for document {document_id}: {refund_err}"
+                    )
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"Could not refund credits for document {document_id}: {e}")
+
+
+def _parse_ocr_date(value):
+    """Parse common OCR date formats into date objects."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+    return None
+
+
+def _to_decimal(value):
+    """Best-effort Decimal conversion for OCR values."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _resolve_result_confidence(document, result):
+    """
+    Resolve OCR/classification confidence across legacy OCRResult and PipelineResult.
+
+    Older callers pass an OCRResult with ``confidence_score`` while the newer
+    orchestrator path passes a PipelineResult with ``classification.confidence``.
+    Prefer the persisted document score, then gracefully fall back to whatever
+    the in-memory result object exposes.
+    """
+    document_confidence = _to_decimal(getattr(document, "confidence_score", None))
+    if document_confidence is not None:
+        return document_confidence
+
+    legacy_confidence = _to_decimal(getattr(result, "confidence_score", None))
+    if legacy_confidence is not None:
+        return legacy_confidence
+
+    classification = getattr(result, "classification", None)
+    classification_confidence = _to_decimal(
+        getattr(classification, "confidence", None) if classification else None
+    )
+    if classification_confidence is not None:
+        return classification_confidence
+
+    extracted_confidence = None
+    if isinstance(getattr(result, "extracted_data", None), dict):
+        extracted_confidence = _to_decimal(result.extracted_data.get("confidence"))
+    if extracted_confidence is not None:
+        return extracted_confidence
+
+    return Decimal("0")
+
+
+def _extract_invoice_number(ocr_data: dict) -> str | None:
+    for key in ("invoice_number", "invoice_no", "rechnung_nr", "receipt_number", "beleg_nr"):
+        value = ocr_data.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _serialize_asset_recognition_result(recognition_result) -> dict:
+    """Convert recognition result into JSON-safe dict for ocr_result."""
+    if recognition_result is None:
+        return {}
+    if hasattr(recognition_result, "model_dump"):
+        return _make_json_safe(recognition_result.model_dump(mode="json"))
+    return _make_json_safe(recognition_result)
+
+
+def _build_duplicate_document_candidates(db, document) -> list:
+    """Collect likely duplicate OCR documents for the same user."""
+    from app.models.document import Document
+    from app.schemas.asset_recognition import DuplicateCandidate
+
+    candidates = []
+    existing_documents = (
+        db.query(Document)
+        .filter(
+            Document.user_id == document.user_id,
+            Document.id != document.id,
+            Document.ocr_result.isnot(None),
+        )
+        .order_by(Document.uploaded_at.desc())
+        .limit(25)
+        .all()
+    )
+
+    for existing in existing_documents:
+        ocr_data = existing.ocr_result if isinstance(existing.ocr_result, dict) else {}
+        candidates.append(
+            DuplicateCandidate(
+                matched_document_id=existing.id,
+                file_hash=existing.file_hash,
+                vendor_name=ocr_data.get("merchant") or ocr_data.get("supplier"),
+                invoice_number=_extract_invoice_number(ocr_data),
+                amount_gross=_to_decimal(ocr_data.get("amount") or ocr_data.get("purchase_price")),
+                amount_net=_to_decimal(ocr_data.get("net_amount")),
+                document_date=_parse_ocr_date(
+                    ocr_data.get("purchase_date") or ocr_data.get("date")
+                ),
+            )
+        )
+    return candidates
+
+
+def _build_duplicate_asset_candidates(db, document) -> list:
+    """Collect existing non-real-estate assets for duplicate detection."""
+    from sqlalchemy import text
+
+    from app.schemas.asset_recognition import DuplicateCandidate
+
+    candidates = []
+    query = text(
+        """
+        select
+            id,
+            supplier,
+            purchase_price,
+            purchase_date,
+            asset_type,
+            name
+        from properties
+        where user_id = :user_id
+          and asset_type != 'real_estate'
+        order by created_at desc
+        limit 25
+        """
+    )
+    asset_rows = db.execute(query, {"user_id": document.user_id}).mappings().all()
+
+    for asset in asset_rows:
+        candidates.append(
+            DuplicateCandidate(
+                matched_asset_id=str(asset["id"]),
+                vendor_name=asset["supplier"],
+                amount_gross=_to_decimal(asset["purchase_price"]),
+                document_date=asset["purchase_date"],
+                invoice_number=None,
+                file_hash=None,
+            )
+        )
+    return candidates
+
+
+def _get_user_and_tax_profile_context(db, user_id: int):
+    """Load the user together with persisted tax-profile source-of-truth."""
+    from app.models.user import User
+    from app.services.tax_profile_service import TaxProfileService
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None, None
+    return user, TaxProfileService().get_asset_tax_profile_context(user)
+
+
+def _profile_inputs_used_payload(profile_context) -> dict[str, str | None]:
+    return {
+        "vat_status": getattr(profile_context.vat_status, "value", profile_context.vat_status),
+        "gewinnermittlungsart": getattr(
+            profile_context.gewinnermittlungsart,
+            "value",
+            profile_context.gewinnermittlungsart,
+        ),
+    }
+
+
+def _build_asset_decision_audit(recognition_input, recognition_result, profile_context, policy_outcome):
+    """Build the minimum asset decision audit payload."""
+    from app.schemas.asset_recognition import (
+        AssetDecisionAudit,
+        AssetProfileInputsUsed,
+    )
+
+    return AssetDecisionAudit(
+        recognition_decision=recognition_result.decision,
+        policy_outcome=policy_outcome,
+        policy_confidence=recognition_result.policy_confidence,
+        reason_codes=recognition_result.reason_codes,
+        review_reasons=recognition_result.review_reasons,
+        missing_fields=list(
+            dict.fromkeys(
+                list(recognition_result.missing_fields)
+                + list(profile_context.completeness.missing_fields)
+            )
+        ),
+        duplicate_status=recognition_result.duplicate.duplicate_status,
+        source_document_id=recognition_input.source_document_id,
+        profile_inputs_used=AssetProfileInputsUsed(
+            vat_status=profile_context.vat_status,
+            gewinnermittlungsart=profile_context.gewinnermittlungsart,
+        ),
+    )
+
+
+def _build_asset_outcome_payload(
+    *,
+    status,
+    decision,
+    source,
+    asset_id=None,
+    quality_gate_decision=None,
+):
+    """Build the persisted asset outcome contract for OCR result state."""
+    from app.schemas.asset_recognition import AssetOutcome
+
+    return AssetOutcome(
+        status=status,
+        decision=decision,
+        asset_id=asset_id,
+        source=source,
+        quality_gate_decision=quality_gate_decision,
+    ).model_dump(mode="json")
+
+
+def _clear_asset_import_suggestion(ocr_result: dict) -> None:
+    suggestion = ocr_result.get("import_suggestion")
+    if isinstance(suggestion, dict) and suggestion.get("type") == "create_asset":
+        ocr_result.pop("import_suggestion", None)
+
+
+def _build_asset_normalized_document(
+    db,
+    document,
+    result=None,
+    *,
+    extracted_overrides: dict | None = None,
+):
+    """Build the single normalized asset-path input from persisted OCR + profile state."""
+    from app.services.document_normalization_service import DocumentNormalizationService
+
+    ocr_data = document.ocr_result or {}
+    if not isinstance(ocr_data, dict):
+        return None, None
+
+    merged_ocr_data = ocr_data.copy()
+    for key, value in (extracted_overrides or {}).items():
+        if value is not None:
+            merged_ocr_data[key] = value
+
+    amount = _to_decimal(merged_ocr_data.get("purchase_price") or merged_ocr_data.get("amount"))
+    if amount is None or amount <= 0:
+        return None, None
+
+    user, profile_context = _get_user_and_tax_profile_context(db, document.user_id)
+    if not user or not profile_context:
+        return None, None
+
+    line_items = merged_ocr_data.get("line_items") or merged_ocr_data.get("items") or []
+    default_business_use = _to_decimal(merged_ocr_data.get("business_use_percentage")) or Decimal("100")
+    purchase_or_invoice_date = _parse_ocr_date(
+        merged_ocr_data.get("purchase_date") or merged_ocr_data.get("date")
+    )
+    payment_date = _parse_ocr_date(merged_ocr_data.get("payment_date")) or purchase_or_invoice_date
+
+    prior_owner_usage_years = _to_decimal(merged_ocr_data.get("prior_owner_usage_years"))
+    first_registration_date = _parse_ocr_date(merged_ocr_data.get("first_registration_date"))
+    if (
+        prior_owner_usage_years is None
+        and first_registration_date is not None
+        and purchase_or_invoice_date is not None
+        and purchase_or_invoice_date > first_registration_date
+    ):
+        prior_owner_usage_years = Decimal(str(
+            round((purchase_or_invoice_date - first_registration_date).days / 365.25, 2)
+        ))
+
+    raw_text = (
+        document.raw_text
+        or getattr(result, "raw_text", None)
+        or " ".join(
+            str(merged_ocr_data.get(key) or "")
+            for key in (
+                "asset_name",
+                "asset_type",
+                "vehicle_identification_number",
+                "license_plate",
+                "seller_name",
+                "buyer_name",
+            )
+        ).strip()
+    )
+
+    normalized_document = DocumentNormalizationService().normalize_asset_document(
+        document=document,
+        extracted_data=merged_ocr_data,
+        raw_text=raw_text,
+        ocr_confidence=(
+            _resolve_result_confidence(document, result)
+            if result is not None
+            else _to_decimal(getattr(document, "confidence_score", None))
+        ),
+        tax_profile_completeness=profile_context.completeness,
+        profile_inputs_used=_profile_inputs_used_payload(profile_context),
+        vat_status=profile_context.resolved_vat_status,
+        gewinnermittlungsart=profile_context.resolved_gewinnermittlungsart,
+        business_type=getattr(user, "business_type", None) or "unknown",
+        industry_code=getattr(user, "business_industry", None),
+        extracted_amount=amount,
+        extracted_net_amount=_to_decimal(merged_ocr_data.get("net_amount")),
+        extracted_vat_amount=_to_decimal(merged_ocr_data.get("vat_amount")),
+        extracted_date=purchase_or_invoice_date,
+        extracted_vendor=merged_ocr_data.get("supplier") or merged_ocr_data.get("merchant"),
+        extracted_invoice_number=_extract_invoice_number(merged_ocr_data),
+        extracted_line_items=line_items if isinstance(line_items, list) else [],
+        default_business_use_percentage=default_business_use,
+        duplicate_document_candidates=_build_duplicate_document_candidates(db, document),
+        duplicate_asset_candidates=_build_duplicate_asset_candidates(db, document),
+        put_into_use_date=_parse_ocr_date(merged_ocr_data.get("put_into_use_date")),
+        payment_date=payment_date,
+        business_use_percentage=default_business_use,
+        is_used_asset=merged_ocr_data.get("is_used_asset"),
+        first_registration_date=first_registration_date,
+        prior_owner_usage_years=prior_owner_usage_years,
+        gwg_elected=merged_ocr_data.get("gwg_elected"),
+        depreciation_method=merged_ocr_data.get("depreciation_method"),
+        degressive_afa_rate=_to_decimal(merged_ocr_data.get("degressive_afa_rate")),
+    )
+    return normalized_document, profile_context
+
+
+def _build_asset_recognition_input(db, document, result):
+    """Build recognition input from the normalized asset-path document contract."""
+    from app.schemas.asset_recognition import AssetRecognitionInput
+
+    normalized_document, _ = _build_asset_normalized_document(db, document, result)
+    if normalized_document is None:
+        return None
+    return AssetRecognitionInput.from_normalized_document(normalized_document)
+
+
+def _build_asset_suggestion(db, document, result) -> dict:
+    """
+    Build asset recognition metadata and, when appropriate, a create_asset suggestion.
+
+    This is additive: the document can still auto-create transactions while also
+    surfacing an asset suggestion for later confirmation.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.schemas.asset_recognition import (
+        AssetOutcomeSource,
+        AssetOutcomeStatus,
+        AssetRecognitionDecision,
+    )
+    from app.services.asset_recognition_service import AssetRecognitionService
+    from app.services.document_quality_gate_service import (
+        DocumentQualityGateService,
+        QualityGateDecision,
+    )
+
+    from app.schemas.asset_recognition import AssetRecognitionInput
+
+    normalized_document, profile_context = _build_asset_normalized_document(db, document, result)
+    if normalized_document is None or not profile_context:
+        return {
+            "asset_recognition": None,
+            "asset_outcome": None,
+            "import_suggestion": None,
+            "auto_create_payload": None,
+        }
+
+    recognition_input = AssetRecognitionInput.from_normalized_document(normalized_document)
+
+    recognition_result = AssetRecognitionService().recognize(recognition_input)
+    quality_gate = DocumentQualityGateService().evaluate_asset_decision(
+        normalized_document,
+        recognition_result,
+    )
+    decision_audit = _build_asset_decision_audit(
+        recognition_input,
+        recognition_result,
+        profile_context,
+        quality_gate.policy_outcome,
+    )
+    recognition_result = recognition_result.model_copy(
+        update={"decision_audit": decision_audit}
+    )
+    recognition_payload = _serialize_asset_recognition_result(recognition_result)
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr["asset_recognition"] = recognition_payload
+    updated_ocr["asset_quality_gate"] = _make_json_safe(quality_gate.model_dump(mode="json"))
+
+    suggestion = None
+    auto_create_payload = None
+    asset_outcome = updated_ocr.get("asset_outcome")
+    existing_import_suggestion = updated_ocr.get("import_suggestion")
+    if recognition_result.decision in (
+        AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
+        AssetRecognitionDecision.CREATE_ASSET_AUTO,
+    ):
+        asset_candidate = recognition_result.asset_candidate
+        tax_flags = recognition_result.tax_flags
+        purchase_date = (
+            recognition_input.extracted_date.isoformat()
+            if recognition_input.extracted_date
+            else None
+        )
+        put_into_use_date = (
+            recognition_input.put_into_use_date.isoformat()
+            if recognition_input.put_into_use_date
+            else None
+        )
+        suggestion = {
+            "type": "create_asset",
+            "status": "pending",
+            "data": {
+                "asset_type": asset_candidate.asset_type or "other_equipment",
+                "sub_category": asset_candidate.asset_subtype,
+                "name": asset_candidate.asset_name or "Unknown Asset",
+                "purchase_date": purchase_date,
+                "put_into_use_date": put_into_use_date,
+                "purchase_price": float(tax_flags.comparison_amount),
+                "supplier": asset_candidate.vendor_name,
+                "is_used_asset": asset_candidate.is_used_asset,
+                "business_use_percentage": float(
+                    recognition_input.business_use_percentage
+                    or recognition_input.default_business_use_percentage
+                    or Decimal("100")
+                ),
+                "useful_life_years": (
+                    int(tax_flags.suggested_useful_life_years)
+                    if tax_flags.suggested_useful_life_years is not None
+                    else None
+                ),
+                "comparison_basis": tax_flags.comparison_basis,
+                "depreciable": tax_flags.depreciable,
+                "gwg_eligible": tax_flags.gwg_eligible,
+                "gwg_default_selected": tax_flags.gwg_default_selected,
+                "gwg_election_required": tax_flags.gwg_election_required,
+                "decision": (
+                    recognition_result.decision
+                    if quality_gate.decision == QualityGateDecision.AUTO_CREATE
+                    else AssetRecognitionDecision.CREATE_ASSET_SUGGESTION
+                ),
+                "recognition_decision": recognition_result.decision,
+                "quality_gate_decision": quality_gate.decision,
+                "quality_gate_blocks_side_effects": quality_gate.blocks_side_effects,
+                "vat_recoverable_status": tax_flags.vat_recoverable_status,
+                "ifb_candidate": tax_flags.ifb_candidate,
+                "ifb_rate": (
+                    float(tax_flags.ifb_rate) if tax_flags.ifb_rate is not None else None
+                ),
+                "ifb_rate_source": tax_flags.ifb_rate_source,
+                "ifb_exclusion_codes": tax_flags.ifb_exclusion_codes,
+                "allowed_depreciation_methods": tax_flags.allowed_depreciation_methods,
+                "suggested_depreciation_method": tax_flags.suggested_depreciation_method,
+                "degressive_max_rate": (
+                    float(tax_flags.degressive_max_rate)
+                    if tax_flags.degressive_max_rate is not None
+                    else None
+                ),
+                "reason_codes": recognition_result.reason_codes,
+                "review_reasons": recognition_result.review_reasons,
+                "missing_fields": quality_gate.missing_fields,
+                "requires_user_confirmation": quality_gate.requires_user_confirmation,
+                "policy_confidence": float(recognition_result.policy_confidence),
+                "policy_rule_ids": recognition_result.policy_rule_ids,
+                "policy_anchor_date": (
+                    tax_flags.policy_anchor_date.isoformat()
+                    if tax_flags.policy_anchor_date
+                    else None
+                ),
+                "gwg_threshold": (
+                    float(tax_flags.gwg_threshold) if tax_flags.gwg_threshold is not None else None
+                ),
+                "useful_life_source": tax_flags.useful_life_source,
+                "income_tax_cost_cap": (
+                    float(tax_flags.income_tax_cost_cap)
+                    if tax_flags.income_tax_cost_cap is not None
+                    else None
+                ),
+                "income_tax_depreciable_base": (
+                    float(tax_flags.income_tax_depreciable_base)
+                    if tax_flags.income_tax_depreciable_base is not None
+                    else None
+                ),
+                "vat_recoverable_reason_codes": tax_flags.vat_recoverable_reason_codes,
+                "duplicate": recognition_result.duplicate.model_dump(mode="json"),
+                "tax_profile_completeness": profile_context.completeness.model_dump(mode="json"),
+                "decision_audit": decision_audit.model_dump(mode="json"),
+            },
+            "confidence": float(recognition_result.policy_confidence),
+        }
+        if quality_gate.decision == QualityGateDecision.AUTO_CREATE:
+            _clear_asset_import_suggestion(updated_ocr)
+            updated_ocr.pop("asset_outcome", None)
+            auto_create_payload = suggestion
+            suggestion = None
+        elif (
+            not existing_import_suggestion
+            or existing_import_suggestion.get("type") == "create_asset"
+        ):
+            updated_ocr["import_suggestion"] = suggestion
+            asset_outcome = _build_asset_outcome_payload(
+                status=AssetOutcomeStatus.PENDING_CONFIRMATION,
+                decision=AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
+                source=AssetOutcomeSource.QUALITY_GATE,
+                quality_gate_decision=quality_gate.decision,
+            )
+            updated_ocr["asset_outcome"] = asset_outcome
+        else:
+            suggestion = None
+
+    document.ocr_result = _make_json_safe(updated_ocr)
+    flag_modified(document, "ocr_result")
+    db.flush()
+
+    return {
+        "asset_recognition": recognition_payload,
+        "asset_outcome": asset_outcome,
+        "import_suggestion": suggestion,
+        "auto_create_payload": auto_create_payload,
+    }
 
 
 def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
@@ -89,6 +648,23 @@ def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
                 db.commit()
         except Exception:
             pass
+        # Refund credits for failed OCR processing
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                credit_svc = CreditService(db, redis_client=None)
+                credit_svc.refund_credits(
+                    user_id=document.user_id,
+                    operation="ocr_scan",
+                    reason="ocr_processing_failed",
+                    context_type="document",
+                    context_id=document_id,
+                    refund_key=f"refund:ocr:{document_id}",
+                )
+                db.commit()
+                logger.info(f"Refunded OCR credits for failed document {document_id}")
+        except Exception as refund_err:
+            logger.warning(f"Credit refund failed for document {document_id}: {refund_err}")
         raise
     finally:
         if own_session:
@@ -133,6 +709,15 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
             OCRDocumentType.RENTAL_CONTRACT: DBDocumentType.RENTAL_CONTRACT,
             OCRDocumentType.E1_FORM: DBDocumentType.E1_FORM,
             OCRDocumentType.EINKOMMENSTEUERBESCHEID: DBDocumentType.EINKOMMENSTEUERBESCHEID,
+            OCRDocumentType.L1_FORM: DBDocumentType.L1_FORM,
+            OCRDocumentType.L1K_BEILAGE: DBDocumentType.L1K_BEILAGE,
+            OCRDocumentType.L1AB_BEILAGE: DBDocumentType.L1AB_BEILAGE,
+            OCRDocumentType.E1A_BEILAGE: DBDocumentType.E1A_BEILAGE,
+            OCRDocumentType.E1B_BEILAGE: DBDocumentType.E1B_BEILAGE,
+            OCRDocumentType.E1KV_BEILAGE: DBDocumentType.E1KV_BEILAGE,
+            OCRDocumentType.U1_FORM: DBDocumentType.U1_FORM,
+            OCRDocumentType.U30_FORM: DBDocumentType.U30_FORM,
+            OCRDocumentType.JAHRESABSCHLUSS: DBDocumentType.JAHRESABSCHLUSS,
             OCRDocumentType.UNKNOWN: DBDocumentType.OTHER,
         }
 
@@ -149,8 +734,10 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                 )
                 document.document_type = DBDocumentType.OTHER
 
-        # Filename-based classification boost
+        # Filename-based classification boost (also handles umlaut variants)
         fname_lower = (document.file_name or "").lower()
+        from app.services.document_classifier import _normalize_umlauts
+        fname_norm = _normalize_umlauts(fname_lower)
         current_dt = document.document_type
         if current_dt in (DBDocumentType.OTHER,):
             if "kaufvertrag" in fname_lower:
@@ -167,7 +754,11 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                 document.document_type = DBDocumentType.SVS_NOTICE
             elif "kontoauszug" in fname_lower:
                 document.document_type = DBDocumentType.BANK_STATEMENT
-            elif "einkommensteuererkl" in fname_lower or "e1" in fname_lower:
+            elif any(kw in fname_lower or kw in fname_norm for kw in [
+                "einkommensteuererkl", "einkommensteuererklaerung",
+                "e1", "e1b", "e 1b", "l1k", "l 1k",
+                "steuererklaerung", "arbeitnehmerveranlagung",
+            ]):
                 document.document_type = DBDocumentType.E1_FORM
             elif "bescheid" in fname_lower:
                 document.document_type = DBDocumentType.EINKOMMENSTEUERBESCHEID
@@ -185,7 +776,10 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
 
         if document.document_type == DBDocumentType.PURCHASE_CONTRACT:
             try:
-                result_dict.update(_build_kaufvertrag_suggestion(db, document, result))
+                kaufvertrag_result = _build_kaufvertrag_suggestion(db, document, result)
+                result_dict.update(kaufvertrag_result)
+                if not kaufvertrag_result.get("import_suggestion"):
+                    result_dict.update(_build_asset_suggestion(db, document, result))
             except Exception as e:
                 logger.warning(f"Build Kaufvertrag suggestion failed for document {document_id}: {e}")
                 result_dict["import_suggestion"] = None
@@ -196,6 +790,38 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning(f"Build Mietvertrag suggestion failed for document {document_id}: {e}")
                 result_dict["import_suggestion"] = None
+
+        elif document.document_type in (DBDocumentType.E1_FORM, DBDocumentType.EINKOMMENSTEUERBESCHEID):
+            # Summary / tax declaration documents — extract historical data, no transactions
+            try:
+                raw_text = document.raw_text or ""
+                historical_data = {}
+                if document.document_type == DBDocumentType.E1_FORM and raw_text:
+                    from app.services.e1_form_extractor import E1FormExtractor
+                    ext = E1FormExtractor()
+                    e1 = ext.extract(raw_text)
+                    historical_data = ext.to_dict(e1)
+                    historical_data["_source"] = "e1_form"
+                elif document.document_type == DBDocumentType.EINKOMMENSTEUERBESCHEID and raw_text:
+                    from app.services.bescheid_extractor import BescheidExtractor
+                    ext = BescheidExtractor()
+                    bd = ext.extract(raw_text)
+                    historical_data = ext.to_dict(bd)
+                    historical_data["_source"] = "bescheid"
+
+                if historical_data:
+                    import json as _json
+                    updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+                    updated_ocr["historical_tax_data"] = historical_data
+                    document.ocr_result = updated_ocr
+                    db.commit()
+                    logger.info(
+                        f"Stored historical tax data for {document.document_type.value} "
+                        f"document {document_id} (year={historical_data.get('tax_year')})"
+                    )
+                    result_dict["historical_tax_data"] = historical_data
+            except Exception as hist_err:
+                logger.warning(f"Historical extraction failed for doc {document_id}: {hist_err}")
 
         else:
             try:
@@ -209,23 +835,45 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                         f"Created {len(suggestions)} transaction suggestion(s) for document {document_id}"
                     )
                     created_ids = []
+                    duplicate_ids = []
                     for suggestion in suggestions:
                         try:
-                            transaction = ocr_transaction_service.create_transaction_from_suggestion(
+                            creation_result = ocr_transaction_service.create_transaction_from_suggestion_with_result(
                                 suggestion, document.user_id
                             )
-                            created_ids.append(transaction.id)
-                            logger.info(
-                                f"Auto-created transaction {transaction.id} from document "
-                                f"{document_id} (deductible={suggestion.get('is_deductible')})"
-                            )
+                            if creation_result.created:
+                                created_ids.append(creation_result.transaction.id)
+                                logger.info(
+                                    f"Auto-created transaction {creation_result.transaction.id} from document "
+                                    f"{document_id} (deductible={suggestion.get('is_deductible')})"
+                                )
+                            else:
+                                duplicate_ids.append(creation_result.transaction.id)
+                                logger.info(
+                                    f"Skipped duplicate OCR transaction for document {document_id}; "
+                                    f"existing transaction {creation_result.transaction.id} reused"
+                                )
                         except Exception as e:
                             logger.warning(f"Could not auto-create transaction from document {document_id}: {e}")
                     result_dict["transaction_suggestion"] = suggestions[0]
                     result_dict["transaction_created"] = len(created_ids) > 0
                     result_dict["transaction_id"] = created_ids[0] if created_ids else None
+                    if duplicate_ids:
+                        result_dict["duplicate_transaction_ids"] = duplicate_ids
                     if len(created_ids) > 1:
                         result_dict["split_transaction_ids"] = created_ids
+
+                    # Detect recurring expense patterns (insurance, subscriptions, etc.)
+                    try:
+                        recurring_suggestion = _detect_recurring_expense(
+                            db, document, suggestions[0]
+                        )
+                        if recurring_suggestion:
+                            result_dict["import_suggestion"] = recurring_suggestion
+                    except Exception as rec_err:
+                        logger.warning(
+                            f"Recurring expense detection failed for doc {document_id}: {rec_err}"
+                        )
 
                     # Persist tax_analysis into document.ocr_result so frontend can display it
                     try:
@@ -257,6 +905,21 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                         logger.info(f"Stored tax_analysis for document {document_id}")
                     except Exception as tax_err:
                         logger.warning(f"Could not store tax_analysis for doc {document_id}: {tax_err}")
+
+                try:
+                    asset_suggestion = _build_asset_suggestion(db, document, result)
+                    result_dict["asset_recognition"] = asset_suggestion.get("asset_recognition")
+                    if asset_suggestion.get("asset_outcome"):
+                        result_dict["asset_outcome"] = asset_suggestion["asset_outcome"]
+                    if (
+                        asset_suggestion.get("import_suggestion")
+                        and not result_dict.get("import_suggestion")
+                    ):
+                        result_dict["import_suggestion"] = asset_suggestion["import_suggestion"]
+                except Exception as asset_err:
+                    logger.warning(
+                        f"Asset suggestion detection failed for doc {document_id}: {asset_err}"
+                    )
             except Exception as e:
                 logger.warning(f"Could not create transaction suggestion: {e}")
 
@@ -275,6 +938,23 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                 logger.info(f"Marked failed document {document_id} as processed")
         except Exception as mark_err:
             logger.warning(f"Could not mark document {document_id} as processed: {mark_err}")
+        # Refund credits for failed OCR processing
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                credit_svc = CreditService(db, redis_client=None)
+                credit_svc.refund_credits(
+                    user_id=document.user_id,
+                    operation="ocr_scan",
+                    reason="ocr_processing_failed",
+                    context_type="document",
+                    context_id=document_id,
+                    refund_key=f"refund:ocr:{document_id}",
+                )
+                db.commit()
+                logger.info(f"Refunded OCR credits for failed document {document_id}")
+        except Exception as refund_err:
+            logger.warning(f"Credit refund failed for document {document_id}: {refund_err}")
         raise
     finally:
         if own_session:
@@ -289,6 +969,26 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
     """
     ocr_data = document.ocr_result or {}
     if not isinstance(ocr_data, dict):
+        return {"import_suggestion": None}
+
+    from app.services.purchase_contract_intelligence import (
+        PurchaseContractKind,
+        detect_purchase_contract_kind,
+    )
+
+    contract_kind = detect_purchase_contract_kind(
+        document.raw_text or getattr(result, "raw_text", None) or "",
+        extracted_data=ocr_data,
+    )
+    if contract_kind != PurchaseContractKind.PROPERTY:
+        logger.info(
+            f"Kaufvertrag doc {document.id}: detected asset-oriented contract, "
+            "skipping property suggestion"
+        )
+        updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+        updated_ocr["purchase_contract_kind"] = contract_kind.value
+        document.ocr_result = updated_ocr
+        db.commit()
         return {"import_suggestion": None}
 
     purchase_price = ocr_data.get("purchase_price")
@@ -310,8 +1010,8 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
     city = str(ocr_data.get("city") or "Unbekannt")
     postal_code = str(ocr_data.get("postal_code") or "0000")
 
-    # purchase_date: try OCR, fallback to document upload date
-    pd_raw = ocr_data.get("purchase_date")
+    # purchase_date: try OCR field, then 'date' field, fallback to upload date
+    pd_raw = ocr_data.get("purchase_date") or ocr_data.get("date")
     if pd_raw:
         if isinstance(pd_raw, str):
             purchase_date = None
@@ -322,11 +1022,11 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
                 except ValueError:
                     continue
             if not purchase_date:
-                purchase_date = document.uploaded_at.date().isoformat()
+                purchase_date = None  # Don't silently use upload date
         else:
             purchase_date = pd_raw.isoformat() if hasattr(pd_raw, "isoformat") else str(pd_raw)
     else:
-        purchase_date = document.uploaded_at.date().isoformat()
+        purchase_date = None  # Will be shown as missing in suggestion card
 
     building_value = (
         float(ocr_data["building_value"])
@@ -335,8 +1035,62 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
     )
     land_value = float(purchase_price_dec) - building_value
 
+    # Check for upload context with property_id (from PropertyDetailPage navigation)
+    upload_context = ocr_data.get("_upload_context", {}) or {}
+    context_property_id = upload_context.get("property_id")
+
+    # If upload context has property_id, associate Kaufvertrag to existing property
+    existing_property_id = None
+    existing_property_address = None
+    address_mismatch_warning = False
+
+    if context_property_id:
+        try:
+            from app.models.property import Property as PropertyModel, PropertyStatus
+            context_prop = (
+                db.query(PropertyModel)
+                .filter(
+                    PropertyModel.id == context_property_id,
+                    PropertyModel.user_id == document.user_id,
+                    PropertyModel.status == PropertyStatus.ACTIVE,
+                )
+                .first()
+            )
+            if context_prop:
+                existing_property_id = str(context_prop.id)
+                existing_property_address = context_prop.address
+                # Check if OCR address matches the target property address
+                if address and existing_property_address:
+                    ocr_addr_norm = address.strip().lower()
+                    prop_addr_norm = existing_property_address.strip().lower()
+                    if (
+                        ocr_addr_norm
+                        and prop_addr_norm
+                        and ocr_addr_norm not in prop_addr_norm
+                        and prop_addr_norm not in ocr_addr_norm
+                    ):
+                        address_mismatch_warning = True
+                        logger.warning(
+                            f"Kaufvertrag doc {document.id}: OCR address '{address}' "
+                            f"does not match target property address "
+                            f"'{existing_property_address}'"
+                        )
+            else:
+                logger.warning(
+                    f"Kaufvertrag doc {document.id}: context property_id "
+                    f"{context_property_id} not found or not active"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Context property lookup failed for Kaufvertrag doc {document.id}: {e}"
+            )
+
+    suggestion_type = (
+        "associate_property" if existing_property_id else "create_property"
+    )
+
     suggestion = {
-        "type": "create_property",
+        "type": suggestion_type,
         "status": "pending",
         "data": {
             "address": address,
@@ -351,6 +1105,9 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
             "grunderwerbsteuer": float(ocr_data["grunderwerbsteuer"]) if ocr_data.get("grunderwerbsteuer") else None,
             "notary_fees": float(ocr_data["notary_fees"]) if ocr_data.get("notary_fees") else None,
             "registry_fees": float(ocr_data["registry_fees"]) if ocr_data.get("registry_fees") else None,
+            "existing_property_id": existing_property_id,
+            "existing_property_address": existing_property_address,
+            "address_mismatch_warning": address_mismatch_warning,
         },
     }
 
@@ -361,6 +1118,7 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
 
     # Save suggestion into document's ocr_result
     updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+    updated_ocr["purchase_contract_kind"] = PurchaseContractKind.PROPERTY.value
     updated_ocr["import_suggestion"] = suggestion
     document.ocr_result = updated_ocr
     db.commit()
@@ -426,10 +1184,163 @@ def create_property_from_suggestion(db, document, suggestion_data: dict) -> dict
         Decimal(str(data["registry_fees"])) if data.get("registry_fees") else None
     )
 
+    # Check if there are existing rental contracts for this address
+    # If no rental contracts → owner_occupied; otherwise → rental/mixed_use
+    from app.models.recurring_transaction import (
+        RecurringTransaction,
+        RecurringTransactionType,
+    )
+    from app.models.property import Property as PropertyModel, PropertyStatus as PS
+
+    # ── Check for existing placeholder property (auto-created from rental contract) ──
+    # If a property exists at the same address with purchase_price<=0.01 (sentinel),
+    # update it instead of creating a duplicate.
+    # Uses fuzzy matching because OCR may produce slight spelling differences
+    # (e.g. "Trenneberg" vs "Thenneberg").
+    import re as _re
+    from difflib import SequenceMatcher as _SM
+
+    def _house_num(s: str) -> str:
+        m = _re.search(r"(\d+\s*[a-zA-Z]?(?:/\d+)?)\s*$", s.strip())
+        return m.group(1).strip() if m else ""
+
+    existing_placeholder = None
+    if street and street != "Unbekannt":
+        candidates = (
+            db.query(PropertyModel)
+            .filter(
+                PropertyModel.user_id == user_id,
+                PropertyModel.status == PS.ACTIVE,
+                PropertyModel.purchase_price <= Decimal("0.01"),
+            )
+            .all()
+        )
+        street_lower = street.lower().strip()
+        addr_lower = address.lower().strip() if address else ""
+        new_hnum = _house_num(street)
+        best_score = 0.0
+        best_candidate = None
+
+        for c in candidates:
+            c_street = (c.street or "").lower().strip()
+            c_addr = (c.address or "").lower().strip()
+            if not c_street:
+                continue
+
+            # 1) Exact / substring match (original logic)
+            if c_street == street_lower or c_street in addr_lower or street_lower in c_addr:
+                best_candidate = c
+                best_score = 1.0
+                break
+
+            c_hnum = _house_num(c_street)
+
+            # 2) Same postal_code + same house number → very strong signal
+            if (
+                postal_code and postal_code != "0000"
+                and c.postal_code == postal_code
+                and new_hnum and c_hnum and new_hnum == c_hnum
+            ):
+                if best_score < 0.95:
+                    best_score = 0.95
+                    best_candidate = c
+
+            # 3) Same house number + fuzzy street name (OCR typos like Trenneberg/Thenneberg)
+            if new_hnum and c_hnum and new_hnum == c_hnum:
+                sim = _SM(None, c_street, street_lower).ratio()
+                if sim >= 0.70 and sim > best_score:
+                    best_score = sim
+                    best_candidate = c
+
+        if best_candidate:
+            existing_placeholder = best_candidate
+            logger.info(
+                "Found placeholder property %s (street='%s') matching Kaufvertrag "
+                "address '%s' (score=%.2f) — will update instead of creating new",
+                best_candidate.id, best_candidate.street, street, best_score,
+            )
+
+    if existing_placeholder:
+        # Update the placeholder with real Kaufvertrag data
+        prop = existing_placeholder
+        prop.street = street
+        prop.city = city
+        prop.postal_code = postal_code
+        prop.address = f"{street}, {postal_code} {city}"
+        prop.purchase_date = purchase_date
+        prop.purchase_price = purchase_price
+        if building_value is not None:
+            prop.building_value = building_value
+        else:
+            prop.building_value = purchase_price * Decimal("0.80")
+        prop.land_value = prop.purchase_price - prop.building_value
+        if construction_year:
+            prop.construction_year = construction_year
+        if grunderwerbsteuer:
+            prop.grunderwerbsteuer = grunderwerbsteuer
+        if notary_fees:
+            prop.notary_fees = notary_fees
+        if registry_fees:
+            prop.registry_fees = registry_fees
+        # Recalculate depreciation rate based on construction year
+        if construction_year and int(construction_year) >= 1915:
+            prop.depreciation_rate = Decimal("0.015")
+        else:
+            prop.depreciation_rate = Decimal("0.02")
+        prop.kaufvertrag_document_id = int(document.id)
+        db.commit()
+        db.refresh(prop)
+
+        logger.info(
+            f"Updated placeholder property {prop.id} with Kaufvertrag data from doc {document.id}"
+        )
+
+        # Recalculate rental percentage (rental contracts may already be linked)
+        try:
+            property_service = PropertyService(db)
+            property_service.recalculate_rental_percentage(prop.id, user_id)
+        except Exception as e:
+            logger.warning(f"Failed to recalculate rental percentage after update: {e}")
+
+        # Mark suggestion as confirmed
+        import json as _json
+        ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+        if ocr_result.get("import_suggestion"):
+            ocr_result["import_suggestion"]["status"] = "confirmed"
+            ocr_result["import_suggestion"]["property_id"] = str(prop.id)
+            document.ocr_result = ocr_result
+            db.commit()
+
+        return {
+            "property_created": True,
+            "property_updated_placeholder": True,
+            "property_id": str(prop.id),
+            "address": prop.address,
+            "purchase_price": float(prop.purchase_price),
+        }
+
+    # ── No placeholder found — create new property ──
+
+    # Look for existing properties at similar address that have rental contracts
+    existing_rentals = (
+        db.query(RecurringTransaction)
+        .join(PropertyModel, RecurringTransaction.property_id == PropertyModel.id)
+        .filter(
+            PropertyModel.user_id == user_id,
+            RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+            RecurringTransaction.is_active == True,
+        )
+        .count()
+    )
+
+    # Default to owner_occupied — will be recalculated when rental contract is linked
+    initial_type = PropertyType.OWNER_OCCUPIED
+    initial_pct = Decimal("0.00")
+
     # Build PropertyCreate schema for validation
     property_data = PropertyCreate(
-        property_type=PropertyType.RENTAL,
-        rental_percentage=Decimal("100.00"),
+        property_type=initial_type,
+        rental_percentage=initial_pct,
         street=street,
         city=city,
         postal_code=postal_code,
@@ -494,6 +1405,10 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
     monthly_rent = Decimal(str(monthly_rent))
     address = ocr_data.get("property_address", "")
 
+    # Check for upload context with property_id (from PropertyDetailPage navigation)
+    upload_context = ocr_data.get("_upload_context", {}) or {}
+    context_property_id = upload_context.get("property_id")
+
     # Parse start_date
     sd_raw = ocr_data.get("start_date")
     if sd_raw:
@@ -524,10 +1439,47 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
                 except ValueError:
                     continue
 
-    # Try to match property by address
+    # Try to match property — prefer upload_context.property_id over address matching
     matched_property_id = None
     matched_property_address = None
-    if address:
+    address_mismatch_warning = False
+
+    if context_property_id:
+        # Direct property association from upload context (PropertyDetailPage navigation)
+        try:
+            from app.models.property import Property as PropertyModel, PropertyStatus
+            context_prop = (
+                db.query(PropertyModel)
+                .filter(
+                    PropertyModel.id == context_property_id,
+                    PropertyModel.user_id == document.user_id,
+                    PropertyModel.status == PropertyStatus.ACTIVE,
+                )
+                .first()
+            )
+            if context_prop:
+                matched_property_id = str(context_prop.id)
+                matched_property_address = context_prop.address
+                # Check if OCR address matches the target property address
+                if address and matched_property_address:
+                    ocr_addr_norm = address.strip().lower()
+                    prop_addr_norm = matched_property_address.strip().lower()
+                    if ocr_addr_norm and prop_addr_norm and ocr_addr_norm not in prop_addr_norm and prop_addr_norm not in ocr_addr_norm:
+                        address_mismatch_warning = True
+                        logger.warning(
+                            f"Mietvertrag doc {document.id}: OCR address '{address}' "
+                            f"does not match target property address '{matched_property_address}'"
+                        )
+            else:
+                logger.warning(
+                    f"Mietvertrag doc {document.id}: context property_id {context_property_id} "
+                    f"not found or not active, falling back to address matching"
+                )
+        except Exception as e:
+            logger.warning(f"Context property lookup failed for Mietvertrag doc {document.id}: {e}")
+
+    # Fallback to address matching if no context property_id or lookup failed
+    if not matched_property_id and address:
         try:
             matcher = AddressMatcher(db)
             matches = matcher.match_address(address, document.user_id)
@@ -555,6 +1507,14 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
         except Exception as e:
             logger.warning(f"Address matching failed for Mietvertrag doc {document.id}: {e}")
 
+    # Detect partial address match (e.g. "Thenneberg 51/3" vs property "Thenneberg 51")
+    is_partial_match = False
+    if matched_property_id and matched_property_address and address:
+        r_norm = address.strip().lower()
+        p_norm = matched_property_address.strip().lower().split(",")[0]
+        if p_norm and r_norm.startswith(p_norm) and r_norm != p_norm:
+            is_partial_match = True
+
     suggestion = {
         "type": "create_recurring_income",
         "status": "pending",
@@ -567,6 +1527,9 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
             "landlord_name": ocr_data.get("landlord_name"),
             "matched_property_id": matched_property_id,
             "matched_property_address": matched_property_address,
+            "no_property_match": matched_property_id is None,
+            "is_partial_match": is_partial_match,
+            "address_mismatch_warning": address_mismatch_warning,
         },
     }
 
@@ -583,6 +1546,1303 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
 
     return {"import_suggestion": suggestion}
 
+def _build_kreditvertrag_suggestion(db, document, result) -> dict:
+    """
+    Build a loan creation suggestion from Kreditvertrag OCR data.
+    Does NOT create any records — only stores suggestion data for user confirmation.
+    Returns dict with suggestion keys to merge into ocr_result.
+    """
+    from decimal import Decimal
+    from datetime import datetime as dt
+    from app.models.property_loan import PropertyLoan
+
+    # Check if a PropertyLoan already exists for this document (avoid duplicate suggestions)
+    existing_loan = (
+        db.query(PropertyLoan)
+        .filter(PropertyLoan.loan_contract_document_id == document.id)
+        .first()
+    )
+    if existing_loan:
+        logger.info(
+            f"Kreditvertrag doc {document.id}: PropertyLoan {existing_loan.id} already exists, "
+            f"returning existing suggestion as confirmed"
+        )
+        suggestion = {
+            "type": "create_loan",
+            "status": "confirmed",
+            "data": {
+                "loan_amount": float(existing_loan.loan_amount) if existing_loan.loan_amount else None,
+                "interest_rate": float(existing_loan.interest_rate) if existing_loan.interest_rate else None,
+                "monthly_payment": float(existing_loan.monthly_payment) if existing_loan.monthly_payment else None,
+                "lender_name": existing_loan.lender_name,
+                "start_date": existing_loan.start_date.isoformat() if existing_loan.start_date else None,
+                "end_date": existing_loan.end_date.isoformat() if existing_loan.end_date else None,
+                "matched_property_id": str(existing_loan.property_id) if existing_loan.property_id else None,
+            },
+            "loan_id": existing_loan.id,
+        }
+        # Update document's ocr_result with the confirmed suggestion
+        updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+        updated_ocr["import_suggestion"] = suggestion
+        document.ocr_result = updated_ocr
+        db.commit()
+        return {"import_suggestion": suggestion}
+
+    ocr_data = document.ocr_result or {}
+    if not isinstance(ocr_data, dict):
+        return {"import_suggestion": None}
+
+    loan_amount = ocr_data.get("loan_amount")
+    interest_rate = ocr_data.get("interest_rate")
+    monthly_payment = ocr_data.get("monthly_payment")
+    lender_name = ocr_data.get("lender_name")
+
+    # Track missing critical fields
+    missing_fields = []
+    if not loan_amount:
+        missing_fields.append("loan_amount")
+    if not interest_rate:
+        missing_fields.append("interest_rate")
+
+    # Parse start_date
+    sd_raw = ocr_data.get("start_date")
+    start_date = None
+    if sd_raw:
+        if isinstance(sd_raw, str):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    start_date = dt.strptime(sd_raw, fmt).date()
+                    break
+                except ValueError:
+                    continue
+        else:
+            start_date = sd_raw
+    if not start_date:
+        start_date = document.uploaded_at.date()
+
+    # Parse end_date
+    ed_raw = ocr_data.get("end_date")
+    end_date = None
+    if ed_raw:
+        if isinstance(ed_raw, str):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    end_date = dt.strptime(ed_raw, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+    # Check for upload context with property_id
+    upload_context = ocr_data.get("_upload_context", {}) or {}
+    context_property_id = upload_context.get("property_id")
+
+    # Resolve property association if property_id provided
+    matched_property_id = None
+    if context_property_id:
+        try:
+            from app.models.property import Property as PropertyModel, PropertyStatus
+
+            context_prop = (
+                db.query(PropertyModel)
+                .filter(
+                    PropertyModel.id == context_property_id,
+                    PropertyModel.user_id == document.user_id,
+                    PropertyModel.status == PropertyStatus.ACTIVE,
+                )
+                .first()
+            )
+            if context_prop:
+                matched_property_id = str(context_prop.id)
+            else:
+                logger.warning(
+                    f"Kreditvertrag doc {document.id}: context property_id "
+                    f"{context_property_id} not found or not active"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Context property lookup failed for Kreditvertrag doc {document.id}: {e}"
+            )
+
+    # Determine status based on missing fields
+    status = "needs_input" if missing_fields else "pending"
+
+    suggestion_data = {
+        "loan_amount": float(Decimal(str(loan_amount))) if loan_amount else None,
+        "interest_rate": float(Decimal(str(interest_rate))) if interest_rate else None,
+        "monthly_payment": float(Decimal(str(monthly_payment))) if monthly_payment else None,
+        "lender_name": lender_name,
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "matched_property_id": matched_property_id,
+    }
+
+    if missing_fields:
+        suggestion_data["missing_fields"] = missing_fields
+
+    # Use different suggestion type based on whether property is matched
+    if matched_property_id:
+        suggestion_type = "create_loan"
+    else:
+        suggestion_type = "create_loan_repayment"
+
+    suggestion = {
+        "type": suggestion_type,
+        "status": status,
+        "data": suggestion_data,
+    }
+
+    logger.info(
+        f"Built loan suggestion for Kreditvertrag doc {document.id}: "
+        f"amount={loan_amount}, rate={interest_rate}, status={status}"
+    )
+
+    # Save suggestion into document's ocr_result
+    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+    updated_ocr["import_suggestion"] = suggestion
+    document.ocr_result = updated_ocr
+    db.commit()
+
+    return {"import_suggestion": suggestion}
+
+
+def _merge_asset_confirmation_overrides(suggestion_data: dict, confirmation_overrides: dict | None) -> dict:
+    """Merge allowed user confirmation overrides into suggestion data."""
+    merged = dict(suggestion_data or {})
+    if not confirmation_overrides:
+        return merged
+
+    allowed_fields = {
+        "put_into_use_date",
+        "business_use_percentage",
+        "is_used_asset",
+        "first_registration_date",
+        "prior_owner_usage_years",
+        "gwg_elected",
+        "depreciation_method",
+        "degressive_afa_rate",
+        "useful_life_years",
+    }
+
+    for key in allowed_fields:
+        if key in confirmation_overrides and confirmation_overrides[key] is not None:
+            merged[key] = confirmation_overrides[key]
+
+    return merged
+
+
+def _build_asset_confirmation_input(db, document, suggestion_data: dict):
+    """Rebuild recognition input solely from the normalized asset-path contract."""
+    from app.schemas.asset_recognition import AssetRecognitionInput
+
+    normalized_document, _ = _build_asset_normalized_document(
+        db,
+        document,
+        extracted_overrides=suggestion_data,
+    )
+    if normalized_document is None:
+        raise ValueError("Asset suggestion is missing a valid amount")
+    return AssetRecognitionInput.from_normalized_document(normalized_document)
+
+
+def _map_asset_transaction_category(asset_type: str | None, sub_category: str | None):
+    """Map asset types to expense categories for linked acquisition records."""
+    from app.models.transaction import ExpenseCategory
+
+    normalized_asset_type = (asset_type or "").lower()
+    normalized_sub_category = (sub_category or "").lower()
+
+    if normalized_asset_type == "vehicle" or normalized_sub_category in {
+        "pkw",
+        "electric_pkw",
+        "truck_van",
+        "fiscal_truck",
+        "motorcycle",
+        "special_vehicle",
+    }:
+        return ExpenseCategory.VEHICLE
+
+    if normalized_asset_type == "phone":
+        return ExpenseCategory.TELECOM
+
+    if normalized_asset_type == "software" or normalized_sub_category in {
+        "perpetual_license",
+    }:
+        return ExpenseCategory.SOFTWARE
+
+    return ExpenseCategory.EQUIPMENT
+
+
+def _build_asset_acquisition_description(asset, supplier: str | None) -> str:
+    """Build a stable description for the asset acquisition transaction."""
+    asset_name = (getattr(asset, "name", None) or "").strip()
+    supplier_name = (supplier or getattr(asset, "supplier", None) or "").strip()
+
+    if asset_name and supplier_name and supplier_name.lower() not in asset_name.lower():
+        return f"{asset_name} - {supplier_name}"[:500]
+    if asset_name:
+        return asset_name[:500]
+    if supplier_name:
+        return f"Asset acquisition - {supplier_name}"[:500]
+    return f"Asset acquisition - {asset.id}"[:500]
+
+
+def _build_asset_acquisition_reason(asset) -> str:
+    """Explain why acquisition is tracked separately from the tax deduction path."""
+    if getattr(asset, "gwg_elected", False):
+        return "GWG election recorded on the asset; tax deduction is handled via the asset schedule."
+    return "Capitalized asset acquisition; tax deduction is handled via depreciation (AfA), not as an immediate expense."
+
+
+def _ensure_asset_acquisition_transaction(
+    db,
+    document,
+    asset,
+    suggestion_data: dict,
+):
+    """
+    Ensure the confirmed asset has exactly one linked acquisition transaction.
+
+    The purchase transaction itself remains non-deductible because the tax
+    effect is handled by GWG/AfA logic on the asset lifecycle.
+    """
+    from app.models.transaction import Transaction, TransactionType
+
+    ocr_data = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+    supplier = (
+        suggestion_data.get("supplier")
+        or ocr_data.get("supplier")
+        or ocr_data.get("merchant")
+    )
+    category = _map_asset_transaction_category(
+        getattr(asset, "asset_type", None),
+        getattr(asset, "sub_category", None),
+    )
+    description = _build_asset_acquisition_description(asset, supplier)
+    deduction_reason = _build_asset_acquisition_reason(asset)
+    confidence = (
+        _to_decimal(suggestion_data.get("policy_confidence"))
+        or _to_decimal(getattr(document, "confidence_score", None))
+        or Decimal("0.95")
+    )
+    vat_amount = _to_decimal(ocr_data.get("vat_amount"))
+    net_amount = _to_decimal(ocr_data.get("net_amount"))
+    vat_rate = None
+    if vat_amount is not None and net_amount and net_amount > 0:
+        try:
+            vat_rate = (vat_amount / net_amount).quantize(Decimal("0.0001"))
+        except Exception:
+            vat_rate = None
+
+    existing_transaction = None
+    if getattr(document, "transaction_id", None):
+        existing_transaction = (
+            db.query(Transaction)
+            .filter(
+                Transaction.id == document.transaction_id,
+                Transaction.user_id == document.user_id,
+            )
+            .first()
+        )
+
+    if existing_transaction is None:
+        existing_transaction = (
+            db.query(Transaction)
+            .filter(
+                Transaction.document_id == document.id,
+                Transaction.user_id == document.user_id,
+                Transaction.type == TransactionType.EXPENSE,
+            )
+            .order_by(Transaction.created_at.asc())
+            .first()
+        )
+
+    if existing_transaction:
+        existing_transaction.property_id = asset.id
+        existing_transaction.type = TransactionType.EXPENSE
+        existing_transaction.income_category = None
+        existing_transaction.expense_category = category
+        existing_transaction.amount = asset.purchase_price
+        existing_transaction.transaction_date = asset.purchase_date
+        existing_transaction.description = description
+        existing_transaction.is_deductible = False
+        existing_transaction.deduction_reason = deduction_reason
+        existing_transaction.vat_amount = vat_amount
+        existing_transaction.vat_rate = vat_rate
+        existing_transaction.document_id = document.id
+        existing_transaction.is_system_generated = True
+        existing_transaction.import_source = "asset_import"
+        existing_transaction.classification_confidence = confidence
+        existing_transaction.classification_method = "rule"
+        existing_transaction.needs_review = False
+        for line_item in existing_transaction.line_items:
+            line_item.is_deductible = False
+            line_item.category = category.value
+        document.transaction_id = existing_transaction.id
+        return existing_transaction, False
+
+    transaction = Transaction(
+        user_id=document.user_id,
+        property_id=asset.id,
+        type=TransactionType.EXPENSE,
+        amount=asset.purchase_price,
+        transaction_date=asset.purchase_date,
+        description=description,
+        expense_category=category,
+        is_deductible=False,
+        deduction_reason=deduction_reason,
+        vat_amount=vat_amount,
+        vat_rate=vat_rate,
+        document_id=document.id,
+        classification_confidence=confidence,
+        classification_method="rule",
+        needs_review=False,
+        is_system_generated=True,
+        import_source="asset_import",
+    )
+    db.add(transaction)
+    db.flush()
+    document.transaction_id = transaction.id
+    return transaction, True
+
+
+def create_asset_from_suggestion(
+    db,
+    document,
+    suggestion_data: dict,
+    confirmation_overrides: dict | None = None,
+    *,
+    trigger_source: str = "user",
+) -> dict:
+    """
+    Create a non-real-estate asset from a confirmed OCR suggestion.
+
+    Also writes the initial policy snapshot and lifecycle events so the asset
+    tax engine has a stable audit trail from day one.
+    """
+    from datetime import date as date_type
+
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.models.asset_event import AssetEvent, AssetEventTriggerSource, AssetEventType
+    from app.models.asset_policy_snapshot import AssetPolicySnapshot
+    from app.schemas.asset_recognition import (
+        AssetCandidate,
+        AssetOutcomeSource,
+        AssetOutcomeStatus,
+        AssetRecognitionDecision,
+        AssetReviewReason,
+        DepreciationMethod,
+        UsefulLifeSource,
+    )
+    from app.schemas.property import AssetCreate
+    from app.services.asset_tax_policy_service import AssetTaxPolicyService
+    from app.services.property_service import PropertyService
+    from app.services.tax_profile_service import TaxProfileService
+
+    data = _merge_asset_confirmation_overrides(suggestion_data or {}, confirmation_overrides)
+    user, _ = _get_user_and_tax_profile_context(db, document.user_id)
+    if not user:
+        raise ValueError(f"User with id {document.user_id} not found")
+    TaxProfileService().require_complete_asset_profile(user)
+    recognition_input = _build_asset_confirmation_input(db, document, data)
+
+    candidate_subtype = data.get("sub_category")
+    asset_candidate = AssetCandidate(
+        asset_type=data.get("asset_type", "other_equipment"),
+        asset_subtype=candidate_subtype,
+        asset_name=data.get("name", "Unknown Asset"),
+        vendor_name=data.get("supplier"),
+        vehicle_category=(
+            candidate_subtype
+            if candidate_subtype in {"pkw", "electric_pkw", "truck_van", "fiscal_truck", "motorcycle", "special_vehicle"}
+            else None
+        ),
+        is_used_asset=recognition_input.is_used_asset,
+    )
+
+    policy_evaluation = AssetTaxPolicyService().evaluate(recognition_input, asset_candidate)
+    blocking_review_reasons = {
+        AssetReviewReason.NON_DEPRECIABLE_OR_UNCLEAR.value,
+        AssetReviewReason.THRESHOLD_BOUNDARY_AMBIGUOUS.value,
+        AssetReviewReason.USED_VEHICLE_HISTORY_MISSING.value,
+    }
+    missing_fields = list(policy_evaluation.missing_fields)
+    if missing_fields:
+        raise ValueError(
+            f"Missing required asset confirmation fields: {', '.join(missing_fields)}"
+        )
+    active_blockers = [reason for reason in policy_evaluation.review_reasons if reason in blocking_review_reasons]
+    if active_blockers:
+        raise ValueError(
+            f"Asset suggestion still requires review: {', '.join(active_blockers)}"
+        )
+
+    purchase_date = _parse_ocr_date(data.get("purchase_date")) or date_type.today()
+    put_into_use_date = recognition_input.put_into_use_date
+    policy_anchor_date = policy_evaluation.tax_flags.policy_anchor_date or put_into_use_date or purchase_date
+
+    if data.get("useful_life_years") is not None:
+        useful_life_years = int(data.get("useful_life_years"))
+        useful_life_source = UsefulLifeSource.USER_OVERRIDE
+    elif policy_evaluation.tax_flags.suggested_useful_life_years is not None:
+        useful_life_years = int(policy_evaluation.tax_flags.suggested_useful_life_years)
+        useful_life_source = policy_evaluation.tax_flags.useful_life_source
+    else:
+        useful_life_years = None
+        useful_life_source = policy_evaluation.tax_flags.useful_life_source
+
+    allowed_methods = {
+        getattr(method, "value", method) for method in policy_evaluation.tax_flags.allowed_depreciation_methods
+    }
+    selected_method = getattr(
+        data.get("depreciation_method") or policy_evaluation.tax_flags.suggested_depreciation_method,
+        "value",
+        data.get("depreciation_method") or policy_evaluation.tax_flags.suggested_depreciation_method or DepreciationMethod.LINEAR,
+    )
+    if selected_method not in allowed_methods:
+        raise ValueError(
+            f"Depreciation method '{selected_method}' is not allowed for this asset. "
+            f"Allowed: {sorted(allowed_methods)}"
+        )
+
+    degressive_rate = None
+    if selected_method == DepreciationMethod.DEGRESSIVE.value:
+        degressive_rate = (
+            _to_decimal(data.get("degressive_afa_rate"))
+            or policy_evaluation.tax_flags.degressive_max_rate
+        )
+        if degressive_rate is None:
+            raise ValueError("degressive_afa_rate is required when depreciation_method is 'degressive'")
+        max_rate = policy_evaluation.tax_flags.degressive_max_rate
+        if max_rate is not None and degressive_rate > max_rate:
+            raise ValueError(
+                f"degressive_afa_rate cannot exceed {max_rate} for this asset"
+            )
+
+    gwg_elected = (
+        bool(data.get("gwg_elected"))
+        if data.get("gwg_elected") is not None
+        else bool(policy_evaluation.tax_flags.gwg_default_selected)
+    )
+    if gwg_elected and not policy_evaluation.tax_flags.gwg_eligible:
+        raise ValueError("GWG can only be elected when the asset is GWG-eligible")
+
+    asset_data = AssetCreate(
+        asset_type=data.get("asset_type", "other_equipment"),
+        sub_category=data.get("sub_category"),
+        name=data.get("name", "Unknown Asset"),
+        purchase_date=purchase_date,
+        purchase_price=Decimal(str(data.get("purchase_price", 0))),
+        supplier=data.get("supplier"),
+        business_use_percentage=recognition_input.business_use_percentage or Decimal("100"),
+        useful_life_years=useful_life_years,
+        document_id=document.id,
+        acquisition_kind="used_asset" if recognition_input.is_used_asset else data.get("acquisition_kind", "purchase"),
+        put_into_use_date=put_into_use_date,
+        is_used_asset=bool(recognition_input.is_used_asset),
+        first_registration_date=recognition_input.first_registration_date,
+        prior_owner_usage_years=recognition_input.prior_owner_usage_years,
+        comparison_basis=policy_evaluation.tax_flags.comparison_basis,
+        comparison_amount=policy_evaluation.tax_flags.comparison_amount,
+        gwg_eligible=policy_evaluation.tax_flags.gwg_eligible,
+        gwg_elected=gwg_elected,
+        depreciation_method=selected_method,
+        degressive_afa_rate=degressive_rate,
+        useful_life_source=useful_life_source,
+        income_tax_cost_cap=policy_evaluation.tax_flags.income_tax_cost_cap,
+        income_tax_depreciable_base=policy_evaluation.tax_flags.income_tax_depreciable_base,
+        vat_recoverable_status=policy_evaluation.tax_flags.vat_recoverable_status,
+        ifb_candidate=policy_evaluation.tax_flags.ifb_candidate,
+        ifb_rate=policy_evaluation.tax_flags.ifb_rate,
+        ifb_rate_source=policy_evaluation.tax_flags.ifb_rate_source,
+        recognition_decision=(
+            AssetRecognitionDecision.GWG_SUGGESTION
+            if gwg_elected
+            else data.get("decision", AssetRecognitionDecision.CREATE_ASSET_SUGGESTION)
+        ),
+        policy_confidence=_to_decimal(data.get("policy_confidence")),
+    )
+
+    service = PropertyService(db)
+    asset = service.create_asset(document.user_id, asset_data)
+
+    snapshot = AssetPolicySnapshot(
+        user_id=document.user_id,
+        property_id=asset.id,
+        effective_anchor_date=policy_anchor_date,
+        snapshot_payload=_make_json_safe({
+            "decision": getattr(asset_data.recognition_decision, "value", asset_data.recognition_decision),
+            "comparison_basis": getattr(asset_data.comparison_basis, "value", asset_data.comparison_basis),
+            "comparison_amount": float(policy_evaluation.tax_flags.comparison_amount),
+            "vat_recoverable_status": getattr(asset_data.vat_recoverable_status, "value", asset_data.vat_recoverable_status),
+            "ifb_candidate": policy_evaluation.tax_flags.ifb_candidate,
+            "ifb_rate": float(policy_evaluation.tax_flags.ifb_rate) if policy_evaluation.tax_flags.ifb_rate is not None else None,
+            "ifb_rate_source": getattr(asset_data.ifb_rate_source, "value", asset_data.ifb_rate_source),
+            "ifb_exclusion_codes": [getattr(code, "value", code) for code in policy_evaluation.tax_flags.ifb_exclusion_codes],
+            "allowed_depreciation_methods": [getattr(method, "value", method) for method in policy_evaluation.tax_flags.allowed_depreciation_methods],
+            "selected_depreciation_method": selected_method,
+            "degressive_max_rate": (
+                float(policy_evaluation.tax_flags.degressive_max_rate)
+                if policy_evaluation.tax_flags.degressive_max_rate is not None
+                else None
+            ),
+            "degressive_afa_rate": float(degressive_rate) if degressive_rate is not None else None,
+            "gwg_threshold": float(policy_evaluation.tax_flags.gwg_threshold) if policy_evaluation.tax_flags.gwg_threshold is not None else None,
+            "gwg_eligible": policy_evaluation.tax_flags.gwg_eligible,
+            "gwg_elected": gwg_elected,
+            "useful_life_years": useful_life_years,
+            "useful_life_source": getattr(useful_life_source, "value", useful_life_source),
+            "income_tax_cost_cap": (
+                float(policy_evaluation.tax_flags.income_tax_cost_cap)
+                if policy_evaluation.tax_flags.income_tax_cost_cap is not None
+                else None
+            ),
+            "income_tax_depreciable_base": (
+                float(policy_evaluation.tax_flags.income_tax_depreciable_base)
+                if policy_evaluation.tax_flags.income_tax_depreciable_base is not None
+                else None
+            ),
+            "vat_recoverable_reason_codes": [
+                getattr(code, "value", code) for code in policy_evaluation.tax_flags.vat_recoverable_reason_codes
+            ],
+            "reason_codes": [getattr(code, "value", code) for code in policy_evaluation.reason_codes],
+            "review_reasons": [getattr(reason, "value", reason) for reason in policy_evaluation.review_reasons],
+            "missing_fields": policy_evaluation.missing_fields,
+            "policy_confidence": data.get("policy_confidence"),
+            "source_document_id": document.id,
+            "user_confirmation_overrides": confirmation_overrides or {},
+            "decision_audit": data.get("decision_audit"),
+        }),
+        rule_ids=list(dict.fromkeys((data.get("policy_rule_ids", []) or []) + (policy_evaluation.rule_ids or []))),
+    )
+    db.add(snapshot)
+
+    source = AssetEventTriggerSource.USER
+    if trigger_source == "system":
+        source = AssetEventTriggerSource.SYSTEM
+    elif trigger_source == "import":
+        source = AssetEventTriggerSource.IMPORT
+    elif trigger_source == "policy_recompute":
+        source = AssetEventTriggerSource.POLICY_RECOMPUTE
+
+    db.add(
+        AssetEvent(
+            user_id=document.user_id,
+            property_id=asset.id,
+            event_type=AssetEventType.ACQUIRED,
+            trigger_source=source,
+            event_date=purchase_date,
+            payload={
+                "source_document_id": document.id,
+                "purchase_price": float(asset_data.purchase_price),
+                "asset_type": asset_data.asset_type,
+                "sub_category": asset_data.sub_category,
+                "comparison_amount": float(policy_evaluation.tax_flags.comparison_amount),
+                "business_use_percentage": float(asset_data.business_use_percentage),
+            },
+        )
+    )
+    if put_into_use_date:
+        db.add(
+            AssetEvent(
+                user_id=document.user_id,
+                property_id=asset.id,
+                event_type=AssetEventType.PUT_INTO_USE,
+                trigger_source=source,
+                event_date=put_into_use_date,
+                payload={"put_into_use_date": put_into_use_date.isoformat()},
+            )
+        )
+
+    acquisition_transaction, transaction_created = _ensure_asset_acquisition_transaction(
+        db,
+        document,
+        asset,
+        data,
+    )
+
+    import json as _json
+
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    _clear_asset_import_suggestion(ocr_result)
+    outcome_decision = (
+        data.get("recognition_decision")
+        or data.get("decision")
+        or (
+            AssetRecognitionDecision.CREATE_ASSET_AUTO
+            if trigger_source == "system"
+            else AssetRecognitionDecision.CREATE_ASSET_SUGGESTION
+        )
+    )
+    ocr_result["asset_outcome"] = _build_asset_outcome_payload(
+        status=(
+            AssetOutcomeStatus.AUTO_CREATED
+            if trigger_source == "system"
+            else AssetOutcomeStatus.CONFIRMED
+        ),
+        decision=outcome_decision,
+        source=(
+            AssetOutcomeSource.QUALITY_GATE
+            if trigger_source == "system"
+            else AssetOutcomeSource.USER_CONFIRMATION
+        ),
+        asset_id=str(asset.id),
+        quality_gate_decision=data.get("quality_gate_decision"),
+    )
+    document.ocr_result = _make_json_safe(ocr_result)
+    flag_modified(document, "ocr_result")
+
+    db.commit()
+    service._invalidate_metrics_cache(asset.id)
+    service._invalidate_portfolio_cache(document.user_id)
+
+    return {
+        "asset_id": str(asset.id),
+        "asset_type": asset_data.asset_type,
+        "name": asset_data.name,
+        "purchase_price": float(asset_data.purchase_price),
+        "useful_life_years": asset.useful_life_years,
+        "depreciation_rate": float(asset.depreciation_rate),
+        "depreciation_method": asset.depreciation_method,
+        "gwg_elected": asset.gwg_elected,
+        "policy_snapshot_id": snapshot.id,
+        "transaction_id": acquisition_transaction.id,
+        "transaction_created": transaction_created,
+    }
+
+
+def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
+    """
+    Create PropertyLoan + RecurringTransaction(loan_interest) from a confirmed Kreditvertrag suggestion.
+    Called by the confirm-loan API endpoint after user approves.
+
+    Steps:
+    1. Create PropertyLoan record with loan_contract_document_id = document.id
+    2. Create RecurringTransaction (type=loan_interest), amount = monthly interest
+    3. Generate historical due transactions
+    4. Mark suggestion as confirmed
+
+    Args:
+        db: Database session
+        document: Document ORM instance
+        suggestion_data: The suggestion["data"] dict from ocr_result.import_suggestion
+
+    Returns:
+        Dict with created record IDs and summary info
+    """
+    from app.models.property_loan import PropertyLoan
+    from app.services.recurring_transaction_service import RecurringTransactionService
+    from decimal import Decimal
+    from datetime import datetime as dt, date as date_cls
+
+    data = suggestion_data
+
+    # --- Extract and validate required fields ---
+    loan_amount_raw = data.get("loan_amount")
+    interest_rate_raw = data.get("interest_rate")
+
+    if not loan_amount_raw or not interest_rate_raw:
+        raise ValueError(
+            "Missing required fields: loan_amount and interest_rate are required"
+        )
+
+    loan_amount = Decimal(str(loan_amount_raw))
+    # OCR stores interest_rate as percentage (e.g. 3.5 for 3.5%)
+    # PropertyLoan stores as decimal (e.g. 0.035)
+    interest_rate_pct = Decimal(str(interest_rate_raw))
+    interest_rate_decimal = interest_rate_pct / Decimal("100")
+
+    monthly_payment_raw = data.get("monthly_payment")
+    monthly_payment = Decimal(str(monthly_payment_raw)) if monthly_payment_raw else None
+
+    lender_name = data.get("lender_name", "Unknown Lender")
+
+    # Parse start_date
+    sd_raw = data.get("start_date")
+    start_date = None
+    if sd_raw and isinstance(sd_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                start_date = dt.strptime(sd_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+    if not start_date:
+        start_date = document.uploaded_at.date()
+
+    # Parse end_date
+    ed_raw = data.get("end_date")
+    end_date = None
+    if ed_raw and isinstance(ed_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                end_date = dt.strptime(ed_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    # Resolve property_id — delegate to standalone handler if no property
+    property_id = data.get("matched_property_id")
+    if not property_id:
+        return create_standalone_loan_repayment(db, document, data)
+
+    # Verify property exists and belongs to user
+    from app.models.property import Property as PropertyModel, PropertyStatus
+
+    prop = (
+        db.query(PropertyModel)
+        .filter(
+            PropertyModel.id == property_id,
+            PropertyModel.user_id == document.user_id,
+            PropertyModel.status == PropertyStatus.ACTIVE,
+        )
+        .first()
+    )
+    if not prop:
+        raise ValueError(f"Property {property_id} not found or not active")
+
+    # Calculate monthly interest if not provided
+    if not monthly_payment or monthly_payment <= 0:
+        monthly_payment = (loan_amount * interest_rate_decimal / Decimal("12")).quantize(
+            Decimal("0.01")
+        )
+
+    # Monthly interest amount for the recurring transaction
+    monthly_interest = (loan_amount * interest_rate_decimal / Decimal("12")).quantize(
+        Decimal("0.01")
+    )
+
+    # --- Create PropertyLoan ---
+    loan = PropertyLoan(
+        property_id=property_id,
+        user_id=document.user_id,
+        loan_amount=loan_amount,
+        interest_rate=interest_rate_decimal,
+        start_date=start_date,
+        end_date=end_date,
+        monthly_payment=monthly_payment,
+        lender_name=lender_name,
+        loan_contract_document_id=document.id,
+    )
+    db.add(loan)
+    db.flush()  # Get loan.id without committing
+
+    # --- Create RecurringTransaction (loan_interest) ---
+    service = RecurringTransactionService(db)
+    recurring = service.create_loan_interest_recurring(
+        user_id=document.user_id,
+        loan_id=loan.id,
+        monthly_interest=monthly_interest,
+        start_date=start_date,
+        end_date=end_date,
+        day_of_month=start_date.day,
+    )
+
+    # Link recurring to source document
+    recurring.source_document_id = document.id
+    db.flush()
+
+    # --- Generate historical due transactions ---
+    generated = []
+    try:
+        generated = service.generate_due_transactions(
+            target_date=date_cls.today(), user_id=document.user_id
+        )
+        logger.info(
+            f"Generated {len(generated)} transactions from loan recurring {recurring.id}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to generate due transactions for loan recurring {recurring.id}: {e}"
+        )
+
+    # --- Mark suggestion as confirmed ---
+    import json as _json
+
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    if ocr_result.get("import_suggestion"):
+        ocr_result["import_suggestion"]["status"] = "confirmed"
+        ocr_result["import_suggestion"]["loan_id"] = loan.id
+        ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+        document.ocr_result = ocr_result
+    db.commit()
+
+    logger.info(
+        f"Created PropertyLoan {loan.id} and recurring {recurring.id} from "
+        f"Kreditvertrag doc {document.id} (amount=€{loan_amount}, "
+        f"rate={interest_rate_pct}%, monthly_interest=€{monthly_interest})"
+    )
+
+    return {
+        "loan_id": loan.id,
+        "recurring_id": recurring.id,
+        "property_id": property_id,
+        "loan_amount": float(loan_amount),
+        "interest_rate": float(interest_rate_pct),
+        "monthly_interest": float(monthly_interest),
+        "monthly_payment": float(monthly_payment),
+        "generated_count": len(generated),
+    }
+
+
+def _build_versicherung_suggestion(db, document, result) -> dict:
+    """
+    Build an insurance recurring expense suggestion from Versicherungsbestätigung OCR data.
+    Does NOT create any records — only stores suggestion data for user confirmation.
+    Returns dict with suggestion keys to merge into ocr_result.
+    """
+    from decimal import Decimal
+    from datetime import datetime as dt
+
+    ocr_data = document.ocr_result or {}
+    if not isinstance(ocr_data, dict):
+        return {"import_suggestion": None}
+
+    # Extract premium amount - the key OCR field
+    praemie = ocr_data.get("praemie") or ocr_data.get("premium") or ocr_data.get("amount")
+    if not praemie:
+        return {"import_suggestion": None}
+
+    try:
+        praemie_decimal = Decimal(str(praemie))
+        if praemie_decimal <= 0:
+            return {"import_suggestion": None}
+    except Exception:
+        return {"import_suggestion": None}
+
+    # Extract frequency (default: annually for insurance)
+    freq_raw = (
+        ocr_data.get("zahlungsfrequenz")
+        or ocr_data.get("payment_frequency")
+        or "annually"
+    )
+    freq_map = {
+        "monatlich": "monthly", "monthly": "monthly",
+        "quartalsweise": "quarterly", "quarterly": "quarterly",
+        "vierteljährlich": "quarterly",
+        "jährlich": "annually", "annually": "annually",
+        "jaehrlich": "annually",
+    }
+    frequency = freq_map.get(str(freq_raw).lower().strip(), "annually")
+
+    # Extract insurance type
+    insurance_type = (
+        ocr_data.get("versicherungsart")
+        or ocr_data.get("insurance_type")
+        or "unknown"
+    )
+
+    # Extract insurer name
+    insurer_name = (
+        ocr_data.get("versicherer")
+        or ocr_data.get("insurer_name")
+        or ocr_data.get("company_name")
+    )
+
+    # Parse start_date
+    sd_raw = ocr_data.get("start_date") or ocr_data.get("vertragsbeginn")
+    start_date = None
+    if sd_raw:
+        if isinstance(sd_raw, str):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    start_date = dt.strptime(sd_raw, fmt).date()
+                    break
+                except ValueError:
+                    continue
+        else:
+            start_date = sd_raw
+    if not start_date:
+        start_date = document.uploaded_at.date()
+
+    # Parse end_date
+    ed_raw = ocr_data.get("end_date") or ocr_data.get("vertragsende")
+    end_date = None
+    if ed_raw:
+        if isinstance(ed_raw, str):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    end_date = dt.strptime(ed_raw, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+    suggestion = {
+        "type": "create_insurance_recurring",
+        "status": "pending",
+        "data": {
+            "praemie": float(praemie_decimal),
+            "frequency": frequency,
+            "insurance_type": insurance_type,
+            "insurer_name": insurer_name,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        },
+    }
+
+    logger.info(
+        f"Built insurance recurring suggestion for Versicherung doc {document.id}: "
+        f"praemie=€{praemie_decimal}, frequency={frequency}, type={insurance_type}"
+    )
+
+    # Save suggestion into document's ocr_result
+    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+    updated_ocr["import_suggestion"] = suggestion
+    document.ocr_result = updated_ocr
+    db.commit()
+
+    return {"import_suggestion": suggestion}
+
+
+def create_insurance_recurring_from_suggestion(db, document, suggestion_data: dict) -> dict:
+    """
+    Create RecurringTransaction(insurance_premium) from a confirmed Versicherung suggestion.
+    Called by the confirm-insurance-recurring API endpoint after user approves.
+    """
+    from app.models.recurring_transaction import (
+        RecurringTransaction,
+        RecurringTransactionType,
+        RecurrenceFrequency,
+    )
+    from decimal import Decimal
+    from datetime import datetime as dt, date as date_cls
+    import json as _json
+
+    data = suggestion_data
+
+    praemie_raw = data.get("praemie")
+    if not praemie_raw:
+        raise ValueError("Missing required field: praemie")
+
+    praemie = Decimal(str(praemie_raw))
+    if praemie <= 0:
+        raise ValueError("Premium amount must be positive")
+
+    # Map frequency
+    freq_str = data.get("frequency", "annually")
+    freq_map = {
+        "monthly": RecurrenceFrequency.MONTHLY,
+        "quarterly": RecurrenceFrequency.QUARTERLY,
+        "annually": RecurrenceFrequency.ANNUALLY,
+    }
+    frequency = freq_map.get(freq_str, RecurrenceFrequency.ANNUALLY)
+
+    insurance_type = data.get("insurance_type", "unknown")
+    insurer_name = data.get("insurer_name", "Unknown Insurer")
+
+    # Parse start_date
+    sd_raw = data.get("start_date")
+    start_date = None
+    if sd_raw and isinstance(sd_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                start_date = dt.strptime(sd_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+    if not start_date:
+        start_date = document.uploaded_at.date()
+
+    # Parse end_date
+    ed_raw = data.get("end_date")
+    end_date = None
+    if ed_raw and isinstance(ed_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                end_date = dt.strptime(ed_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    description = f"Insurance premium - {insurer_name}"
+    if insurance_type and insurance_type != "unknown":
+        description = f"Insurance premium ({insurance_type}) - {insurer_name}"
+
+    recurring = RecurringTransaction(
+        user_id=document.user_id,
+        recurring_type=RecurringTransactionType.INSURANCE_PREMIUM,
+        description=description,
+        amount=praemie,
+        transaction_type="expense",
+        category="insurance",
+        frequency=frequency,
+        start_date=start_date,
+        end_date=end_date,
+        day_of_month=start_date.day,
+        is_active=True,
+        next_generation_date=start_date,
+        source_document_id=document.id,
+    )
+    db.add(recurring)
+    db.flush()
+
+    # Generate historical due transactions
+    from app.services.recurring_transaction_service import RecurringTransactionService
+
+    service = RecurringTransactionService(db)
+    generated = []
+    try:
+        generated = service.generate_due_transactions(
+            target_date=date_cls.today(), user_id=document.user_id
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to generate due transactions for insurance recurring {recurring.id}: {e}"
+        )
+
+    # Mark suggestion as confirmed
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    if ocr_result.get("import_suggestion"):
+        ocr_result["import_suggestion"]["status"] = "confirmed"
+        ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+        document.ocr_result = ocr_result
+    db.commit()
+
+    logger.info(
+        f"Created insurance recurring {recurring.id} from Versicherung doc {document.id} "
+        f"(praemie=€{praemie}, frequency={freq_str})"
+    )
+
+    return {
+        "recurring_id": recurring.id,
+        "praemie": float(praemie),
+        "frequency": freq_str,
+        "insurance_type": insurance_type,
+        "generated_count": len(generated),
+    }
+
+
+def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dict:
+    """
+    Create RecurringTransaction(loan_repayment) from a confirmed standalone loan suggestion.
+    Called by the confirm-loan-repayment API endpoint after user approves.
+    For loans NOT associated with a property (car loans, personal loans, etc.).
+    """
+    from app.models.recurring_transaction import (
+        RecurringTransaction,
+        RecurringTransactionType,
+        RecurrenceFrequency,
+    )
+    from decimal import Decimal
+    from datetime import datetime as dt, date as date_cls
+    import json as _json
+
+    data = suggestion_data
+
+    monthly_payment_raw = data.get("monthly_payment")
+    if not monthly_payment_raw:
+        raise ValueError("Missing required field: monthly_payment")
+
+    monthly_payment = Decimal(str(monthly_payment_raw))
+    if monthly_payment <= 0:
+        raise ValueError("Monthly payment must be positive")
+
+    lender_name = data.get("lender_name", "Unknown Lender")
+
+    # Parse start_date
+    sd_raw = data.get("start_date")
+    start_date = None
+    if sd_raw and isinstance(sd_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                start_date = dt.strptime(sd_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+    if not start_date:
+        start_date = document.uploaded_at.date()
+
+    # Parse end_date
+    ed_raw = data.get("end_date")
+    end_date = None
+    if ed_raw and isinstance(ed_raw, str):
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                end_date = dt.strptime(ed_raw, fmt).date()
+                break
+            except ValueError:
+                continue
+
+    description = f"Loan repayment - {lender_name}"
+
+    recurring = RecurringTransaction(
+        user_id=document.user_id,
+        recurring_type=RecurringTransactionType.LOAN_REPAYMENT,
+        description=description,
+        amount=monthly_payment,
+        transaction_type="expense",
+        category="loan_repayment",
+        frequency=RecurrenceFrequency.MONTHLY,
+        start_date=start_date,
+        end_date=end_date,
+        day_of_month=start_date.day,
+        is_active=True,
+        next_generation_date=start_date,
+        source_document_id=document.id,
+    )
+    db.add(recurring)
+    db.flush()
+
+    # Generate historical due transactions
+    from app.services.recurring_transaction_service import RecurringTransactionService
+
+    service = RecurringTransactionService(db)
+    generated = []
+    try:
+        generated = service.generate_due_transactions(
+            target_date=date_cls.today(), user_id=document.user_id
+        )
+    except Exception as e:
+        logger.warning(
+            f"Failed to generate due transactions for loan repayment recurring {recurring.id}: {e}"
+        )
+
+    # Mark suggestion as confirmed
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    if ocr_result.get("import_suggestion"):
+        ocr_result["import_suggestion"]["status"] = "confirmed"
+        ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+        document.ocr_result = ocr_result
+    db.commit()
+
+    logger.info(
+        f"Created standalone loan repayment recurring {recurring.id} from "
+        f"Kreditvertrag doc {document.id} (monthly=€{monthly_payment})"
+    )
+
+    return {
+        "recurring_id": recurring.id,
+        "monthly_payment": float(monthly_payment),
+        "lender_name": lender_name,
+        "generated_count": len(generated),
+    }
+
+
+def _detect_recurring_expense(db, document, suggestion: dict) -> dict | None:
+    """
+    Detect if an invoice/receipt represents a recurring expense pattern.
+
+    Checks OCR text and extracted data for keywords indicating periodic payments
+    (insurance, subscriptions, monthly fees, maintenance contracts, etc.).
+    Returns an import_suggestion dict or None.
+    """
+    import json as _json
+
+    ocr_data = document.ocr_result or {}
+    if not isinstance(ocr_data, dict):
+        return None
+
+    description = suggestion.get("description", "")
+    amount = suggestion.get("amount")
+    if not amount or float(amount) <= 0:
+        return None
+
+    raw_text = (document.raw_text or "").lower()
+    desc_lower = description.lower()
+    combined = f"{desc_lower} {raw_text}"
+
+    # Keywords that indicate recurring payments (German + English)
+    RECURRING_KEYWORDS = {
+        # Insurance
+        "versicherung", "insurance", "polizze", "prämie", "premium",
+        "haftpflicht", "haushaltsversicherung", "gebäudeversicherung",
+        "rechtsschutz", "kfz-versicherung", "lebensversicherung",
+        # Subscriptions / memberships
+        "abonnement", "abo", "subscription", "mitgliedschaft", "membership",
+        "monatsbeitrag", "jahresbeitrag", "beitrag",
+        # Recurring services
+        "wartungsvertrag", "servicevertrag", "maintenance",
+        "hausverwaltung", "property management",
+        "reinigung", "cleaning", "gartenpflege",
+        # Utilities / telecom
+        "internet", "telefon", "mobilfunk", "strom", "gas", "fernwärme",
+        # Loan / leasing
+        "leasingrate", "kreditrate", "darlehen", "tilgung",
+        # Periodic indicators
+        "monatlich", "monthly", "vierteljährlich", "quarterly",
+        "jährlich", "annually", "halbjährlich",
+        "pro monat", "per month", "je monat",
+        "pro quartal", "pro jahr",
+    }
+
+    # Frequency detection from text
+    FREQ_PATTERNS = {
+        "monthly": ["monatlich", "monthly", "pro monat", "per month", "je monat", "mtl"],
+        "quarterly": [
+            "vierteljährlich", "quarterly", "pro quartal", "quartalsweise",
+        ],
+        "annually": [
+            "jährlich", "annually", "pro jahr", "per year", "jahresprämie",
+        ],
+    }
+
+    matched_keywords = [kw for kw in RECURRING_KEYWORDS if kw in combined]
+    if not matched_keywords:
+        return None
+
+    # Determine frequency
+    detected_freq = "monthly"  # default
+    for freq, patterns in FREQ_PATTERNS.items():
+        if any(p in combined for p in patterns):
+            detected_freq = freq
+            break
+
+    # Try to extract contract period from OCR data
+    start_raw = ocr_data.get("start_date") or ocr_data.get("contract_start")
+    end_raw = ocr_data.get("end_date") or ocr_data.get("contract_end") or ocr_data.get("valid_until")
+
+    from datetime import datetime as dt
+
+    def _parse_date(raw):
+        if not raw or not isinstance(raw, str):
+            return None
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y"):
+            try:
+                return dt.strptime(raw, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    start = _parse_date(start_raw)
+    end = _parse_date(end_raw)
+
+    if not start:
+        txn_date = suggestion.get("transaction_date")
+        start = _parse_date(txn_date) or document.uploaded_at.date()
+
+    category = suggestion.get("category", "other")
+    txn_type = suggestion.get("transaction_type", "expense")
+
+    suggestion_data = {
+        "type": "create_recurring_expense",
+        "status": "pending",
+        "data": {
+            "description": description,
+            "amount": float(amount),
+            "transaction_type": txn_type,
+            "category": category,
+            "frequency": detected_freq,
+            "start_date": start.isoformat() if start else None,
+            "end_date": end.isoformat() if end else None,
+            "detected_keywords": matched_keywords[:5],
+            "day_of_month": start.day if start else 1,
+        },
+    }
+
+    logger.info(
+        f"Detected recurring expense pattern for doc {document.id}: "
+        f"desc='{description[:50]}', amount=€{amount}, freq={detected_freq}, "
+        f"keywords={matched_keywords[:3]}"
+    )
+
+    # Save into document's ocr_result
+    updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    updated_ocr["import_suggestion"] = suggestion_data
+    document.ocr_result = updated_ocr
+    db.commit()
+
+    return suggestion_data
+
 
 def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dict:
     """
@@ -597,8 +2857,104 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     monthly_rent = Decimal(str(data["monthly_rent"]))
     property_id = data.get("matched_property_id")
 
+    # Retry address matching if no property was matched at upload time
+    # (property may have been created after the Mietvertrag was uploaded)
     if not property_id:
-        raise ValueError("No matching property found. Please create the property first.")
+        address = data.get("address", "")
+        if address:
+            try:
+                from app.services.address_matcher import AddressMatcher
+                matcher = AddressMatcher(db)
+                matches = matcher.match_address(address, document.user_id)
+                if matches and matches[0].confidence > 0.3:
+                    property_id = str(matches[0].property.id)
+                    logger.info(
+                        f"Retry match found property {property_id} for address '{address}'"
+                    )
+                else:
+                    # Fallback: street name matching
+                    from app.models.property import Property as PropertyModel, PropertyStatus
+                    user_props = (
+                        db.query(PropertyModel)
+                        .filter(
+                            PropertyModel.user_id == document.user_id,
+                            PropertyModel.status == PropertyStatus.ACTIVE,
+                        )
+                        .all()
+                    )
+                    addr_lower = address.lower()
+                    for p in user_props:
+                        p_street = (p.street or "").lower()
+                        if p_street and p_street in addr_lower:
+                            property_id = str(p.id)
+                            logger.info(
+                                f"Retry street match found property {property_id} for '{address}'"
+                            )
+                            break
+            except Exception as e:
+                logger.warning(f"Retry address matching failed: {e}")
+
+    if not property_id:
+        # Auto-create a minimal property from the rental contract address
+        # User can later upload Kaufvertrag to fill in purchase details
+        address = data.get("address", "")
+        logger.info(
+            f"No matching property for rental contract (doc {document.id}), "
+            f"auto-creating from address: '{address}'"
+        )
+        try:
+            from app.models.property import (
+                Property as PropertyModel,
+                PropertyType,
+                PropertyStatus,
+            )
+            from decimal import Decimal as D
+
+            # Parse address into components (best-effort)
+            street = address or "Unbekannt"
+            city = "Unbekannt"
+            postal_code = "0000"
+            # Try to split "Street, PostalCode City" pattern
+            if "," in address:
+                parts = address.split(",", 1)
+                street = parts[0].strip()
+                rest = parts[1].strip()
+                # Try to extract postal code and city from rest
+                rest_parts = rest.split(None, 1)
+                if rest_parts and rest_parts[0].isdigit():
+                    postal_code = rest_parts[0]
+                    city = rest_parts[1] if len(rest_parts) > 1 else "Unbekannt"
+                else:
+                    city = rest
+
+            new_prop = PropertyModel(
+                user_id=document.user_id,
+                property_type=PropertyType.OWNER_OCCUPIED,  # Will be recalculated
+                rental_percentage=D("0.00"),
+                address=address or street,
+                street=street,
+                city=city,
+                postal_code=postal_code,
+                purchase_date=dt.now().date(),  # Placeholder — user should correct
+                purchase_price=D("0.01"),  # Placeholder (DB CHECK requires > 0)
+                building_value=D("0.01"),  # Placeholder (DB CHECK requires > 0)
+                land_value=D("0.00"),
+                depreciation_rate=D("0.015"),  # Default 1.5% for rental
+                status=PropertyStatus.ACTIVE,
+                mietvertrag_document_id=int(document.id),
+            )
+            db.add(new_prop)
+            db.flush()
+            property_id = str(new_prop.id)
+            logger.info(
+                f"Auto-created property {property_id} from rental contract address '{address}'"
+            )
+        except Exception as e:
+            logger.error(f"Failed to auto-create property from rental contract: {e}")
+            raise ValueError(
+                "No matching property found and auto-creation failed. "
+                "Please create the property first."
+            )
 
     # Parse start_date
     sd_raw = data.get("start_date")
@@ -640,9 +2996,76 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
         end_date=end_date,
     )
 
+    # Link recurring back to source document for edit-sync
+    recurring.source_document_id = document.id
+    db.flush()
+
+    # Detect partial address match → set unit_percentage hint
+    # e.g. property="Thenneberg 51" vs rental="Thenneberg 51/3" → partial match
+    rental_address = data.get("address", "")
+    prop_address = prop.address if prop else ""
+    is_partial_match = False
+    if prop and rental_address and prop_address:
+        # Rental address contains property address as prefix but has extra unit info
+        r_norm = rental_address.strip().lower()
+        p_norm = prop_address.strip().lower()
+        p_street = (prop.street or "").strip().lower()
+        if p_street and r_norm.startswith(p_street) and r_norm != p_street:
+            is_partial_match = True
+        elif p_norm and r_norm.startswith(p_norm.split(",")[0]) and r_norm != p_norm:
+            is_partial_match = True
+
+    # Default unit_percentage: 100% if exact match, None if partial (user must set)
+    if not is_partial_match:
+        recurring.unit_percentage = Decimal("100.00")
+    # else: leave as None — frontend will prompt user to set it
+
+    # If end_date is in the past, mark as inactive but still let recalculate run first
+    # so the property type reflects the rental relationship before expiry kicks in
+    from datetime import date as date_cls
+    contract_expired = end_date and end_date < date_cls.today()
+
+    # Recalculate property rental_percentage from all active contracts
+    from app.services.property_service import PropertyService as PS
+    ps = PS(db)
+    try:
+        ps.recalculate_rental_percentage(prop.id, document.user_id)
+    except Exception as e:
+        logger.warning(f"Failed to recalculate rental percentage for property {property_id}: {e}")
+
+    # Generate individual transactions BEFORE deactivating expired contracts.
+    # For expired contracts, generate up to end_date; for active ones, up to today.
+    # generate_due_transactions only processes is_active=True, so this must run first.
+    gen_target = end_date if contract_expired else date_cls.today()
+    try:
+        generated = service.generate_due_transactions(
+            target_date=gen_target, user_id=document.user_id
+        )
+        logger.info(
+            f"Generated {len(generated)} transactions from recurring {recurring.id} "
+            f"(start={start_date}, target={gen_target})"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to generate transactions from recurring {recurring.id}: {e}")
+
+    # Now handle expired contracts: deactivate and recalculate again
+    # This ensures the property was briefly marked as rental (for history/AfA),
+    # then reverts to owner_occupied since the contract is no longer active
+    if contract_expired:
+        recurring.is_active = False
+        db.commit()
+        logger.info(
+            f"Contract expired (end_date={end_date}), deactivated recurring {recurring.id}"
+        )
+        try:
+            ps.recalculate_rental_percentage(prop.id, document.user_id)
+        except Exception as e:
+            logger.warning(f"Failed to recalculate after expiry for property {property_id}: {e}")
+
     logger.info(
         f"Created recurring rental income {recurring.id} from confirmed suggestion "
-        f"for doc {document.id} (rent=€{monthly_rent}, property={property_id})"
+        f"for doc {document.id} (rent=€{monthly_rent}, property={property_id}, "
+        f"partial_match={is_partial_match}, expired={contract_expired})"
     )
 
     # Mark suggestion as confirmed (deep copy to trigger SQLAlchemy change detection)
@@ -654,11 +3077,19 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
         document.ocr_result = ocr_result
         db.commit()
 
+    # Track whether property was auto-created (for frontend messaging)
+    property_auto_created = prop and prop.purchase_price is not None and prop.purchase_price <= Decimal("0.01")
+
     return {
         "recurring_created": True,
         "recurring_id": recurring.id,
         "property_id": property_id,
         "monthly_rent": float(monthly_rent),
+        "is_partial_match": is_partial_match,
+        "unit_percentage": float(recurring.unit_percentage) if recurring.unit_percentage else None,
+        "contract_expired": bool(contract_expired),
+        "property_auto_created": property_auto_created,
+        "property_address": prop.address if prop else None,
     }
 
 
@@ -1048,6 +3479,8 @@ def process_historical_import_ocr(self, upload_id: str) -> Dict[str, Any]:
         
         return result
         
+    except CeleryRetry:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error processing historical import OCR {upload_id}: {str(e)}")

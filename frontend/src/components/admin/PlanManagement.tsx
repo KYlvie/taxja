@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PlanManagement.css';
 
 interface Plan {
@@ -13,10 +14,11 @@ interface Plan {
 }
 
 const PlanManagement: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
+  const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
     fetchPlans();
@@ -35,6 +37,32 @@ const PlanManagement: React.FC = () => {
     }
   };
 
+  const getPlanLabel = (planType: string, fallbackName: string) => {
+    const key = `pricing.plans.${planType}.name`;
+    const label = t(key);
+    return label === key ? fallbackName : label;
+  };
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const translateFeature = (featureKey: string) => {
+    const key = `pricing.features.${featureKey}`;
+    const label = t(key);
+    return label === key ? featureKey : label;
+  };
+
+  const translateQuota = (quotaKey: string) => {
+    const key = `admin.plans.quotas_labels.${quotaKey}`;
+    const label = t(key);
+    return label === key ? quotaKey : label;
+  };
+
   const handleEdit = (plan: Plan) => {
     setEditingPlan({ ...plan });
   };
@@ -51,10 +79,10 @@ const PlanManagement: React.FC = () => {
           monthly_price: editingPlan.monthly_price,
           yearly_price: editingPlan.yearly_price,
           features: editingPlan.features,
-          quotas: editingPlan.quotas
-        })
+          quotas: editingPlan.quotas,
+        }),
       });
-      
+
       fetchPlans();
       setEditingPlan(null);
     } catch (error) {
@@ -70,7 +98,7 @@ const PlanManagement: React.FC = () => {
     if (!editingPlan) return;
     setEditingPlan({
       ...editingPlan,
-      features: { ...editingPlan.features, [key]: value }
+      features: { ...editingPlan.features, [key]: value },
     });
   };
 
@@ -78,7 +106,7 @@ const PlanManagement: React.FC = () => {
     if (!editingPlan) return;
     setEditingPlan({
       ...editingPlan,
-      quotas: { ...editingPlan.quotas, [key]: value }
+      quotas: { ...editingPlan.quotas, [key]: value },
     });
   };
 
@@ -89,25 +117,25 @@ const PlanManagement: React.FC = () => {
   return (
     <div className="plan-management">
       <h2>{t('admin.plans.title')}</h2>
-      
+
       <div className="plans-grid">
         {plans.map((plan) => (
           <div key={plan.id} className="plan-card">
             <div className="plan-header">
-              <h3>{plan.name}</h3>
+              <h3>{getPlanLabel(plan.plan_type, plan.name)}</h3>
               <span className={`plan-type ${plan.plan_type}`}>
-                {plan.plan_type.toUpperCase()}
+                {getPlanLabel(plan.plan_type, plan.plan_type)}
               </span>
             </div>
 
             <div className="plan-pricing">
               <div className="price-item">
                 <span>{t('admin.plans.monthly')}</span>
-                <strong>€{plan.monthly_price.toFixed(2)}</strong>
+                <strong>{formatCurrency(plan.monthly_price)}</strong>
               </div>
               <div className="price-item">
                 <span>{t('admin.plans.yearly')}</span>
-                <strong>€{plan.yearly_price.toFixed(2)}</strong>
+                <strong>{formatCurrency(plan.yearly_price)}</strong>
               </div>
             </div>
 
@@ -116,7 +144,7 @@ const PlanManagement: React.FC = () => {
               <ul>
                 {Object.entries(plan.features).map(([key, value]) => (
                   <li key={key} className={value ? 'enabled' : 'disabled'}>
-                    {value ? '✓' : '✗'} {key}
+                    {value ? '✓' : '✕'} {translateFeature(key)}
                   </li>
                 ))}
               </ul>
@@ -127,34 +155,34 @@ const PlanManagement: React.FC = () => {
               <ul>
                 {Object.entries(plan.quotas).map(([key, value]) => (
                   <li key={key}>
-                    {key}: {value === -1 ? t('admin.plans.unlimited') : value}
+                    {translateQuota(key)}: {value === -1 ? t('admin.plans.unlimited') : value}
                   </li>
                 ))}
               </ul>
             </div>
 
-            <button
-              onClick={() => handleEdit(plan)}
-              className="btn-edit"
-            >
+            <button type="button" onClick={() => handleEdit(plan)} className="btn-edit">
               {t('admin.actions.edit')}
             </button>
           </div>
         ))}
       </div>
 
-      {/* Edit Modal */}
       {editingPlan && (
         <div className="modal-overlay" onClick={handleCancel}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>{t('admin.plans.edit_plan')}: {editingPlan.name}</h3>
-            
+          <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+            <h3>
+              {t('admin.plans.edit_plan')}: {getPlanLabel(editingPlan.plan_type, editingPlan.name)}
+            </h3>
+
             <div className="form-group">
               <label>{t('admin.plans.name')}</label>
               <input
                 type="text"
                 value={editingPlan.name}
-                onChange={(e) => setEditingPlan({ ...editingPlan, name: e.target.value })}
+                onChange={(event) =>
+                  setEditingPlan({ ...editingPlan, name: event.target.value })
+                }
               />
             </div>
 
@@ -165,7 +193,12 @@ const PlanManagement: React.FC = () => {
                   type="number"
                   step="0.01"
                   value={editingPlan.monthly_price}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, monthly_price: parseFloat(e.target.value) })}
+                  onChange={(event) =>
+                    setEditingPlan({
+                      ...editingPlan,
+                      monthly_price: parseFloat(event.target.value),
+                    })
+                  }
                 />
               </div>
               <div className="form-group">
@@ -174,7 +207,12 @@ const PlanManagement: React.FC = () => {
                   type="number"
                   step="0.01"
                   value={editingPlan.yearly_price}
-                  onChange={(e) => setEditingPlan({ ...editingPlan, yearly_price: parseFloat(e.target.value) })}
+                  onChange={(event) =>
+                    setEditingPlan({
+                      ...editingPlan,
+                      yearly_price: parseFloat(event.target.value),
+                    })
+                  }
                 />
               </div>
             </div>
@@ -186,9 +224,9 @@ const PlanManagement: React.FC = () => {
                   <input
                     type="checkbox"
                     checked={value}
-                    onChange={(e) => updateFeature(key, e.target.checked)}
+                    onChange={(event) => updateFeature(key, event.target.checked)}
                   />
-                  <span>{key}</span>
+                  <span>{translateFeature(key)}</span>
                 </div>
               ))}
             </div>
@@ -197,21 +235,21 @@ const PlanManagement: React.FC = () => {
               <label>{t('admin.plans.quotas')}</label>
               {Object.entries(editingPlan.quotas).map(([key, value]) => (
                 <div key={key} className="quota-item">
-                  <span>{key}</span>
+                  <span>{translateQuota(key)}</span>
                   <input
                     type="number"
                     value={value}
-                    onChange={(e) => updateQuota(key, parseInt(e.target.value))}
+                    onChange={(event) => updateQuota(key, parseInt(event.target.value, 10))}
                   />
                 </div>
               ))}
             </div>
 
             <div className="modal-actions">
-              <button onClick={handleCancel} className="btn-cancel">
+              <button type="button" onClick={handleCancel} className="btn-cancel">
                 {t('common.cancel')}
               </button>
-              <button onClick={handleSave} className="btn-save">
+              <button type="button" onClick={handleSave} className="btn-save">
                 {t('common.save')}
               </button>
             </div>

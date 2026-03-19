@@ -3,7 +3,14 @@ Employee Tax Refund Calculator (Arbeitnehmerveranlagung)
 
 This module calculates potential tax refunds for employees by comparing
 withheld tax (Lohnsteuer) from Lohnzettel with actual tax liability after
-applying all available deductions.
+applying all available deductions and tax credits (Absetzbeträge).
+
+Correct calculation flow (§33 EStG):
+1. gross_income - income_deductions = taxable_income
+2. tax_before_credits = progressive_tax(taxable_income)
+3. tax_credits = VAB + Zuschlag + Familienbonus + AVAB/AEAB + ...
+4. final_tax = max(0, tax_before_credits - tax_credits)
+5. refund = withheld_tax - final_tax
 
 Requirements: 37.1, 37.2, 37.3, 37.4, 37.5, 37.6, 37.7
 """
@@ -13,15 +20,25 @@ from typing import Dict, Any, Optional, List, Protocol
 from datetime import datetime
 
 from app.services.income_tax_calculator import IncomeTaxCalculator
-from app.services.deduction_calculator import DeductionCalculator
+from app.services.deduction_calculator import DeductionCalculator, FamilyInfo as DeductionFamilyInfo
 
 
 class FamilyInfo:
     """Family information for deduction calculation"""
 
-    def __init__(self, num_children: int = 0, is_single_parent: bool = False):
+    def __init__(
+        self,
+        num_children: int = 0,
+        is_single_parent: bool = False,
+        children_under_18: int = 0,
+        children_18_to_24: int = 0,
+        is_sole_earner: bool = False,
+    ):
         self.num_children = num_children
         self.is_single_parent = is_single_parent
+        self.children_under_18 = children_under_18
+        self.children_18_to_24 = children_18_to_24
+        self.is_sole_earner = is_sole_earner
 
 
 class UserLike(Protocol):
@@ -32,6 +49,8 @@ class UserLike(Protocol):
     commuting_distance: Optional[int]
     public_transport_available: Optional[bool]
     family_info: Optional[FamilyInfo]
+    telearbeit_days: Optional[int]
+    employer_telearbeit_pauschale: Optional[Decimal]
 
 
 class LohnzettelData:
@@ -63,6 +82,7 @@ class RefundResult:
         refund_amount: Decimal,
         is_refund: bool,
         deductions_applied: Dict[str, Decimal],
+        tax_credits_applied: Dict[str, Decimal],
         explanation: str,
         breakdown: Dict[str, Any],
     ):
@@ -72,6 +92,7 @@ class RefundResult:
         self.refund_amount = refund_amount
         self.is_refund = is_refund
         self.deductions_applied = deductions_applied
+        self.tax_credits_applied = tax_credits_applied
         self.explanation = explanation
         self.breakdown = breakdown
 
@@ -86,6 +107,9 @@ class RefundResult:
             "deductions_applied": {
                 k: float(v) for k, v in self.deductions_applied.items()
             },
+            "tax_credits_applied": {
+                k: float(v) for k, v in self.tax_credits_applied.items()
+            },
             "explanation": self.explanation,
             "breakdown": self.breakdown,
         }
@@ -96,28 +120,44 @@ class EmployeeRefundCalculator:
     Calculate employee tax refunds (Arbeitnehmerveranlagung)
 
     Compares withheld tax from Lohnzettel with actual tax liability
-    after applying all available deductions.
+    after applying all available deductions AND tax credits (Absetzbeträge).
+
+    Key distinction:
+    - Income deductions (reduce taxable_income): Werbungskosten, Pendlerpauschale,
+      Home Office, Sonderausgabenpauschale, SVS
+    - Tax credits / Absetzbeträge (reduce tax liability): Verkehrsabsetzbetrag,
+      Zuschlag zum VAB, Pendlereuro, Familienbonus Plus, AVAB/AEAB
     """
 
-    # Hardcoded 2026 fallback config for when no DB config is available
+    # 2026 fallback config (matches get_2026_tax_config in tax_configuration.py)
     _DEFAULT_TAX_CONFIG = {
         "tax_year": 2026,
         "tax_brackets": [
-            {"min": 0, "max": 12816, "rate": 0},
-            {"min": 12816, "max": 20818, "rate": 20},
-            {"min": 20818, "max": 34513, "rate": 30},
-            {"min": 34513, "max": 66612, "rate": 40},
-            {"min": 66612, "max": 99266, "rate": 48},
-            {"min": 99266, "max": 1000000, "rate": 50},
-            {"min": 1000000, "max": None, "rate": 55},
+            {"lower": 0, "upper": 13539, "rate": 0.00},
+            {"lower": 13539, "upper": 21992, "rate": 0.20},
+            {"lower": 21992, "upper": 36458, "rate": 0.30},
+            {"lower": 36458, "upper": 70365, "rate": 0.40},
+            {"lower": 70365, "upper": 104859, "rate": 0.48},
+            {"lower": 104859, "upper": 1000000, "rate": 0.50},
+            {"lower": 1000000, "upper": None, "rate": 0.55},
         ],
-        "exemption_amount": 12816,
+        "exemption_amount": 13539,
     }
 
-    def __init__(self, tax_config: Optional[Dict] = None):
+    def __init__(self, tax_config: Optional[Dict] = None, deduction_config: Optional[Dict] = None):
         config = tax_config or self._DEFAULT_TAX_CONFIG
         self.income_tax_calculator = IncomeTaxCalculator(config)
-        self.deduction_calculator = DeductionCalculator()
+        self.deduction_calculator = DeductionCalculator(deduction_config)
+
+    def _to_deduction_family_info(self, family_info: FamilyInfo) -> DeductionFamilyInfo:
+        """Convert local FamilyInfo to deduction_calculator's FamilyInfo dataclass."""
+        return DeductionFamilyInfo(
+            num_children=family_info.num_children,
+            is_single_parent=family_info.is_single_parent,
+            children_under_18=getattr(family_info, 'children_under_18', 0),
+            children_18_to_24=getattr(family_info, 'children_18_to_24', 0),
+            is_sole_earner=getattr(family_info, 'is_sole_earner', False),
+        )
 
     def calculate_refund(
         self,
@@ -126,12 +166,18 @@ class EmployeeRefundCalculator:
         additional_deductions: Optional[Dict[str, Decimal]] = None,
     ) -> RefundResult:
         """
-        Calculate tax refund for employee
+        Calculate tax refund for employee.
+
+        Follows the correct Austrian tax calculation flow:
+        1. Determine income deductions (reduce taxable income)
+        2. Calculate tariff tax on taxable income
+        3. Apply Absetzbeträge (reduce tax liability)
+        4. Compare with withheld tax
 
         Args:
             lohnzettel_data: Data from Lohnzettel
             user: User object with family and commuting info
-            additional_deductions: Optional additional deductions (e.g., donations)
+            additional_deductions: Optional additional income deductions (e.g., donations)
 
         Returns:
             RefundResult with refund amount and explanation
@@ -140,61 +186,137 @@ class EmployeeRefundCalculator:
         gross_income = lohnzettel_data.gross_income
         withheld_tax = lohnzettel_data.withheld_tax
 
-        # Calculate all applicable deductions
-        deductions_applied = {}
-        total_deductions = Decimal("0.00")
+        # ──────────────────────────────────────────────────────────
+        # STEP 1: Income deductions (reduce taxable income)
+        # ──────────────────────────────────────────────────────────
+        income_deductions = {}
+        total_income_deductions = Decimal("0.00")
 
-        # 1. Commuting allowance (Pendlerpauschale)
-        if user.commuting_distance and user.commuting_distance >= 20:
-            commuting_deduction = self.deduction_calculator.calculate_commuting_allowance(
+        # 1a. Werbungskostenpauschale (€132/year) — only if no higher actual Werbungskosten
+        actual_werbungskosten = Decimal("0.00")
+        if additional_deductions and "werbungskosten" in additional_deductions:
+            actual_werbungskosten = additional_deductions.pop("werbungskosten")
+
+        if actual_werbungskosten > self.deduction_calculator.WERBUNGSKOSTENPAUSCHALE:
+            income_deductions["werbungskosten_actual"] = actual_werbungskosten
+            total_income_deductions += actual_werbungskosten
+        else:
+            income_deductions["werbungskostenpauschale"] = self.deduction_calculator.WERBUNGSKOSTENPAUSCHALE
+            total_income_deductions += self.deduction_calculator.WERBUNGSKOSTENPAUSCHALE
+
+        # 1b. Commuting allowance (Pendlerpauschale) — income deduction
+        # NOTE: Pendlerpauschale is a Werbungskosten/Freibetrag (income deduction),
+        # but Pendlereuro is an Absetzbetrag (tax credit) — they must be separated.
+        # Großes Pendlerpauschale starts at 2km, Kleines at 20km
+        pendler_euro = Decimal("0.00")
+        if user.commuting_distance and user.commuting_distance >= 2:
+            commuting_result = self.deduction_calculator.calculate_commuting_allowance(
                 distance_km=user.commuting_distance,
                 public_transport_available=user.public_transport_available or False,
                 working_days_per_year=220,
             )
-            if commuting_deduction.amount > 0:
-                deductions_applied["commuting_allowance"] = commuting_deduction.amount
-                total_deductions += commuting_deduction.amount
+            if commuting_result.amount > Decimal("0"):
+                # Only Pendlerpauschale (base_annual) goes to income deductions
+                base_annual = commuting_result.breakdown.get("base_annual", Decimal("0.00"))
+                pendler_euro = commuting_result.breakdown.get("pendler_euro", Decimal("0.00"))
+                if base_annual > Decimal("0"):
+                    income_deductions["pendlerpauschale"] = base_annual
+                    total_income_deductions += base_annual
 
-        # 2. Home office deduction
-        home_office_deduction = self.deduction_calculator.calculate_home_office_deduction()
-        if home_office_deduction.amount > 0:
-            deductions_applied["home_office"] = home_office_deduction.amount
-            total_deductions += home_office_deduction.amount
+        # 1c. Telearbeitspauschale / Home office — income deduction (Werbungskosten)
+        # €3/day, max 100 days, minus employer's tax-free Telearbeitspauschale
+        # None = legacy/unknown → flat €300 fallback; 0 = explicit zero → €0
+        telearbeit_days = getattr(user, "telearbeit_days", None)
+        employer_pauschale = getattr(user, "employer_telearbeit_pauschale", None)
+        employer_pauschale = Decimal(str(employer_pauschale)) if employer_pauschale else Decimal("0.00")
+        home_office_result = self.deduction_calculator.calculate_home_office_deduction(
+            telearbeit_days=telearbeit_days,
+            employer_telearbeit_pauschale=employer_pauschale,
+        )
+        if home_office_result.amount > Decimal("0"):
+            income_deductions["telearbeit_pauschale"] = home_office_result.amount
+            total_income_deductions += home_office_result.amount
 
-        # 3. Family deductions (Kinderabsetzbetrag, single parent)
-        if user.family_info:
-            family_deduction = self.deduction_calculator.calculate_family_deductions(
-                user.family_info
-            )
-            if family_deduction.amount > 0:
-                deductions_applied["family_deductions"] = family_deduction.amount
-                total_deductions += family_deduction.amount
+        # 1d. Social insurance contributions (Sonderausgaben) — income deduction
+        if lohnzettel_data.withheld_svs > Decimal("0"):
+            income_deductions["social_insurance"] = lohnzettel_data.withheld_svs
+            total_income_deductions += lohnzettel_data.withheld_svs
 
-        # 4. Social insurance contributions (Sonderausgaben)
-        # Already withheld, but can be claimed as deduction
-        if lohnzettel_data.withheld_svs > 0:
-            deductions_applied["social_insurance"] = lohnzettel_data.withheld_svs
-            total_deductions += lohnzettel_data.withheld_svs
+        # 1e. Sonderausgabenpauschale (§18 Abs 2 EStG) — income deduction
+        # This is a Sonderausgabe (reduces taxable income), NOT a tax credit.
+        sap = self.deduction_calculator.SONDERAUSGABENPAUSCHALE
+        income_deductions["sonderausgabenpauschale"] = sap
+        total_income_deductions += sap
 
-        # 5. Additional deductions (if provided)
+        # 1f. Additional income deductions (if provided)
         if additional_deductions:
             for key, value in additional_deductions.items():
-                deductions_applied[key] = value
-                total_deductions += value
+                income_deductions[key] = value
+                total_income_deductions += value
 
-        # Calculate taxable income after deductions
-        taxable_income = gross_income - total_deductions
+        # ──────────────────────────────────────────────────────────
+        # STEP 2: Calculate tariff tax on taxable income
+        # ──────────────────────────────────────────────────────────
+        taxable_income = max(gross_income - total_income_deductions, Decimal("0.00"))
 
-        # Calculate actual tax liability
         tax_result = self.income_tax_calculator.calculate_progressive_tax(
             taxable_income=taxable_income, tax_year=tax_year
         )
+        tax_before_credits = tax_result.total_tax
 
-        actual_tax_liability = tax_result.total_tax
+        # ──────────────────────────────────────────────────────────
+        # STEP 3: Apply Absetzbeträge (tax credits — reduce tax liability)
+        # These are NOT income deductions. They reduce the calculated tax.
+        # ──────────────────────────────────────────────────────────
+        tax_credits = {}
+        total_tax_credits = Decimal("0.00")
 
-        # Calculate refund or additional payment
+        # 3a. Verkehrsabsetzbetrag (§33 Abs 5 EStG) — all employees get this
+        vab = self.deduction_calculator.VERKEHRSABSETZBETRAG
+        tax_credits["verkehrsabsetzbetrag"] = vab
+        total_tax_credits += vab
+
+        # 3b. Zuschlag zum Verkehrsabsetzbetrag (low-income supplement)
+        zuschlag_result = self.deduction_calculator.calculate_zuschlag_verkehrsabsetzbetrag(
+            annual_income=taxable_income
+        )
+        if zuschlag_result.amount > Decimal("0"):
+            tax_credits["zuschlag_verkehrsabsetzbetrag"] = zuschlag_result.amount
+            total_tax_credits += zuschlag_result.amount
+
+        # 3c. Pendlereuro (§33 Abs 5 EStG) — Absetzbetrag (tax credit)
+        # Pendlereuro is legally a tax credit, NOT an income deduction.
+        # It was calculated in Step 1b but stored separately for correct classification.
+        if pendler_euro > Decimal("0"):
+            tax_credits["pendlereuro"] = pendler_euro
+            total_tax_credits += pendler_euro
+
+        # 3d. Family-related tax credits
+        if user.family_info and user.family_info.num_children > 0:
+            dc_family = self._to_deduction_family_info(user.family_info)
+
+            # Familienbonus Plus (§33 Abs 3a EStG) — tax credit per child
+            familienbonus_result = self.deduction_calculator.calculate_familienbonus(dc_family)
+            if familienbonus_result.amount > Decimal("0"):
+                tax_credits["familienbonus_plus"] = familienbonus_result.amount
+                total_tax_credits += familienbonus_result.amount
+
+            # Alleinverdiener-/Alleinerzieherabsetzbetrag (§33 Abs 4 EStG)
+            alleinverdiener_result = self.deduction_calculator.calculate_alleinverdiener(dc_family)
+            if alleinverdiener_result.amount > Decimal("0"):
+                tax_credits["alleinverdiener_aeab"] = alleinverdiener_result.amount
+                total_tax_credits += alleinverdiener_result.amount
+
+        # ──────────────────────────────────────────────────────────
+        # STEP 4: Final tax = max(0, tariff_tax - tax_credits)
+        # ──────────────────────────────────────────────────────────
+        actual_tax_liability = max(Decimal("0.00"), tax_before_credits - total_tax_credits)
+
+        # ──────────────────────────────────────────────────────────
+        # STEP 5: Refund = withheld - actual
+        # ──────────────────────────────────────────────────────────
         refund_amount = withheld_tax - actual_tax_liability
-        is_refund = refund_amount > 0
+        is_refund = refund_amount > Decimal("0")
 
         # Generate explanation
         explanation = self._generate_explanation(
@@ -203,19 +325,28 @@ class EmployeeRefundCalculator:
             actual_tax_liability=actual_tax_liability,
             refund_amount=refund_amount,
             is_refund=is_refund,
-            deductions_applied=deductions_applied,
+            income_deductions=income_deductions,
+            tax_credits=tax_credits,
         )
+
+        # Merge all deductions for backward-compatible deductions_applied dict
+        all_deductions = {}
+        all_deductions.update(income_deductions)
 
         # Create breakdown
         breakdown = {
             "gross_income": float(gross_income),
-            "total_deductions": float(total_deductions),
+            "total_income_deductions": float(total_income_deductions),
             "taxable_income": float(taxable_income),
             "tax_calculation": {
                 "total_tax": float(tax_result.total_tax),
                 "effective_rate": float(tax_result.effective_rate),
                 "breakdown": tax_result.breakdown,
             },
+            "tax_before_credits": float(tax_before_credits),
+            "total_tax_credits": float(total_tax_credits),
+            "tax_credits_detail": {k: float(v) for k, v in tax_credits.items()},
+            "actual_tax_liability": float(actual_tax_liability),
             "withheld_tax": float(withheld_tax),
             "difference": float(refund_amount),
         }
@@ -226,7 +357,8 @@ class EmployeeRefundCalculator:
             actual_tax_liability=actual_tax_liability,
             refund_amount=abs(refund_amount),
             is_refund=is_refund,
-            deductions_applied=deductions_applied,
+            deductions_applied=all_deductions,
+            tax_credits_applied=tax_credits,
             explanation=explanation,
             breakdown=breakdown,
         )
@@ -284,22 +416,28 @@ class EmployeeRefundCalculator:
         actual_tax_liability: Decimal,
         refund_amount: Decimal,
         is_refund: bool,
-        deductions_applied: Dict[str, Decimal],
+        income_deductions: Dict[str, Decimal],
+        tax_credits: Dict[str, Decimal],
     ) -> str:
         """Generate human-readable explanation of refund calculation"""
 
         if is_refund:
             explanation = f"Good news! You are entitled to a tax refund of €{refund_amount:,.2f}.\n\n"
             explanation += f"Your employer withheld €{withheld_tax:,.2f} in income tax (Lohnsteuer) from your gross income of €{gross_income:,.2f}. "
-            explanation += f"However, after applying all available deductions, your actual tax liability is only €{actual_tax_liability:,.2f}.\n\n"
+            explanation += f"However, after applying all available deductions and tax credits, your actual tax liability is only €{actual_tax_liability:,.2f}.\n\n"
         else:
-            explanation = f"Based on your deductions, you need to pay an additional €{refund_amount:,.2f} in taxes.\n\n"
+            explanation = f"Based on your deductions, you need to pay an additional €{abs(refund_amount):,.2f} in taxes.\n\n"
             explanation += f"Your employer withheld €{withheld_tax:,.2f} in income tax (Lohnsteuer) from your gross income of €{gross_income:,.2f}. "
-            explanation += f"After applying all available deductions, your actual tax liability is €{actual_tax_liability:,.2f}.\n\n"
+            explanation += f"After applying all available deductions and tax credits, your actual tax liability is €{actual_tax_liability:,.2f}.\n\n"
 
-        if deductions_applied:
-            explanation += "Deductions applied:\n"
-            for key, value in deductions_applied.items():
+        if income_deductions:
+            explanation += "Income deductions (reduce taxable income):\n"
+            for key, value in income_deductions.items():
+                explanation += f"  - {key.replace('_', ' ').title()}: €{value:,.2f}\n"
+
+        if tax_credits:
+            explanation += "\nTax credits (Absetzbeträge — reduce tax liability):\n"
+            for key, value in tax_credits.items():
                 explanation += f"  - {key.replace('_', ' ').title()}: €{value:,.2f}\n"
 
         explanation += "\n"
@@ -345,14 +483,14 @@ class EmployeeRefundCalculator:
 
         # Generate suggestions
         suggestions = []
-        if not user.commuting_distance or user.commuting_distance < 20:
+        if not user.commuting_distance or user.commuting_distance < 2:
             suggestions.append(
-                "Add your commuting distance (if ≥20km) to claim Pendlerpauschale"
+                "Add your commuting distance (if ≥2km without public transport, or ≥20km with) to claim Pendlerpauschale"
             )
 
         if not user.family_info or user.family_info.num_children == 0:
             suggestions.append(
-                "Add family information to claim Kinderabsetzbetrag (child deduction)"
+                "Add family information to claim Familienbonus Plus and Alleinverdienerabsetzbetrag"
             )
 
         return {

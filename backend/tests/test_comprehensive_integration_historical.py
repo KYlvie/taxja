@@ -474,10 +474,15 @@ class TestIntegrationComplexScenarios:
         # Deductions applied (commuting + family)
         assert result.deductions.amount > Decimal("0")
 
-        # Family deductions should include child deduction
-        assert "family_deductions" in result.deductions.breakdown
-        assert "family_amount" in result.deductions.breakdown
-        assert result.deductions.breakdown["family_amount"] > Decimal("0")
+        # Family-related items are exposed via informational child support plus
+        # the current tax-credit fields used by the engine.
+        assert "kinderabsetzbetrag_info" in result.deductions.breakdown
+        assert "kinderabsetzbetrag_info_amount" in result.deductions.breakdown
+        assert result.deductions.breakdown["kinderabsetzbetrag_info_amount"] > Decimal("0")
+        assert "familienbonus_amount" in result.deductions.breakdown
+        assert result.deductions.breakdown["familienbonus_amount"] > Decimal("0")
+        assert "alleinverdiener_amount" in result.deductions.breakdown
+        assert result.deductions.breakdown["alleinverdiener_amount"] > Decimal("0")
 
         # KESt calculated (bank interest at 25%)
         assert result.kest is not None
@@ -1035,8 +1040,8 @@ class TestTaxCredits:
         # Alleinverdiener/Alleinerzieher amount should be in breakdown
         assert "alleinverdiener_amount" in result.deductions.breakdown
         alleinerzieher = result.deductions.breakdown["alleinverdiener_amount"]
-        # Base EUR 612 + 1 additional child * EUR 273 = EUR 885
-        expected = Decimal("612.00") + Decimal("273.00")
+        # Current 2026 config uses the explicit 2-children total for AEAB.
+        expected = Decimal("828.00")
         assert alleinerzieher == expected.quantize(Decimal("0.01"))
 
     def test_employee_no_children_no_familienbonus(self):

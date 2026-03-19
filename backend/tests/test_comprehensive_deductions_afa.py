@@ -22,14 +22,17 @@ except Exception:
 
     class AfACalculator:
         """Standalone fallback for AfA unit-testable methods when DB config is unavailable."""
+        RESIDENTIAL_RATE = Decimal("0.015")
+        COMMERCIAL_RATE = Decimal("0.025")
+
         def __init__(self, db=None):
             self.db = db
             self.warnings = []
 
-        def determine_depreciation_rate(self, construction_year):
-            if construction_year and construction_year < 1915:
-                return Decimal("0.015")
-            return Decimal("0.020")
+        def determine_depreciation_rate(self, construction_year=None, is_commercial=False):
+            if is_commercial:
+                return self.COMMERCIAL_RATE
+            return self.RESIDENTIAL_RATE
 
         def calculate_prorated_depreciation(self, property, months_owned):
             if property.property_type == "owner_occupied":
@@ -97,9 +100,9 @@ class TestCommutingSmallPendlerpauschale:
     @pytest.mark.parametrize(
         "distance_km, expected_amount",
         [
-            (25, Decimal("846.00")),   # 58*12 + 25*6
-            (45, Decimal("1626.00")),  # 113*12 + 45*6
-            (65, Decimal("2406.00")),  # 168*12 + 65*6
+            (25, Decimal("696.00")),   # 58*12 (base_annual only, Pendlereuro separate)
+            (45, Decimal("1356.00")),  # 113*12
+            (65, Decimal("2016.00")),  # 168*12
         ],
         ids=["25km", "45km", "65km"],
     )
@@ -125,10 +128,10 @@ class TestCommutingLargePendlerpauschale:
     @pytest.mark.parametrize(
         "distance_km, expected_amount",
         [
-            (5, Decimal("402.00")),    # 31*12 + 5*6
-            (25, Decimal("1626.00")),  # 123*12 + 25*6
-            (45, Decimal("2838.00")),  # 214*12 + 45*6
-            (65, Decimal("4062.00")),  # 306*12 + 65*6
+            (5, Decimal("372.00")),    # 31*12 (base_annual only, Pendlereuro separate)
+            (25, Decimal("1476.00")),  # 123*12
+            (45, Decimal("2568.00")),  # 214*12
+            (65, Decimal("3672.00")),  # 306*12
         ],
         ids=["5km", "25km", "45km", "65km"],
     )
@@ -237,8 +240,8 @@ class TestAlleinverdiener:
         "num_children, expected",
         [
             (1, Decimal("612.00")),   # base only
-            (2, Decimal("885.00")),   # 612 + 273*1
-            (3, Decimal("1158.00")),  # 612 + 273*2
+            (2, Decimal("828.00")),   # 2026 BMF tiered
+            (3, Decimal("1101.00")),  # 828 + 273*(3-2)
         ],
         ids=["1-child", "2-children", "3-children"],
     )
@@ -255,7 +258,7 @@ class TestAlleinverdiener:
     def test_sole_earner_with_children(self, calc: DeductionCalculator):
         family = FamilyInfo(num_children=2, is_sole_earner=True)
         result = calc.calculate_alleinverdiener(family)
-        assert result.amount == Decimal("885.00")
+        assert result.amount == Decimal("828.00")
         assert result.breakdown["type"] == "Alleinverdienerabsetzbetrag"
 
     def test_not_eligible_no_children(self, calc: DeductionCalculator):
@@ -335,20 +338,20 @@ class TestTotalDeductions:
             actual_werbungskosten=Decimal("50.00"),
         )
 
-        # Commuting: 58*12 + 30*6 = 696 + 180 = 876
-        assert result.breakdown["commuting_amount"] == Decimal("876.00")
+        # Commuting: base_annual only = 58*12 = 696 (Pendlereuro separate as tax credit)
+        assert result.breakdown["commuting_amount"] == Decimal("696.00")
 
-        # Home office: 300
-        assert result.breakdown["home_office_amount"] == Decimal("300.00")
+        # Home office: 300 (stored as telearbeit_amount)
+        assert result.breakdown["telearbeit_amount"] == Decimal("300.00")
 
-        # Family: child deduction 70.90*12*2 = 1701.60 + single parent 612 = 2313.60
-        assert result.breakdown["family_amount"] == Decimal("2313.60")
+        # Family: Kinderabsetzbetrag informational only (NOT in total amount)
+        assert 'kinderabsetzbetrag_info_amount' in result.breakdown
 
         # Familienbonus in breakdown: 2000.16 + 700.08 = 2700.24
         assert result.breakdown["familienbonus_amount"] == Decimal("2700.24")
 
-        # Alleinverdiener: 612 + 273 = 885
-        assert result.breakdown["alleinverdiener_amount"] == Decimal("885.00")
+        # Alleinverdiener: 2 children = 828 (2026 BMF tiered)
+        assert result.breakdown["alleinverdiener_amount"] == Decimal("828.00")
 
         # Employee: Werbungskostenpauschale 132
         assert result.breakdown["werbungskostenpauschale_amount"] == Decimal("132.00")
@@ -356,9 +359,10 @@ class TestTotalDeductions:
         # Verkehrsabsetzbetrag stored for engine
         assert result.breakdown["verkehrsabsetzbetrag"] == Decimal("496.00")
 
-        # Total (income deductions only; tax credits are stored but not in .amount):
-        # commuting 876 + home_office 300 + family 2313.60 + employee 132 = 3621.60
-        assert result.amount == Decimal("3621.60")
+        # Total (income deductions only: commuting + home_office + employee):
+        # 696 + 300 + 132 = 1128.00
+        # Family items, Pendlereuro, Verkehrsabsetzbetrag are NOT in amount
+        assert result.amount == Decimal("1128.00")
 
 
 class TestCustomConfigOverrides:
@@ -395,20 +399,21 @@ class TestCustomConfigOverrides:
         result = calc.calculate_commuting_allowance(
             distance_km=25, public_transport_available=True
         )
-        # 65*12 + 25*6 = 780 + 150 = 930
-        assert result.amount == Decimal("930.00")
+        # base_annual only: 65*12 = 780 (Pendlereuro 25*6=150 separate in breakdown)
+        assert result.amount == Decimal("780.00")
 
     def test_custom_alleinverdiener(self):
         calc = DeductionCalculator(
             deduction_config={
-                "alleinverdiener_base": 650,
-                "alleinverdiener_per_child": 300,
+                "alleinverdiener_base": 650,       # 1-child total
+                "alleinverdiener_2_children": 900,  # 2-children total
+                "alleinverdiener_per_extra_child": 300,
             }
         )
         family = FamilyInfo(num_children=3, is_single_parent=True)
         result = calc.calculate_alleinverdiener(family)
-        # 650 + 300*2 = 1250
-        assert result.amount == Decimal("1250.00")
+        # 2-children total (900) + 300*(3-2) = 1200
+        assert result.amount == Decimal("1200.00")
 
     def test_custom_familienbonus(self):
         calc = DeductionCalculator(
@@ -448,15 +453,15 @@ class TestEdgeCases:
         result = calc.calculate_commuting_allowance(
             distance_km=20, public_transport_available=True
         )
-        # 58*12 + 20*6 = 696 + 120 = 816
-        assert result.amount == Decimal("816.00")
+        # base_annual only: 58*12 = 696 (Pendlereuro 20*6=120 separate)
+        assert result.amount == Decimal("696.00")
 
     def test_exact_minimum_large_2km(self, calc: DeductionCalculator):
         result = calc.calculate_commuting_allowance(
             distance_km=2, public_transport_available=False
         )
-        # 31*12 + 2*6 = 372 + 12 = 384
-        assert result.amount == Decimal("384.00")
+        # base_annual only: 31*12 = 372 (Pendlereuro 2*6=12 separate)
+        assert result.amount == Decimal("372.00")
 
     def test_total_deductions_no_inputs(self, calc: DeductionCalculator):
         result = calc.calculate_total_deductions()
@@ -476,26 +481,33 @@ class TestEdgeCases:
 
 
 class TestDepreciationRate:
-    """determine_depreciation_rate: pre-1915 => 1.5%, otherwise 2.0%."""
+    """determine_depreciation_rate: residential=1.5%, commercial=2.5% (since 2016 reform)."""
 
     @pytest.mark.parametrize(
-        "construction_year, expected_rate",
+        "construction_year, is_commercial, expected_rate",
         [
-            (1900, Decimal("0.015")),
-            (1914, Decimal("0.015")),
-            (1915, Decimal("0.020")),
-            (2000, Decimal("0.020")),
-            (None, Decimal("0.020")),
+            (1900, False, Decimal("0.015")),
+            (1914, False, Decimal("0.015")),
+            (1915, False, Decimal("0.015")),
+            (2000, False, Decimal("0.015")),
+            (None, False, Decimal("0.015")),
+            (2000, True, Decimal("0.025")),
+            (None, True, Decimal("0.025")),
         ],
-        ids=["1900-pre1915", "1914-pre1915", "1915-boundary", "2000-modern", "unknown-None"],
+        ids=[
+            "1900-residential", "1914-residential", "1915-residential",
+            "2000-residential", "unknown-residential",
+            "2000-commercial", "unknown-commercial",
+        ],
     )
     def test_depreciation_rate(
         self,
         afa_calc: AfACalculator,
         construction_year: Optional[int],
+        is_commercial: bool,
         expected_rate: Decimal,
     ):
-        assert afa_calc.determine_depreciation_rate(construction_year) == expected_rate
+        assert afa_calc.determine_depreciation_rate(construction_year, is_commercial=is_commercial) == expected_rate
 
 
 class TestProratedDepreciation:

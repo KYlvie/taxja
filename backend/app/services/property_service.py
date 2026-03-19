@@ -17,6 +17,8 @@ from sqlalchemy import func, extract, and_
 
 from app.core.config import settings
 from app.models.property import Property, PropertyType, PropertyStatus
+from app.models.property_loan import PropertyLoan
+from app.models.recurring_transaction import RecurringTransaction
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User
 from app.schemas.property import (
@@ -27,6 +29,7 @@ from app.schemas.property import (
     PropertyMetrics
 )
 from app.services.afa_calculator import AfACalculator
+from app.services.asset_lifecycle_service import AssetLifecycleService
 from app.core.metrics import property_created_counter
 
 
@@ -45,6 +48,7 @@ class PropertyService:
         """
         self.db = db
         self.afa_calculator = AfACalculator(db)
+        self.asset_lifecycle_service = AssetLifecycleService(db)
         self._redis_client: Optional[redis.Redis] = None
         self._init_redis()
     def _validate_ownership(self, property_id: UUID, user_id: int) -> Property:
@@ -547,10 +551,147 @@ class PropertyService:
         self._invalidate_property_list_cache(user_id)
         
         return property
-    
+
+    def create_asset(self, user_id: int, asset_data) -> Property:
+        """
+        Create a non-real-estate asset (vehicle, equipment, etc.) as a Property record.
+
+        Uses the existing Property model with asset_type != 'real_estate'.
+        Depreciation is straight-line over useful_life_years.
+
+        Args:
+            user_id: Owner user ID
+            asset_data: AssetCreate schema instance
+
+        Returns:
+            Created Property instance
+        """
+        from app.schemas.property import ASSET_USEFUL_LIFE
+
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError(f"User with id {user_id} not found")
+
+        useful_life = asset_data.useful_life_years or ASSET_USEFUL_LIFE.get(
+            asset_data.asset_type, 5
+        )
+        depreciation_method = getattr(asset_data.depreciation_method, "value", asset_data.depreciation_method) or "linear"
+        if asset_data.gwg_elected:
+            useful_life = 1
+            dep_rate = Decimal("1.0000")
+            depreciation_method = "linear"
+        elif depreciation_method == "degressive":
+            dep_rate = Decimal(str(asset_data.degressive_afa_rate or Decimal("0.30"))).quantize(Decimal("0.0001"))
+        else:
+            dep_rate = (Decimal("1") / Decimal(str(useful_life))).quantize(Decimal("0.0001"))
+
+        # For non-real-estate assets, building_value is the income-tax depreciable base.
+        depreciable_value = (
+            asset_data.income_tax_depreciable_base
+            or asset_data.comparison_amount
+            or asset_data.purchase_price
+        )
+        comparison_basis = getattr(asset_data.comparison_basis, "value", asset_data.comparison_basis)
+        useful_life_source = getattr(asset_data.useful_life_source, "value", asset_data.useful_life_source)
+        vat_recoverable_status = getattr(
+            asset_data.vat_recoverable_status,
+            "value",
+            asset_data.vat_recoverable_status,
+        )
+        ifb_rate_source = getattr(asset_data.ifb_rate_source, "value", asset_data.ifb_rate_source)
+        recognition_decision = getattr(
+            asset_data.recognition_decision,
+            "value",
+            asset_data.recognition_decision,
+        )
+
+        # Address placeholder for non-real-estate assets (required by DB constraints)
+        placeholder_name = asset_data.name or asset_data.asset_type
+
+        asset = Property(
+            user_id=user_id,
+            asset_type=asset_data.asset_type,
+            sub_category=asset_data.sub_category,
+            name=asset_data.name,
+            property_type=PropertyType.RENTAL,  # reuse enum; means "business use"
+            rental_percentage=asset_data.business_use_percentage,
+            business_use_percentage=asset_data.business_use_percentage,
+            address=placeholder_name,
+            street=placeholder_name,
+            city="-",
+            postal_code="0000",
+            purchase_date=asset_data.purchase_date,
+            purchase_price=asset_data.purchase_price,
+            building_value=depreciable_value,
+            land_value=Decimal("0"),
+            depreciation_rate=dep_rate,
+            useful_life_years=useful_life,
+            acquisition_kind=asset_data.acquisition_kind,
+            put_into_use_date=asset_data.put_into_use_date,
+            is_used_asset=asset_data.is_used_asset,
+            first_registration_date=asset_data.first_registration_date,
+            prior_owner_usage_years=asset_data.prior_owner_usage_years,
+            comparison_basis=comparison_basis,
+            comparison_amount=asset_data.comparison_amount or asset_data.purchase_price,
+            gwg_eligible=asset_data.gwg_eligible,
+            gwg_elected=asset_data.gwg_elected,
+            depreciation_method=depreciation_method,
+            degressive_afa_rate=asset_data.degressive_afa_rate,
+            useful_life_source=useful_life_source,
+            income_tax_cost_cap=asset_data.income_tax_cost_cap,
+            income_tax_depreciable_base=depreciable_value,
+            vat_recoverable_status=vat_recoverable_status,
+            ifb_candidate=asset_data.ifb_candidate,
+            ifb_rate=asset_data.ifb_rate,
+            ifb_rate_source=ifb_rate_source,
+            recognition_decision=recognition_decision,
+            policy_confidence=asset_data.policy_confidence,
+            supplier=asset_data.supplier,
+            accumulated_depreciation=Decimal("0"),
+            status=PropertyStatus.ACTIVE,
+            kaufvertrag_document_id=asset_data.document_id,
+        )
+
+        self.db.add(asset)
+        self.db.commit()
+        self.db.refresh(asset)
+
+        logger.info(
+            "Asset created",
+            extra={
+                "user_id": user_id,
+                "asset_id": str(asset.id),
+                "asset_type": asset_data.asset_type,
+                "name": asset_data.name,
+                "purchase_price": float(asset_data.purchase_price),
+                "useful_life": useful_life,
+                "depreciation_rate": float(dep_rate),
+                "depreciation_method": depreciation_method,
+                "put_into_use_date": (
+                    asset_data.put_into_use_date.isoformat() if asset_data.put_into_use_date else None
+                ),
+            },
+        )
+
+        self._invalidate_portfolio_cache(user_id)
+        self._invalidate_property_list_cache(user_id)
+
+        return asset
+
+    def list_assets(self, user_id: int, include_archived: bool = False) -> list:
+        """List non-real-estate assets for a user."""
+        query = self.db.query(Property).filter(
+            Property.user_id == user_id,
+            Property.asset_type != "real_estate",
+        )
+        if not include_archived:
+            query = query.filter(Property.status != PropertyStatus.ARCHIVED)
+        return query.order_by(Property.created_at.desc()).all()
+
     def get_property(self, property_id: UUID, user_id: int) -> Property:
         """
         Get property with ownership validation.
+        Also syncs expired rental contracts on-the-fly.
         
         Args:
             property_id: UUID of the property
@@ -562,7 +703,55 @@ class PropertyService:
         Raises:
             ValueError: If property not found or does not belong to user
         """
-        return self._validate_ownership(property_id, user_id)
+        prop = self._validate_ownership(property_id, user_id)
+        self._sync_expired_rental_contracts(prop, user_id)
+        return prop
+
+    def _sync_expired_rental_contracts(self, prop: Property, user_id: int) -> None:
+        """Deactivate expired rental contracts and recalculate rental percentage."""
+        from app.models.recurring_transaction import (
+            RecurringTransaction,
+            RecurringTransactionType,
+        )
+
+        today = date.today()
+        changed = False
+
+        # 1. Deactivate any still-active contracts that have expired
+        expired_active = (
+            self.db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.property_id == prop.id,
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+                RecurringTransaction.is_active == True,
+                RecurringTransaction.end_date.isnot(None),
+                RecurringTransaction.end_date < today,
+            )
+            .all()
+        )
+        if expired_active:
+            for rt in expired_active:
+                rt.is_active = False
+            self.db.commit()
+            changed = True
+
+        # 2. Check if property_type is stale (rental but no active contracts)
+        if not changed and prop.property_type in (PropertyType.RENTAL, PropertyType.MIXED_USE):
+            active_count = (
+                self.db.query(RecurringTransaction)
+                .filter(
+                    RecurringTransaction.property_id == prop.id,
+                    RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+                    RecurringTransaction.is_active == True,
+                )
+                .count()
+            )
+            if active_count == 0:
+                changed = True
+
+        if changed:
+            self.recalculate_rental_percentage(prop.id, user_id)
+            self.db.refresh(prop)
     
     def list_properties(
         self, 
@@ -727,7 +916,9 @@ class PropertyService:
             
             # Calculate depreciable value (considering rental percentage for mixed-use)
             depreciable_value = property.building_value
-            if property.property_type == PropertyType.MIXED_USE:
+            if getattr(property, "asset_type", "real_estate") != "real_estate":
+                depreciable_value = self.asset_lifecycle_service.get_depreciable_base(property)
+            elif property.property_type == PropertyType.MIXED_USE:
                 rental_pct = property.rental_percentage / Decimal("100")
                 depreciable_value = depreciable_value * rental_pct
             
@@ -744,7 +935,12 @@ class PropertyService:
             
             # Calculate years remaining (if depreciation is ongoing)
             years_remaining = None
-            if annual_depreciation > 0 and property.depreciation_rate > 0:
+            if getattr(property, "asset_type", "real_estate") != "real_estate":
+                years_remaining = self.asset_lifecycle_service.estimate_years_remaining(
+                    property,
+                    year,
+                )
+            elif annual_depreciation > 0 and property.depreciation_rate > 0:
                 years_remaining = (
                     remaining_depreciable_value / (depreciable_value * property.depreciation_rate)
                 ).quantize(Decimal("0.1"))
@@ -818,6 +1014,101 @@ class PropertyService:
         self._invalidate_property_list_cache(user_id)
         
         return property
+
+    def recalculate_rental_percentage(self, property_id: UUID, user_id: int) -> Property:
+        """
+        Recalculate rental_percentage and property_type from rental contracts.
+
+        rental_percentage is based on ACTIVE contracts only (for tax calculation).
+        property_type is determined by active contracts:
+          - active contracts with 100% → rental
+          - active contracts with < 100% → mixed_use
+          - no active contracts → owner_occupied (even if expired contracts exist)
+        AfA history is preserved in transaction records regardless of property_type.
+        """
+        prop = self._validate_ownership(property_id, user_id)
+
+        from app.models.recurring_transaction import (
+            RecurringTransaction,
+            RecurringTransactionType,
+        )
+
+        # Active contracts → determine rental_percentage for current tax year
+        active_rentals = (
+            self.db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.property_id == property_id,
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+                RecurringTransaction.is_active == True,
+            )
+            .all()
+        )
+
+        total_pct = sum(
+            float(r.unit_percentage or 0) for r in active_rentals
+        )
+        total_pct = min(total_pct, 100.0)
+
+        prop.rental_percentage = Decimal(str(total_pct)).quantize(Decimal("0.01"))
+
+        # ALL contracts (including expired) → determine property_type
+        # A property that was ever rented stays as rental/mixed_use
+        all_rentals_count = (
+            self.db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.property_id == property_id,
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+            )
+            .count()
+        )
+
+        if all_rentals_count == 0:
+            prop.property_type = PropertyType.OWNER_OCCUPIED
+        elif total_pct >= 100:
+            prop.property_type = PropertyType.RENTAL
+        elif total_pct > 0:
+            prop.property_type = PropertyType.MIXED_USE
+        else:
+            # Has rental history but no active contracts → owner_occupied
+            # AfA history is preserved in transaction records regardless of property_type
+            prop.property_type = PropertyType.OWNER_OCCUPIED
+
+        self.db.commit()
+        self.db.refresh(prop)
+
+        self._invalidate_metrics_cache(property_id)
+        self._invalidate_portfolio_cache(user_id)
+        self._invalidate_property_list_cache(user_id)
+
+        logger.info(
+            "Recalculated rental_percentage",
+            extra={
+                "property_id": str(property_id),
+                "rental_percentage": float(prop.rental_percentage),
+                "property_type": prop.property_type.value,
+                "active_contracts": len(active_rentals),
+            },
+        )
+        return prop
+
+    def get_rental_contracts(self, property_id: UUID, user_id: int) -> list:
+        """Get all rental income recurring transactions linked to a property."""
+        self._validate_ownership(property_id, user_id)
+
+        from app.models.recurring_transaction import (
+            RecurringTransaction,
+            RecurringTransactionType,
+        )
+
+        return (
+            self.db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.property_id == property_id,
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+            )
+            .order_by(RecurringTransaction.start_date.desc())
+            .all()
+        )
     
     def archive_property(
         self, 
@@ -861,35 +1152,62 @@ class PropertyService:
         
         return property
     
-    def delete_property(self, property_id: UUID, user_id: int) -> bool:
+    def delete_property(self, property_id: UUID, user_id: int, force: bool = False) -> dict:
         """
-        Delete property (only if no linked transactions).
+        Delete property. If force=True, unlinks transactions and deletes
+        recurring transactions/loans first. Otherwise returns impact summary.
         
         Args:
             property_id: UUID of the property to delete
             user_id: ID of the user deleting the property
+            force: If True, cascade-delete related data
             
         Returns:
-            True if deleted successfully
-            
-        Raises:
-            ValueError: If property not found, does not belong to user, or has linked transactions
+            dict with deletion result and impact summary
         """
         # Get property with ownership validation
         property = self._validate_ownership(property_id, user_id)
         
-        # Check for linked transactions
+        # Count linked data
         transaction_count = self.db.query(func.count(Transaction.id)).filter(
             Transaction.property_id == property_id
-        ).scalar()
+        ).scalar() or 0
         
+        recurring_count = self.db.query(func.count(RecurringTransaction.id)).filter(
+            RecurringTransaction.property_id == property_id
+        ).scalar() or 0
+        
+        loan_count = self.db.query(func.count(PropertyLoan.id)).filter(
+            PropertyLoan.property_id == property_id
+        ).scalar() or 0
+        
+        impact = {
+            "transaction_count": transaction_count,
+            "recurring_count": recurring_count,
+            "loan_count": loan_count,
+        }
+        
+        if not force:
+            return {"deleted": False, "impact": impact}
+        
+        # Unlink transactions (SET NULL)
         if transaction_count > 0:
-            raise ValueError(
-                f"Cannot delete property {property_id}: {transaction_count} linked transaction(s) exist. "
-                f"Please unlink or delete transactions first, or archive the property instead."
-            )
+            self.db.query(Transaction).filter(
+                Transaction.property_id == property_id
+            ).update({"property_id": None}, synchronize_session="fetch")
         
-        # Delete property
+        # Recurring transactions and loans cascade via DB ondelete,
+        # but delete explicitly for clarity
+        if recurring_count > 0:
+            self.db.query(RecurringTransaction).filter(
+                RecurringTransaction.property_id == property_id
+            ).delete(synchronize_session="fetch")
+        
+        if loan_count > 0:
+            self.db.query(PropertyLoan).filter(
+                PropertyLoan.property_id == property_id
+            ).delete(synchronize_session="fetch")
+        
         self.db.delete(property)
         self.db.commit()
         
@@ -897,7 +1215,7 @@ class PropertyService:
         self._invalidate_portfolio_cache(user_id)
         self._invalidate_property_list_cache(user_id)
         
-        return True
+        return {"deleted": True, "impact": impact}
     
     def link_transaction_to_property(
         self, 
@@ -1083,7 +1401,9 @@ class PropertyService:
         
         # Calculate depreciable value (considering rental percentage for mixed-use)
         depreciable_value = property.building_value
-        if property.property_type == PropertyType.MIXED_USE:
+        if getattr(property, "asset_type", "real_estate") != "real_estate":
+            depreciable_value = self.asset_lifecycle_service.get_depreciable_base(property)
+        elif property.property_type == PropertyType.MIXED_USE:
             rental_pct = property.rental_percentage / Decimal("100")
             depreciable_value = depreciable_value * rental_pct
         
@@ -1102,7 +1422,12 @@ class PropertyService:
         
         # Calculate years remaining (if depreciation is ongoing)
         years_remaining = None
-        if annual_depreciation > 0 and property.depreciation_rate > 0:
+        if getattr(property, "asset_type", "real_estate") != "real_estate":
+            years_remaining = self.asset_lifecycle_service.estimate_years_remaining(
+                property,
+                year,
+            )
+        elif annual_depreciation > 0 and property.depreciation_rate > 0:
             years_remaining = (
                 remaining_depreciable_value / (depreciable_value * property.depreciation_rate)
             ).quantize(Decimal("0.1"))

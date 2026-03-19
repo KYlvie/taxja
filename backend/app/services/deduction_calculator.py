@@ -55,20 +55,22 @@ class DeductionCalculator:
     _DEFAULT_VERKEHRSABSETZBETRAG = Decimal('496.00')  # 2026: €496 (2025: €487)
     _DEFAULT_FAMILIENBONUS_UNDER_18 = Decimal('2000.16')  # since 2022
     _DEFAULT_FAMILIENBONUS_18_24 = Decimal('700.08')  # since 2024
-    _DEFAULT_ALLEINVERDIENER_BASE = Decimal('612.00')  # 2026: €612 (2025: €601)
-    _DEFAULT_ALLEINVERDIENER_PER_CHILD = Decimal('273.00')  # 2026: €273 per additional child
+    _DEFAULT_ALLEINVERDIENER_BASE = Decimal('612.00')  # 2026: 1-child total (BMF)
+    _DEFAULT_ALLEINVERDIENER_2_CHILDREN = Decimal('828.00')  # 2026: 2-children total (BMF)
+    _DEFAULT_ALLEINVERDIENER_PER_EXTRA_CHILD = Decimal('273.00')  # 2026: per child from 3rd (BMF)
     # Zuschlag zum Verkehrsabsetzbetrag for low-income earners (§33 Abs 5 EStG)
     # Full Zuschlag if income ≤ €16,832 (2026), phases out to €0 at €28,326 (2026)
-    _DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG = Decimal('752.00')  # 2026: €752
-    _DEFAULT_ZUSCHLAG_INCOME_LOWER = Decimal('16832.00')  # Full Zuschlag up to this income
-    _DEFAULT_ZUSCHLAG_INCOME_UPPER = Decimal('28326.00')  # Zuschlag phases out above this
+    _DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG = Decimal('804.00')  # 2026: €804 (BMF)
+    _DEFAULT_ZUSCHLAG_INCOME_LOWER = Decimal('19761.00')  # Full Zuschlag up to this income
+    _DEFAULT_ZUSCHLAG_INCOME_UPPER = Decimal('30259.00')  # Zuschlag phases out above this
+    _DEFAULT_ERHOEHTER_VERKEHRSABSETZBETRAG = Decimal('853.00')  # 2026: €853 (BMF)
     # Pensionistenabsetzbetrag (§33 Abs 6 EStG) — tax credit for pensioners
-    _DEFAULT_PENSIONISTEN_ABSETZBETRAG = Decimal('954.00')  # 2026: €954
-    _DEFAULT_PENSIONISTEN_INCOME_LOWER = Decimal('20233.00')  # Full amount up to this
-    _DEFAULT_PENSIONISTEN_INCOME_UPPER = Decimal('30981.00')  # Phases out above this
+    _DEFAULT_PENSIONISTEN_ABSETZBETRAG = Decimal('1020.00')  # 2026: €1,020 (BMF)
+    _DEFAULT_PENSIONISTEN_INCOME_LOWER = Decimal('21614.00')  # Full amount up to this
+    _DEFAULT_PENSIONISTEN_INCOME_UPPER = Decimal('31494.00')  # Phases out above this
     # Erhöhter Pensionistenabsetzbetrag (for single pensioners)
-    _DEFAULT_ERHOEHTER_PENSIONISTEN = Decimal('1405.00')  # 2026: €1,405
-    _DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER = Decimal('25774.00')  # Phases out up to this
+    _DEFAULT_ERHOEHTER_PENSIONISTEN = Decimal('1502.00')  # 2026: €1,502 (BMF)
+    _DEFAULT_ERHOEHTER_PENSIONISTEN_INCOME_LOWER = Decimal('24616.00')  # Full amount up to this income
     # Sonderausgabenpauschale (§18 Abs 2 EStG) — automatic special expenses flat-rate
     _DEFAULT_SONDERAUSGABENPAUSCHALE = Decimal('60.00')  # €60/year (unchanged for years)
 
@@ -108,8 +110,11 @@ class DeductionCalculator:
             self.ALLEINVERDIENER_BASE = Decimal(str(
                 deduction_config.get('alleinverdiener_base', self._DEFAULT_ALLEINVERDIENER_BASE)
             ))
-            self.ALLEINVERDIENER_PER_CHILD = Decimal(str(
-                deduction_config.get('alleinverdiener_per_child', self._DEFAULT_ALLEINVERDIENER_PER_CHILD)
+            self.ALLEINVERDIENER_2_CHILDREN = Decimal(str(
+                deduction_config.get('alleinverdiener_2_children', self._DEFAULT_ALLEINVERDIENER_2_CHILDREN)
+            ))
+            self.ALLEINVERDIENER_PER_EXTRA_CHILD = Decimal(str(
+                deduction_config.get('alleinverdiener_per_extra_child', self._DEFAULT_ALLEINVERDIENER_PER_EXTRA_CHILD)
             ))
             self.ZUSCHLAG_VERKEHRSABSETZBETRAG = Decimal(str(
                 deduction_config.get('zuschlag_verkehrsabsetzbetrag', self._DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG)
@@ -119,6 +124,9 @@ class DeductionCalculator:
             ))
             self.ZUSCHLAG_INCOME_UPPER = Decimal(str(
                 deduction_config.get('zuschlag_income_upper', self._DEFAULT_ZUSCHLAG_INCOME_UPPER)
+            ))
+            self.ERHOEHTER_VERKEHRSABSETZBETRAG = Decimal(str(
+                deduction_config.get('erhoehter_verkehrsabsetzbetrag', self._DEFAULT_ERHOEHTER_VERKEHRSABSETZBETRAG)
             ))
             self.PENSIONISTEN_ABSETZBETRAG = Decimal(str(
                 deduction_config.get('pensionisten_absetzbetrag', self._DEFAULT_PENSIONISTEN_ABSETZBETRAG)
@@ -132,9 +140,19 @@ class DeductionCalculator:
             self.ERHOEHTER_PENSIONISTEN = Decimal(str(
                 deduction_config.get('erhoehter_pensionisten', self._DEFAULT_ERHOEHTER_PENSIONISTEN)
             ))
-            self.ERHOEHTER_PENSIONISTEN_UPPER = Decimal(str(
-                deduction_config.get('erhoehter_pensionisten_upper', self._DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER)
+            self.ERHOEHTER_PENSIONISTEN_INCOME_LOWER = Decimal(str(
+                deduction_config.get('erhoehter_pensionisten_income_lower',
+                    deduction_config.get('erhoehter_pensionisten_upper',  # backwards compat
+                        self._DEFAULT_ERHOEHTER_PENSIONISTEN_INCOME_LOWER))
             ))
+            # Erhöhter PAB phase-out upper; falls back to regular PAB upper if not set
+            _epiu = deduction_config.get('erhoehter_pensionisten_income_upper')
+            if _epiu is not None:
+                self.ERHOEHTER_PENSIONISTEN_INCOME_UPPER = Decimal(str(_epiu))
+            else:
+                self.ERHOEHTER_PENSIONISTEN_INCOME_UPPER = Decimal(str(
+                    deduction_config.get('pensionisten_income_upper', self._DEFAULT_PENSIONISTEN_INCOME_UPPER)
+                ))
             self.SONDERAUSGABENPAUSCHALE = Decimal(str(
                 deduction_config.get('sonderausgabenpauschale', self._DEFAULT_SONDERAUSGABENPAUSCHALE)
             ))
@@ -165,15 +183,18 @@ class DeductionCalculator:
             self.FAMILIENBONUS_UNDER_18 = self._DEFAULT_FAMILIENBONUS_UNDER_18
             self.FAMILIENBONUS_18_24 = self._DEFAULT_FAMILIENBONUS_18_24
             self.ALLEINVERDIENER_BASE = self._DEFAULT_ALLEINVERDIENER_BASE
-            self.ALLEINVERDIENER_PER_CHILD = self._DEFAULT_ALLEINVERDIENER_PER_CHILD
+            self.ALLEINVERDIENER_2_CHILDREN = self._DEFAULT_ALLEINVERDIENER_2_CHILDREN
+            self.ALLEINVERDIENER_PER_EXTRA_CHILD = self._DEFAULT_ALLEINVERDIENER_PER_EXTRA_CHILD
             self.ZUSCHLAG_VERKEHRSABSETZBETRAG = self._DEFAULT_ZUSCHLAG_VERKEHRSABSETZBETRAG
             self.ZUSCHLAG_INCOME_LOWER = self._DEFAULT_ZUSCHLAG_INCOME_LOWER
             self.ZUSCHLAG_INCOME_UPPER = self._DEFAULT_ZUSCHLAG_INCOME_UPPER
+            self.ERHOEHTER_VERKEHRSABSETZBETRAG = self._DEFAULT_ERHOEHTER_VERKEHRSABSETZBETRAG
             self.PENSIONISTEN_ABSETZBETRAG = self._DEFAULT_PENSIONISTEN_ABSETZBETRAG
             self.PENSIONISTEN_INCOME_LOWER = self._DEFAULT_PENSIONISTEN_INCOME_LOWER
             self.PENSIONISTEN_INCOME_UPPER = self._DEFAULT_PENSIONISTEN_INCOME_UPPER
             self.ERHOEHTER_PENSIONISTEN = self._DEFAULT_ERHOEHTER_PENSIONISTEN
-            self.ERHOEHTER_PENSIONISTEN_UPPER = self._DEFAULT_ERHOEHTER_PENSIONISTEN_UPPER
+            self.ERHOEHTER_PENSIONISTEN_INCOME_LOWER = self._DEFAULT_ERHOEHTER_PENSIONISTEN_INCOME_LOWER
+            self.ERHOEHTER_PENSIONISTEN_INCOME_UPPER = self._DEFAULT_PENSIONISTEN_INCOME_UPPER
             self.SONDERAUSGABENPAUSCHALE = self._DEFAULT_SONDERAUSGABENPAUSCHALE
     
     def calculate_commuting_allowance(
@@ -233,16 +254,17 @@ class DeductionCalculator:
         base_annual = base_monthly * Decimal('12')
         
         # Calculate Pendlereuro (€6 per km per year)
+        # IMPORTANT: Pendlereuro is an Absetzbetrag (tax credit), NOT an income deduction.
+        # It is stored in breakdown for the calling engine to apply separately from tax liability.
+        # Only Pendlerpauschale (base_annual) is an income deduction (Werbungskosten/Freibetrag).
         pendler_euro = Decimal(str(distance_km)) * self.PENDLER_EURO_PER_KM
         
-        # Total deduction
-        total = base_annual + pendler_euro
-        
-        # Prepare breakdown
+        # amount = only Pendlerpauschale (income deduction / Freibetrag)
+        # Pendlereuro is in breakdown['pendler_euro'] for the engine to use as tax credit
         allowance_type = 'Kleines Pendlerpauschale' if public_transport_available else 'Großes Pendlerpauschale'
         
         return DeductionResult(
-            amount=total.quantize(Decimal('0.01')),
+            amount=base_annual.quantize(Decimal('0.01')),
             breakdown={
                 'type': allowance_type,
                 'distance_km': distance_km,
@@ -254,23 +276,70 @@ class DeductionCalculator:
             }
         )
     
-    def calculate_home_office_deduction(self) -> DeductionResult:
+    def calculate_home_office_deduction(
+        self,
+        telearbeit_days: Optional[int] = None,
+        employer_telearbeit_pauschale: Decimal = Decimal("0.00"),
+    ) -> DeductionResult:
         """
-        Calculate home office deduction.
-        
-        Austria provides a flat-rate deduction of €300/year for home office expenses.
-        
+        Calculate Telearbeitspauschale / Home Office deduction (Werbungskosten).
+
+        BMF rules (since 2025):
+        - €3.00 per Telearbeit/Home-Office day
+        - Maximum 100 days per year → annual cap €300
+        - If employer pays tax-free Telearbeitspauschale, the employee can only
+          claim the shortfall (max_allowed − employer_paid)
+
+        Semantics:
+        - telearbeit_days is None → legacy/unknown data → flat €300 fallback
+        - telearbeit_days == 0    → user explicitly has 0 home-office days → €0
+
+        Args:
+            telearbeit_days: Number of home-office days (None = unknown/legacy)
+            employer_telearbeit_pauschale: Amount already paid tax-free by employer
+
         Returns:
-            DeductionResult with €300 annual deduction
+            DeductionResult with deductible amount and breakdown
         """
+        if not isinstance(employer_telearbeit_pauschale, Decimal):
+            employer_telearbeit_pauschale = Decimal(str(employer_telearbeit_pauschale))
+
+        # Legacy fallback: no day info → flat €300
+        if telearbeit_days is None:
+            return DeductionResult(
+                amount=self.HOME_OFFICE_DEDUCTION,
+                breakdown={
+                    'type': 'Telearbeitspauschale',
+                    'mode': 'flat_rate_fallback',
+                    'annual_amount': self.HOME_OFFICE_DEDUCTION,
+                },
+                note="Home office flat-rate €300/year (no day count provided)"
+            )
+
+        # Precise calculation (telearbeit_days is an int here, including 0)
+        eligible_days = min(max(telearbeit_days, 0), 100)
+        rate_per_day = Decimal("3.00")
+        max_allowed = rate_per_day * Decimal(str(eligible_days))
+        deductible = max(Decimal("0.00"), max_allowed - employer_telearbeit_pauschale)
+        deductible = deductible.quantize(Decimal("0.01"))
+
         return DeductionResult(
-            amount=self.HOME_OFFICE_DEDUCTION,
+            amount=deductible,
             breakdown={
-                'type': 'Home Office Deduction',
-                'rate': 'Flat rate',
-                'annual_amount': self.HOME_OFFICE_DEDUCTION
+                'type': 'Telearbeitspauschale',
+                'mode': 'precise',
+                'telearbeit_days': telearbeit_days,
+                'eligible_days': eligible_days,
+                'rate_per_day': rate_per_day,
+                'max_allowed': max_allowed.quantize(Decimal("0.01")),
+                'employer_paid': employer_telearbeit_pauschale.quantize(Decimal("0.01")),
+                'deductible': deductible,
             },
-            note="Home office flat-rate deduction of €300/year"
+            note=(
+                f"Telearbeitspauschale: {eligible_days} Tage × €3.00 = €{max_allowed:.2f}"
+                f" − €{employer_telearbeit_pauschale:.2f} AG-Pauschale"
+                f" = €{deductible} absetzbar"
+            )
         )
     
     def calculate_family_deductions(
@@ -391,13 +460,15 @@ class DeductionCalculator:
                 note="Not eligible for Alleinverdiener/Alleinerzieherabsetzbetrag"
             )
 
-        base = self.ALLEINVERDIENER_BASE
-        additional = Decimal('0.00')
-        if family_info.num_children > 1:
-            additional = self.ALLEINVERDIENER_PER_CHILD * Decimal(
-                str(family_info.num_children - 1)
-            )
-        total = base + additional
+        n = family_info.num_children
+        # Official BMF total amounts: base=1-child total, 2_children=2-children total,
+        # 3+ = 2_children + per_extra_child * (n-2)
+        if n == 1:
+            total = self.ALLEINVERDIENER_BASE
+        elif n == 2:
+            total = self.ALLEINVERDIENER_2_CHILDREN
+        else:
+            total = self.ALLEINVERDIENER_2_CHILDREN + self.ALLEINVERDIENER_PER_EXTRA_CHILD * Decimal(str(n - 2))
 
         label = (
             "Alleinerzieherabsetzbetrag" if family_info.is_single_parent
@@ -408,12 +479,10 @@ class DeductionCalculator:
             amount=total.quantize(Decimal('0.01')),
             breakdown={
                 'type': label,
-                'base': base.quantize(Decimal('0.01')),
-                'additional_per_child': self.ALLEINVERDIENER_PER_CHILD,
-                'additional_children': max(0, family_info.num_children - 1),
-                'additional_total': additional.quantize(Decimal('0.01')),
+                'num_children': n,
+                'total': total.quantize(Decimal('0.01')),
             },
-            note=f"{label}: €{base} + {max(0, family_info.num_children - 1)}×€{self.ALLEINVERDIENER_PER_CHILD} = €{total}"
+            note=f"{label}: €{total} for {n} child(ren)"
         )
 
     def calculate_zuschlag_verkehrsabsetzbetrag(
@@ -486,12 +555,12 @@ class DeductionCalculator:
 
         if is_single:
             full_amount = self.ERHOEHTER_PENSIONISTEN
-            upper = self.ERHOEHTER_PENSIONISTEN_UPPER
+            lower = self.ERHOEHTER_PENSIONISTEN_INCOME_LOWER
+            upper = self.ERHOEHTER_PENSIONISTEN_INCOME_UPPER
         else:
             full_amount = self.PENSIONISTEN_ABSETZBETRAG
+            lower = self.PENSIONISTEN_INCOME_LOWER
             upper = self.PENSIONISTEN_INCOME_UPPER
-
-        lower = self.PENSIONISTEN_INCOME_LOWER
 
         if pension_income <= lower:
             amount = full_amount
@@ -589,6 +658,8 @@ class DeductionCalculator:
         commuting_distance_km: Optional[int] = None,
         public_transport_available: Optional[bool] = None,
         home_office_eligible: bool = False,
+        telearbeit_days: Optional[int] = None,
+        employer_telearbeit_pauschale: Decimal = Decimal("0.00"),
         family_info: Optional[FamilyInfo] = None,
         is_employee: bool = False,
         actual_werbungskosten: Decimal = Decimal('0.00')
@@ -596,46 +667,79 @@ class DeductionCalculator:
         """
         Calculate total deductions from all sources.
 
+        Returns a DeductionResult where:
+        - amount = total INCOME deductions (reduce taxable_income)
+        - breakdown contains both income deductions and tax credits (Absetzbeträge)
+
+        Tax credits (Absetzbeträge) are stored in breakdown but NOT included in amount.
+        The calling engine must apply them separately: final_tax = max(0, tariff_tax - credits).
+
+        Breakdown keys for tax credits (Absetzbeträge — reduce tax, not income):
+        - 'verkehrsabsetzbetrag': VAB amount
+        - 'pendlereuro': Pendlereuro (€6/km/year) — Absetzbetrag per §33 Abs 5 EStG
+        - 'familienbonus_amount': Familienbonus Plus
+        - 'alleinverdiener_amount': AVAB/AEAB (includes single parent = Alleinerzieher)
+
+        Breakdown keys for informational items (NOT included in amount):
+        - 'kinderabsetzbetrag_info': Kinderabsetzbetrag (paid via Familienbeihilfe,
+          not an income deduction or Absetzbetrag in the tax return)
+
         Args:
             commuting_distance_km: One-way commuting distance (None if not applicable)
             public_transport_available: Whether public transport is available
             home_office_eligible: Whether eligible for home office deduction
+            telearbeit_days: Number of home office days (None = legacy fallback)
+            employer_telearbeit_pauschale: Employer-paid tax-free home office allowance
             family_info: Family information (None if not applicable)
             is_employee: Whether the user is an employee (for Werbungskostenpauschale)
             actual_werbungskosten: Actual work-related expenses (employees only)
 
         Returns:
-            DeductionResult with total deductions and detailed breakdown.
-            For employees, breakdown includes 'verkehrsabsetzbetrag' (tax credit,
-            to be applied separately from tax liability by the engine).
+            DeductionResult with income deductions total and detailed breakdown.
         """
         total_amount = Decimal('0.00')
         breakdown = {}
 
-        # Commuting allowance
+        # Commuting: Pendlerpauschale = income deduction, Pendlereuro = tax credit
         if commuting_distance_km is not None and public_transport_available is not None:
             commuting_result = self.calculate_commuting_allowance(
                 distance_km=commuting_distance_km,
                 public_transport_available=public_transport_available
             )
             if commuting_result.amount > Decimal('0.00'):
+                # Pendlerpauschale (base_annual) → income deduction
                 total_amount += commuting_result.amount
                 breakdown['commuting_allowance'] = commuting_result.breakdown
                 breakdown['commuting_amount'] = commuting_result.amount
+            # Pendlereuro → tax credit (Absetzbetrag), stored separately
+            pendlereuro = commuting_result.breakdown.get('pendler_euro', Decimal('0.00'))
+            if pendlereuro > Decimal('0.00'):
+                breakdown['pendlereuro'] = pendlereuro
 
-        # Home office deduction
-        if home_office_eligible:
-            home_office_result = self.calculate_home_office_deduction()
+        # Telearbeitspauschale / Home office — income deduction
+        if home_office_eligible or telearbeit_days is not None:
+            home_office_result = self.calculate_home_office_deduction(
+                telearbeit_days=telearbeit_days,
+                employer_telearbeit_pauschale=employer_telearbeit_pauschale,
+            )
             total_amount += home_office_result.amount
-            breakdown['home_office'] = home_office_result.breakdown
-            breakdown['home_office_amount'] = home_office_result.amount
+            breakdown['telearbeit'] = home_office_result.breakdown
+            breakdown['telearbeit_amount'] = home_office_result.amount
 
-        # Family deductions
+        # Family-related items
         if family_info is not None and family_info.num_children > 0:
+            # Kinderabsetzbetrag — informational only.
+            # This is paid automatically via Familienbeihilfe and should NOT be
+            # treated as an income deduction or tax credit in the Veranlagung.
             family_result = self.calculate_family_deductions(family_info)
-            total_amount += family_result.amount
-            breakdown['family_deductions'] = family_result.breakdown
-            breakdown['family_amount'] = family_result.amount
+            breakdown['kinderabsetzbetrag_info'] = family_result.breakdown
+            breakdown['kinderabsetzbetrag_info_amount'] = family_result.amount
+            # NOTE: deliberately NOT added to total_amount
+
+            # NOTE: Alleinerzieherabsetzbetrag (AEAB) is a TAX CREDIT (Absetzbetrag),
+            # NOT an income deduction. It is handled via calculate_alleinverdiener()
+            # below and stored in breakdown for the engine to apply from tax liability.
+            # Do NOT add SINGLE_PARENT_DEDUCTION to total_amount here.
 
             # Familienbonus Plus (tax credit — stored for engine to apply from tax liability)
             familienbonus_result = self.calculate_familienbonus(family_info)
@@ -644,6 +748,7 @@ class DeductionCalculator:
                 breakdown['familienbonus_amount'] = familienbonus_result.amount
 
             # Alleinverdiener/Alleinerzieher (tax credit — stored for engine)
+            # This includes both AVAB (sole earner) and AEAB (single parent).
             alleinverdiener_result = self.calculate_alleinverdiener(family_info)
             if alleinverdiener_result.amount > Decimal('0.00'):
                 breakdown['alleinverdiener'] = alleinverdiener_result.breakdown

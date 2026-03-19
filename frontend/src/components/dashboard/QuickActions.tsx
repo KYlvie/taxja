@@ -15,20 +15,6 @@ export const QuickActions = () => {
       path: '/documents'
     },
     {
-      icon: '💰',
-      titleKey: 'quickActions.addTransaction',
-      descKey: 'quickActions.addTransactionDesc',
-      color: '#10b981',
-      path: '/transactions'
-    },
-    {
-      icon: '💼',
-      titleKey: 'quickActions.manageProperties',
-      descKey: 'quickActions.managePropertiesDesc',
-      color: '#f59e0b',
-      path: '/properties'
-    },
-    {
       icon: '📊',
       titleKey: 'quickActions.generateReports',
       descKey: 'quickActions.generateReportsDesc',
@@ -36,12 +22,12 @@ export const QuickActions = () => {
       path: '/reports'
     },
     {
-      icon: '🤖',
-      titleKey: 'quickActions.aiAssistant',
-      descKey: 'quickActions.aiAssistantDesc',
-      color: '#06b6d4',
-      path: '/ai-assistant'
-    }
+      icon: '🔍',
+      titleKey: 'quickActions.viewTransactions',
+      descKey: 'quickActions.viewTransactionsDesc',
+      color: '#10b981',
+      path: '/transactions'
+    },
   ];
 
   return (

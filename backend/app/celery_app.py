@@ -11,7 +11,16 @@ celery_app = Celery(
     "taxja",
     broker=settings.CELERY_BROKER,
     backend=settings.CELERY_BACKEND,
-    include=["app.tasks.ocr_tasks", "app.tasks.property_tasks", "app.tasks.recurring_tasks"]
+    include=[
+        "app.tasks.ocr_tasks",
+        "app.tasks.property_tasks",
+        "app.tasks.recurring_tasks",
+        "app.tasks.data_export_tasks",
+        "app.tasks.account_cleanup_tasks",
+        "app.tasks.trial_tasks",
+        "app.tasks.classification_tasks",
+        "app.tasks.credit_tasks",
+    ]
 )
 
 celery_app.conf.update(
@@ -78,6 +87,90 @@ celery_app.conf.beat_schedule = {
             'priority': 9,  # High priority (0-9 scale, 9 is highest)
         },
     },
+    # Daily cleanup of expired deactivated accounts - runs at 02:00 Vienna time
+    'cleanup-expired-accounts': {
+        'task': 'app.tasks.account_cleanup_tasks.cleanup_expired_accounts',
+        'schedule': {
+            'minute': '0',
+            'hour': '2',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 8,
+        },
+    },
+    # Daily trial expiration handling - runs at 00:30 Vienna time
+    'handle-expired-trials': {
+        'task': 'handle_expired_trials',
+        'schedule': {
+            'minute': '30',
+            'hour': '0',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 8,
+        },
+    },
+    # Daily trial expiration reminders - runs at 10:00 Vienna time
+    'send-trial-expiration-reminders': {
+        'task': 'send_trial_expiration_reminders',
+        'schedule': {
+            'minute': '0',
+            'hour': '10',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 7,
+        },
+    },
+    # Daily deletion reminders for accounts at day 23 - runs at 09:00 Vienna time
+    'send-deletion-reminders': {
+        'task': 'app.tasks.account_cleanup_tasks.send_deletion_reminders',
+        'schedule': {
+            'minute': '0',
+            'hour': '9',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 7,
+        },
+    },
+    # Daily credit period-end batch - runs at 00:15 UTC
+    'process-credit-period-end-batch': {
+        'task': 'app.tasks.credit_tasks.process_period_end_batch',
+        'schedule': {
+            'minute': '15',
+            'hour': '0',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 8,
+        },
+    },
+    # Daily ML classification model auto-retrain check - runs at 03:00 Vienna time
+    'auto-retrain-classification-model': {
+        'task': 'classification.auto_retrain',
+        'schedule': {
+            'minute': '0',
+            'hour': '3',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600,
+            'priority': 6,
+        },
+    },
 }
 
 # Import all models so SQLAlchemy relationships resolve correctly
@@ -91,6 +184,8 @@ import app.models.classification_correction  # noqa
 import app.models.loss_carryforward  # noqa
 import app.models.property  # noqa
 import app.models.recurring_transaction  # noqa
+import app.models.user_classification_rule  # noqa
+import app.models.transaction_line_item  # noqa
 
 
 # Task monitoring signals for logging and observability

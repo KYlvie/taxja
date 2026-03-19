@@ -2,7 +2,6 @@
 Vector database service for AI Tax Assistant knowledge base.
 Uses ChromaDB for storing and retrieving document embeddings.
 """
-import os
 from typing import List, Dict, Any, Optional
 import chromadb
 from sentence_transformers import SentenceTransformer
@@ -40,6 +39,13 @@ class VectorDBService:
             name=name,
             metadata={"hnsw:space": "cosine"}
         )
+
+    @staticmethod
+    def _normalize_embeddings(embeddings: Any) -> List[List[float]]:
+        """Normalize embedding outputs from either ndarray-like or plain-list models."""
+        if hasattr(embeddings, "tolist"):
+            return embeddings.tolist()
+        return embeddings
     
     def add_documents(
         self,
@@ -60,7 +66,7 @@ class VectorDBService:
         collection = self._get_collection(collection_name)
         
         # Generate embeddings
-        embeddings = self.embedding_model.encode(documents).tolist()
+        embeddings = self._normalize_embeddings(self.embedding_model.encode(documents))
         
         # Generate IDs if not provided
         if ids is None:
@@ -96,7 +102,9 @@ class VectorDBService:
         collection = self._get_collection(collection_name)
         
         # Generate query embedding
-        query_embedding = self.embedding_model.encode([query_text]).tolist()
+        query_embedding = self._normalize_embeddings(
+            self.embedding_model.encode([query_text])
+        )
         
         # Query collection
         results = collection.query(

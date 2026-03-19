@@ -83,6 +83,9 @@ backend/data/
 # Docker
 docker-compose.override.yml
 
+# Local mobile toolchains and SDKs
+.mobile-tools/
+
 # Alembic
 alembic/versions/*.pyc
 
@@ -93,9 +96,19 @@ models/*.joblib
 # MinIO data
 minio_data/
 
-# Temporary test/fix scripts
+# Temporary test/fix/debug scripts
 test_*.py
 fix_*.py
+fix_*.cjs
 check_*.py
+debug_*.py
+reprocess_*.py
+seed_*.py
+import_*.py
+create_template_table.py
+update_*.cjs
 backend/test_*.py
 backend/fix_*.py
+
+# Claude Code config
+.claude/

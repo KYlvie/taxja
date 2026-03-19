@@ -1,13 +1,23 @@
 """Machine learning-based transaction classifier using scikit-learn"""
-from decimal import Decimal
-from typing import List, Optional, Tuple
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-import pickle
+import glob
+import json
+import logging
 import os
+import pickle
+import shutil
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import StandardScaler
+
+logger = logging.getLogger(__name__)
+
+# Maximum number of versioned model backups to keep on disk.
+_MAX_MODEL_VERSIONS = 5
 
 
 class ClassificationResult:
@@ -121,11 +131,13 @@ class MLClassifier:
             )
         
         try:
-            # Extract features
+            # Extract features (use expense-specific scaler)
+            expense_scaler = getattr(self, "expense_amount_scaler", self.amount_scaler)
             features = self._extract_features(
                 transaction.description,
                 float(transaction.amount),
-                self.expense_vectorizer
+                self.expense_vectorizer,
+                scaler=expense_scaler,
             )
             
             # Predict
@@ -150,7 +162,8 @@ class MLClassifier:
         self,
         description: str,
         amount: float,
-        vectorizer: TfidfVectorizer
+        vectorizer: TfidfVectorizer,
+        scaler=None,
     ) -> np.ndarray:
         """
         Extract features from transaction.
@@ -161,6 +174,7 @@ class MLClassifier:
             description: Transaction description
             amount: Transaction amount
             vectorizer: Fitted TF-IDF vectorizer
+            scaler: Optional StandardScaler override (defaults to self.amount_scaler)
         
         Returns:
             Feature vector as numpy array
@@ -170,7 +184,8 @@ class MLClassifier:
         
         # Amount feature (normalized)
         amount_feature = np.array([[amount]])
-        amount_normalized = self.amount_scaler.transform(amount_feature)
+        active_scaler = scaler if scaler is not None else self.amount_scaler
+        amount_normalized = active_scaler.transform(amount_feature)
         
         # Combine features
         features = np.hstack([text_features, amount_normalized])
@@ -256,10 +271,13 @@ class MLClassifier:
         )
         text_features = self.expense_vectorizer.fit_transform(descriptions).toarray()
         
-        # Fit amount scaler (reuse the same scaler)
-        if not hasattr(self.amount_scaler, 'mean_'):
-            self.amount_scaler.fit(amounts)
-        amount_features = self.amount_scaler.transform(amounts)
+        # Use a dedicated scaler for expense amounts to avoid data leakage
+        # from income statistics.  Previously the shared amount_scaler was
+        # fit on income data and reused here without refitting, which biased
+        # expense feature scaling toward income distributions.
+        self.expense_amount_scaler = StandardScaler()
+        self.expense_amount_scaler.fit(amounts)
+        amount_features = self.expense_amount_scaler.transform(amounts)
         
         # Combine features
         X = np.hstack([text_features, amount_features])
@@ -320,29 +338,134 @@ class MLClassifier:
         # For now, we'll just note that this would be stored
         pass
     
+    # ------------------------------------------------------------------
+    # Model versioning
+    # ------------------------------------------------------------------
+
+    def _version_dir(self, version: str) -> str:
+        return os.path.join(self.model_path, "versions", version)
+
+    def _backup_current_models(self) -> Optional[str]:
+        """
+        Snapshot the current model files into a versioned sub-directory.
+
+        Returns the version label (ISO timestamp) or None if there are
+        no models to back up.
+        """
+        model_files = [
+            "income_model.pkl", "income_vectorizer.pkl",
+            "expense_model.pkl", "expense_vectorizer.pkl",
+            "amount_scaler.pkl",
+        ]
+        existing = [
+            f for f in model_files
+            if os.path.exists(os.path.join(self.model_path, f))
+        ]
+        if not existing:
+            return None
+
+        version = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")
+        dest = self._version_dir(version)
+        os.makedirs(dest, exist_ok=True)
+
+        for fname in existing:
+            src = os.path.join(self.model_path, fname)
+            shutil.copy2(src, os.path.join(dest, fname))
+
+        logger.info("Backed up current models as version %s", version)
+        self._prune_old_versions()
+        return version
+
+    def _prune_old_versions(self) -> None:
+        """Keep only the N most recent model versions on disk."""
+        versions_root = os.path.join(self.model_path, "versions")
+        if not os.path.isdir(versions_root):
+            return
+        dirs = sorted(
+            [d for d in os.listdir(versions_root)
+             if os.path.isdir(os.path.join(versions_root, d))],
+            reverse=True,
+        )
+        for old in dirs[_MAX_MODEL_VERSIONS:]:
+            shutil.rmtree(os.path.join(versions_root, old), ignore_errors=True)
+            logger.info("Pruned old model version %s", old)
+
+    def list_versions(self) -> List[str]:
+        """Return available model version labels, newest first."""
+        versions_root = os.path.join(self.model_path, "versions")
+        if not os.path.isdir(versions_root):
+            return []
+        return sorted(
+            [d for d in os.listdir(versions_root)
+             if os.path.isdir(os.path.join(versions_root, d))],
+            reverse=True,
+        )
+
+    def rollback(self, version: str) -> bool:
+        """
+        Restore models from a previously saved version.
+
+        Args:
+            version: Version label as returned by ``list_versions()``.
+
+        Returns:
+            True if rollback succeeded.
+        """
+        src_dir = self._version_dir(version)
+        if not os.path.isdir(src_dir):
+            logger.error("Rollback failed: version %s not found", version)
+            return False
+
+        # Back up the *current* state before overwriting (so rollback is reversible).
+        self._backup_current_models()
+
+        for fname in os.listdir(src_dir):
+            if fname.endswith(".pkl"):
+                shutil.copy2(
+                    os.path.join(src_dir, fname),
+                    os.path.join(self.model_path, fname),
+                )
+
+        # Reload into memory
+        self._load_models()
+        logger.info("Rolled back to model version %s", version)
+        return True
+
+    # ------------------------------------------------------------------
+    # Save / load
+    # ------------------------------------------------------------------
+
     def _save_models(self):
-        """Save trained models to disk"""
+        """Save trained models to disk, backing up the previous version first."""
+        self._backup_current_models()
         os.makedirs(self.model_path, exist_ok=True)
-        
+
         if self.income_model is not None:
             with open(os.path.join(self.model_path, 'income_model.pkl'), 'wb') as f:
                 pickle.dump(self.income_model, f)
-        
+
         if self.income_vectorizer is not None:
             with open(os.path.join(self.model_path, 'income_vectorizer.pkl'), 'wb') as f:
                 pickle.dump(self.income_vectorizer, f)
-        
+
         if self.expense_model is not None:
             with open(os.path.join(self.model_path, 'expense_model.pkl'), 'wb') as f:
                 pickle.dump(self.expense_model, f)
-        
+
         if self.expense_vectorizer is not None:
             with open(os.path.join(self.model_path, 'expense_vectorizer.pkl'), 'wb') as f:
                 pickle.dump(self.expense_vectorizer, f)
-        
-        # Save scaler
+
         with open(os.path.join(self.model_path, 'amount_scaler.pkl'), 'wb') as f:
             pickle.dump(self.amount_scaler, f)
+
+        # Save expense-specific scaler (separate from income scaler)
+        expense_scaler = getattr(self, "expense_amount_scaler", None)
+        if expense_scaler is not None:
+            with open(os.path.join(self.model_path, 'expense_amount_scaler.pkl'), 'wb') as f:
+                pickle.dump(expense_scaler, f)
+
+        logger.info("Models saved to %s", self.model_path)
     
     def _load_models(self):
         """Load trained models from disk"""
@@ -371,6 +494,13 @@ class MLClassifier:
             if os.path.exists(scaler_path):
                 with open(scaler_path, 'rb') as f:
                     self.amount_scaler = pickle.load(f)
+
+            # Load expense-specific scaler; fall back to shared scaler for
+            # backward compatibility with models trained before the fix.
+            expense_scaler_path = os.path.join(self.model_path, 'expense_amount_scaler.pkl')
+            if os.path.exists(expense_scaler_path):
+                with open(expense_scaler_path, 'rb') as f:
+                    self.expense_amount_scaler = pickle.load(f)
         except Exception as e:
             # If loading fails, start with fresh models
             pass

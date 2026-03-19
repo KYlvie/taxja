@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Property, PropertyType, PropertyStatus } from '../../types/property';
+import { useConfirm } from '../../hooks/useConfirm';
+import { Link } from 'react-router-dom';
+import { Property, PropertyType, PropertyStatus, RentalContract } from '../../types/property';
 import { Transaction, TransactionType } from '../../types/transaction';
 import { propertyService } from '../../services/propertyService';
-import HistoricalDepreciationBackfill from './HistoricalDepreciationBackfill';
-import PropertyReports from './PropertyReports';
+import { recurringService } from '../../services/recurringService';
+import {
+  formatCurrency as formatCurrencyForLanguage,
+  formatDate as formatDateForLanguage,
+  normalizeLanguage,
+} from '../../utils/locale';
 import './PropertyDetail.css';
 
 interface PropertyDetailProps {
@@ -35,6 +41,66 @@ interface TransactionsByYear {
   };
 }
 
+const transactionSectionCopy = {
+  de: {
+    title: 'Einnahmen und Ausgaben dieser Immobilie',
+    description:
+      'Hier sehen Sie alle Buchungen, die bereits dieser Immobilie zugeordnet sind. Wenn Sie etwas aendern moechten, bearbeiten Sie die Buchung in der Transaktionsliste.',
+    manageLinkLabel: 'Zur Transaktionsliste',
+    emptyTitle: 'Noch keine Einnahmen oder Ausgaben erfasst',
+    emptyDescription:
+      'Sobald Sie in der Transaktionsliste Mieteinnahmen oder Immobilienkosten dieser Immobilie zuordnen, erscheinen sie hier automatisch.',
+  },
+  en: {
+    title: 'Income and expenses for this property',
+    description:
+      'This section shows the entries already assigned to this property. If something is wrong, update the entry in your transactions list.',
+    manageLinkLabel: 'Open transactions',
+    emptyTitle: 'No income or expenses recorded yet',
+    emptyDescription:
+      'Once you assign rent income or property costs to this property in the transactions list, they will appear here automatically.',
+  },
+  zh: {
+    title: '这套房产的收入与支出',
+    description:
+      '这里只展示已经归到这套房产名下的收支记录。如果归属不对，请到交易记录里修改那一笔。',
+    manageLinkLabel: '去交易记录查看',
+    emptyTitle: '还没有这套房产的收支记录',
+    emptyDescription:
+      '你在交易记录里把租金收入或房产相关支出选到这套房产后，这里会自动显示。',
+  },
+} as const;
+
+const assetTransactionSectionCopy = {
+  de: {
+    title: 'Verknüpfte Buchungen dieses Wirtschaftsguts',
+    description:
+      'Hier sehen Sie bereits verknüpfte Buchungen und Abschreibungen dieses Assets. Anpassungen nehmen Sie in der Transaktionsliste vor.',
+    manageLinkLabel: 'Zur Transaktionsliste',
+    emptyTitle: 'Noch keine Buchungen zu diesem Asset',
+    emptyDescription:
+      'Sobald Anschaffung, AfA oder Folgekosten diesem Asset zugeordnet sind, erscheinen sie hier automatisch.',
+  },
+  en: {
+    title: 'Linked entries for this asset',
+    description:
+      'This section shows transactions and depreciation entries already linked to this asset. Update them from the transactions list if needed.',
+    manageLinkLabel: 'Open transactions',
+    emptyTitle: 'No entries linked to this asset yet',
+    emptyDescription:
+      'Once acquisition, depreciation, or follow-up costs are linked to this asset, they will appear here automatically.',
+  },
+  zh: {
+    title: '这项资产的关联记录',
+    description:
+      '这里展示已经关联到这项资产的购置、折旧和后续支出记录。如需调整，请到交易记录里修改。',
+    manageLinkLabel: '去交易记录查看',
+    emptyTitle: '这项资产还没有关联记录',
+    emptyDescription:
+      '当购置、折旧或后续成本关联到这项资产后，这里会自动显示。',
+  },
+} as const;
+
 const PropertyDetail = ({
   property,
   onEdit,
@@ -42,15 +108,41 @@ const PropertyDetail = ({
   onBack,
 }: PropertyDetailProps) => {
   const { t, i18n } = useTranslation();
+  const { confirm: showConfirm } = useConfirm();
+  const language = normalizeLanguage(i18n.language);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
   const [warnings, setWarnings] = useState<PropertyWarning[]>([]);
+  const [rentalContracts, setRentalContracts] = useState<RentalContract[]>([]);
+  const [isLoadingContracts, setIsLoadingContracts] = useState(false);
+  const [editingPercentages, setEditingPercentages] = useState<Record<number, string>>({});
+  const [savingContractId, setSavingContractId] = useState<number | null>(null);
+  const [editingContractId, setEditingContractId] = useState<number | null>(null);
+  const [editingContractData, setEditingContractData] = useState<{
+    amount: string;
+    start_date: string;
+    end_date: string;
+    is_active: boolean;
+  }>({ amount: '', start_date: '', end_date: '', is_active: true });
+  const isRealEstate = !property.asset_type || property.asset_type === 'real_estate';
+  const sectionCopy = (isRealEstate ? transactionSectionCopy : assetTransactionSectionCopy)[language];
+  const displayName = isRealEstate
+    ? property.address
+    : property.name || t(`properties.assetTypes.${property.asset_type}`, property.asset_type || 'Asset');
+  const assetTypeLabel = property.asset_type
+    ? t(`properties.assetTypes.${property.asset_type}`, property.asset_type)
+    : t('properties.assetDetails.asset', '资产');
 
   useEffect(() => {
     loadTransactions();
-    loadWarnings();
-  }, [property.id]);
+    if (isRealEstate) {
+      loadWarnings();
+      loadRentalContracts();
+    } else {
+      setWarnings([]);
+      setRentalContracts([]);
+    }
+  }, [property.id, isRealEstate]);
 
   const loadTransactions = async () => {
     setIsLoadingTransactions(true);
@@ -76,13 +168,110 @@ const PropertyDetail = ({
     }
   };
 
-  const handleBackfillComplete = () => {
-    // Reload transactions to show newly created depreciation transactions
-    loadTransactions();
+  const loadRentalContracts = async () => {
+    setIsLoadingContracts(true);
+    try {
+      const data = await propertyService.getRentalContracts(property.id);
+      setRentalContracts(data);
+      const initial: Record<number, string> = {};
+      data.forEach((c) => {
+        if (c.unit_percentage != null) {
+          initial[c.id] = String(c.unit_percentage);
+        }
+      });
+      setEditingPercentages(initial);
+    } catch (error) {
+      console.error('Failed to load rental contracts:', error);
+    } finally {
+      setIsLoadingContracts(false);
+    }
   };
 
+  const saveUnitPercentage = async (contractId: number) => {
+    const val = editingPercentages[contractId];
+    if (!val || isNaN(Number(val)) || Number(val) <= 0 || Number(val) > 100) return;
+    setSavingContractId(contractId);
+    try {
+      await recurringService.update(contractId, { unit_percentage: Number(val) } as any);
+      await loadRentalContracts();
+    } catch (error) {
+      console.error('Failed to save unit percentage:', error);
+    } finally {
+      setSavingContractId(null);
+    }
+  };
+
+  const startEditContract = (contract: RentalContract) => {
+    setEditingContractId(contract.id);
+    setEditingContractData({
+      amount: String(contract.amount),
+      start_date: contract.start_date || '',
+      end_date: contract.end_date || '',
+      is_active: contract.is_active,
+    });
+  };
+
+  const cancelEditContract = () => {
+    setEditingContractId(null);
+  };
+
+  const saveEditContract = async (contractId: number) => {
+    setSavingContractId(contractId);
+    try {
+      const updateData: any = {};
+      const orig = rentalContracts.find((c) => c.id === contractId);
+      if (!orig) return;
+
+      const newAmount = Number(editingContractData.amount);
+      if (newAmount > 0 && newAmount !== orig.amount) {
+        updateData.amount = newAmount;
+      }
+      if (editingContractData.start_date && editingContractData.start_date !== orig.start_date) {
+        updateData.start_date = editingContractData.start_date;
+      }
+      // Allow clearing end_date (set to null for indefinite)
+      if (editingContractData.end_date !== (orig.end_date || '')) {
+        updateData.end_date = editingContractData.end_date || null;
+      }
+      if (editingContractData.is_active !== orig.is_active) {
+        updateData.is_active = editingContractData.is_active;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await recurringService.update(contractId, updateData);
+      }
+      setEditingContractId(null);
+      await loadRentalContracts();
+      // Recalculate after edit
+      try {
+        await propertyService.recalculateRental(property.id);
+        onEdit(property);
+      } catch (_) { /* ignore */ }
+    } catch (error) {
+      console.error('Failed to save contract:', error);
+    } finally {
+      setSavingContractId(null);
+    }
+  };
+
+  const handleDeleteContract = async (contractId: number) => {
+    const ok = await showConfirm(t('properties.rentalContracts.confirmDelete'), { variant: 'warning' });
+    if (!ok) return;
+    try {
+      await recurringService.delete(contractId);
+      await loadRentalContracts();
+      try {
+        await propertyService.recalculateRental(property.id);
+        onEdit(property);
+      } catch (_) { /* ignore */ }
+    } catch (error) {
+      console.error('Failed to delete contract:', error);
+    }
+  };
+
+
   const getWarningMessage = (warning: PropertyWarning): string => {
-    const lang = i18n.language;
+    const lang = language;
     if (lang === 'de') return warning.message_de;
     if (lang === 'zh') return warning.message_zh;
     return warning.message_en;
@@ -98,16 +287,11 @@ const PropertyDetail = ({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+    return formatCurrencyForLanguage(amount, language);
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-AT', {
+    return formatDateForLanguage(dateString, language, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -116,6 +300,11 @@ const PropertyDetail = ({
 
   const formatPercentage = (rate: number) => {
     return `${(rate * 100).toFixed(2)}%`;
+  };
+
+  const formatAssetTaxValue = (group: string, value?: string | null) => {
+    if (!value) return '—';
+    return t(`properties.assetDetails.${group}.${value}`, value);
   };
 
   const calculateAccumulatedDepreciation = (): number => {
@@ -189,27 +378,13 @@ const PropertyDetail = ({
     return grouped;
   };
 
-  const handleUnlinkTransaction = async (transactionId: number) => {
-    const confirmMessage = t('properties.confirmUnlink');
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
-
-    try {
-      await propertyService.unlinkTransaction(property.id, transactionId);
-      await loadTransactions();
-    } catch (error) {
-      console.error('Failed to unlink transaction:', error);
-      alert(t('properties.unlinkError'));
-    }
-  };
-
-  const handleArchiveClick = () => {
+  const handleArchiveClick = async () => {
     const confirmMessage = t('properties.confirmArchive', {
-      address: property.address,
+      address: displayName,
     });
     
-    if (window.confirm(confirmMessage)) {
+    const ok = await showConfirm(confirmMessage, { variant: 'warning', confirmText: t('properties.archive') });
+    if (ok) {
       onArchive(property);
     }
   };
@@ -219,7 +394,13 @@ const PropertyDetail = ({
   const accumulated = calculateAccumulatedDepreciation();
   const remaining = calculateRemainingValue();
   const yearsRemaining = calculateYearsRemaining();
-  const isRental = property.property_type !== PropertyType.OWNER_OCCUPIED;
+  const isRental = isRealEstate && property.property_type !== PropertyType.OWNER_OCCUPIED;
+  const assetAccumulated = property.accumulated_depreciation ?? accumulated;
+  const assetRemaining = property.remaining_value ?? Math.max(0, property.building_value - assetAccumulated);
+  const assetAnnualDepreciation = property.annual_depreciation ?? (property.building_value * property.depreciation_rate);
+  const assetUsageLabel = property.business_use_percentage != null
+    ? `${Number(property.business_use_percentage).toFixed(0)}%`
+    : '—';
 
   return (
     <div className="property-detail">
@@ -229,20 +410,26 @@ const PropertyDetail = ({
           ← {t('properties.title')}
         </button>
         <span className="breadcrumb-separator">/</span>
-        <span className="breadcrumb-current">{property.address}</span>
+        <span className="breadcrumb-current">{displayName}</span>
       </div>
 
       {/* Property Header */}
       <div className="property-detail-header">
         <div className="header-content">
-          <h1>{property.address}</h1>
+          <h1>{displayName}</h1>
           <div className="property-badges">
             <span className={`status-badge ${property.status}`}>
               {t(`properties.status.${property.status}`)}
             </span>
-            <span className={`type-badge ${property.property_type}`}>
-              {t(`properties.types.${property.property_type}`)}
-            </span>
+            {isRealEstate ? (
+              <span className={`type-badge ${property.property_type}`}>
+                {t(`properties.types.${property.property_type}`)}
+              </span>
+            ) : (
+              <span className="type-badge asset">
+                {assetTypeLabel}
+              </span>
+            )}
           </div>
         </div>
         <div className="header-actions">
@@ -259,117 +446,258 @@ const PropertyDetail = ({
 
       {/* Property Information Grid */}
       <div className="property-info-section">
-        <h2>{t('properties.propertyDetails')}</h2>
+        <h2>{isRealEstate ? t('properties.propertyDetails') : t('properties.assetDetails.title', '资产详情')}</h2>
         
         <div className="info-grid">
-          <div className="info-card">
-            <h3>{t('properties.addressSection')}</h3>
-            <div className="info-rows">
-              <div className="info-row">
-                <span className="label">{t('properties.street')}</span>
-                <span className="value">{property.street}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">{t('properties.city')}</span>
-                <span className="value">{property.city}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">{t('properties.postalCode')}</span>
-                <span className="value">{property.postal_code}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="info-card">
-            <h3>{t('properties.purchaseSection')}</h3>
-            <div className="info-rows">
-              <div className="info-row">
-                <span className="label">{t('properties.purchaseDate')}</span>
-                <span className="value">{formatDate(property.purchase_date)}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">{t('properties.purchasePrice')}</span>
-                <span className="value">{formatCurrency(property.purchase_price)}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">{t('properties.buildingValue')}</span>
-                <span className="value">{formatCurrency(property.building_value)}</span>
-              </div>
-              {property.land_value && (
-                <div className="info-row">
-                  <span className="label">{t('properties.landValue')}</span>
-                  <span className="value">{formatCurrency(property.land_value)}</span>
-                </div>
-              )}
-              {property.construction_year && (
-                <div className="info-row">
-                  <span className="label">{t('properties.constructionYear')}</span>
-                  <span className="value">{property.construction_year}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {isRental && (
-            <div className="info-card">
-              <h3>{t('properties.depreciationInfo')}</h3>
-              <div className="info-rows">
-                <div className="info-row">
-                  <span className="label">{t('properties.depreciationRate')}</span>
-                  <span className="value">{formatPercentage(property.depreciation_rate)}</span>
-                </div>
-                {property.property_type === PropertyType.MIXED_USE && (
+          {isRealEstate ? (
+            <>
+              <div className="info-card">
+                <h3>{t('properties.addressSection')}</h3>
+                <div className="info-rows">
                   <div className="info-row">
-                    <span className="label">{t('properties.rentalPercentage')}</span>
-                    <span className="value">{property.rental_percentage}%</span>
+                    <span className="label">{t('properties.street')}</span>
+                    <span className="value">{property.street}</span>
                   </div>
-                )}
-                <div className="info-row highlight">
-                  <span className="label">{t('properties.accumulatedDepreciation')}</span>
-                  <span className="value">{formatCurrency(accumulated)}</span>
-                </div>
-                <div className="info-row highlight">
-                  <span className="label">{t('properties.remainingValue')}</span>
-                  <span className="value">{formatCurrency(remaining)}</span>
-                </div>
-                {yearsRemaining !== null && (
                   <div className="info-row">
-                    <span className="label">{t('properties.yearsRemaining')}</span>
+                    <span className="label">{t('properties.city')}</span>
+                    <span className="value">{property.city}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="label">{t('properties.postalCode')}</span>
+                    <span className="value">{property.postal_code}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="info-card">
+                <h3>{t('properties.purchaseSection')}</h3>
+                <div className="info-rows">
+                  <div className="info-row">
+                    <span className="label">{t('properties.purchaseDate')}</span>
+                    <span className="value">{formatDate(property.purchase_date)}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="label">{t('properties.purchasePrice')}</span>
+                    <span className="value">{formatCurrency(property.purchase_price)}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="label">{t('properties.buildingValue')}</span>
+                    <span className="value">{formatCurrency(property.building_value)}</span>
+                  </div>
+                  {property.land_value && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.landValue')}</span>
+                      <span className="value">{formatCurrency(property.land_value)}</span>
+                    </div>
+                  )}
+                  {property.construction_year && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.constructionYear')}</span>
+                      <span className="value">{property.construction_year}</span>
+                    </div>
+                  )}
+                  {!property.kaufvertrag_document_id && (
+                    <div className="info-row" style={{ borderTop: '1px dashed #e5e7eb', paddingTop: '8px', marginTop: '4px' }}>
+                      <span className="label" />
+                      <Link
+                        to={`/documents?property_id=${property.id}&type=purchase_contract`}
+                        style={{ fontSize: '0.85rem', color: '#4f46e5', textDecoration: 'none' }}
+                      >
+                        📄 {t('properties.uploadPurchaseContract', '上传购房合同')}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {isRental && (
+                <div className="info-card">
+                  <h3>{t('properties.depreciationInfo')}</h3>
+                  <div className="info-rows">
+                    <div className="info-row">
+                      <span className="label">{t('properties.depreciationRate')}</span>
+                      <span className="value">{formatPercentage(property.depreciation_rate)}</span>
+                    </div>
+                    {property.property_type === PropertyType.MIXED_USE && (
+                      <div className="info-row">
+                        <span className="label">{t('properties.rentalPercentage')}</span>
+                        <span className="value">{property.rental_percentage}%</span>
+                      </div>
+                    )}
+                    <div className="info-row highlight">
+                      <span className="label">{t('properties.accumulatedDepreciation')}</span>
+                      <span className="value">{formatCurrency(accumulated)}</span>
+                    </div>
+                    <div className="info-row highlight">
+                      <span className="label">{t('properties.remainingValue')}</span>
+                      <span className="value">{formatCurrency(remaining)}</span>
+                    </div>
+                    {yearsRemaining !== null && (
+                      <div className="info-row">
+                        <span className="label">{t('properties.yearsRemaining')}</span>
+                        <span className="value">
+                          {yearsRemaining === 0
+                            ? t('properties.fullyDepreciated')
+                            : t('properties.yearsRemainingValue', { years: yearsRemaining })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(property.grunderwerbsteuer || property.notary_fees || property.registry_fees) && (
+                <div className="info-card">
+                  <h3>{t('properties.purchaseCostsSection')}</h3>
+                  <div className="info-rows">
+                    {property.grunderwerbsteuer && (
+                      <div className="info-row">
+                        <span className="label">{t('properties.grunderwerbsteuer')}</span>
+                        <span className="value">{formatCurrency(property.grunderwerbsteuer)}</span>
+                      </div>
+                    )}
+                    {property.notary_fees && (
+                      <div className="info-row">
+                        <span className="label">{t('properties.notaryFees')}</span>
+                        <span className="value">{formatCurrency(property.notary_fees)}</span>
+                      </div>
+                    )}
+                    {property.registry_fees && (
+                      <div className="info-row">
+                        <span className="label">{t('properties.registryFees')}</span>
+                        <span className="value">{formatCurrency(property.registry_fees)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="info-card">
+                <h3>{t('properties.assetDetails.acquisition', '购置信息')}</h3>
+                <div className="info-rows">
+                  <div className="info-row">
+                    <span className="label">{t('properties.assetDetails.assetType', '资产类型')}</span>
+                    <span className="value">{assetTypeLabel}</span>
+                  </div>
+                  {property.sub_category && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.subCategory', '子类型')}</span>
+                      <span className="value">{property.sub_category}</span>
+                    </div>
+                  )}
+                  {property.supplier && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.supplier', '供应商')}</span>
+                      <span className="value">{property.supplier}</span>
+                    </div>
+                  )}
+                  <div className="info-row">
+                    <span className="label">{t('properties.purchaseDate')}</span>
+                    <span className="value">{formatDate(property.purchase_date)}</span>
+                  </div>
+                  <div className="info-row">
+                    <span className="label">{t('properties.purchasePrice')}</span>
+                    <span className="value">{formatCurrency(property.purchase_price)}</span>
+                  </div>
+                  {property.put_into_use_date && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.putIntoUseDate', '投入使用日期')}</span>
+                      <span className="value">{formatDate(property.put_into_use_date)}</span>
+                    </div>
+                  )}
+                  {property.acquisition_kind && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.acquisitionKind', '取得方式')}</span>
+                      <span className="value">{formatAssetTaxValue('acquisitionKinds', property.acquisition_kind)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="info-card">
+                <h3>{t('properties.assetDetails.taxHandling', '税务处理')}</h3>
+                <div className="info-rows">
+                  <div className="info-row">
+                    <span className="label">{t('properties.assetDetails.businessUse', '业务使用比例')}</span>
+                    <span className="value">{assetUsageLabel}</span>
+                  </div>
+                  {property.comparison_basis && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.comparisonBasis', 'GWG 比较基数')}</span>
+                      <span className="value">{formatAssetTaxValue('comparisonBasisOptions', property.comparison_basis)}</span>
+                    </div>
+                  )}
+                  {property.comparison_amount != null && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.comparisonAmount', '比较金额')}</span>
+                      <span className="value">{formatCurrency(property.comparison_amount)}</span>
+                    </div>
+                  )}
+                  <div className="info-row">
+                    <span className="label">{t('properties.assetDetails.depreciationMethod', '折旧方式')}</span>
                     <span className="value">
-                      {yearsRemaining === 0
-                        ? t('properties.fullyDepreciated')
-                        : t('properties.yearsRemainingValue', { years: yearsRemaining })}
+                      {property.gwg_elected
+                        ? t('properties.assetDetails.gwg', 'GWG 一次性费用化')
+                          : formatAssetTaxValue('depreciationMethods', property.depreciation_method)}
                     </span>
                   </div>
-                )}
+                  {property.degressive_afa_rate != null && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.degressiveRate', '递减折旧比例')}</span>
+                      <span className="value">{formatPercentage(property.degressive_afa_rate)}</span>
+                    </div>
+                  )}
+                  {property.vat_recoverable_status && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.vatStatus', '进项税预判')}</span>
+                      <span className="value">{formatAssetTaxValue('vatStatuses', property.vat_recoverable_status)}</span>
+                    </div>
+                  )}
+                  <div className="info-row">
+                    <span className="label">{t('properties.assetDetails.ifb', 'IFB')}</span>
+                    <span className="value">
+                      {property.ifb_candidate
+                        ? property.ifb_rate != null
+                          ? `${property.ifb_rate}%`
+                          : t('properties.assetDetails.ifbCandidate', '候选')
+                        : t('properties.assetDetails.ifbNotEligible', '当前不适用')}
+                    </span>
+                  </div>
+                  {property.income_tax_cost_cap != null && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.incomeTaxCap', '所得税可计提上限')}</span>
+                      <span className="value">{formatCurrency(property.income_tax_cost_cap)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
 
-          {(property.grunderwerbsteuer || property.notary_fees || property.registry_fees) && (
-            <div className="info-card">
-              <h3>{t('properties.purchaseCostsSection')}</h3>
-              <div className="info-rows">
-                {property.grunderwerbsteuer && (
-                  <div className="info-row">
-                    <span className="label">{t('properties.grunderwerbsteuer')}</span>
-                    <span className="value">{formatCurrency(property.grunderwerbsteuer)}</span>
+              <div className="info-card">
+                <h3>{t('properties.assetDetails.depreciation', '折旧摘要')}</h3>
+                <div className="info-rows">
+                  {property.useful_life_years != null && (
+                    <div className="info-row">
+                      <span className="label">{t('properties.assetDetails.usefulLife', '使用年限')}</span>
+                      <span className="value">{property.useful_life_years} {t('properties.assetDetails.years', '年')}</span>
+                    </div>
+                  )}
+                  <div className="info-row highlight">
+                    <span className="label">{t('properties.accumulatedDepreciation')}</span>
+                    <span className="value">{formatCurrency(assetAccumulated)}</span>
                   </div>
-                )}
-                {property.notary_fees && (
-                  <div className="info-row">
-                    <span className="label">{t('properties.notaryFees')}</span>
-                    <span className="value">{formatCurrency(property.notary_fees)}</span>
+                  <div className="info-row highlight">
+                    <span className="label">{t('properties.remainingValue')}</span>
+                    <span className="value">{formatCurrency(assetRemaining)}</span>
                   </div>
-                )}
-                {property.registry_fees && (
-                  <div className="info-row">
-                    <span className="label">{t('properties.registryFees')}</span>
-                    <span className="value">{formatCurrency(property.registry_fees)}</span>
+                  <div className="info-row highlight">
+                    <span className="label">{t('properties.assetDetails.annualDepreciation', '年度折旧')}</span>
+                    <span className="value">{formatCurrency(assetAnnualDepreciation)}</span>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
@@ -381,7 +709,7 @@ const PropertyDetail = ({
       </div>
 
       {/* Tax Warnings Section */}
-      {warnings.length > 0 && (
+      {isRealEstate && warnings.length > 0 && (
         <div className="warnings-section">
           <h2>{t('properties.warnings.title')}</h2>
           <div className="warnings-list">
@@ -405,25 +733,241 @@ const PropertyDetail = ({
         </div>
       )}
 
-      {/* Historical Depreciation Backfill Section */}
-      <HistoricalDepreciationBackfill
-        property={property}
-        onBackfillComplete={handleBackfillComplete}
-      />
+      {/* Rental Contracts Section */}
+      {isRealEstate && (
+      <div className="rental-contracts-section">
+        <div className="section-header">
+          <h2>{t('properties.rentalContracts.title')}</h2>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Link
+              to={`/documents?property_id=${property.id}&type=rental_contract`}
+              className="btn btn-primary btn-sm"
+              style={{ textDecoration: 'none' }}
+            >
+              ➕ {t('properties.rentalContracts.addContract')}
+            </Link>
+          </div>
+        </div>
 
-      {/* Property Reports Section */}
-      <PropertyReports property={property} />
+        {isLoadingContracts ? (
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p>{t('common.loading')}</p>
+          </div>
+        ) : rentalContracts.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📋</div>
+            <p>{t('properties.rentalContracts.emptyUploadHint', '暂无租赁合同，请上传租赁合同文件，系统将自动识别并创建。')}</p>
+            <Link to={`/documents?property_id=${property.id}&type=rental_contract`} className="btn btn-primary btn-sm" style={{ marginTop: '8px', textDecoration: 'none' }}>
+              📄 {t('properties.rentalContracts.uploadContract', '上传租赁合同')}
+            </Link>
+          </div>
+        ) : (
+          <>
+            {rentalContracts.length > 0 && rentalContracts.every(
+              (c) => !c.is_active || (c.end_date && new Date(c.end_date) < new Date())
+            ) && (
+              <div className="warning-banner" style={{ marginBottom: '12px', padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', fontSize: '0.9rem', color: '#92400e' }}>
+                ⚠️ {t('properties.rentalContracts.allExpiredWarning', '所有租赁合同已过期，该房产已自动转为自用状态。如需继续出租，请添加新的租赁合同。')}
+              </div>
+            )}
+            <div className="rental-contracts-list">
+              {rentalContracts.map((contract) => {
+                const isExpired = !contract.is_active || (contract.end_date && new Date(contract.end_date) < new Date());
+                const isEditing = editingContractId === contract.id;
+                return (
+                  <div key={contract.id} className={`rental-contract-card ${isExpired ? 'expired' : 'active'}`}>
+                    <div className="contract-header">
+                      <span className="contract-description">{contract.description}</span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span className={`contract-status-badge ${isExpired ? 'expired' : 'active'}`}>
+                          {isExpired ? t('properties.rentalContracts.expired') : t('properties.rentalContracts.active')}
+                        </span>
+                        {!isEditing && (
+                          <>
+                            {contract.source_document_id ? (
+                              <Link
+                                to={`/documents/${contract.source_document_id}`}
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontSize: '0.75rem', textDecoration: 'none' }}
+                                title={t('properties.rentalContracts.viewLinkedDocument', '查看关联合同')}
+                              >
+                                📄
+                              </Link>
+                            ) : (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                onClick={() => startEditContract(contract)}
+                              >
+                                ✏️
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                              onClick={() => handleDeleteContract(contract.id)}
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="contract-details">
+                      {isEditing ? (
+                        <>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.rent')}</span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              className="unit-percentage-input"
+                              style={{ width: '120px' }}
+                              value={editingContractData.amount}
+                              onChange={(e) => setEditingContractData((p) => ({ ...p, amount: e.target.value }))}
+                            />
+                          </div>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.startDate')}</span>
+                            <input
+                              type="date"
+                              className="unit-percentage-input"
+                              style={{ width: '160px' }}
+                              value={editingContractData.start_date}
+                              onChange={(e) => setEditingContractData((p) => ({ ...p, start_date: e.target.value }))}
+                            />
+                          </div>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.endDate')}</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <input
+                                type="date"
+                                className="unit-percentage-input"
+                                style={{ width: '160px' }}
+                                value={editingContractData.end_date}
+                                onChange={(e) => setEditingContractData((p) => ({ ...p, end_date: e.target.value }))}
+                              />
+                              {editingContractData.end_date && (
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                                  onClick={() => setEditingContractData((p) => ({ ...p, end_date: '' }))}
+                                >
+                                  {t('properties.rentalContracts.clearEndDate')}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.status')}</span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={editingContractData.is_active}
+                                onChange={(e) => setEditingContractData((p) => ({ ...p, is_active: e.target.checked }))}
+                              />
+                              {editingContractData.is_active ? t('properties.rentalContracts.active') : t('properties.rentalContracts.expired')}
+                            </label>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              disabled={savingContractId === contract.id}
+                              onClick={() => saveEditContract(contract.id)}
+                            >
+                              {savingContractId === contract.id ? '...' : t('properties.rentalContracts.save')}
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={cancelEditContract}
+                            >
+                              {t('common.cancel')}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.rent')}</span>
+                            <span className="value">{formatCurrency(contract.amount)}</span>
+                          </div>
+                          <div className="contract-detail-row">
+                            <span className="label">{t('properties.rentalContracts.period')}</span>
+                            <span className="value">
+                              {contract.start_date ? formatDate(contract.start_date) : '—'}
+                              {' → '}
+                              {contract.end_date ? formatDate(contract.end_date) : '∞'}
+                            </span>
+                          </div>
+                          {contract.source_document_id && (
+                            <div className="contract-detail-row" style={{ borderTop: '1px dashed #e5e7eb', paddingTop: '6px', marginTop: '4px' }}>
+                              <span className="label" />
+                              <Link
+                                to={`/documents/${contract.source_document_id}`}
+                                style={{ fontSize: '0.8rem', color: '#4f46e5', textDecoration: 'none' }}
+                              >
+                                📄 {t('properties.rentalContracts.editFromDocument', '如需修改请前往关联合同')}
+                              </Link>
+                            </div>
+                          )}
+                          <div className="contract-detail-row unit-percentage-row">
+                            <span className="label">{t('properties.rentalContracts.unitPercentage')}</span>
+                            <div className="unit-percentage-input-group">
+                              <input
+                                type="number"
+                                min="0.01"
+                                max="100"
+                                step="0.01"
+                                className="unit-percentage-input"
+                                placeholder={t('properties.rentalContracts.unitPercentagePlaceholder')}
+                                value={editingPercentages[contract.id] ?? ''}
+                                onChange={(e) =>
+                                  setEditingPercentages((prev) => ({ ...prev, [contract.id]: e.target.value }))
+                                }
+                              />
+                              <span className="unit-percentage-suffix">%</span>
+                              <button
+                                className="btn btn-primary btn-sm"
+                                disabled={savingContractId === contract.id}
+                                onClick={() => saveUnitPercentage(contract.id)}
+                              >
+                                {savingContractId === contract.id ? '...' : t('properties.rentalContracts.save')}
+                              </button>
+                            </div>
+                            {contract.unit_percentage == null && (
+                              <div className="percentage-hint">
+                                ⚠️ {t('properties.rentalContracts.setPercentageHint')}
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="rental-total-summary">
+              <span className="label">{t('properties.rentalContracts.totalRentalPercentage')}</span>
+              <span className="value">{property.rental_percentage}%</span>
+            </div>
+          </>
+        )}
+      </div>
+      )}
 
       {/* Linked Transactions Section */}
       <div className="transactions-section">
         <div className="section-header">
-          <h2>{t('properties.linkedTransactions')}</h2>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowLinkModal(true)}
-          >
-            🔗 {t('properties.linkTransaction')}
-          </button>
+          <div className="section-header-copy">
+            <h2>{sectionCopy.title}</h2>
+            <p className="section-description">
+              {sectionCopy.description}{' '}
+              <Link to="/transactions">{sectionCopy.manageLinkLabel}</Link>
+            </p>
+          </div>
         </div>
 
         {isLoadingTransactions ? (
@@ -434,8 +978,8 @@ const PropertyDetail = ({
         ) : transactions.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📋</div>
-            <h3>{t('properties.noTransactions')}</h3>
-            <p>{t('properties.noTransactionsDescription')}</p>
+            <h3>{sectionCopy.emptyTitle}</h3>
+            <p>{sectionCopy.emptyDescription}</p>
           </div>
         ) : (
           <div className="transactions-by-year">
@@ -472,7 +1016,6 @@ const PropertyDetail = ({
                           <th>{t('transactions.category')}</th>
                           <th>{t('transactions.type')}</th>
                           <th className="amount-col">{t('transactions.amount')}</th>
-                          <th className="actions-col">{t('common.actions')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -493,15 +1036,6 @@ const PropertyDetail = ({
                             <td className={`amount-col ${transaction.type}`}>
                               {formatCurrency(transaction.amount)}
                             </td>
-                            <td className="actions-col">
-                              <button
-                                className="btn-icon btn-danger"
-                                onClick={() => handleUnlinkTransaction(transaction.id)}
-                                title={t('properties.unlinkTransaction')}
-                              >
-                                🔗✖️
-                              </button>
-                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -513,31 +1047,6 @@ const PropertyDetail = ({
           </div>
         )}
       </div>
-
-      {/* Link Transaction Modal (placeholder) */}
-      {showLinkModal && (
-        <div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{t('properties.linkTransaction')}</h2>
-              <button className="modal-close" onClick={() => setShowLinkModal(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>{t('properties.linkTransactionDescription')}</p>
-              <p className="info-message">
-                ℹ️ {t('properties.linkTransactionHint')}
-              </p>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowLinkModal(false)}>
-                {t('common.close')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

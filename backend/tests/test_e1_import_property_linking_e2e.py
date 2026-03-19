@@ -31,6 +31,7 @@ from app.services.property_service import PropertyService
 from app.services.e1_form_import_service import E1FormImportService
 from app.services.e1_form_extractor import E1FormData
 from app.schemas.property import PropertyCreate
+from tests.fixtures.database import reset_test_schema
 
 
 # Test database setup
@@ -45,6 +46,7 @@ TEST_DATABASE_URL = os.getenv(
 def db_session():
     """Create a test database session with clean state"""
     engine = create_engine(TEST_DATABASE_URL)
+    reset_test_schema(engine)
     Base.metadata.create_all(bind=engine)
     
     SessionLocal = sessionmaker(bind=engine)
@@ -53,7 +55,7 @@ def db_session():
     yield session
     
     session.close()
-    Base.metadata.drop_all(bind=engine)
+    reset_test_schema(engine)
     engine.dispose()
 
 

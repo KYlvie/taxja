@@ -6,98 +6,164 @@ Tracks property creation, depreciation generation, backfill operations, and erro
 """
 import logging
 from typing import Optional
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
 
 
-# Initialize metrics at module level
-# Prometheus client handles duplicate registration internally
+def _expected_labelnames(args, kwargs) -> tuple[str, ...]:
+    if "labelnames" in kwargs:
+        return tuple(kwargs["labelnames"])
+    if args and isinstance(args[0], (list, tuple)):
+        return tuple(args[0])
+    return ()
+
+
+def _collector_matches(existing, metric_cls, expected_labelnames: tuple[str, ...]) -> bool:
+    return (
+        existing is not None
+        and isinstance(existing, metric_cls)
+        and tuple(getattr(existing, "_labelnames", ())) == expected_labelnames
+    )
+
+
+def _unregister_conflicting_collector(existing) -> None:
+    if existing is None:
+        return
+    try:
+        REGISTRY.unregister(existing)
+    except KeyError:
+        pass
+
+
+def _get_or_create_metric(metric_cls, name: str, documentation: str, *args, **kwargs):
+    """Reuse an existing Prometheus collector when the module is imported repeatedly."""
+    registry_map = getattr(REGISTRY, "_names_to_collectors", {})
+    lookup_names = [name]
+    if name.endswith("_total"):
+        lookup_names.append(name[:-6])
+    expected_labelnames = _expected_labelnames(args, kwargs)
+    conflicting = None
+
+    for lookup_name in lookup_names:
+        existing = registry_map.get(lookup_name)
+        if _collector_matches(existing, metric_cls, expected_labelnames):
+            return existing
+        if existing is not None:
+            conflicting = existing
+
+    try:
+        _unregister_conflicting_collector(conflicting)
+        return metric_cls(name, documentation, *args, **kwargs)
+    except ValueError:
+        registry_map = getattr(REGISTRY, "_names_to_collectors", {})
+        for lookup_name in lookup_names:
+            existing = registry_map.get(lookup_name)
+            if _collector_matches(existing, metric_cls, expected_labelnames):
+                return existing
+            if existing is not None:
+                conflicting = existing
+        _unregister_conflicting_collector(conflicting)
+        return metric_cls(name, documentation, *args, **kwargs)
 
 # Property creation metrics
-property_created_total = Counter(
+property_created_total = _get_or_create_metric(
+    Counter,
     'property_created_total',
     'Total number of properties created',
     ['property_type', 'user_type']
 )
 
-property_creation_errors_total = Counter(
+property_creation_errors_total = _get_or_create_metric(
+    Counter,
     'property_creation_errors_total',
     'Total number of property creation errors',
     ['error_type']
 )
 
 # Depreciation generation metrics
-depreciation_generated_total = Counter(
+depreciation_generated_total = _get_or_create_metric(
+    Counter,
     'depreciation_generated_total',
     'Total number of depreciation transactions generated',
     ['generation_type']
 )
 
-depreciation_generation_errors_total = Counter(
+depreciation_generation_errors_total = _get_or_create_metric(
+    Counter,
     'depreciation_generation_errors_total',
     'Total number of depreciation generation errors',
     ['error_type']
 )
 
-depreciation_amount_total = Counter(
+depreciation_amount_total = _get_or_create_metric(
+    Counter,
     'depreciation_amount_total',
     'Total depreciation amount generated in EUR',
     ['generation_type']
 )
 
 # Backfill operation metrics
-backfill_duration_seconds = Histogram(
+backfill_duration_seconds = _get_or_create_metric(
+    Histogram,
     'backfill_duration_seconds',
     'Duration of historical depreciation backfill operations',
     buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
 )
 
-backfill_years_processed = Histogram(
+backfill_years_processed = _get_or_create_metric(
+    Histogram,
     'backfill_years_processed',
     'Number of years processed in backfill operations',
     buckets=[1, 2, 3, 5, 10, 15, 20, 30]
 )
 
-backfill_errors_total = Counter(
+backfill_errors_total = _get_or_create_metric(
+    Counter,
     'backfill_errors_total',
     'Total number of backfill operation errors',
     ['error_type']
 )
 
 # Property operation metrics
-property_updated_total = Counter(
+property_updated_total = _get_or_create_metric(
+    Counter,
     'property_updated_total',
     'Total number of property updates',
     ['update_type']
 )
 
-property_deleted_total = Counter(
+property_deleted_total = _get_or_create_metric(
+    Counter,
     'property_deleted_total',
     'Total number of properties deleted'
 )
 
-property_archived_total = Counter(
+property_archived_total = _get_or_create_metric(
+    Counter,
     'property_archived_total',
     'Total number of properties archived'
 )
 
 # Transaction linking metrics
-transaction_linked_total = Counter(
+transaction_linked_total = _get_or_create_metric(
+    Counter,
     'transaction_linked_total',
     'Total number of transactions linked to properties',
     ['transaction_type']
 )
 
-transaction_unlinked_total = Counter(
+transaction_unlinked_total = _get_or_create_metric(
+    Counter,
     'transaction_unlinked_total',
     'Total number of transactions unlinked from properties'
 )
 
 # Property query performance metrics
-property_query_duration_seconds = Histogram(
+property_query_duration_seconds = _get_or_create_metric(
+    Histogram,
     'property_query_duration_seconds',
     'Duration of property query operations',
     ['query_type'],
@@ -105,27 +171,31 @@ property_query_duration_seconds = Histogram(
 )
 
 # Cache metrics
-property_cache_hits_total = Counter(
+property_cache_hits_total = _get_or_create_metric(
+    Counter,
     'property_cache_hits_total',
     'Total number of property cache hits',
     ['cache_type']
 )
 
-property_cache_misses_total = Counter(
+property_cache_misses_total = _get_or_create_metric(
+    Counter,
     'property_cache_misses_total',
     'Total number of property cache misses',
     ['cache_type']
 )
 
 # Active properties gauge
-active_properties_gauge = Gauge(
+active_properties_gauge = _get_or_create_metric(
+    Gauge,
     'active_properties_total',
     'Current number of active properties',
     ['property_type']
 )
 
 # Validation error metrics
-property_validation_errors_total = Counter(
+property_validation_errors_total = _get_or_create_metric(
+    Counter,
     'property_validation_errors_total',
     'Total number of property validation errors',
     ['validation_type']

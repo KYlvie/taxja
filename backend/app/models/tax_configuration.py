@@ -123,12 +123,12 @@ def get_2026_tax_config() -> dict:
         "svs_rates": {
             "pension": 0.185,                  # 18.5% Pensionsversicherung
             "health": 0.068,                   # 6.8% Krankenversicherung
-            "accident_fixed": 12.17,           # ~€12.17/month Unfallversicherung (adjusted)
+            "accident_fixed": 12.95,           # €12.95/month Unfallversicherung (WKO 2026)
             "supplementary_pension": 0.0153,   # 1.53% Selbständigenvorsorge (BMSVG)
             "gsvg_min_base_monthly": 551.10,   # Mindestbeitragsgrundlage (= Geringfügigkeitsgrenze)
             "gsvg_min_income_yearly": 6613.20, # = 12 × 551.10
             "neue_min_monthly": 160.81,        # Neue Selbständige Mindestbeitrag
-            "max_base_monthly": 7585.00        # Höchstbeitragsgrundlage GSVG 2026
+            "max_base_monthly": 8085.00        # Höchstbeitragsgrundlage GSVG 2026 (WKO)
         },
         "deduction_config": {
             "home_office": 300.00,
@@ -139,7 +139,8 @@ def get_2026_tax_config() -> dict:
             "familienbonus_under_18": 2000.16,
             "familienbonus_18_24": 700.08,
             "alleinverdiener_base": 612.00,
-            "alleinverdiener_per_child": 273.00,
+            "alleinverdiener_2_children": 828.00,
+            "alleinverdiener_per_extra_child": 273.00,
             "commuting_brackets": {
                 "small": {
                     "20": 58.00,
@@ -161,22 +162,30 @@ def get_2026_tax_config() -> dict:
                 "grundfreibetrag_rate": 0.15,
                 "grundfreibetrag_max": 4950.00,
                 "max_total_freibetrag": 46400.00,
-                "flat_rate_turnover_limit": 320000.00,
-                "flat_rate_general": 0.135,
+                "flat_rate_turnover_limit": 420000.00,
+                "flat_rate_general": 0.15,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 55000.00,
                 "kleinunternehmer_tolerance": 60500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
-            # 2026: cold-progression adjusted
-            "zuschlag_verkehrsabsetzbetrag": 752.00,
-            "zuschlag_income_lower": 16832.00,
-            "zuschlag_income_upper": 28326.00,
-            "pensionisten_absetzbetrag": 954.00,
-            "pensionisten_income_lower": 20233.00,
-            "pensionisten_income_upper": 30981.00,
-            "erhoehter_pensionisten": 1405.00,
-            "erhoehter_pensionisten_upper": 25774.00,
+            "kindermehrbetrag": 700.00,
+            "unterhaltsabsetzbetrag": {
+                "first_child_monthly": 38.00,
+                "second_child_monthly": 56.00,
+                "third_plus_child_monthly": 75.00
+            },
+            # 2026: cold-progression adjusted (BMF 2026)
+            "zuschlag_verkehrsabsetzbetrag": 804.00,
+            "zuschlag_income_lower": 19761.00,
+            "zuschlag_income_upper": 30259.00,
+            "erhoehter_verkehrsabsetzbetrag": 853.00,
+            "pensionisten_absetzbetrag": 1020.00,
+            "pensionisten_income_lower": 21614.00,
+            "pensionisten_income_upper": 31494.00,
+            "erhoehter_pensionisten": 1502.00,
+            "erhoehter_pensionisten_income_lower": 24616.00,
+            "erhoehter_pensionisten_income_upper": 31494.00,
             "sonderausgabenpauschale": 60.00
         }
     }
@@ -221,7 +230,7 @@ def get_2025_tax_config() -> dict:
             "gsvg_min_base_monthly": 500.91,
             "gsvg_min_income_yearly": 6010.92,
             "neue_min_monthly": 146.18,
-            "max_base_monthly": 7070.00
+            "max_base_monthly": 7525.00        # Höchstbeitragsgrundlage GSVG 2025 (WKO)
         },
         "deduction_config": {
             "home_office": 300.00,
@@ -232,7 +241,8 @@ def get_2025_tax_config() -> dict:
             "familienbonus_under_18": 2000.16,
             "familienbonus_18_24": 700.08,
             "alleinverdiener_base": 601.00,
-            "alleinverdiener_per_child": 268.00,
+            "alleinverdiener_2_children": 813.00,
+            "alleinverdiener_per_extra_child": 268.00,
             "commuting_brackets": {
                 "small": {
                     "20": 58.00,
@@ -246,7 +256,7 @@ def get_2025_tax_config() -> dict:
                     "60": 306.00
                 }
             },
-            "pendler_euro_per_km": 6.00,
+            "pendler_euro_per_km": 2.00,
             "basic_exemption_rate": 0.15,
             "basic_exemption_max": 4950.00,
             "self_employed": {
@@ -261,15 +271,23 @@ def get_2025_tax_config() -> dict:
                 "kleinunternehmer_tolerance": 60500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
-            # 2025: cold-progression adjusted
-            "zuschlag_verkehrsabsetzbetrag": 725.00,
-            "zuschlag_income_lower": 16293.00,
-            "zuschlag_income_upper": 27420.00,
-            "pensionisten_absetzbetrag": 924.00,
-            "pensionisten_income_lower": 19583.00,
-            "pensionisten_income_upper": 29987.00,
-            "erhoehter_pensionisten": 1361.00,
-            "erhoehter_pensionisten_upper": 24953.00,
+            "kindermehrbetrag": 700.00,
+            "unterhaltsabsetzbetrag": {
+                "first_child_monthly": 37.00,
+                "second_child_monthly": 55.00,
+                "third_plus_child_monthly": 73.00
+            },
+            # 2025: cold-progression adjusted (BMF/AK/finanz.at verified)
+            "zuschlag_verkehrsabsetzbetrag": 790.00,
+            "zuschlag_income_lower": 19424.00,
+            "zuschlag_income_upper": 29743.00,
+            "erhoehter_verkehrsabsetzbetrag": 838.00,
+            "pensionisten_absetzbetrag": 1002.00,
+            "pensionisten_income_lower": 21245.00,
+            "pensionisten_income_upper": 30957.00,
+            "erhoehter_pensionisten": 1476.00,
+            "erhoehter_pensionisten_income_lower": 24196.00,
+            "erhoehter_pensionisten_income_upper": 30957.00,
             "sonderausgabenpauschale": 60.00
         }
     }
@@ -323,14 +341,15 @@ def get_2024_tax_config() -> dict:
         },
         "deduction_config": {
             "home_office": 300.00,
-            "child_deduction_monthly": 58.40,
+            "child_deduction_monthly": 67.80,
             "single_parent_deduction": 572.00,
             "verkehrsabsetzbetrag": 463.00,
             "werbungskostenpauschale": 132.00,
             "familienbonus_under_18": 2000.16,
             "familienbonus_18_24": 700.08,
             "alleinverdiener_base": 572.00,
-            "alleinverdiener_per_child": 256.00,
+            "alleinverdiener_2_children": 774.00,
+            "alleinverdiener_per_extra_child": 255.00,
             "commuting_brackets": {
                 "small": {
                     "20": 58.00,
@@ -359,15 +378,23 @@ def get_2024_tax_config() -> dict:
                 "kleinunternehmer_tolerance": 38500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
-            # 2024: cold-progression adjusted
-            "zuschlag_verkehrsabsetzbetrag": 684.00,
-            "zuschlag_income_lower": 16293.00,
-            "zuschlag_income_upper": 27420.00,
-            "pensionisten_absetzbetrag": 868.00,
-            "pensionisten_income_lower": 19413.00,
-            "pensionisten_income_upper": 28956.00,
-            "erhoehter_pensionisten": 1278.00,
-            "erhoehter_pensionisten_upper": 24480.00,
+            "kindermehrbetrag": 700.00,
+            "unterhaltsabsetzbetrag": {
+                "first_child_monthly": 35.00,
+                "second_child_monthly": 52.00,
+                "third_plus_child_monthly": 69.00
+            },
+            # 2024: cold-progression adjusted (BMF 2024)
+            "zuschlag_verkehrsabsetzbetrag": 752.00,
+            "zuschlag_income_lower": 18499.00,
+            "zuschlag_income_upper": 28326.00,
+            "erhoehter_verkehrsabsetzbetrag": 798.00,
+            "pensionisten_absetzbetrag": 954.00,
+            "pensionisten_income_lower": 20233.00,
+            "pensionisten_income_upper": 29482.00,
+            "erhoehter_pensionisten": 1405.00,
+            "erhoehter_pensionisten_income_lower": 23043.00,
+            "erhoehter_pensionisten_income_upper": 29482.00,
             "sonderausgabenpauschale": 60.00
         }
     }
@@ -391,7 +418,7 @@ def get_2022_tax_config() -> dict:
         "tax_brackets": [
             {"lower": 0, "upper": 11000, "rate": 0.00},
             {"lower": 11000, "upper": 18000, "rate": 0.20},
-            {"lower": 18000, "upper": 31000, "rate": 0.35},
+            {"lower": 18000, "upper": 31000, "rate": 0.325},
             {"lower": 31000, "upper": 60000, "rate": 0.42},
             {"lower": 60000, "upper": 90000, "rate": 0.48},
             {"lower": 90000, "upper": 1000000, "rate": 0.50},
@@ -424,7 +451,8 @@ def get_2022_tax_config() -> dict:
             "familienbonus_under_18": 2000.16,
             "familienbonus_18_24": 650.16,
             "alleinverdiener_base": 494.00,
-            "alleinverdiener_per_child": 220.00,
+            "alleinverdiener_2_children": 669.00,
+            "alleinverdiener_per_extra_child": 220.00,
             "commuting_brackets": {
                 "small": {
                     "20": 58.00,
@@ -438,6 +466,8 @@ def get_2022_tax_config() -> dict:
                     "60": 306.00
                 }
             },
+            # Pendlereuro: Regelwert 2.00 €/km/Jahr.
+            # Temporäre Erhöhung 2022.05–2023.06: 8.00 €/km + Pauschale +50% (nicht modelliert).
             "pendler_euro_per_km": 2.00,
             "basic_exemption_rate": 0.15,
             "basic_exemption_max": 4950.00,
@@ -453,6 +483,12 @@ def get_2022_tax_config() -> dict:
                 "kleinunternehmer_tolerance": 38500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
+            "kindermehrbetrag": 550.00,
+            "unterhaltsabsetzbetrag": {
+                "first_child_monthly": 29.20,
+                "second_child_monthly": 43.80,
+                "third_plus_child_monthly": 58.40
+            },
             # 2022: Zuschlag and Pensionistenabsetzbetrag (pre cold-progression)
             "zuschlag_verkehrsabsetzbetrag": 684.00,
             "zuschlag_income_lower": 15500.00,
@@ -460,8 +496,9 @@ def get_2022_tax_config() -> dict:
             "pensionisten_absetzbetrag": 868.00,
             "pensionisten_income_lower": 17000.00,
             "pensionisten_income_upper": 25000.00,
-            "erhoehter_pensionisten": 1278.00,
-            "erhoehter_pensionisten_upper": 22500.00,
+            "erhoehter_pensionisten": 1214.00,
+            "erhoehter_pensionisten_income_lower": 19930.00,
+            "erhoehter_pensionisten_income_upper": 25250.00,
             "sonderausgabenpauschale": 60.00
         }
     }
@@ -512,14 +549,15 @@ def get_2023_tax_config() -> dict:
         },
         "deduction_config": {
             "home_office": 300.00,
-            "child_deduction_monthly": 58.40,
+            "child_deduction_monthly": 61.80,
             "single_parent_deduction": 520.00,
             "verkehrsabsetzbetrag": 421.00,
             "werbungskostenpauschale": 132.00,
             "familienbonus_under_18": 2000.16,
             "familienbonus_18_24": 650.16,
             "alleinverdiener_base": 520.00,
-            "alleinverdiener_per_child": 232.00,
+            "alleinverdiener_2_children": 704.00,
+            "alleinverdiener_per_extra_child": 232.00,
             "commuting_brackets": {
                 "small": {
                     "20": 58.00,
@@ -533,6 +571,8 @@ def get_2023_tax_config() -> dict:
                     "60": 306.00
                 }
             },
+            # Pendlereuro: Regelwert 2.00 €/km/Jahr.
+            # Temporäre Erhöhung 2022.05–2023.06: 8.00 €/km + Pauschale +50% (nicht modelliert).
             "pendler_euro_per_km": 2.00,
             "basic_exemption_rate": 0.15,
             "basic_exemption_max": 4950.00,
@@ -548,15 +588,22 @@ def get_2023_tax_config() -> dict:
                 "kleinunternehmer_tolerance": 38500.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
-            # 2023: First year of cold-progression adjustment for these credits
+            "kindermehrbetrag": 550.00,
+            "unterhaltsabsetzbetrag": {
+                "first_child_monthly": 31.00,
+                "second_child_monthly": 47.00,
+                "third_plus_child_monthly": 62.00
+            },
+            # 2023: First year of cold-progression adjustment (Findok/BMF verified)
             "zuschlag_verkehrsabsetzbetrag": 684.00,
-            "zuschlag_income_lower": 16499.00,
-            "zuschlag_income_upper": 26532.00,
+            "zuschlag_income_lower": 16832.00,
+            "zuschlag_income_upper": 25774.00,
             "pensionisten_absetzbetrag": 868.00,
             "pensionisten_income_lower": 18410.00,
-            "pensionisten_income_upper": 27460.00,
+            "pensionisten_income_upper": 26826.00,
             "erhoehter_pensionisten": 1278.00,
-            "erhoehter_pensionisten_upper": 23580.00,
+            "erhoehter_pensionisten_income_lower": 20967.00,
+            "erhoehter_pensionisten_income_upper": 26826.00,
             "sonderausgabenpauschale": 60.00
         }
     }

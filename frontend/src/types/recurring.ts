@@ -31,6 +31,7 @@ export interface RecurringTransaction {
   paused_at?: string;
   last_generated_date?: string;
   next_generation_date?: string;
+  source_document_id?: number;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -49,6 +50,7 @@ export interface RentalIncomeRecurringCreate {
   start_date: string;
   end_date?: string;
   day_of_month?: number;
+  unit_percentage?: number;
 }
 
 export interface LoanInterestRecurringCreate {
@@ -63,8 +65,25 @@ export interface RecurringTransactionUpdate {
   description?: string;
   amount?: number;
   frequency?: RecurrenceFrequency;
-  end_date?: string;
+  start_date?: string;
+  end_date?: string | null;
   day_of_month?: number;
   notes?: string;
   is_active?: boolean;
+  unit_percentage?: number;
+}
+
+export interface RecurringTransactionCreate {
+  recurring_type: string;
+  description: string;
+  amount: number;
+  transaction_type: 'income' | 'expense';
+  category: string;
+  frequency: RecurrenceFrequency;
+  start_date: string;
+  end_date?: string;
+  day_of_month?: number;
+  notes?: string;
+  property_id?: string;
+  loan_id?: number;
 }

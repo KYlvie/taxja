@@ -1,33 +1,45 @@
-"""Database session management with connection pooling"""
+"""Database session management with connection pooling.
+
+When using PgBouncer in transaction mode (production), SQLAlchemy should use
+NullPool so that PgBouncer manages the actual connection pool. In development
+(direct PostgreSQL), we use QueuePool with sensible defaults.
+"""
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
+_USE_PGBOUNCER = os.getenv("USE_PGBOUNCER", "false").lower() == "true"
 
-# Create async engine with connection pooling
+# When PgBouncer handles pooling, use NullPool on the app side to avoid
+# double-pooling. Otherwise keep a local pool for dev convenience.
+_pool_kwargs = (
+    {"poolclass": NullPool}
+    if _USE_PGBOUNCER
+    else {
+        "pool_pre_ping": True,
+        "pool_size": 30,
+        "max_overflow": 20,
+        "pool_recycle": 1800,
+        "pool_timeout": 30,
+    }
+)
+
+# Create async engine
 engine = create_async_engine(
     settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
     echo=False,
     future=True,
-    pool_pre_ping=True,  # Verify connections before using
-    pool_size=20,  # Maximum number of connections in the pool
-    max_overflow=10,  # Maximum overflow connections
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    pool_timeout=30,  # Timeout for getting connection from pool
-    # AsyncEngine uses AsyncAdaptedQueuePool by default, don't specify poolclass
+    **_pool_kwargs,
 )
 
 # Create sync engine for Celery tasks
 sync_engine = create_engine(
     settings.DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
-    pool_recycle=3600,
-    pool_timeout=30,
+    **_pool_kwargs,
 )
 
 # Create async session factory

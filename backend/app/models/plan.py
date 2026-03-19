@@ -1,7 +1,8 @@
 """Plan model for subscription plans"""
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from decimal import Decimal
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -45,6 +46,11 @@ class Plan(Base):
     features = Column(JSONB, nullable=False, default={})
     quotas = Column(JSONB, nullable=False, default={})
     
+    # Credit billing fields
+    monthly_credits = Column(Integer, nullable=False, default=0)
+    overage_price_per_credit = Column(Numeric(6, 4), nullable=True)
+    # None = overage not supported (Free plan)
+
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

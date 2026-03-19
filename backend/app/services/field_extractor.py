@@ -49,6 +49,7 @@ class FieldExtractor:
         fields["merchant_confidence"] = merchant_field.confidence
         items = self.extract_line_items(text)
         fields["items"] = items
+        fields["line_items"] = items
         fields["items_count"] = len(items)
         vat_amounts = self.extract_vat_amounts(text)
         fields["vat_amounts"] = vat_amounts
@@ -809,9 +810,18 @@ class FieldExtractor:
         return [text]
 
     def _split_within_page(self, text: str) -> List[str]:
-        """Try to detect multiple receipts within a single page of text."""
-        # Look for repeated receipt/invoice headers
-        header_pattern = r"(?:Rechnung|Invoice|Receipt|Beleg|Quittung)\s*(?:\||:|\b)"
+        """Try to detect multiple receipts within a single page of text.
+
+        Strategy:
+        1. Look for repeated receipt/invoice headers (Rechnung, Kassenbon, etc.)
+        2. Look for repeated merchant/store name patterns at start of blocks
+        3. Look for multiple total/sum lines as segment boundaries
+        """
+        # Strategy 1: Repeated receipt/invoice headers
+        header_pattern = (
+            r"(?:Rechnung|Invoice|Receipt|Beleg|Quittung|Kassenbon|Kassabon|BON\s*NR)"
+            r"\s*(?:\||:|\b|#|\d)"
+        )
         matches = list(re.finditer(header_pattern, text, re.IGNORECASE))
 
         if len(matches) >= 2:
@@ -820,9 +830,34 @@ class FieldExtractor:
                 start = match.start()
                 end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
                 segment = text[start:end].strip()
-                # Validate: segment must have an amount
                 if re.search(r"\d+[,\.]\d{2}", segment):
                     segments.append(segment)
+            if len(segments) >= 2:
+                return segments
+
+        # Strategy 2: Multiple total/sum lines as boundaries
+        # Each total line likely ends a receipt; the text after starts a new one
+        total_pattern = (
+            r"^.*(?:SUMME|TOTAL|GESAMT|ZAHLBETRAG|RECHNUNGSBETRAG|ENDBETRAG|ZU ZAHLEN)"
+            r"[:\s]*[\d.,]+\s*(?:EUR|€)?"
+        )
+        total_matches = list(re.finditer(total_pattern, text, re.IGNORECASE | re.MULTILINE))
+
+        if len(total_matches) >= 2:
+            segments = []
+            prev_end = 0
+            for match in total_matches:
+                end = match.end()
+                segment = text[prev_end:end].strip()
+                if segment and re.search(r"\d+[,\.]\d{2}", segment):
+                    segments.append(segment)
+                prev_end = end
+            # Remaining text after last total
+            remaining = text[prev_end:].strip()
+            if remaining and re.search(r"\d+[,\.]\d{2}", remaining):
+                segments[-1] += "\n" + remaining if segments else None
+                if not segments:
+                    segments.append(remaining)
             if len(segments) >= 2:
                 return segments
 

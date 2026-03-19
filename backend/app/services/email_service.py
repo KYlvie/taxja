@@ -1,106 +1,207 @@
-"""
-Email notification service using SMTP.
-
-Sends transactional emails for events like depreciation generation,
-subscription changes, and security alerts.
-"""
+"""Email service for sending verification and notification emails."""
 import logging
 import smtplib
+import secrets
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from datetime import datetime
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-class EmailService:
-    """Lightweight SMTP email sender"""
+def generate_verification_token() -> str:
+    """Generate a secure random token for email verification."""
+    return secrets.token_urlsafe(32)
 
-    def send(
-        self,
-        to_email: str,
-        subject: str,
-        body_html: str,
-        body_text: Optional[str] = None,
-    ) -> bool:
-        """
-        Send an email via SMTP.
 
-        Returns True on success, False on failure (never raises).
-        """
-        if not settings.ENABLE_EMAIL_NOTIFICATIONS:
-            logger.debug("Email notifications disabled, skipping send to %s", to_email)
-            return False
+def _get_verification_url(token: str) -> str:
+    """Build the frontend verification URL."""
+    # In production, use a proper domain; in dev, use localhost:5173
+    base = "http://localhost:5173"
+    return f"{base}/verify-email?token={token}"
+
+
+def _build_verification_html(name: str, token: str, language: str = "de") -> str:
+    """Build HTML email body for verification."""
+    url = _get_verification_url(token)
+
+    subjects = {
+        "de": "Bitte bestätigen Sie Ihre E-Mail-Adresse",
+        "en": "Please verify your email address",
+        "zh": "请验证您的邮箱地址",
+    }
+    headings = {
+        "de": f"Hallo {name},",
+        "en": f"Hello {name},",
+        "zh": f"{name}，您好！",
+    }
+    bodies = {
+        "de": "Vielen Dank für Ihre Registrierung bei Taxja. Bitte klicken Sie auf den Button, um Ihre E-Mail-Adresse zu bestätigen.",
+        "en": "Thank you for registering with Taxja. Please click the button below to verify your email address.",
+        "zh": "感谢您注册 Taxja。请点击下方按钮验证您的邮箱地址。",
+    }
+    buttons = {
+        "de": "E-Mail bestätigen",
+        "en": "Verify Email",
+        "zh": "验证邮箱",
+    }
+    footers = {
+        "de": "Wenn Sie sich nicht bei Taxja registriert haben, können Sie diese E-Mail ignorieren.",
+        "en": "If you did not register for Taxja, you can ignore this email.",
+        "zh": "如果您没有注册 Taxja，请忽略此邮件。",
+    }
+
+    lang = language if language in subjects else "de"
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1e293b">
+  <div style="text-align:center;margin-bottom:24px">
+    <h2 style="color:#0ea5e9;margin:0">Taxja</h2>
+  </div>
+  <h3>{headings[lang]}</h3>
+  <p style="line-height:1.6">{bodies[lang]}</p>
+  <div style="text-align:center;margin:32px 0">
+    <a href="{url}" style="display:inline-block;padding:14px 32px;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">{buttons[lang]}</a>
+  </div>
+  <p style="font-size:0.85rem;color:#64748b">{footers[lang]}</p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
+  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">Taxja - Steuern einfach ja!</p>
+</body></html>"""
+
+
+def send_verification_email(email: str, name: str, token: str, language: str = "de") -> bool:
+    """Send verification email. Returns True if sent successfully."""
+    if not settings.ENABLE_EMAIL_NOTIFICATIONS:
+        # Dev mode: log the verification URL instead of sending
+        url = _get_verification_url(token)
+        logger.info(f"[DEV] Verification email for {email}: {url}")
+        print(f"\n{'='*60}")
+        print(f"  EMAIL VERIFICATION (dev mode - no SMTP)")
+        print(f"  To: {email}")
+        print(f"  URL: {url}")
+        print(f"{'='*60}\n")
+        return True
+
+    try:
+        subjects = {
+            "de": "Taxja: Bitte bestätigen Sie Ihre E-Mail-Adresse",
+            "en": "Taxja: Please verify your email address",
+            "zh": "Taxja: 请验证您的邮箱地址",
+        }
+        lang = language if language in subjects else "de"
 
         msg = MIMEMultipart("alternative")
+        msg["Subject"] = subjects[lang]
         msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg["Subject"] = subject
+        msg["To"] = email
 
-        if body_text:
-            msg.attach(MIMEText(body_text, "plain", "utf-8"))
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
+        html = _build_verification_html(name, token, lang)
+        msg.attach(MIMEText(html, "html", "utf-8"))
 
-        try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
             if settings.SMTP_USE_TLS:
-                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
                 server.starttls()
-            else:
-                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
-
-            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+            if settings.SMTP_USER:
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_FROM_EMAIL, [email], msg.as_string())
 
-            server.sendmail(settings.SMTP_FROM_EMAIL, to_email, msg.as_string())
-            server.quit()
-            logger.info("Email sent to %s: %s", to_email, subject)
-            return True
-        except Exception as e:
-            logger.error("Failed to send email to %s: %s", to_email, e)
-            return False
-
-    # ── Convenience helpers ──────────────────────────────────────────
-
-    def send_depreciation_notification(
-        self, to_email: str, user_name: str, year: int, property_count: int, total_amount: float
-    ) -> bool:
-        subject = f"Taxja – Jahresabschreibung {year} generiert"
-        body_html = (
-            f"<p>Sehr geehrte/r {user_name},</p>"
-            f"<p>Die automatische Abschreibung (AfA) für das Jahr <strong>{year}</strong> "
-            f"wurde erfolgreich generiert.</p>"
-            f"<p><strong>Zusammenfassung:</strong></p>"
-            f"<ul>"
-            f"<li>Anzahl Immobilien: {property_count}</li>"
-            f"<li>Gesamtabschreibung: €{total_amount:,.2f}</li>"
-            f"</ul>"
-            f"<p>Sie können die Details in Ihrem "
-            f"<a href='https://app.taxja.at/transactions'>Taxja-Dashboard</a> einsehen.</p>"
-            f"<p>Mit freundlichen Grüßen,<br/>Ihr Taxja Team</p>"
-        )
-        body_text = (
-            f"Sehr geehrte/r {user_name},\n\n"
-            f"Die automatische Abschreibung (AfA) für {year} wurde generiert.\n"
-            f"Immobilien: {property_count}, Gesamt: €{total_amount:,.2f}\n\n"
-            f"Details: https://app.taxja.at/transactions\n\n"
-            f"Ihr Taxja Team"
-        )
-        return self.send(to_email, subject, body_html, body_text)
-
-    def send_subscription_confirmation(
-        self, to_email: str, user_name: str, plan_name: str
-    ) -> bool:
-        subject = f"Taxja – Abo bestätigt: {plan_name}"
-        body_html = (
-            f"<p>Hallo {user_name},</p>"
-            f"<p>Ihr <strong>{plan_name}</strong>-Abo ist jetzt aktiv.</p>"
-            f"<p><a href='https://app.taxja.at/dashboard'>Zum Dashboard</a></p>"
-            f"<p>Ihr Taxja Team</p>"
-        )
-        return self.send(to_email, subject, body_html)
+        logger.info(f"Verification email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send verification email to {email}: {e}")
+        return False
 
 
-# Module-level singleton
-email_service = EmailService()
+def _get_reset_password_url(token: str) -> str:
+    """Build the frontend password reset URL."""
+    base = "http://localhost:5173"
+    return f"{base}/reset-password?token={token}"
+
+
+def _build_reset_password_html(name: str, token: str, language: str = "de") -> str:
+    """Build HTML email body for password reset."""
+    url = _get_reset_password_url(token)
+
+    headings = {
+        "de": f"Hallo {name},",
+        "en": f"Hello {name},",
+        "zh": f"{name}，您好！",
+    }
+    bodies = {
+        "de": "Sie haben eine Passwort-Zurücksetzung für Ihr Taxja-Konto angefordert. Klicken Sie auf den Button, um ein neues Passwort festzulegen. Der Link ist 1 Stunde gültig.",
+        "en": "You requested a password reset for your Taxja account. Click the button below to set a new password. This link is valid for 1 hour.",
+        "zh": "您请求重置 Taxja 账户密码。请点击下方按钮设置新密码。链接有效期为 1 小时。",
+    }
+    buttons = {
+        "de": "Passwort zurücksetzen",
+        "en": "Reset Password",
+        "zh": "重置密码",
+    }
+    footers = {
+        "de": "Wenn Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail ignorieren.",
+        "en": "If you did not request this, you can safely ignore this email.",
+        "zh": "如果您没有请求重置密码，请忽略此邮件。",
+    }
+
+    lang = language if language in headings else "de"
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:32px 16px;color:#1e293b">
+  <div style="text-align:center;margin-bottom:24px">
+    <h2 style="color:#0ea5e9;margin:0">Taxja</h2>
+  </div>
+  <h3>{headings[lang]}</h3>
+  <p style="line-height:1.6">{bodies[lang]}</p>
+  <div style="text-align:center;margin:32px 0">
+    <a href="{url}" style="display:inline-block;padding:14px 32px;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">{buttons[lang]}</a>
+  </div>
+  <p style="font-size:0.85rem;color:#64748b">{footers[lang]}</p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
+  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">Taxja - Steuern einfach ja!</p>
+</body></html>"""
+
+
+def send_password_reset_email(email: str, name: str, token: str, language: str = "de") -> bool:
+    """Send password reset email. Returns True if sent successfully."""
+    if not settings.ENABLE_EMAIL_NOTIFICATIONS:
+        url = _get_reset_password_url(token)
+        logger.info(f"[DEV] Password reset email for {email}: {url}")
+        print(f"\n{'='*60}")
+        print(f"  PASSWORD RESET (dev mode - no SMTP)")
+        print(f"  To: {email}")
+        print(f"  URL: {url}")
+        print(f"{'='*60}\n")
+        return True
+
+    try:
+        subjects = {
+            "de": "Taxja: Passwort zurücksetzen",
+            "en": "Taxja: Reset your password",
+            "zh": "Taxja: 重置密码",
+        }
+        lang = language if language in subjects else "de"
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subjects[lang]
+        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+        msg["To"] = email
+
+        html = _build_reset_password_html(name, token, lang)
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+            if settings.SMTP_USER:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_FROM_EMAIL, [email], msg.as_string())
+
+        logger.info(f"Password reset email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send password reset email to {email}: {e}")
+        return False

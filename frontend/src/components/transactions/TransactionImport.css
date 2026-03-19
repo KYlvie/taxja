@@ -105,13 +105,24 @@
   background: var(--color-bg);
 }
 
+.file-label.mobile-enabled {
+  cursor: pointer;
+}
+
 .file-label:hover {
   border-color: var(--color-primary);
   background: var(--color-primary-50);
 }
 
 .file-icon {
-  font-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary-dark);
+}
+
+.import-mobile-trigger {
+  margin-bottom: 20px;
 }
 
 .import-error {

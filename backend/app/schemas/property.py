@@ -4,7 +4,38 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, computed_field
-from app.models.property import PropertyType, PropertyStatus
+from app.models.property import PropertyType, PropertyStatus, BuildingUse
+from app.schemas.asset_recognition import (
+    AssetRecognitionDecision,
+    ComparisonBasis,
+    DepreciationMethod,
+    IfbRateSource,
+    UsefulLifeSource,
+    VatRecoverableStatus,
+)
+
+
+# Austrian tax law: standard useful life for common asset types
+ASSET_USEFUL_LIFE = {
+    "vehicle": 8,           # PKW: 8 years
+    "electric_vehicle": 8,  # E-Auto: 8 years (eligible for IFB 15%)
+    "computer": 3,          # Computer, Laptop, Tablet
+    "phone": 3,             # Smartphone
+    "office_furniture": 10, # Büromöbel
+    "machinery": 10,        # Maschinen
+    "tools": 5,             # Werkzeuge
+    "software": 3,          # Software-Lizenzen
+    "other_equipment": 5,   # Sonstige Betriebsausstattung
+    "real_estate": 50,      # Gebäude (handled separately by construction_year)
+}
+
+ASSET_ACQUISITION_KINDS = {
+    "purchase",
+    "lease",
+    "finance_lease",
+    "self_constructed",
+    "used_asset",
+}
 
 
 class PropertyBase(BaseModel):
@@ -39,11 +70,19 @@ class PropertyBase(BaseModel):
         ge=1800,
         description="Year of construction (affects depreciation rate)"
     )
+    building_use: BuildingUse = Field(
+        default=BuildingUse.RESIDENTIAL,
+        description="Building usage: residential (Wohngebäude, 1.5% AfA) or commercial (Betriebsgebäude, 2.5% AfA)"
+    )
+    eco_standard: bool = Field(
+        default=False,
+        description="Meets eco/klimaaktiv standard (enables extended 3× AfA for 3 years on 2024-2026 residential builds)"
+    )
     depreciation_rate: Optional[Decimal] = Field(
         None,
         ge=Decimal("0.001"),
-        le=Decimal("0.10"),
-        description="Annual depreciation rate (0.1% to 10%, auto-determined if not provided)"
+        le=Decimal("1.00"),
+        description="Annual depreciation rate (0.1% to 100%, auto-determined from building_use if not provided)"
     )
     grunderwerbsteuer: Optional[Decimal] = Field(
         None,
@@ -117,9 +156,9 @@ class PropertyBase(BaseModel):
                 raise ValueError(
                     f"Depreciation rate must be >= 0.1% (0.001). Provided: {v}"
                 )
-            if v > Decimal("0.10"):
+            if v > Decimal("1.00"):
                 raise ValueError(
-                    f"Depreciation rate must be <= 10% (0.10). Provided: {v}"
+                    f"Depreciation rate must be <= 100% (1.00). Provided: {v}"
                 )
             return v.quantize(Decimal('0.0001'))
         return v
@@ -179,14 +218,22 @@ class PropertyCreate(PropertyBase):
 
     @model_validator(mode='after')
     def auto_determine_depreciation_rate(self):
-        """Auto-determine depreciation rate based on construction year if not provided"""
+        """Auto-determine depreciation rate from building_use if not provided.
+
+        Since 1. StRefG 2015/2016 (§8 Abs 1 / §16 Abs 1 Z 8 EStG):
+        - Residential (Wohngebäude): 1.5%
+        - Commercial (Betriebsgebäude): 2.5%
+
+        The old pre-1915 vs post-1915 distinction no longer applies.
+        Accelerated depreciation (3×/2× for post-2020) is applied dynamically
+        in AfACalculator, not stored here.
+        """
         if self.depreciation_rate is None:
-            # Austrian tax law: buildings before 1915 = 1.5%, 1915+ = 2.0%
-            if self.construction_year and self.construction_year < 1915:
-                self.depreciation_rate = Decimal("0.015")
+            if self.building_use == BuildingUse.COMMERCIAL:
+                self.depreciation_rate = Decimal("0.025")  # 2.5% Betriebsgebäude
             else:
-                self.depreciation_rate = Decimal("0.020")
-        
+                self.depreciation_rate = Decimal("0.015")  # 1.5% Wohngebäude
+
         return self
 
     @model_validator(mode='after')
@@ -228,10 +275,12 @@ class PropertyUpdate(BaseModel):
     purchase_price: Optional[Decimal] = Field(None, gt=0)
     building_value: Optional[Decimal] = Field(None, gt=0)
     construction_year: Optional[int] = Field(None, ge=1800)
+    building_use: Optional[BuildingUse] = None
+    eco_standard: Optional[bool] = None
     depreciation_rate: Optional[Decimal] = Field(
         None,
         ge=Decimal("0.001"),
-        le=Decimal("0.10")
+        le=Decimal("1.00")
     )
     grunderwerbsteuer: Optional[Decimal] = Field(None, ge=0)
     notary_fees: Optional[Decimal] = Field(None, ge=0)
@@ -273,9 +322,9 @@ class PropertyUpdate(BaseModel):
                 raise ValueError(
                     f"Depreciation rate must be >= 0.1% (0.001). Provided: {v}"
                 )
-            if v > Decimal("0.10"):
+            if v > Decimal("1.00"):
                 raise ValueError(
-                    f"Depreciation rate must be <= 10% (0.10). Provided: {v}"
+                    f"Depreciation rate must be <= 100% (1.00). Provided: {v}"
                 )
             return v.quantize(Decimal('0.0001'))
         return v
@@ -320,6 +369,9 @@ class PropertyResponse(BaseModel):
     
     id: UUID
     user_id: int
+    asset_type: Optional[str] = "real_estate"
+    sub_category: Optional[str] = None
+    name: Optional[str] = None
     property_type: PropertyType
     rental_percentage: Decimal
     address: str
@@ -334,7 +386,33 @@ class PropertyResponse(BaseModel):
     notary_fees: Optional[Decimal]
     registry_fees: Optional[Decimal]
     construction_year: Optional[int]
+    building_use: BuildingUse = BuildingUse.RESIDENTIAL
+    eco_standard: bool = False
     depreciation_rate: Decimal
+    useful_life_years: Optional[int] = None
+    acquisition_kind: Optional[str] = None
+    put_into_use_date: Optional[date] = None
+    is_used_asset: bool = False
+    first_registration_date: Optional[date] = None
+    prior_owner_usage_years: Optional[Decimal] = None
+    business_use_percentage: Optional[Decimal] = Decimal("100.00")
+    comparison_basis: Optional[ComparisonBasis] = None
+    comparison_amount: Optional[Decimal] = None
+    gwg_eligible: bool = False
+    gwg_elected: bool = False
+    depreciation_method: Optional[DepreciationMethod] = None
+    degressive_afa_rate: Optional[Decimal] = None
+    useful_life_source: Optional[UsefulLifeSource] = None
+    income_tax_cost_cap: Optional[Decimal] = None
+    income_tax_depreciable_base: Optional[Decimal] = None
+    vat_recoverable_status: Optional[VatRecoverableStatus] = None
+    ifb_candidate: bool = False
+    ifb_rate: Optional[Decimal] = None
+    ifb_rate_source: Optional[IfbRateSource] = None
+    recognition_decision: Optional[AssetRecognitionDecision] = None
+    policy_confidence: Optional[Decimal] = None
+    supplier: Optional[str] = None
+    accumulated_depreciation: Optional[Decimal] = Decimal("0")
     status: PropertyStatus
     sale_date: Optional[date]
     kaufvertrag_document_id: Optional[int]
@@ -342,19 +420,37 @@ class PropertyResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @computed_field
+    @property
+    def annual_depreciation(self) -> Decimal:
+        return (self.building_value * self.depreciation_rate).quantize(Decimal("0.01"))
+
+    @computed_field
+    @property
+    def remaining_value(self) -> Decimal:
+        accumulated = self.accumulated_depreciation or Decimal("0")
+        return max(self.building_value - accumulated, Decimal("0")).quantize(Decimal("0.01"))
+
 
 class PropertyListItem(BaseModel):
     """Simplified property schema for list views"""
     model_config = ConfigDict(from_attributes=True)
     
     id: UUID
+    asset_type: Optional[str] = "real_estate"
+    name: Optional[str] = None
     property_type: PropertyType
     street: str
     city: str
     postal_code: str
     purchase_date: date
+    purchase_price: Decimal
     building_value: Decimal
     depreciation_rate: Decimal
+    rental_percentage: Decimal = Decimal("100.00")
+    useful_life_years: Optional[int] = None
+    business_use_percentage: Optional[Decimal] = Decimal("100.00")
+    accumulated_depreciation: Optional[Decimal] = Decimal("0")
     status: PropertyStatus
     created_at: datetime
     
@@ -495,3 +591,267 @@ class AnnualDepreciationResponse(BaseModel):
         default_factory=list,
         description="Details of skipped properties with reasons"
     )
+
+
+# ---------------------------------------------------------------------------
+# Asset (non-real-estate) schemas
+# ---------------------------------------------------------------------------
+
+class AssetCreate(BaseModel):
+    """Schema for creating a non-real-estate asset (vehicle, equipment, etc.)"""
+    asset_type: str = Field(
+        ...,
+        description="Asset type: vehicle, electric_vehicle, computer, phone, "
+                    "office_furniture, machinery, tools, software, other_equipment"
+    )
+    sub_category: Optional[str] = Field(
+        None, max_length=100,
+        description="Sub-category (e.g., 'PKW', 'Laptop', 'CNC-Maschine')"
+    )
+    name: str = Field(
+        ..., min_length=1, max_length=255,
+        description="Asset name/description (e.g., 'VW Golf 2024', 'MacBook Pro 16')"
+    )
+    purchase_date: date = Field(..., description="Purchase/acquisition date")
+    purchase_price: Decimal = Field(
+        ..., gt=0, le=Decimal("10000000"),
+        description="Purchase price incl. VAT (Anschaffungskosten)"
+    )
+    supplier: Optional[str] = Field(
+        None, max_length=255,
+        description="Supplier/dealer name"
+    )
+    business_use_percentage: Decimal = Field(
+        default=Decimal("100.00"), ge=0, le=100,
+        description="Percentage used for business (betriebliche Nutzung)"
+    )
+    useful_life_years: Optional[int] = Field(
+        None, ge=1, le=50,
+        description="Useful life in years (auto-determined from asset_type if not provided)"
+    )
+    document_id: Optional[int] = Field(
+        None, description="ID of the source document (Kaufvertrag/Rechnung)"
+    )
+    acquisition_kind: str = Field(
+        default="purchase",
+        description="Acquisition kind: purchase, lease, finance_lease, self_constructed, used_asset"
+    )
+    put_into_use_date: Optional[date] = Field(
+        None,
+        description="Date the asset was first put into business use (Inbetriebnahme)"
+    )
+    is_used_asset: bool = Field(
+        default=False,
+        description="Whether the asset was bought used (gebraucht)"
+    )
+    first_registration_date: Optional[date] = Field(
+        None,
+        description="Vehicle first registration date, mainly for used PKW useful life handling"
+    )
+    prior_owner_usage_years: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=Decimal("50.00"),
+        description="Estimated years used by a previous owner for used vehicles"
+    )
+    comparison_basis: Optional[ComparisonBasis] = Field(
+        None,
+        description="Tax comparison basis used for GWG/VAT logic"
+    )
+    comparison_amount: Optional[Decimal] = Field(
+        None,
+        gt=0,
+        le=Decimal("10000000"),
+        description="Tax comparison amount after VAT basis selection"
+    )
+    gwg_eligible: bool = Field(
+        default=False,
+        description="Whether the asset is eligible for GWG treatment"
+    )
+    gwg_elected: bool = Field(
+        default=False,
+        description="Whether the user elected GWG immediate expensing"
+    )
+    depreciation_method: Optional[DepreciationMethod] = Field(
+        default=DepreciationMethod.LINEAR,
+        description="Chosen depreciation method"
+    )
+    degressive_afa_rate: Optional[Decimal] = Field(
+        None,
+        gt=0,
+        le=Decimal("0.3000"),
+        description="Chosen degressive AfA rate when depreciation_method=degressive"
+    )
+    useful_life_source: Optional[UsefulLifeSource] = Field(
+        None,
+        description="Where the useful life came from: law, tax practice, system_default, user_override"
+    )
+    income_tax_cost_cap: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=Decimal("10000000"),
+        description="Income-tax cost cap, e.g. EUR 40,000 for PKW/Kombi"
+    )
+    income_tax_depreciable_base: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=Decimal("10000000"),
+        description="Depreciable basis after applying cost caps or other policy adjustments"
+    )
+    vat_recoverable_status: Optional[VatRecoverableStatus] = Field(
+        None,
+        description="Likely VAT recovery status"
+    )
+    ifb_candidate: bool = Field(
+        default=False,
+        description="Whether the asset is a candidate for IFB"
+    )
+    ifb_rate: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=Decimal("1.0000"),
+        description="IFB rate candidate"
+    )
+    ifb_rate_source: Optional[IfbRateSource] = Field(
+        None,
+        description="Source of the IFB rate"
+    )
+    recognition_decision: Optional[AssetRecognitionDecision] = Field(
+        None,
+        description="Recognition decision that led to asset creation"
+    )
+    policy_confidence: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=Decimal("1.00"),
+        description="Policy confidence score from the recognition engine"
+    )
+
+    @field_validator("asset_type")
+    @classmethod
+    def validate_asset_type(cls, v: str) -> str:
+        v = v.strip().lower()
+        valid = set(ASSET_USEFUL_LIFE.keys()) - {"real_estate"}
+        if v not in valid:
+            raise ValueError(
+                f"Invalid asset_type '{v}'. Must be one of: {sorted(valid)}"
+            )
+        return v
+
+    @field_validator("purchase_date")
+    @classmethod
+    def validate_purchase_date(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("Purchase date cannot be in the future")
+        return v
+
+    @field_validator("acquisition_kind")
+    @classmethod
+    def validate_acquisition_kind(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in ASSET_ACQUISITION_KINDS:
+            raise ValueError(
+                f"Invalid acquisition_kind '{v}'. Must be one of: {sorted(ASSET_ACQUISITION_KINDS)}"
+            )
+        return normalized
+
+    @field_validator("prior_owner_usage_years")
+    @classmethod
+    def validate_prior_owner_usage_years(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        return v.quantize(Decimal("0.01"))
+
+    @field_validator(
+        "comparison_amount",
+        "income_tax_cost_cap",
+        "income_tax_depreciable_base",
+        "ifb_rate",
+        "policy_confidence",
+        "degressive_afa_rate",
+    )
+    @classmethod
+    def quantize_optional_decimal(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        return Decimal(str(v))
+
+    @model_validator(mode="after")
+    def auto_useful_life(self):
+        if self.useful_life_years is None:
+            self.useful_life_years = ASSET_USEFUL_LIFE.get(self.asset_type, 5)
+        if self.prior_owner_usage_years is not None:
+            self.is_used_asset = True
+        if self.acquisition_kind == "used_asset":
+            self.is_used_asset = True
+        if self.is_used_asset and self.acquisition_kind == "purchase":
+            self.acquisition_kind = "used_asset"
+        if self.put_into_use_date and self.put_into_use_date < self.purchase_date:
+            raise ValueError("put_into_use_date cannot be earlier than purchase_date")
+        if self.first_registration_date and self.first_registration_date > self.purchase_date:
+            raise ValueError("first_registration_date cannot be later than purchase_date")
+        if self.gwg_elected and not self.gwg_eligible:
+            raise ValueError("gwg_elected can only be true when gwg_eligible is true")
+        if self.degressive_afa_rate is not None and self.depreciation_method != DepreciationMethod.DEGRESSIVE:
+            raise ValueError("degressive_afa_rate can only be set when depreciation_method is 'degressive'")
+        return self
+
+
+class AssetResponse(BaseModel):
+    """Response schema for non-real-estate assets"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: int
+    asset_type: str
+    sub_category: Optional[str]
+    name: Optional[str]
+    purchase_date: date
+    purchase_price: Decimal
+    building_value: Decimal  # = depreciable value for assets
+    depreciation_rate: Decimal
+    useful_life_years: Optional[int]
+    acquisition_kind: Optional[str] = None
+    put_into_use_date: Optional[date] = None
+    is_used_asset: bool = False
+    first_registration_date: Optional[date] = None
+    prior_owner_usage_years: Optional[Decimal] = None
+    business_use_percentage: Decimal
+    comparison_basis: Optional[ComparisonBasis] = None
+    comparison_amount: Optional[Decimal] = None
+    gwg_eligible: bool = False
+    gwg_elected: bool = False
+    depreciation_method: Optional[DepreciationMethod] = None
+    degressive_afa_rate: Optional[Decimal] = None
+    useful_life_source: Optional[UsefulLifeSource] = None
+    income_tax_cost_cap: Optional[Decimal] = None
+    income_tax_depreciable_base: Optional[Decimal] = None
+    vat_recoverable_status: Optional[VatRecoverableStatus] = None
+    ifb_candidate: bool = False
+    ifb_rate: Optional[Decimal] = None
+    ifb_rate_source: Optional[IfbRateSource] = None
+    recognition_decision: Optional[AssetRecognitionDecision] = None
+    policy_confidence: Optional[Decimal] = None
+    supplier: Optional[str]
+    accumulated_depreciation: Decimal
+    status: PropertyStatus
+    kaufvertrag_document_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+
+    @computed_field
+    @property
+    def annual_depreciation(self) -> Decimal:
+        return (self.building_value * self.depreciation_rate).quantize(Decimal("0.01"))
+
+    @computed_field
+    @property
+    def remaining_value(self) -> Decimal:
+        return max(
+            self.building_value - self.accumulated_depreciation, Decimal("0")
+        ).quantize(Decimal("0.01"))
+
+
+class AssetListResponse(BaseModel):
+    total: int
+    assets: list[AssetResponse]

@@ -205,7 +205,12 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
       
       set({ isLoading: false });
     } catch (error: any) {
-      // Rollback on error
+      // If 404, property is already gone — treat as success
+      if (error.response?.status === 404) {
+        set({ isLoading: false });
+        return;
+      }
+      // Rollback on other errors
       set({
         properties: originalProperties,
         selectedProperty: originalSelected,

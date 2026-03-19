@@ -1,8 +1,12 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import AppLayout from '../components/layout/AppLayout';
+import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
+import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from '../pages/auth/ResetPasswordPage';
+import VerifyEmailPage from '../pages/auth/VerifyEmailPage';
 import TwoFactorSetupPage from '../pages/auth/TwoFactorSetupPage';
 import DashboardPage from '../pages/DashboardPage';
 import TransactionsPage from '../pages/TransactionsPage';
@@ -12,12 +16,20 @@ import ProfilePage from '../pages/ProfilePage';
 import PropertiesPage from '../pages/PropertiesPage';
 import PricingPage from '../pages/PricingPage';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
+import AdvancedManagementPage from '../pages/AdvancedManagementPage';
+import TaxToolsPage from '../pages/TaxToolsPage';
 import { PropertyPortfolioDashboard } from '../components/properties/PropertyPortfolioDashboard';
 import { PropertyComparison } from '../components/properties/PropertyComparison';
 import TaxConfigAdmin from '../pages/admin/TaxConfigAdmin';
+import AdminDashboard from '../pages/admin/AdminDashboard';
 import RecurringTransactionsPage from '../pages/RecurringTransactionsPage';
 import AIAssistantPage from '../pages/AIAssistantPage';
 import SubscriptionManagement from '../pages/SubscriptionManagement';
+import DeleteAccountWizard from '../components/account/DeleteAccountWizard';
+import LegalPage from '../pages/LegalPage';
+import CompanyPage from '../pages/CompanyPage';
+import ClassificationRulesPage from '../pages/ClassificationRulesPage';
+import CreditHistoryPage from '../pages/CreditHistoryPage';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -30,7 +42,28 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Admin route wrapper — redirects non-admin users to dashboard
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const user = useAuthStore((state) => state.user);
+  
+  if (!user?.is_admin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+const CatchAllRoute = () => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  return <Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />;
+};
+
 export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <HomePage />,
+  },
   {
     path: '/login',
     element: <LoginPage />,
@@ -38,6 +71,30 @@ export const router = createBrowserRouter([
   {
     path: '/register',
     element: <RegisterPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
+  {
+    path: '/verify-email',
+    element: <VerifyEmailPage />,
+  },
+  {
+    path: '/legal/:type',
+    element: <LegalPage />,
+  },
+  {
+    path: '/company',
+    element: <CompanyPage />,
+  },
+  {
+    path: '/pricing',
+    element: <PricingPage />,
   },
   {
     path: '/2fa-setup',
@@ -48,17 +105,12 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: '/',
     element: (
       <ProtectedRoute>
         <AppLayout />
       </ProtectedRoute>
     ),
     children: [
-      {
-        index: true,
-        element: <Navigate to="/dashboard" replace />,
-      },
       {
         path: 'dashboard',
         element: <DashboardPage />,
@@ -100,12 +152,16 @@ export const router = createBrowserRouter([
         element: <ReportsPage />,
       },
       {
-        path: 'profile',
-        element: <ProfilePage />,
+        path: 'advanced',
+        element: <AdvancedManagementPage />,
       },
       {
-        path: 'pricing',
-        element: <PricingPage />,
+        path: 'tax-tools',
+        element: <TaxToolsPage />,
+      },
+      {
+        path: 'profile',
+        element: <ProfilePage />,
       },
       {
         path: 'checkout/success',
@@ -113,7 +169,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'admin/tax-configs',
-        element: <TaxConfigAdmin />,
+        element: <AdminRoute><TaxConfigAdmin /></AdminRoute>,
+      },
+      {
+        path: 'admin',
+        element: <AdminRoute><AdminDashboard /></AdminRoute>,
       },
       {
         path: 'ai-assistant',
@@ -124,6 +184,10 @@ export const router = createBrowserRouter([
         element: <SubscriptionManagement />,
       },
       {
+        path: 'credits/history',
+        element: <CreditHistoryPage />,
+      },
+      {
         path: 'documents/upload',
         element: <DocumentsPage />,
       },
@@ -131,10 +195,18 @@ export const router = createBrowserRouter([
         path: 'transactions/new',
         element: <TransactionsPage />,
       },
+      {
+        path: 'classification-rules',
+        element: <ClassificationRulesPage />,
+      },
+      {
+        path: 'account/delete',
+        element: <DeleteAccountWizard />,
+      },
     ],
   },
   {
     path: '*',
-    element: <Navigate to="/" replace />,
+    element: <CatchAllRoute />,
   },
 ]);

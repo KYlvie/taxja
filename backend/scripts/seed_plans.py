@@ -31,10 +31,12 @@ def seed_plans():
                 features={
                     "basic_tax_calc": True,
                     "transaction_entry": True,
+                    "ocr_scanning": True,
+                    "multi_language": True,
                 },
                 quotas={
-                    "transactions": 50,
-                    "ocr_scans": 0,
+                    "transactions": 30,
+                    "ocr_scans": 3,          # 3 free scans/month
                     "ai_conversations": 0,
                 }
             ),
@@ -52,6 +54,9 @@ def seed_plans():
                     "multi_language": True,
                     "vat_calc": True,
                     "svs_calc": True,
+                    "bank_import": True,
+                    "property_management": True,
+                    "recurring_suggestions": True,
                 },
                 quotas={
                     "transactions": -1,  # unlimited
@@ -62,8 +67,8 @@ def seed_plans():
             Plan(
                 plan_type=PlanType.PRO,
                 name="Pro",
-                monthly_price=9.90,
-                yearly_price=99.00,
+                monthly_price=12.90,
+                yearly_price=129.00,
                 features={
                     "basic_tax_calc": True,
                     "transaction_entry": True,
@@ -74,6 +79,9 @@ def seed_plans():
                     "multi_language": True,
                     "vat_calc": True,
                     "svs_calc": True,
+                    "bank_import": True,
+                    "property_management": True,
+                    "recurring_suggestions": True,
                     "ai_assistant": True,
                     "e1_generation": True,
                     "advanced_reports": True,

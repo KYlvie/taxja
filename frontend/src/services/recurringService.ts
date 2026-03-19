@@ -5,6 +5,7 @@ import {
   RentalIncomeRecurringCreate,
   LoanInterestRecurringCreate,
   RecurringTransactionUpdate,
+  RecurringTransactionCreate,
 } from '../types/recurring';
 
 export const recurringService = {
@@ -19,6 +20,12 @@ export const recurringService = {
   // Get a specific recurring transaction
   async get(id: number): Promise<RecurringTransaction> {
     const response = await api.get(`/recurring-transactions/${id}`);
+    return response.data;
+  },
+
+  // Create a generic recurring transaction
+  async create(data: RecurringTransactionCreate): Promise<RecurringTransaction> {
+    const response = await api.post('/recurring-transactions', data);
     return response.data;
   },
 

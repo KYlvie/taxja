@@ -14,10 +14,15 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
+try:
+    import redis
+except ImportError:
+    redis = None  # type: ignore
+
 from app.models.property import Property, PropertyStatus
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory, IncomeCategory
 from app.services.afa_calculator import AfACalculator
-from app.services.property_report_export_service import PropertyReportExportService
+from app.services.asset_lifecycle_service import AssetLifecycleService
 
 
 class PropertyReportService:
@@ -26,9 +31,10 @@ class PropertyReportService:
     def __init__(self, db: Session):
         self.db = db
         self.afa_calculator = AfACalculator(db)
+        self.asset_lifecycle_service = AssetLifecycleService(db)
         self._redis_client: Optional[redis.Redis] = None
         self._init_redis()
-        self.export_service = PropertyReportExportService(language="de")
+        self._export_service = None
     
     def _init_redis(self):
         """Initialize synchronous Redis client for caching"""
@@ -146,30 +152,47 @@ class PropertyReportService:
             or Decimal("0")
         )
 
-        # Get expenses by category
-        expenses_query = (
-            self.db.query(
-                Transaction.expense_category,
-                func.sum(Transaction.amount).label("total"),
-            )
+        # Get expenses by category (line-item-aware)
+        # First, load all expense transactions for this property
+        expense_transactions = (
+            self.db.query(Transaction)
             .filter(
                 Transaction.property_id == property_id,
                 Transaction.type == TransactionType.EXPENSE,
                 Transaction.transaction_date >= start_date,
                 Transaction.transaction_date <= end_date,
             )
-            .group_by(Transaction.expense_category)
+            .all()
         )
 
         expenses_by_category = {}
         total_expenses = Decimal("0")
 
-        for category, amount in expenses_query:
-            if category:  # Only include if category is not None
-                expenses_by_category[category.value] = float(amount)
-                total_expenses += amount
+        for t in expense_transactions:
+            if t.has_line_items:
+                # Use line-item-level categories
+                for li in t.line_items:
+                    cat = li.category or "other"
+                    amt = li.amount * li.quantity
+                    expenses_by_category[cat] = expenses_by_category.get(cat, 0.0) + float(amt)
+                    total_expenses += amt
+            else:
+                # Legacy: whole-transaction amount
+                if t.expense_category:
+                    cat = t.expense_category.value
+                    amt = t.amount or Decimal("0")
+                    expenses_by_category[cat] = expenses_by_category.get(cat, 0.0) + float(amt)
+                    total_expenses += amt
 
         net_income = rental_income - total_expenses
+
+        # Add calculated building AfA (not stored as transactions)
+        year = start_date.year
+        calculated_afa = self.afa_calculator.calculate_annual_depreciation(property, year)
+        if calculated_afa > Decimal("0"):
+            expenses_by_category["depreciation_afa"] = float(calculated_afa)
+            total_expenses += calculated_afa
+            net_income = rental_income - total_expenses
 
         return {
             "property": {
@@ -232,7 +255,12 @@ class PropertyReportService:
             if not property:
                 raise ValueError(f"Property {property_id} not found")
 
-            purchase_year = property.purchase_date.year
+            schedule_start_date = (
+                property.put_into_use_date
+                if getattr(property, "asset_type", "real_estate") != "real_estate" and property.put_into_use_date
+                else property.purchase_date
+            )
+            purchase_year = schedule_start_date.year
             current_year = date.today().year
 
             # Calculate sale year if property is sold
@@ -241,6 +269,11 @@ class PropertyReportService:
             # Historical schedule (purchase year to current/sale year)
             historical_schedule = []
             accumulated = Decimal("0")
+            total_depreciable_base = (
+                self.asset_lifecycle_service.get_depreciable_base(property)
+                if getattr(property, "asset_type", "real_estate") != "real_estate"
+                else property.building_value
+            )
 
             for year in range(purchase_year, end_year + 1):
                 # Calculate annual depreciation for this year
@@ -249,7 +282,7 @@ class PropertyReportService:
                 )
 
                 accumulated += annual_depreciation
-                remaining = property.building_value - accumulated
+                remaining = total_depreciable_base - accumulated
 
                 historical_schedule.append({
                     "year": year,
@@ -261,13 +294,13 @@ class PropertyReportService:
 
             # Future projections (only if property is active and not fully depreciated)
             future_schedule = []
-            if include_future and property.status == PropertyStatus.ACTIVE and accumulated < property.building_value:
+            if include_future and property.status == PropertyStatus.ACTIVE and accumulated < total_depreciable_base:
                 projection_accumulated = accumulated
                 projection_year = end_year + 1
                 years_projected = 0
 
                 # Project until fully depreciated or future_years limit reached
-                while years_projected < future_years and projection_accumulated < property.building_value:
+                while years_projected < future_years and projection_accumulated < total_depreciable_base:
                     # Calculate projected annual depreciation
                     annual_depreciation = self.afa_calculator.calculate_annual_depreciation(
                         property, projection_year
@@ -278,7 +311,7 @@ class PropertyReportService:
                         break
 
                     projection_accumulated += annual_depreciation
-                    remaining = property.building_value - projection_accumulated
+                    remaining = total_depreciable_base - projection_accumulated
 
                     future_schedule.append({
                         "year": projection_year,
@@ -296,19 +329,26 @@ class PropertyReportService:
 
             # Calculate years remaining until fully depreciated
             years_remaining = None
-            if property.status == PropertyStatus.ACTIVE and accumulated < property.building_value:
-                # Calculate based on current depreciation rate
-                remaining_value = property.building_value - accumulated
-                annual_rate = property.building_value * property.depreciation_rate
-                if annual_rate > 0:
-                    years_remaining = float((remaining_value / annual_rate).quantize(Decimal("0.1")))
+            if property.status == PropertyStatus.ACTIVE and accumulated < total_depreciable_base:
+                if getattr(property, "asset_type", "real_estate") != "real_estate":
+                    asset_years_remaining = self.asset_lifecycle_service.estimate_years_remaining(
+                        property,
+                        current_year,
+                    )
+                    years_remaining = float(asset_years_remaining) if asset_years_remaining is not None else None
+                else:
+                    # Calculate based on current depreciation rate
+                    remaining_value = total_depreciable_base - accumulated
+                    annual_rate = total_depreciable_base * property.depreciation_rate
+                    if annual_rate > 0:
+                        years_remaining = float((remaining_value / annual_rate).quantize(Decimal("0.1")))
 
             result = {
                 "property": {
                     "id": str(property.id),
                     "address": property.address,
                     "purchase_date": property.purchase_date.isoformat(),
-                    "building_value": float(property.building_value),
+                    "building_value": float(total_depreciable_base),
                     "depreciation_rate": float(property.depreciation_rate),
                     "status": property.status.value,
                     "sale_date": property.sale_date.isoformat() if property.sale_date else None
@@ -318,9 +358,9 @@ class PropertyReportService:
                     "total_years": len(full_schedule),
                     "years_elapsed": len(historical_schedule),
                     "years_projected": len(future_schedule),
-                    "total_depreciation": float(property.building_value),
+                    "total_depreciation": float(total_depreciable_base),
                     "accumulated_depreciation": float(accumulated),
-                    "remaining_value": float(property.building_value - accumulated),
+                    "remaining_value": float(total_depreciable_base - accumulated),
                     "years_remaining": years_remaining,
                     "fully_depreciated_year": full_schedule[-1]["year"] if future_schedule and full_schedule[-1]["remaining_value"] == 0 else None
                 },
@@ -354,6 +394,7 @@ class PropertyReportService:
         report_data = self.generate_income_statement(
             property_id, start_date, end_date
         )
+        from app.services.property_report_export_service import PropertyReportExportService
         export_service = PropertyReportExportService(language=language)
         return export_service.export_income_statement_pdf(report_data)
 
@@ -379,6 +420,7 @@ class PropertyReportService:
         report_data = self.generate_income_statement(
             property_id, start_date, end_date
         )
+        from app.services.property_report_export_service import PropertyReportExportService
         export_service = PropertyReportExportService(language=language)
         return export_service.export_income_statement_csv(report_data)
 
@@ -404,6 +446,7 @@ class PropertyReportService:
         report_data = self.generate_depreciation_schedule(
             property_id, include_future, future_years
         )
+        from app.services.property_report_export_service import PropertyReportExportService
         export_service = PropertyReportExportService(language=language)
         return export_service.export_depreciation_schedule_pdf(report_data)
 
@@ -429,5 +472,6 @@ class PropertyReportService:
         report_data = self.generate_depreciation_schedule(
             property_id, include_future, future_years
         )
+        from app.services.property_report_export_service import PropertyReportExportService
         export_service = PropertyReportExportService(language=language)
         return export_service.export_depreciation_schedule_csv(report_data)

@@ -1,13 +1,7 @@
-/**
- * Usage Widget Component
- * 
- * Compact widget showing resource usage with progress bars.
- * Per Requirements 3.2, 3.3, 3.6: Display usage with color-coded warnings.
- */
-
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import { formatDate } from '../../utils/locale';
 import './UsageWidget.css';
 
 interface UsageWidgetProps {
@@ -15,41 +9,42 @@ interface UsageWidgetProps {
 }
 
 const UsageWidget: React.FC<UsageWidgetProps> = ({ compact = false }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { usage, fetchUsage } = useSubscriptionStore();
-  
+  const currentLanguage = i18n.resolvedLanguage || i18n.language;
+
   useEffect(() => {
-    fetchUsage();
-    
-    // Refresh usage every 5 minutes
+    void fetchUsage();
+
     const interval = setInterval(() => {
-      fetchUsage();
+      void fetchUsage();
     }, 5 * 60 * 1000);
-    
+
     return () => clearInterval(interval);
   }, [fetchUsage]);
-  
+
   if (!usage) {
     return null;
   }
-  
+
   const getColorClass = (data: any) => {
-    if (data.is_exceeded) return 'exceeded';
-    if (data.is_warning) return 'warning';
+    if (data.is_exceeded) {
+      return 'exceeded';
+    }
+
+    if (data.is_warning) {
+      return 'warning';
+    }
+
     return 'normal';
   };
-  
-  const formatResetDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
-  };
-  
+
   const resourceLabels: Record<string, string> = {
     transactions: t('usage.transactions', 'Transactions'),
-    ocr_scans: t('usage.ocr_scans', 'OCR Scans'),
+    ocr_scans: t('usage.ocr_scans', 'Document Scans'),
     ai_conversations: t('usage.ai_conversations', 'AI Conversations'),
   };
-  
+
   if (compact) {
     return (
       <div className="usage-widget compact">
@@ -61,26 +56,24 @@ const UsageWidget: React.FC<UsageWidgetProps> = ({ compact = false }) => {
                 style={{ width: `${Math.min(data.percentage, 100)}%` }}
               />
             </div>
-            <span className="usage-label-compact">
-              {resourceLabels[key]}
-            </span>
+            <span className="usage-label-compact">{resourceLabels[key]}</span>
           </div>
         ))}
       </div>
     );
   }
-  
+
   return (
     <div className="usage-widget">
       <div className="widget-header">
         <h3>{t('usage.title', 'Resource Usage')}</h3>
         <span className="reset-info">
           {t('usage.resets_on', 'Resets: {{date}}', {
-            date: formatResetDate(Object.values(usage)[0].reset_date)
+            date: formatDate(Object.values(usage)[0].reset_date, currentLanguage),
           })}
         </span>
       </div>
-      
+
       <div className="usage-list">
         {Object.entries(usage).map(([key, data]) => (
           <div key={key} className="usage-row">
@@ -89,28 +82,27 @@ const UsageWidget: React.FC<UsageWidgetProps> = ({ compact = false }) => {
               <span className={`usage-value ${getColorClass(data)}`}>
                 {data.limit === -1
                   ? t('usage.unlimited', 'Unlimited')
-                  : `${data.current} / ${data.limit}`
-                }
+                  : `${data.current} / ${data.limit}`}
               </span>
             </div>
-            
+
             <div className="progress-bar">
               <div
                 className={`progress-fill ${getColorClass(data)}`}
                 style={{ width: `${Math.min(data.percentage, 100)}%` }}
               />
             </div>
-            
+
             {data.is_exceeded && (
               <div className="usage-alert exceeded">
-                ⚠️ {t('usage.quota_exceeded', 'Quota exceeded')}
+                {t('usage.quota_exceeded', 'Quota exceeded')}
               </div>
             )}
-            
+
             {data.is_warning && !data.is_exceeded && (
               <div className="usage-alert warning">
-                ⚡ {t('usage.quota_warning', 'Approaching limit ({{percent}}%)', {
-                  percent: Math.round(data.percentage)
+                {t('usage.quota_warning', 'Approaching limit ({{percent}}%)', {
+                  percent: Math.round(data.percentage),
                 })}
               </div>
             )}

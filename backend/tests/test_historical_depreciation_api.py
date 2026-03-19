@@ -12,6 +12,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.property import Property, PropertyType, PropertyStatus
+from app.models.recurring_transaction import (
+    RecurrenceFrequency,
+    RecurringTransaction,
+    RecurringTransactionType,
+)
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory
 from app.models.user import User, UserType
 from app.core.security import create_access_token
@@ -52,8 +57,37 @@ def other_user(db: Session):
 @pytest.fixture
 def auth_headers(test_user: User):
     """Create authentication headers"""
-    token = create_access_token(subject=test_user.email)
+    token = create_access_token(data={"sub": test_user.email})
     return {"Authorization": f"Bearer {token}"}
+
+
+def _add_rental_contract(
+    db: Session,
+    user_id: int,
+    property_id,
+    start_date: date,
+    unit_percentage: Decimal = Decimal("100.00"),
+    amount: Decimal = Decimal("1500.00"),
+) -> RecurringTransaction:
+    """Create an active rental contract so rental-state sync keeps the property rentable."""
+    contract = RecurringTransaction(
+        user_id=user_id,
+        recurring_type=RecurringTransactionType.RENTAL_INCOME,
+        property_id=property_id,
+        description="Monthly rent",
+        amount=amount,
+        transaction_type="income",
+        category="rental_income",
+        frequency=RecurrenceFrequency.MONTHLY,
+        start_date=start_date,
+        day_of_month=1,
+        is_active=True,
+        unit_percentage=unit_percentage,
+    )
+    db.add(contract)
+    db.commit()
+    db.refresh(contract)
+    return contract
 
 
 class TestHistoricalDepreciationPreview:
@@ -86,6 +120,7 @@ class TestHistoricalDepreciationPreview:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Preview historical depreciation
         response = client.get(
@@ -112,12 +147,12 @@ class TestHistoricalDepreciationPreview:
         # First year should be 2023
         first_year = years[0]
         assert first_year["year"] == 2023
-        assert first_year["amount"] > 0
+        assert Decimal(first_year["amount"]) > 0
         assert first_year["transaction_date"] == "2023-12-31"
         
         # Total amount should be sum of all years
-        expected_total = sum(year["amount"] for year in years)
-        assert abs(data["total_amount"] - expected_total) < 0.01
+        expected_total = sum(Decimal(year["amount"]) for year in years)
+        assert abs(Decimal(data["total_amount"]) - expected_total) < Decimal("0.01")
     
     def test_preview_with_existing_depreciation(
         self,
@@ -146,6 +181,7 @@ class TestHistoricalDepreciationPreview:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Create depreciation transaction for 2023
         transaction = Transaction(
@@ -221,6 +257,7 @@ class TestHistoricalDepreciationPreview:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, other_user.id, property.id, property.purchase_date)
         
         # Try to preview with test_user's auth
         response = client.get(
@@ -228,7 +265,7 @@ class TestHistoricalDepreciationPreview:
             headers=auth_headers
         )
         
-        assert response.status_code == 403
+        assert response.status_code == 404
     
     def test_preview_no_authentication(
         self,
@@ -255,6 +292,7 @@ class TestHistoricalDepreciationPreview:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # No auth headers
         response = client.get(
@@ -294,6 +332,7 @@ class TestBackfillDepreciation:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Backfill depreciation
         response = client.post(
@@ -312,7 +351,7 @@ class TestBackfillDepreciation:
         
         # Should have backfilled at least 2 years (2024, 2025)
         assert data["years_backfilled"] >= 2
-        assert data["total_amount"] > 0
+        assert Decimal(data["total_amount"]) > 0
         assert len(data["transaction_ids"]) >= 2
         
         # Verify transactions were created in database
@@ -357,6 +396,7 @@ class TestBackfillDepreciation:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # First backfill
         response1 = client.post(
@@ -427,6 +467,8 @@ class TestBackfillDepreciation:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Try to backfill with test_user's auth
         response = client.post(
@@ -434,7 +476,7 @@ class TestBackfillDepreciation:
             headers=auth_headers
         )
         
-        assert response.status_code == 403
+        assert response.status_code == 404
     
     def test_backfill_no_authentication(
         self,
@@ -461,6 +503,7 @@ class TestBackfillDepreciation:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # No auth headers
         response = client.post(
@@ -497,6 +540,7 @@ class TestBackfillDepreciation:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Backfill
         response = client.post(
@@ -508,7 +552,7 @@ class TestBackfillDepreciation:
         data = response.json()
         
         # Total amount should not exceed building value
-        assert data["total_amount"] <= float(property.building_value)
+        assert Decimal(data["total_amount"]) <= property.building_value
         
         # Verify in database
         transactions = db.query(Transaction).filter(
@@ -550,6 +594,7 @@ class TestHistoricalDepreciationIntegration:
         db.add(property)
         db.commit()
         db.refresh(property)
+        _add_rental_contract(db, test_user.id, property.id, property.purchase_date)
         
         # Step 1: Preview
         preview_response = client.get(
@@ -572,7 +617,7 @@ class TestHistoricalDepreciationIntegration:
         
         # Verify preview matches backfill
         assert backfill_data["years_backfilled"] == expected_years
-        assert abs(backfill_data["total_amount"] - expected_total) < 0.01
+        assert abs(Decimal(backfill_data["total_amount"]) - Decimal(expected_total)) < Decimal("0.01")
         
         # Step 3: Preview again should show nothing to backfill
         preview_response_2 = client.get(
@@ -584,4 +629,4 @@ class TestHistoricalDepreciationIntegration:
         
         # Should have no years to backfill
         assert preview_data_2["years_count"] == 0
-        assert preview_data_2["total_amount"] == 0
+        assert Decimal(preview_data_2["total_amount"]) == Decimal("0")

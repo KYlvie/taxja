@@ -29,10 +29,19 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   setDocuments: (documents, total) => set({ documents, total }),
   setCurrentDocument: (document) => set({ currentDocument: document }),
   addDocument: (document) =>
-    set((state) => ({
-      documents: [document, ...state.documents],
-      total: state.total + 1,
-    })),
+    set((state) => {
+      const existingIndex = state.documents.findIndex((doc) => doc.id === document.id);
+      if (existingIndex >= 0) {
+        const nextDocuments = [...state.documents];
+        nextDocuments[existingIndex] = { ...nextDocuments[existingIndex], ...document };
+        return { documents: nextDocuments };
+      }
+
+      return {
+        documents: [document, ...state.documents],
+        total: state.total + 1,
+      };
+    }),
   updateDocument: (id, updates) =>
     set((state) => ({
       documents: state.documents.map((doc) =>

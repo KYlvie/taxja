@@ -1,7 +1,13 @@
 """
-E2E tests for subscription flows.
-Tests complete user journeys through the monetization system.
+E2E-style tests for subscription and usage flows.
+
+These tests are aligned to the current API contracts:
+- subscription endpoints require authenticated users
+- checkout uses plan_id/billing_cycle/success_url/cancel_url
+- usage endpoints remain deprecated read-only compatibility surfaces
+- admin endpoints require admin auth and use query parameters
 """
+
 import pytest
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
@@ -9,16 +15,12 @@ from sqlalchemy.orm import Session
 from unittest.mock import Mock, patch
 
 from app.main import app
-from app.models.user import User
-from app.models.plan import Plan
-from app.models.subscription import Subscription
-from app.models.usage_record import UsageRecord
-
-
-@pytest.fixture
-def client():
-    """Create test client."""
-    return TestClient(app)
+from app.api.deps import get_current_admin, get_current_user as api_get_current_user, get_db
+from app.core.security import get_current_user as core_get_current_user
+from app.models.user import User, UserType
+from app.models.plan import BillingCycle, Plan
+from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.usage_record import ResourceType
 
 
 @pytest.fixture
@@ -28,40 +30,88 @@ def db_session():
 
 
 @pytest.fixture
-def free_plan(db_session):
-    """Create Free plan."""
-    plan = Plan(
-        id=1,
-        plan_type="free",
-        name="Free",
-        monthly_price=0.0,
-        yearly_price=0.0,
-        features={"basic_tax_calc": True},
-        quotas={"transactions": 50, "ocr_scans": 0}
-    )
-    db_session.query().filter().first.return_value = plan
-    return plan
+def client(db_session):
+    """Create test client with mocked DB only."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def plus_plan(db_session):
+def authenticated_user():
+    """Authenticated regular user for endpoint tests."""
+    return User(
+        id=1,
+        email="test@example.com",
+        name="Test User",
+        user_type=UserType.SELF_EMPLOYED,
+        is_admin=False,
+    )
+
+
+@pytest.fixture
+def admin_user():
+    """Authenticated admin user for admin endpoint tests."""
+    return User(
+        id=999,
+        email="admin@example.com",
+        name="Admin User",
+        user_type=UserType.SELF_EMPLOYED,
+        is_admin=True,
+    )
+
+
+@pytest.fixture
+def authenticated_client(db_session, authenticated_user):
+    """Create test client with authenticated user + mocked DB."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[api_get_current_user] = lambda: authenticated_user
+    app.dependency_overrides[core_get_current_user] = lambda: authenticated_user
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def admin_client(db_session, admin_user):
+    """Create test client with authenticated admin + mocked DB."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[api_get_current_user] = lambda: admin_user
+    app.dependency_overrides[core_get_current_user] = lambda: admin_user
+    app.dependency_overrides[get_current_admin] = lambda: admin_user
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def plus_plan():
     """Create Plus plan."""
-    plan = Plan(
+    return Plan(
         id=2,
         plan_type="plus",
         name="Plus",
         monthly_price=4.90,
         yearly_price=49.00,
         features={"basic_tax_calc": True, "full_tax_calc": True, "ocr": True},
-        quotas={"transactions": -1, "ocr_scans": 20}
+        quotas={"transactions": -1, "ocr_scans": 20},
     )
-    return plan
 
 
 @pytest.fixture
-def pro_plan(db_session):
+def pro_plan():
     """Create Pro plan."""
-    plan = Plan(
+    return Plan(
         id=3,
         plan_type="pro",
         name="Pro",
@@ -72,307 +122,301 @@ def pro_plan(db_session):
             "full_tax_calc": True,
             "ocr": True,
             "ai_assistant": True,
-            "e1_generation": True
+            "e1_generation": True,
         },
-        quotas={"transactions": -1, "ocr_scans": -1, "ai_conversations": -1}
+        quotas={"transactions": -1, "ocr_scans": -1, "ai_conversations": -1},
     )
-    return plan
+
+
+def build_subscription(**overrides) -> Subscription:
+    """Construct a subscription object with response-safe defaults."""
+    now = datetime.utcnow()
+    base = {
+        "id": 1,
+        "user_id": 1,
+        "plan_id": 2,
+        "status": SubscriptionStatus.ACTIVE,
+        "billing_cycle": BillingCycle.MONTHLY,
+        "current_period_start": now,
+        "current_period_end": now + timedelta(days=30),
+        "cancel_at_period_end": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    base.update(overrides)
+    return Subscription(**base)
 
 
 class TestUserSignupTrialUpgradeFlow:
-    """Test complete user journey from signup through trial to paid subscription."""
+    """Test complete user journey from trial through checkout and webhook."""
 
-    @patch('app.services.trial_service.TrialService')
-    @patch('app.services.subscription_service.SubscriptionService')
-    @patch('app.services.stripe_payment_service.StripePaymentService')
+    @patch("app.services.stripe_payment_service.StripePaymentService")
     def test_new_user_gets_trial_and_upgrades(
         self,
-        mock_stripe,
-        mock_subscription_service,
-        mock_trial_service,
-        client,
+        mock_stripe_service,
+        authenticated_client,
         db_session,
-        pro_plan
+        pro_plan,
     ):
-        """Test: New user signs up → gets 14-day Pro trial → upgrades to Plus."""
-        # Step 1: User signs up
+        """New user receives trial access, checks out, and webhook completes."""
         user = User(
             id=1,
             email="newuser@example.com",
             trial_used=False,
-            trial_end_date=None
+            trial_end_date=None,
         )
-        
-        # Step 2: Trial is automatically activated
         trial_end = datetime.utcnow() + timedelta(days=14)
-        mock_trial_service.activate_trial.return_value = Subscription(
+        trial_sub = build_subscription(
             id=1,
             user_id=user.id,
             plan_id=pro_plan.id,
-            status="trialing",
-            current_period_start=datetime.utcnow(),
-            current_period_end=trial_end
+            status=SubscriptionStatus.TRIALING,
+            current_period_end=trial_end,
         )
-        
-        trial_sub = mock_trial_service.activate_trial(db_session, user.id)
-        assert trial_sub.status == "trialing"
+
+        assert trial_sub.status == SubscriptionStatus.TRIALING
         assert trial_sub.plan_id == pro_plan.id
-        
-        # Step 3: User uses Pro features during trial
-        # (Feature gate should allow access)
-        
-        # Step 4: User decides to upgrade before trial ends
-        mock_stripe.create_checkout_session.return_value = {
-            "id": "cs_test_123",
-            "url": "https://checkout.stripe.com/pay/cs_test_123"
+
+        db_session.query.return_value.filter.return_value.first.return_value = pro_plan
+        mock_stripe_service.return_value.create_checkout_session.return_value = {
+            "session_id": "cs_test_123",
+            "url": "https://checkout.stripe.com/pay/cs_test_123",
         }
-        
-        checkout_response = client.post(
-            "/api/v1/subscriptions/checkout",
-            json={"plan_type": "plus", "billing_cycle": "monthly"}
-        )
+
+        with patch("app.api.v1.endpoints.subscriptions._is_stripe_configured", return_value=True):
+            checkout_response = authenticated_client.post(
+                "/api/v1/subscriptions/checkout",
+                json={
+                    "plan_id": pro_plan.id,
+                    "billing_cycle": "monthly",
+                    "success_url": "http://localhost:5173/billing/success",
+                    "cancel_url": "http://localhost:5173/billing/cancel",
+                },
+            )
+
         assert checkout_response.status_code == 200
+        assert checkout_response.json()["session_id"] == "cs_test_123"
         assert "url" in checkout_response.json()
-        
-        # Step 5: Stripe webhook confirms payment
-        mock_subscription_service.create_subscription.return_value = Subscription(
-            id=2,
-            user_id=user.id,
-            plan_id=2,  # Plus plan
-            status="active",
-            stripe_subscription_id="sub_123",
-            current_period_start=datetime.utcnow(),
-            current_period_end=datetime.utcnow() + timedelta(days=30)
-        )
-        
+
         webhook_payload = {
             "type": "checkout.session.completed",
             "data": {
                 "object": {
                     "customer": "cus_123",
                     "subscription": "sub_123",
-                    "metadata": {"user_id": "1", "plan_type": "plus"}
+                    "metadata": {"user_id": "1", "plan_type": "plus"},
                 }
-            }
+            },
         }
-        
-        with patch('app.api.v1.webhooks.verify_stripe_signature'):
-            webhook_response = client.post(
+
+        with patch("app.api.v1.endpoints.webhooks.StripePaymentService") as webhook_stripe:
+            webhook_stripe.return_value.handle_webhook_event.return_value = {
+                "event_type": "checkout.session.completed",
+                "status": "processed",
+            }
+            webhook_response = authenticated_client.post(
                 "/api/v1/webhooks/stripe",
                 json=webhook_payload,
-                headers={"stripe-signature": "test_sig"}
+                headers={"Stripe-Signature": "test_sig"},
             )
-            assert webhook_response.status_code == 200
-        
-        # Verify final state
-        mock_subscription_service.create_subscription.assert_called_once()
+
+        assert webhook_response.status_code == 200
+        webhook_stripe.return_value.handle_webhook_event.assert_called_once()
 
 
-class TestQuotaEnforcementFlow:
-    """Test quota enforcement and upgrade prompts."""
+class TestUsageCompatibilityFlow:
+    """Test legacy usage surfaces after credit cutover."""
 
-    @patch('app.services.usage_tracker_service.UsageTrackerService')
-    @patch('app.services.feature_gate_service.FeatureGateService')
-    def test_free_user_hits_transaction_limit(
-        self,
-        mock_feature_gate,
-        mock_usage_tracker,
-        client,
-        free_plan
-    ):
-        """Test: Free user hits 50 transaction limit → gets quota exceeded error."""
-        user_id = 1
-        
-        # User has 49 transactions
-        mock_usage_tracker.get_current_usage.return_value = UsageRecord(
-            user_id=user_id,
-            resource_type="transactions",
-            count=49,
-            period_start=datetime.utcnow().replace(day=1),
-            period_end=datetime.utcnow().replace(day=1) + timedelta(days=30)
-        )
-        
-        # 50th transaction succeeds
-        mock_usage_tracker.check_quota_limit.return_value = True
-        response = client.post("/api/v1/transactions", json={"amount": 100})
-        assert response.status_code in [200, 201]
-        
-        # Update usage to 50
-        mock_usage_tracker.get_current_usage.return_value.count = 50
-        
-        # 51st transaction fails with quota exceeded
-        mock_usage_tracker.check_quota_limit.side_effect = Exception("Quota exceeded")
-        
-        response = client.post("/api/v1/transactions", json={"amount": 100})
-        assert response.status_code == 429
-        assert "quota" in response.json()["detail"].lower()
-        
-        # Response should include upgrade prompt
-        assert "upgrade" in response.json()["detail"].lower()
-
-    @patch('app.services.usage_tracker_service.UsageTrackerService')
-    def test_quota_warning_at_80_percent(
+    @patch("app.api.v1.endpoints.usage.UsageTrackerService")
+    def test_usage_summary_is_read_only_compatibility(
         self,
         mock_usage_tracker,
-        client,
-        free_plan
+        authenticated_client,
     ):
-        """Test: User at 80% quota gets warning in response headers."""
-        user_id = 1
-        
-        # User has 40 transactions (80% of 50)
-        mock_usage_tracker.get_current_usage.return_value = UsageRecord(
-            user_id=user_id,
-            resource_type="transactions",
-            count=40,
-            period_start=datetime.utcnow().replace(day=1),
-            period_end=datetime.utcnow().replace(day=1) + timedelta(days=30)
-        )
-        mock_usage_tracker.check_quota_limit.return_value = True
-        
-        response = client.get("/api/v1/usage/summary")
-        
-        # Should include warning in response
+        """Usage summary remains available as deprecated read-only compatibility data."""
+        mock_usage_tracker.return_value.get_usage_summary.return_value = {
+            "transactions": {
+                "current": 50,
+                "limit": 50,
+                "percentage": 100,
+                "is_warning": True,
+                "is_exceeded": True,
+            }
+        }
+
+        response = authenticated_client.get("/api/v1/usage/summary")
+
         assert response.status_code == 200
-        usage_data = response.json()
-        assert usage_data["transactions"]["percentage"] >= 80
+        assert response.headers["X-Usage-Compatibility"] == "read-only"
+        assert "transactions:50/50" in response.headers["X-Quota-Warning"]
+        assert response.json()["transactions"]["is_exceeded"] is True
+
+    @patch("app.api.v1.endpoints.usage.UsageTrackerService")
+    def test_resource_usage_endpoint_returns_warning_headers(
+        self,
+        mock_usage_tracker,
+        authenticated_client,
+    ):
+        """Per-resource usage endpoint still exposes compatibility headers."""
+        now = datetime.utcnow()
+        mock_usage_tracker.return_value.get_current_usage.return_value = {
+            "resource_type": ResourceType.TRANSACTIONS,
+            "current_usage": 40,
+            "quota_limit": 50,
+            "usage_percentage": 80,
+            "is_exceeded": False,
+            "is_near_limit": True,
+            "period_start": now,
+            "period_end": now + timedelta(days=30),
+            "current": 40,
+            "limit": 50,
+            "percentage": 80,
+            "is_warning": True,
+            "reset_date": None,
+        }
+
+        response = authenticated_client.get("/api/v1/usage/transactions")
+
+        assert response.status_code == 200
+        assert response.headers["X-Usage-Compatibility"] == "read-only"
+        assert "transactions:40/50" in response.headers["X-Quota-Warning"]
+        assert response.json()["usage_percentage"] >= 80
 
 
 class TestSubscriptionCancellationFlow:
     """Test subscription cancellation and reactivation."""
 
-    @patch('app.services.subscription_service.SubscriptionService')
-    @patch('app.services.stripe_payment_service.StripePaymentService')
+    @patch("app.api.v1.endpoints.subscriptions.SubscriptionService")
     def test_user_cancels_and_reactivates_subscription(
         self,
-        mock_stripe,
         mock_subscription_service,
-        client,
-        plus_plan
+        authenticated_client,
+        plus_plan,
     ):
-        """Test: User cancels subscription → changes mind → reactivates."""
+        """Authenticated user can cancel and reactivate an active subscription."""
         user_id = 1
         period_end = datetime.utcnow() + timedelta(days=15)
-        
-        # Step 1: User has active Plus subscription
-        subscription = Subscription(
+        subscription = build_subscription(
             id=1,
             user_id=user_id,
             plan_id=plus_plan.id,
-            status="active",
+            status=SubscriptionStatus.ACTIVE,
             stripe_subscription_id="sub_123",
             current_period_end=period_end,
-            cancel_at_period_end=False
+            cancel_at_period_end=False,
         )
-        mock_subscription_service.get_user_subscription.return_value = subscription
-        
-        # Step 2: User cancels subscription
-        mock_stripe.cancel_subscription.return_value = {"status": "active"}
-        mock_subscription_service.cancel_subscription.return_value = Subscription(
-            **{**subscription.__dict__, "cancel_at_period_end": True}
+
+        service_instance = mock_subscription_service.return_value
+        service_instance.get_user_subscription.return_value = subscription
+        service_instance.cancel_subscription.return_value = {
+            "subscription": build_subscription(
+                id=subscription.id,
+                user_id=subscription.user_id,
+                plan_id=subscription.plan_id,
+                status=SubscriptionStatus.ACTIVE,
+                stripe_subscription_id=subscription.stripe_subscription_id,
+                current_period_end=period_end,
+                cancel_at_period_end=True,
+            )
+        }
+        service_instance.reactivate_subscription.return_value = build_subscription(
+            id=subscription.id,
+            user_id=subscription.user_id,
+            plan_id=subscription.plan_id,
+            status=SubscriptionStatus.ACTIVE,
+            stripe_subscription_id=subscription.stripe_subscription_id,
+            current_period_end=period_end,
+            cancel_at_period_end=False,
         )
-        
-        cancel_response = client.post("/api/v1/subscriptions/cancel")
+
+        cancel_response = authenticated_client.post("/api/v1/subscriptions/cancel")
         assert cancel_response.status_code == 200
         assert cancel_response.json()["cancel_at_period_end"] is True
-        
-        # Subscription remains active until period end
         assert cancel_response.json()["status"] == "active"
-        
-        # Step 3: User changes mind and reactivates
-        mock_subscription_service.reactivate_subscription.return_value = Subscription(
-            **{**subscription.__dict__, "cancel_at_period_end": False}
-        )
-        
-        reactivate_response = client.post("/api/v1/subscriptions/reactivate")
+
+        reactivate_response = authenticated_client.post("/api/v1/subscriptions/reactivate")
         assert reactivate_response.status_code == 200
         assert reactivate_response.json()["cancel_at_period_end"] is False
-        
-        # Step 4: Subscription continues after period end
-        # (No webhook event for cancellation)
 
 
 class TestAdminSubscriptionManagement:
     """Test admin operations on user subscriptions."""
 
-    @patch('app.services.subscription_service.SubscriptionService')
-    @patch('app.services.trial_service.TrialService')
-    @patch('app.api.v1.admin.require_admin')
+    @patch("app.api.v1.endpoints.admin.SubscriptionService")
     def test_admin_grants_trial_and_changes_plan(
         self,
-        mock_require_admin,
-        mock_trial_service,
         mock_subscription_service,
-        client,
+        admin_client,
+        db_session,
         pro_plan,
-        plus_plan
+        plus_plan,
     ):
-        """Test: Admin grants trial to user → changes user's plan."""
-        mock_require_admin.return_value = None  # Admin check passes
+        """Admin grants a trial, changes a plan, and extends the period."""
         user_id = 1
-        
-        # Step 1: Admin grants 14-day Pro trial to user
-        trial_end = datetime.utcnow() + timedelta(days=14)
-        mock_trial_service.activate_trial.return_value = Subscription(
-            id=1,
+        managed_user = User(
+            id=user_id,
+            email="managed@example.com",
+            name="Managed User",
+            user_type=UserType.SELF_EMPLOYED,
+            trial_used=False,
+            is_admin=False,
+        )
+        existing_subscription = build_subscription(
+            id=2,
             user_id=user_id,
             plan_id=pro_plan.id,
-            status="trialing",
-            current_period_end=trial_end
+            status=SubscriptionStatus.TRIALING,
         )
-        
-        grant_response = client.post(
+        extendable_subscription = build_subscription(
+            id=3,
+            user_id=user_id,
+            plan_id=plus_plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_end=datetime.utcnow() + timedelta(days=30),
+        )
+
+        db_session.query.return_value.filter.return_value.first.side_effect = [
+            managed_user,           # grant-trial -> user
+            pro_plan,               # grant-trial -> pro plan
+            None,                   # grant-trial -> existing subscription
+            managed_user,           # change-plan -> user
+            plus_plan,              # change-plan -> plus plan
+            extendable_subscription,  # extend -> subscription
+        ]
+        mock_subscription_service.return_value.get_user_subscription.return_value = existing_subscription
+
+        grant_response = admin_client.post(
             f"/api/v1/admin/subscriptions/{user_id}/grant-trial"
         )
         assert grant_response.status_code == 200
-        
-        # Step 2: Admin changes user's plan to Plus
-        mock_subscription_service.upgrade_subscription.return_value = Subscription(
-            id=2,
-            user_id=user_id,
-            plan_id=plus_plan.id,
-            status="active",
-            current_period_end=datetime.utcnow() + timedelta(days=30)
-        )
-        
-        change_response = client.put(
-            f"/api/v1/admin/subscriptions/{user_id}/change-plan",
-            json={"plan_type": "plus"}
+        assert "trial_end_date" in grant_response.json()
+
+        change_response = admin_client.put(
+            f"/api/v1/admin/subscriptions/{user_id}/change-plan?plan_type=plus"
         )
         assert change_response.status_code == 200
-        assert change_response.json()["plan_id"] == plus_plan.id
-        
-        # Step 3: Admin extends subscription by 30 days
-        extended_end = datetime.utcnow() + timedelta(days=60)
-        mock_subscription_service.get_user_subscription.return_value = Subscription(
-            id=2,
-            user_id=user_id,
-            plan_id=plus_plan.id,
-            status="active",
-            current_period_end=extended_end
-        )
-        
-        extend_response = client.post(
-            f"/api/v1/admin/subscriptions/{user_id}/extend",
-            json={"days": 30}
+        assert change_response.json()["subscription"]["plan_id"] == plus_plan.id
+
+        previous_end = extendable_subscription.current_period_end
+        extend_response = admin_client.post(
+            f"/api/v1/admin/subscriptions/{user_id}/extend?days=30"
         )
         assert extend_response.status_code == 200
+        assert extend_response.json()["new_end_date"] is not None
+        assert extendable_subscription.current_period_end == previous_end + timedelta(days=30)
 
 
 class TestWebhookIdempotencyAndConcurrency:
-    """Test webhook idempotency and handling of concurrent changes."""
+    """Test webhook delivery and concurrent subscription actions."""
 
-    @patch('app.services.stripe_payment_service.StripePaymentService')
-    @patch('app.models.payment_event.PaymentEvent')
-    def test_duplicate_webhook_events_are_ignored(
+    @patch("app.api.v1.endpoints.webhooks.StripePaymentService")
+    def test_duplicate_webhook_events_are_accepted(
         self,
-        mock_payment_event,
-        mock_stripe,
-        client
+        mock_stripe_service,
+        client,
     ):
-        """Test: Same webhook event sent twice → second is ignored."""
+        """Duplicate Stripe deliveries still produce successful responses."""
         event_id = "evt_test_123"
-        
         webhook_payload = {
             "id": event_id,
             "type": "invoice.payment_succeeded",
@@ -380,67 +424,55 @@ class TestWebhookIdempotencyAndConcurrency:
                 "object": {
                     "customer": "cus_123",
                     "subscription": "sub_123",
-                    "amount_paid": 490
+                    "amount_paid": 490,
                 }
-            }
+            },
         }
-        
-        # First webhook - should process
-        mock_payment_event.query().filter().first.return_value = None
-        
-        with patch('app.api.v1.webhooks.verify_stripe_signature'):
-            response1 = client.post(
-                "/api/v1/webhooks/stripe",
-                json=webhook_payload,
-                headers={"stripe-signature": "test_sig"}
-            )
-            assert response1.status_code == 200
-        
-        # Second webhook - should be ignored (idempotent)
-        mock_payment_event.query().filter().first.return_value = Mock(
-            stripe_event_id=event_id
-        )
-        
-        with patch('app.api.v1.webhooks.verify_stripe_signature'):
-            response2 = client.post(
-                "/api/v1/webhooks/stripe",
-                json=webhook_payload,
-                headers={"stripe-signature": "test_sig"}
-            )
-            assert response2.status_code == 200
-        
-        # Verify event was only processed once
-        mock_stripe.handle_webhook_event.assert_called_once()
 
-    @patch('app.services.subscription_service.SubscriptionService')
+        mock_stripe_service.return_value.handle_webhook_event.side_effect = [
+            {"status": "processed", "event_id": event_id},
+            {"status": "duplicate_ignored", "event_id": event_id},
+        ]
+
+        response1 = client.post(
+            "/api/v1/webhooks/stripe",
+            json=webhook_payload,
+            headers={"Stripe-Signature": "test_sig"},
+        )
+        response2 = client.post(
+            "/api/v1/webhooks/stripe",
+            json=webhook_payload,
+            headers={"Stripe-Signature": "test_sig"},
+        )
+
+        assert response1.status_code == 200
+        assert response2.status_code == 200
+        assert mock_stripe_service.return_value.handle_webhook_event.call_count == 2
+
+    @patch("app.api.v1.endpoints.subscriptions.FeatureGateService")
+    @patch("app.api.v1.endpoints.subscriptions.SubscriptionService")
     def test_concurrent_subscription_changes(
         self,
         mock_subscription_service,
-        client
+        mock_feature_gate_service,
+        authenticated_client,
     ):
-        """Test: User upgrades while webhook arrives → last write wins."""
-        user_id = 1
-        
-        # Simulate race condition:
-        # 1. User initiates upgrade via UI
-        # 2. Webhook arrives for previous subscription change
-        # 3. Both try to update subscription
-        
-        # Mock database to handle concurrent updates
-        subscription = Subscription(
+        """Concurrent upgrade path returns a consistent subscription response."""
+        subscription = build_subscription(
             id=1,
-            user_id=user_id,
-            plan_id=2,
-            status="active"
+            user_id=1,
+            plan_id=3,
+            status=SubscriptionStatus.ACTIVE,
+            billing_cycle=BillingCycle.MONTHLY,
         )
-        mock_subscription_service.get_user_subscription.return_value = subscription
-        
-        # Both operations should succeed
-        # (Database transaction isolation handles conflicts)
-        upgrade_response = client.post(
-            "/api/v1/subscriptions/upgrade",
-            json={"plan_type": "pro"}
+        mock_subscription_service.return_value.get_user_subscription.return_value = subscription
+        mock_subscription_service.return_value.upgrade_subscription.return_value = {
+            "subscription": subscription
+        }
+
+        upgrade_response = authenticated_client.post(
+            "/api/v1/subscriptions/upgrade?plan_id=3&billing_cycle=monthly"
         )
-        
-        # Final state should be consistent
-        assert upgrade_response.status_code in [200, 409]  # 409 if conflict detected
+
+        assert upgrade_response.status_code == 200
+        assert upgrade_response.json()["plan_id"] == 3

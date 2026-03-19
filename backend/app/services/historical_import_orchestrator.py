@@ -701,14 +701,16 @@ class HistoricalImportOrchestrator:
                     if metrics:
                         metrics.corrections = corrections
                         metrics.fields_corrected = len(corrections)
-                        
+
                         # Update field-level accuracies based on corrections
+                        field_accuracies = dict(metrics.field_accuracies or {})
                         for correction in corrections:
                             field_name = correction["field"]
                             # Mark corrected fields as inaccurate (0.0)
-                            if field_name in metrics.field_accuracies:
-                                metrics.field_accuracies[field_name] = 0.0
-                        
+                            if field_name in field_accuracies:
+                                field_accuracies[field_name] = 0.0
+                        metrics.field_accuracies = field_accuracies
+
                         self.db.add(metrics)
                         
                         logger.info(

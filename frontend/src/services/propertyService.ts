@@ -6,15 +6,25 @@ import {
   PropertyListResponse,
   PropertyDetailResponse,
   PropertyMetrics,
+  RentalContract,
 } from '../types/property';
+
+const toOptionalNumber = (value: any): number | undefined => (
+  value === null || value === undefined || value === ''
+    ? undefined
+    : Number(value)
+);
 
 /** Map backend property response to frontend Property type */
 function mapProperty(raw: any): Property {
   return {
     id: raw.id,
     user_id: raw.user_id,
+    asset_type: raw.asset_type || 'real_estate',
+    sub_category: raw.sub_category ?? undefined,
+    name: raw.name,
     property_type: raw.property_type,
-    rental_percentage: raw.rental_percentage,
+    rental_percentage: Number(raw.rental_percentage),
     address: raw.address,
     street: raw.street,
     city: raw.city,
@@ -22,16 +32,42 @@ function mapProperty(raw: any): Property {
     purchase_date: raw.purchase_date,
     purchase_price: Number(raw.purchase_price),
     building_value: Number(raw.building_value),
-    land_value: raw.land_value ? Number(raw.land_value) : undefined,
-    grunderwerbsteuer: raw.grunderwerbsteuer ? Number(raw.grunderwerbsteuer) : undefined,
-    notary_fees: raw.notary_fees ? Number(raw.notary_fees) : undefined,
-    registry_fees: raw.registry_fees ? Number(raw.registry_fees) : undefined,
+    land_value: toOptionalNumber(raw.land_value),
+    grunderwerbsteuer: toOptionalNumber(raw.grunderwerbsteuer),
+    notary_fees: toOptionalNumber(raw.notary_fees),
+    registry_fees: toOptionalNumber(raw.registry_fees),
     construction_year: raw.construction_year,
     depreciation_rate: Number(raw.depreciation_rate),
+    useful_life_years: raw.useful_life_years ?? undefined,
+    acquisition_kind: raw.acquisition_kind ?? undefined,
+    put_into_use_date: raw.put_into_use_date ?? undefined,
+    is_used_asset: raw.is_used_asset ?? undefined,
+    first_registration_date: raw.first_registration_date ?? undefined,
+    prior_owner_usage_years: toOptionalNumber(raw.prior_owner_usage_years),
+    business_use_percentage: toOptionalNumber(raw.business_use_percentage),
+    comparison_basis: raw.comparison_basis ?? undefined,
+    comparison_amount: toOptionalNumber(raw.comparison_amount),
+    gwg_eligible: raw.gwg_eligible ?? undefined,
+    gwg_elected: raw.gwg_elected ?? undefined,
+    depreciation_method: raw.depreciation_method ?? undefined,
+    degressive_afa_rate: toOptionalNumber(raw.degressive_afa_rate),
+    useful_life_source: raw.useful_life_source ?? undefined,
+    income_tax_cost_cap: toOptionalNumber(raw.income_tax_cost_cap),
+    income_tax_depreciable_base: toOptionalNumber(raw.income_tax_depreciable_base),
+    vat_recoverable_status: raw.vat_recoverable_status ?? undefined,
+    ifb_candidate: raw.ifb_candidate ?? undefined,
+    ifb_rate: toOptionalNumber(raw.ifb_rate),
+    ifb_rate_source: raw.ifb_rate_source ?? undefined,
+    recognition_decision: raw.recognition_decision ?? undefined,
+    policy_confidence: toOptionalNumber(raw.policy_confidence),
+    supplier: raw.supplier ?? undefined,
+    accumulated_depreciation: toOptionalNumber(raw.accumulated_depreciation),
     status: raw.status,
     sale_date: raw.sale_date,
     kaufvertrag_document_id: raw.kaufvertrag_document_id,
     mietvertrag_document_id: raw.mietvertrag_document_id,
+    annual_depreciation: toOptionalNumber(raw.annual_depreciation),
+    remaining_value: toOptionalNumber(raw.remaining_value),
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
@@ -141,6 +177,8 @@ export const propertyService = {
       if (data.street) payload.street = data.street;
       if (data.city) payload.city = data.city;
       if (data.postal_code) payload.postal_code = data.postal_code;
+      if (data.purchase_date) payload.purchase_date = data.purchase_date;
+      if (data.purchase_price !== undefined) payload.purchase_price = Number(data.purchase_price);
       if (data.building_value !== undefined) payload.building_value = Number(data.building_value);
       if (data.construction_year) payload.construction_year = data.construction_year;
       if (data.depreciation_rate !== undefined) payload.depreciation_rate = Number(data.depreciation_rate);
@@ -175,12 +213,30 @@ export const propertyService = {
   },
 
   /**
-   * Delete property
-   * DELETE /api/v1/properties/{id}
+   * Check delete impact for a property (without actually deleting)
+   * DELETE /api/v1/properties/{id}?force=false
    */
-  deleteProperty: async (id: string): Promise<void> => {
+  checkDeleteImpact: async (id: string): Promise<{ deleted: boolean; impact: { transaction_count: number; recurring_count: number; loan_count: number } }> => {
     try {
-      await api.delete(`/properties/${id}`);
+      const response = await api.delete(`/properties/${id}?force=false`);
+      return response.data || { deleted: true, impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 } };
+    } catch (error: any) {
+      // Property already gone — treat as already deleted
+      if (error.response?.status === 404) {
+        return { deleted: true, impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 } };
+      }
+      console.error('Error checking delete impact:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Force delete property (unlinks transactions, deletes recurring/loans)
+   * DELETE /api/v1/properties/{id}?force=true
+   */
+  deleteProperty: async (id: string, force: boolean = true): Promise<void> => {
+    try {
+      await api.delete(`/properties/${id}?force=${force}`);
     } catch (error: any) {
       console.error('Error deleting property:', error);
       throw error;
@@ -315,6 +371,73 @@ export const propertyService = {
       };
     } catch (error: any) {
       console.error('Error fetching property metrics:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get rental contracts linked to a property
+   * GET /api/v1/properties/{propertyId}/rental-contracts
+   */
+  getRentalContracts: async (propertyId: string): Promise<RentalContract[]> => {
+    try {
+      const response = await api.get(`/properties/${propertyId}/rental-contracts`);
+      return response.data || [];
+    } catch (error: any) {
+      console.error('Error fetching rental contracts:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Recalculate rental percentage from active contracts
+   * POST /api/v1/properties/{propertyId}/recalculate-rental
+   */
+  recalculateRental: async (propertyId: string): Promise<Property> => {
+    try {
+      const response = await api.post(`/properties/${propertyId}/recalculate-rental`);
+      return mapProperty(response.data);
+    } catch (error: any) {
+      console.error('Error recalculating rental:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create a non-real-estate depreciable asset
+   * POST /api/v1/properties/assets
+   */
+  createAsset: async (data: {
+    asset_type: string;
+    name: string;
+    sub_category?: string;
+    purchase_date: string;
+    purchase_price: number;
+    supplier?: string;
+    business_use_percentage?: number;
+    useful_life_years?: number;
+  }): Promise<any> => {
+    try {
+      const response = await api.post('/properties/assets', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error creating asset:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * List non-real-estate assets (vehicles, equipment, etc.)
+   * GET /api/v1/properties/assets
+   */
+  getAssets: async (includeArchived: boolean = false): Promise<{ total: number; assets: any[] }> => {
+    try {
+      const response = await api.get('/properties/assets', {
+        params: { include_archived: includeArchived },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching assets:', error);
       throw error;
     }
   },

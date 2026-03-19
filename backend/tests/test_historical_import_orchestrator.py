@@ -4,6 +4,7 @@ Unit tests for HistoricalImportOrchestrator
 import pytest
 from datetime import datetime
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 from app.services.historical_import_orchestrator import HistoricalImportOrchestrator
@@ -24,6 +25,7 @@ def test_user(db_session):
     user = User(
         email="test@example.com",
         hashed_password="hashed",
+        name="Test User",
         user_type=UserType.EMPLOYEE,
     )
     db_session.add(user)
@@ -290,7 +292,7 @@ class TestReviewUpload:
             orchestrator.review_upload(upload_id=upload.id, approved=True)
 
     def test_review_upload_approval_without_edited_data(
-        self, orchestrator, test_user, db_session, mocker
+        self, orchestrator, test_user, db_session
     ):
         """Test approving upload without edited data"""
         # Create document
@@ -317,7 +319,7 @@ class TestReviewUpload:
         db_session.commit()
 
         # Mock the _finalize_upload method
-        mock_finalize = mocker.patch.object(
+        with patch.object(
             orchestrator,
             "_finalize_upload",
             return_value={
@@ -325,15 +327,14 @@ class TestReviewUpload:
                 "properties_created": 0,
                 "properties_linked": 1,
             },
-        )
-
-        # Approve upload
-        result = orchestrator.review_upload(
-            upload_id=upload.id,
-            approved=True,
-            notes="Looks good",
-            reviewed_by=test_user.id,
-        )
+        ) as mock_finalize:
+            # Approve upload
+            result = orchestrator.review_upload(
+                upload_id=upload.id,
+                approved=True,
+                notes="Looks good",
+                reviewed_by=test_user.id,
+            )
 
         # Verify result
         assert result["upload_id"] == upload.id
@@ -355,7 +356,7 @@ class TestReviewUpload:
         mock_finalize.assert_called_once_with(upload)
 
     def test_review_upload_approval_with_edited_data(
-        self, orchestrator, test_user, db_session, mocker
+        self, orchestrator, test_user, db_session
     ):
         """Test approving upload with edited data"""
         # Create document
@@ -381,7 +382,7 @@ class TestReviewUpload:
         db_session.commit()
 
         # Mock the _finalize_upload method
-        mock_finalize = mocker.patch.object(
+        with patch.object(
             orchestrator,
             "_finalize_upload",
             return_value={
@@ -389,17 +390,16 @@ class TestReviewUpload:
                 "properties_created": 0,
                 "properties_linked": 0,
             },
-        )
-
-        # Approve with edited data
-        edited_data = {"kz_245": 51000, "kz_350": 10000}  # Corrected kz_245
-        result = orchestrator.review_upload(
-            upload_id=upload.id,
-            approved=True,
-            edited_data=edited_data,
-            notes="Corrected employment income",
-            reviewed_by=test_user.id,
-        )
+        ):
+            # Approve with edited data
+            edited_data = {"kz_245": 51000, "kz_350": 10000}  # Corrected kz_245
+            result = orchestrator.review_upload(
+                upload_id=upload.id,
+                approved=True,
+                edited_data=edited_data,
+                notes="Corrected employment income",
+                reviewed_by=test_user.id,
+            )
 
         # Verify result
         assert result["approved"] is True
@@ -410,7 +410,7 @@ class TestReviewUpload:
         assert upload.edited_data == edited_data
         assert upload.approval_notes == "Corrected employment income"
 
-    def test_review_upload_rejection(self, orchestrator, test_user, db_session, mocker):
+    def test_review_upload_rejection(self, orchestrator, test_user, db_session):
         """Test rejecting upload"""
         # Create document
         document = Document(
@@ -436,7 +436,7 @@ class TestReviewUpload:
         db_session.commit()
 
         # Mock the _reject_upload method
-        mock_reject = mocker.patch.object(
+        with patch.object(
             orchestrator,
             "_reject_upload",
             return_value={
@@ -444,15 +444,14 @@ class TestReviewUpload:
                 "properties_unlinked": 0,
                 "depreciation_schedules_deleted": 0,
             },
-        )
-
-        # Reject upload
-        result = orchestrator.review_upload(
-            upload_id=upload.id,
-            approved=False,
-            notes="Data quality too low",
-            reviewed_by=test_user.id,
-        )
+        ) as mock_reject:
+            # Reject upload
+            result = orchestrator.review_upload(
+                upload_id=upload.id,
+                approved=False,
+                notes="Data quality too low",
+                reviewed_by=test_user.id,
+            )
 
         # Verify result
         assert result["upload_id"] == upload.id
@@ -472,7 +471,7 @@ class TestReviewUpload:
         mock_reject.assert_called_once_with(upload)
 
     def test_review_upload_updates_session_metrics(
-        self, orchestrator, test_user, db_session, mocker
+        self, orchestrator, test_user, db_session
     ):
         """Test that reviewing upload updates session metrics"""
         # Create session
@@ -508,7 +507,7 @@ class TestReviewUpload:
         db_session.commit()
 
         # Mock finalize method
-        mocker.patch.object(
+        with patch.object(
             orchestrator,
             "_finalize_upload",
             return_value={
@@ -516,10 +515,9 @@ class TestReviewUpload:
                 "properties_created": 0,
                 "properties_linked": 0,
             },
-        )
-
-        # Approve upload
-        orchestrator.review_upload(upload_id=upload.id, approved=True)
+        ):
+            # Approve upload
+            orchestrator.review_upload(upload_id=upload.id, approved=True)
 
         # Verify session metrics were updated
         db_session.refresh(session)
@@ -1019,7 +1017,7 @@ class TestCaptureUserCorrections:
         assert len(corrections) == 0
 
     def test_review_upload_updates_import_metrics_with_corrections(
-        self, orchestrator, test_user, db_session, mocker
+        self, orchestrator, test_user, db_session
     ):
         """Test that review_upload updates ImportMetrics with user corrections"""
         from app.models.historical_import import ImportMetrics
@@ -1062,7 +1060,7 @@ class TestCaptureUserCorrections:
         db_session.commit()
 
         # Mock finalize method
-        mocker.patch.object(
+        with patch.object(
             orchestrator,
             "_finalize_upload",
             return_value={
@@ -1070,22 +1068,21 @@ class TestCaptureUserCorrections:
                 "properties_created": 0,
                 "properties_linked": 0,
             },
-        )
+        ):
+            # User corrected data
+            edited_data = {
+                "kz_245": 51000,  # Corrected
+                "kz_350": 10000,  # Unchanged
+                "kz_210": 5500,   # Corrected
+            }
 
-        # User corrected data
-        edited_data = {
-            "kz_245": 51000,  # Corrected
-            "kz_350": 10000,  # Unchanged
-            "kz_210": 5500,   # Corrected
-        }
-
-        # Approve with edited data
-        result = orchestrator.review_upload(
-            upload_id=upload.id,
-            approved=True,
-            edited_data=edited_data,
-            reviewed_by=test_user.id,
-        )
+            # Approve with edited data
+            result = orchestrator.review_upload(
+                upload_id=upload.id,
+                approved=True,
+                edited_data=edited_data,
+                reviewed_by=test_user.id,
+            )
 
         # Verify result
         assert result["approved"] is True

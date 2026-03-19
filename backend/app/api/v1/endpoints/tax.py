@@ -10,7 +10,7 @@ from decimal import Decimal
 from datetime import datetime
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Response, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from pydantic import BaseModel, Field
@@ -25,6 +25,7 @@ from app.services.employee_refund_calculator import (
     EmployeeRefundCalculator,
     LohnzettelData,
 )
+from app.services.credit_service import CreditService, InsufficientCreditsError
 
 router = APIRouter()
 
@@ -48,6 +49,44 @@ class AdditionalDeductionsRequest(BaseModel):
 class RefundCalculationRequest(BaseModel):
     lohnzettel: LohnzettelRequest
     additional_deductions: Optional[AdditionalDeductionsRequest] = None
+
+
+def _build_employee_refund_user_adapter(user: User):
+    """Adapt the persisted user profile to EmployeeRefundCalculator's protocol."""
+
+    class _UserAdapter:
+        def __init__(self, wrapped_user: User):
+            self.id = wrapped_user.id
+            self.email = wrapped_user.email
+
+            commuting_info = getattr(wrapped_user, "commuting_info", None) or {}
+            self.commuting_distance = (
+                commuting_info.get("distance_km") if isinstance(commuting_info, dict) else None
+            )
+            self.public_transport_available = (
+                commuting_info.get("public_transport_available")
+                if isinstance(commuting_info, dict)
+                else None
+            )
+
+            family_info = getattr(wrapped_user, "family_info", None) or {}
+            if isinstance(family_info, dict) and family_info:
+                self.family_info = FamilyInfo(
+                    num_children=family_info.get("num_children", 0),
+                    is_single_parent=family_info.get("is_single_parent", False),
+                    children_under_18=family_info.get("children_under_18", 0),
+                    children_18_to_24=family_info.get("children_18_to_24", 0),
+                    is_sole_earner=family_info.get("is_sole_earner", False),
+                )
+            else:
+                self.family_info = None
+
+            self.telearbeit_days = getattr(wrapped_user, "telearbeit_days", None)
+            self.employer_telearbeit_pauschale = getattr(
+                wrapped_user, "employer_telearbeit_pauschale", None
+            )
+
+    return _UserAdapter(user)
 
 
 # --- Helper: simple progressive tax calculation (2026 USP) ---
@@ -112,7 +151,11 @@ def calculate_employee_refund(
                 additional_deductions["church_tax"] = Decimal(str(request.additional_deductions.church_tax))
             if request.additional_deductions.other:
                 additional_deductions["other"] = Decimal(str(request.additional_deductions.other))
-        result = calculator.calculate_refund(lohnzettel_data, current_user, additional_deductions)
+        result = calculator.calculate_refund(
+            lohnzettel_data,
+            _build_employee_refund_user_adapter(current_user),
+            additional_deductions,
+        )
         return result.to_dict()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -141,7 +184,11 @@ def calculate_refund_from_transactions(
         )
         if not employment_transactions:
             raise HTTPException(status_code=404, detail=f"No employment income found for {tax_year}")
-        result = calculator.calculate_refund_from_transactions(current_user, tax_year, employment_transactions)
+        result = calculator.calculate_refund_from_transactions(
+            _build_employee_refund_user_adapter(current_user),
+            tax_year,
+            employment_transactions,
+        )
         return result.to_dict()
     except HTTPException:
         raise
@@ -181,26 +228,10 @@ def estimate_refund_potential(
                     "message": "No income data available for estimation",
                 }
 
-        # Wrap user with UserLike-compatible attributes
-        class _UserAdapter:
-            def __init__(self, user):
-                self.id = user.id
-                self.email = user.email
-                ci = getattr(user, "commuting_info", None) or {}
-                self.commuting_distance = ci.get("distance_km") if isinstance(ci, dict) else None
-                self.public_transport_available = ci.get("public_transport_available") if isinstance(ci, dict) else None
-                fi = getattr(user, "family_info", None) or {}
-                if isinstance(fi, dict) and fi:
-                    from app.services.employee_refund_calculator import FamilyInfo
-                    self.family_info = FamilyInfo(
-                        num_children=fi.get("num_children", 0),
-                        is_single_parent=fi.get("is_single_parent", False),
-                    )
-                else:
-                    self.family_info = None
-
         estimate = calculator.estimate_refund_potential(
-            _UserAdapter(current_user), tax_year, Decimal(str(estimated_gross_income))
+            _build_employee_refund_user_adapter(current_user),
+            tax_year,
+            Decimal(str(estimated_gross_income)),
         )
         return estimate
     except Exception as e:
@@ -446,6 +477,7 @@ def simulate_tax_scenario(
     scenario: dict,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    response: Response = None,
 ):
     """
     Simulate tax impact of adding/removing income or expenses.
@@ -460,6 +492,20 @@ def simulate_tax_scenario(
     Returns: current vs simulated tax comparison + AI classification.
     """
     tax_year = scenario.get("tax_year", datetime.now().year)
+
+    # --- Credit deduction ---
+    credit_service = CreditService(db, redis_client=None)
+    try:
+        deduction = credit_service.check_and_deduct(
+            user_id=current_user.id,
+            operation="tax_calc",
+        )
+    except InsufficientCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits: {e.required} required, {e.available} available",
+        )
+
     change_type = scenario.get("changeType", scenario.get("type", "add_expense"))
     change_amount = Decimal(str(scenario.get("amount", 0)))
     description = scenario.get("description", "")
@@ -595,6 +641,12 @@ def simulate_tax_scenario(
     if ai_classification:
         result["classification"] = ai_classification
 
+    if response is not None:
+        response.headers["X-Credits-Remaining"] = str(
+            deduction.balance_after.available_without_overage
+        )
+
+    db.commit()
     return result
 
 
@@ -1152,3 +1204,37 @@ async def knowledge_base_status(
             collections[name] = {"count": 0, "status": "not_initialized"}
 
     return {"collections": collections}
+
+
+# ═══ GrESt (Grunderwerbsteuer) Calculator ═══
+
+
+class GrEStRequest(BaseModel):
+    grundstueckswert: float = Field(..., description="Grundstueckswert (property value)")
+    is_family_transfer: bool = Field(default=False, description="Family transfer (stepped rates)")
+
+
+@router.post("/tax/calculate-grest")
+def calculate_grest_endpoint(
+    request: GrEStRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Calculate Grunderwerbsteuer (property transfer tax).
+
+    Standard: 3.5% flat rate.
+    Family transfer (§7 Abs 1 Z 2 GrEstG): stepped rates 0.5% / 2.0% / 3.5%.
+    """
+    from app.services.grest_calculator import calculate_grest
+
+    result = calculate_grest(
+        grundstueckswert=Decimal(str(request.grundstueckswert)),
+        is_family_transfer=request.is_family_transfer,
+    )
+    return {
+        "grundstueckswert": float(result.grundstueckswert),
+        "is_family_transfer": result.is_family_transfer,
+        "tax_amount": float(result.tax_amount),
+        "effective_rate": float(result.effective_rate),
+        "tier_breakdown": result.tier_breakdown,
+        "note": result.note,
+    }

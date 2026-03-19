@@ -20,7 +20,45 @@ class DocumentType(str, Enum):
     LOHNZETTEL = "lohnzettel"  # Official tax wage slip
     EINKOMMENSTEUERBESCHEID = "einkommensteuerbescheid"  # Income tax assessment
     E1_FORM = "e1_form"  # E1 tax declaration form
+    L1_FORM = "l1_form"  # L1 employee tax return
+    L1K_BEILAGE = "l1k_beilage"  # L1k child supplement
+    L1AB_BEILAGE = "l1ab_beilage"  # L1ab deductions supplement
+    E1A_BEILAGE = "e1a_beilage"  # E1a self-employment supplement
+    E1B_BEILAGE = "e1b_beilage"  # E1b rental income supplement
+    E1KV_BEILAGE = "e1kv_beilage"  # E1kv capital gains supplement
+    U1_FORM = "u1_form"  # U1 annual VAT declaration
+    U30_FORM = "u30_form"  # U30 VAT advance return (UVA)
+    JAHRESABSCHLUSS = "jahresabschluss"  # Annual financial statement
+    SPENDENBESTAETIGUNG = "spendenbestaetigung"  # Donation confirmation
+    VERSICHERUNGSBESTAETIGUNG = "versicherungsbestaetigung"  # Insurance confirmation
+    KINDERBETREUUNGSKOSTEN = "kinderbetreuungskosten"  # Childcare cost receipt
+    FORTBILDUNGSKOSTEN = "fortbildungskosten"  # Continuing education cost receipt
+    PENDLERPAUSCHALE = "pendlerpauschale"  # Commuter allowance confirmation
+    KIRCHENBEITRAG = "kirchenbeitrag"  # Church tax confirmation
+    GRUNDBUCHAUSZUG = "grundbuchauszug"  # Land registry extract
+    BETRIEBSKOSTENABRECHNUNG = "betriebskostenabrechnung"  # Operating cost statement
+    GEWERBESCHEIN = "gewerbeschein"  # Trade license
+    KONTOAUSZUG = "kontoauszug"  # Bank account statement
     UNKNOWN = "unknown"
+
+
+def _normalize_umlauts(text: str) -> str:
+    """Normalize German umlauts and sharp-s to ASCII equivalents.
+
+    This ensures keyword matching works regardless of whether the OCR engine
+    or PDF text layer uses proper Unicode umlauts (ä, ö, ü, ß) or their ASCII
+    transliterations (ae, oe, ue, ss).  We match against BOTH forms.
+    """
+    return (
+        text
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .replace("Ä", "Ae")
+        .replace("Ö", "Oe")
+        .replace("Ü", "Ue")
+    )
 
 
 class DocumentClassifier:
@@ -167,10 +205,30 @@ class DocumentClassifier:
                     "nutzflache",
                     "als kauferin",
                     "als käuferin",
+                    "fahrgestellnummer",
+                    "fahrzeug",
+                    "kfz",
+                    "pkw",
+                    "zulassung",
+                    "marke",
+                    "modell",
+                    "kilometerstand",
+                    "erstzulassung",
+                    "typenschein",
+                    "motorleistung",
+                    "hubraum",
+                    "seriennummer",
+                    "garantie",
+                    "gewährleistung",
+                    "gewaehrleistung",
+                    "lieferschein",
+                    "anschaffung",
                 ],
                 "required_keywords": [],
                 "required_any": ["kaufvertrag", "kaufpreis", "käufer", "kaufer",
-                                 "verkäufer", "verkaufer", "grundstück", "grundstuck"],
+                                 "verkäufer", "verkaufer", "grundstück", "grundstuck",
+                                 "fahrgestellnummer", "fahrzeug", "kfz", "pkw",
+                                 "zulassung", "typenschein"],
                 "weight": 1.2,
             },
             DocumentType.MIETVERTRAG: {
@@ -266,7 +324,8 @@ class DocumentClassifier:
                     "einkommensteuererklaerung",
                     "e 1-edv",
                     "e 1-pdf",
-                    "e 1,",
+                    "e 1, seite",
+                    "e1-pdf",
                     "formular e1",
                     "steuererklärung",
                     "steuererklaerung",
@@ -275,16 +334,27 @@ class DocumentClassifier:
                     "kz 245",
                     "kz 350",
                     "nichtselbständiger arbeit",
+                    "nichtselbstaendiger arbeit",
                     "vermietung und verpachtung",
                     "sonderausgaben",
                     "werbungskosten",
                     "außergewöhnliche belastungen",
+                    "aussergewoehnliche belastungen",
                     "verlustvortrag",
                     "familienbonus",
-                    "e 1b",
-                    "e 1b-pdf",
-                    "l 1k",
-                    "beilage zur einkommensteuererklärung",
+                    "einkünfte aus selbständiger arbeit",
+                    "einkuenfte aus selbstaendiger arbeit",
+                    "einnahmen-ausgaben-rechnung",
+                    "einnahmen ausgaben rechnung",
+                    "gewinnfreibetrag",
+                    "bundesministerium für finanzen",
+                    "bundesministerium fuer finanzen",
+                    "finanzamt",
+                    "formular e 1",
+                    "erklaerung",
+                    "erklärung",
+                    "einkuenfte aus vermietung",
+                    "einkünfte aus vermietung",
                 ],
                 "required_keywords": [],
                 "required_any": [
@@ -292,9 +362,422 @@ class DocumentClassifier:
                     "einkommensteuererklaerung",
                     "e 1-edv",
                     "e 1-pdf",
+                    "e1-pdf",
+                    "e 1, seite",
                     "steuererklärung für",
+                    "steuererklaerung fuer",
+                    "steuererklaerung fur",
+                    "formular e 1",
+                    "formular e1",
+                    "finanzamt",
+                    "bundesministerium für finanzen",
+                    "bundesministerium fuer finanzen",
                 ],
                 "weight": 1.8,
+            },
+            DocumentType.L1_FORM: {
+                "keywords": [
+                    "arbeitnehmerveranlagung",
+                    "arbeitnehmerinnenveranlagung",
+                    "l 1", "l1",
+                    "werbungskosten",
+                    "sonderausgaben",
+                    "außergewöhnliche belastungen",
+                    "aussergewoehnliche belastungen",
+                    "pendlerpauschale",
+                    "kirchenbeitrag",
+                    "spenden",
+                    "fortbildungskosten",
+                    "arbeitsmittel",
+                    "fachliteratur",
+                    "reisekosten",
+                    "kz 717", "kz 719", "kz 720", "kz 721",
+                    "kz 722", "kz 723", "kz 724",
+                    "kz 450", "kz 458", "kz 459",
+                    "kz 730", "kz 740",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "arbeitnehmerveranlagung", "arbeitnehmerinnenveranlagung",
+                    "l 1-pdf", "l1-pdf", "formular l 1", "formular l1",
+                ],
+                "weight": 1.7,
+            },
+            DocumentType.L1K_BEILAGE: {
+                "keywords": [
+                    "l1k", "l 1k",
+                    "beilage für kinder",
+                    "beilage fuer kinder",
+                    "familienbonus plus",
+                    "familienbonus",
+                    "kindermehrbetrag",
+                    "unterhaltsabsetzbetrag",
+                    "kz 770", "kz 771", "kz 772",
+                    "kind", "kinder",
+                    "geburtsdatum",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "l1k", "l 1k", "beilage für kinder", "beilage fuer kinder",
+                    "familienbonus plus", "kindermehrbetrag",
+                ],
+                "weight": 1.6,
+            },
+            DocumentType.L1AB_BEILAGE: {
+                "keywords": [
+                    "l1ab", "l 1ab",
+                    "absetzbeträge", "absetzbetraege",
+                    "alleinverdienerabsetzbetrag",
+                    "alleinerzieherabsetzbetrag",
+                    "alleinverdiener",
+                    "alleinerzieher",
+                    "pendlerpauschale",
+                    "pendlereuro",
+                    "unterhaltsabsetzbetrag",
+                    "km entfernung",
+                    "öffentliches verkehrsmittel",
+                    "oeffentliches verkehrsmittel",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "l1ab", "l 1ab",
+                    "alleinverdienerabsetzbetrag", "alleinerzieherabsetzbetrag",
+                ],
+                "weight": 1.6,
+            },
+            DocumentType.E1A_BEILAGE: {
+                "keywords": [
+                    "e1a", "e 1a",
+                    "beilage zur einkommensteuererklärung",
+                    "beilage zur einkommensteuererklaerung",
+                    "selbständige arbeit",
+                    "selbstaendige arbeit",
+                    "einnahmen-ausgaben-rechnung",
+                    "einnahmen ausgaben rechnung",
+                    "betriebseinnahmen",
+                    "betriebsausgaben",
+                    "gewinnfreibetrag",
+                    "betriebsausgabenpauschale",
+                    "wareneinkauf",
+                    "personalaufwand",
+                    "abschreibung",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "e1a", "e 1a", "e 1a-pdf", "e1a-pdf",
+                    "betriebseinnahmen", "betriebsausgaben",
+                    "selbständige arbeit", "selbstaendige arbeit",
+                ],
+                "weight": 1.7,
+            },
+            DocumentType.E1B_BEILAGE: {
+                "keywords": [
+                    "e1b", "e 1b",
+                    "vermietung und verpachtung",
+                    "mieteinnahmen",
+                    "kz 9460", "kz 9500", "kz 9510", "kz 9520", "kz 9530",
+                    "kz 9414",
+                    "afa", "absetzung für abnutzung",
+                    "absetzung fuer abnutzung",
+                    "fremdfinanzierung",
+                    "instandhaltung",
+                    "werbungskosten vermietung",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "e1b", "e 1b", "e 1b-pdf", "e1b-pdf",
+                    "vermietung und verpachtung",
+                    "kz 9460", "kz 9414",
+                ],
+                "weight": 1.7,
+            },
+            DocumentType.E1KV_BEILAGE: {
+                "keywords": [
+                    "e1kv", "e 1kv",
+                    "kapitalvermögen", "kapitalvermoegen",
+                    "kapitalertragsteuer", "kest",
+                    "kryptowährung", "kryptowaehrung",
+                    "aktiengewinne",
+                    "dividenden",
+                    "zinserträge", "zinsertraege",
+                    "fondsgewinne",
+                    "27,5%",
+                    "endbesteuerung",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "e1kv", "e 1kv", "e 1kv-pdf", "e1kv-pdf",
+                    "kapitalvermögen", "kapitalvermoegen",
+                    "kapitalertragsteuer",
+                ],
+                "weight": 1.7,
+            },
+            DocumentType.U1_FORM: {
+                "keywords": [
+                    "umsatzsteuererklärung", "umsatzsteuererklaerung",
+                    "u 1", "u1",
+                    "jahresumsatzsteuer",
+                    "umsatzsteuer",
+                    "vorsteuer",
+                    "lieferungen und leistungen",
+                    "steuerbarer umsatz",
+                    "steuerpflichtiger umsatz",
+                    "20%", "13%", "10%",
+                    "innergemeinschaftliche",
+                    "zahllast",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "umsatzsteuererklärung", "umsatzsteuererklaerung",
+                    "u 1-pdf", "u1-pdf", "formular u 1", "formular u1",
+                    "jahresumsatzsteuer",
+                ],
+                "weight": 1.5,
+            },
+            DocumentType.U30_FORM: {
+                "keywords": [
+                    "umsatzsteuervoranmeldung",
+                    "u 30", "u30",
+                    "uva",
+                    "voranmeldung",
+                    "voranmeldungszeitraum",
+                    "umsatzsteuer",
+                    "vorsteuer",
+                    "zahllast",
+                    "monat", "quartal",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "umsatzsteuervoranmeldung",
+                    "u 30-pdf", "u30-pdf", "formular u 30", "formular u30",
+                    "voranmeldung",
+                ],
+                "weight": 1.5,
+            },
+            DocumentType.JAHRESABSCHLUSS: {
+                "keywords": [
+                    "jahresabschluss",
+                    "einnahmen-ausgaben-rechnung",
+                    "einnahmen ausgaben rechnung",
+                    "bilanz",
+                    "gewinn- und verlustrechnung",
+                    "gewinn und verlustrechnung",
+                    "betriebsergebnis",
+                    "bilanzsumme",
+                    "eigenkapital",
+                    "fremdkapital",
+                    "anlagevermögen", "anlagevermoegen",
+                    "umlaufvermögen", "umlaufvermoegen",
+                    "rückstellungen", "rueckstellungen",
+                    "abschreibungen",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "jahresabschluss",
+                    "bilanz",
+                    "gewinn- und verlustrechnung",
+                    "gewinn und verlustrechnung",
+                ],
+                "weight": 1.3,
+            },
+            DocumentType.SPENDENBESTAETIGUNG: {
+                "keywords": [
+                    "spendenbestätigung", "spendenbestaetigung",
+                    "spendenbescheinigung",
+                    "spende", "spenden",
+                    "zuwendungsbestätigung", "zuwendungsbestaetigung",
+                    "gemeinnützig", "gemeinnuetzig",
+                    "absetzbar", "sonderausgaben",
+                    "§ 4a", "§4a",
+                    "spendenorganisation",
+                    "registrierungsnummer",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "spendenbestätigung", "spendenbestaetigung",
+                    "spendenbescheinigung",
+                    "zuwendungsbestätigung", "zuwendungsbestaetigung",
+                ],
+                "weight": 1.2,
+            },
+            DocumentType.VERSICHERUNGSBESTAETIGUNG: {
+                "keywords": [
+                    "versicherungsbestätigung", "versicherungsbestaetigung",
+                    "versicherungspolizze", "polizze",
+                    "versicherungsnehmer",
+                    "prämie", "praemie",
+                    "versicherungssumme",
+                    "deckung",
+                    "haftpflicht", "haushaltsversicherung",
+                    "rechtsschutz", "unfallversicherung",
+                    "lebensversicherung", "krankenversicherung",
+                    "zusatzversicherung",
+                    "versicherungsvertrag",
+                    "versicherungsschein",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "versicherungsbestätigung", "versicherungsbestaetigung",
+                    "versicherungspolizze", "polizze",
+                    "versicherungsschein", "versicherungsvertrag",
+                ],
+                "weight": 1.0,
+            },
+            DocumentType.KINDERBETREUUNGSKOSTEN: {
+                "keywords": [
+                    "kinderbetreuung", "kinderbetreuungskosten",
+                    "kindergarten", "kindertagesstätte", "kindertagesstaette",
+                    "hort", "tagesmutter",
+                    "betreuungskosten",
+                    "betreuungseinrichtung",
+                    "pädagogisch", "paedagogisch",
+                    "kind", "kinder",
+                    "betreuungsgeld",
+                    "nachmittagsbetreuung",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "kinderbetreuung", "kinderbetreuungskosten",
+                    "betreuungskosten", "kindergarten",
+                    "tagesmutter",
+                ],
+                "weight": 1.1,
+            },
+            DocumentType.FORTBILDUNGSKOSTEN: {
+                "keywords": [
+                    "fortbildung", "fortbildungskosten",
+                    "weiterbildung", "weiterbildungskosten",
+                    "kursbestätigung", "kursbestaetigung",
+                    "seminar", "schulung", "lehrgang",
+                    "teilnahmebestätigung", "teilnahmebestaetigung",
+                    "zertifikat", "diplom",
+                    "bildungseinrichtung",
+                    "studiengebühr", "studiengebuehr",
+                    "umschulung",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "fortbildung", "fortbildungskosten",
+                    "weiterbildung", "weiterbildungskosten",
+                    "kursbestätigung", "kursbestaetigung",
+                    "teilnahmebestätigung", "teilnahmebestaetigung",
+                ],
+                "weight": 1.1,
+            },
+            DocumentType.PENDLERPAUSCHALE: {
+                "keywords": [
+                    "pendlerpauschale",
+                    "pendlerrechner",
+                    "pendlereuro",
+                    "fahrtstrecke", "arbeitsweg",
+                    "entfernung", "kilometer",
+                    "öffentliches verkehrsmittel", "oeffentliches verkehrsmittel",
+                    "zumutbarkeit",
+                    "pendlerförderung", "pendlerfoerderung",
+                    "arbeitsstätte", "arbeitsstaette",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "pendlerpauschale", "pendlerrechner", "pendlereuro",
+                ],
+                "weight": 1.2,
+            },
+            DocumentType.KIRCHENBEITRAG: {
+                "keywords": [
+                    "kirchenbeitrag", "kirchensteuer",
+                    "kirchenbeitragsbestätigung", "kirchenbeitragsbestaetigung",
+                    "diözese", "dioezese",
+                    "pfarrgemeinde", "pfarramt",
+                    "kirchgeld",
+                    "beitragsjahr",
+                    "mitgliedsbeitrag",
+                    "seelsorge",
+                    "religionsgemeinschaft",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "kirchenbeitrag", "kirchensteuer",
+                    "kirchenbeitragsbestätigung", "kirchenbeitragsbestaetigung",
+                ],
+                "weight": 1.2,
+            },
+            DocumentType.GRUNDBUCHAUSZUG: {
+                "keywords": [
+                    "grundbuchauszug", "grundbuch",
+                    "einlagezahl", "katastralgemeinde",
+                    "bezirksgericht",
+                    "eigentumsrecht", "eigentümer", "eigentuemer",
+                    "grundstücksnummer", "grundstuecksnummer",
+                    "lastenblatt", "eigentumsblatt",
+                    "pfandrecht", "hypothek",
+                    "dienstbarkeit",
+                    "liegenschaft",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "grundbuchauszug", "grundbuch",
+                    "einlagezahl", "katastralgemeinde",
+                ],
+                "weight": 1.2,
+            },
+            DocumentType.BETRIEBSKOSTENABRECHNUNG: {
+                "keywords": [
+                    "betriebskostenabrechnung", "betriebskosten",
+                    "hausverwaltung",
+                    "abrechnungszeitraum", "abrechnungsperiode",
+                    "nachzahlung", "guthaben",
+                    "heizkosten", "warmwasser",
+                    "müllabfuhr", "muellabfuhr",
+                    "kanalgebühr", "kanalgebuehr",
+                    "versicherung", "verwaltungshonorar",
+                    "aufzug", "lift",
+                    "allgemeinbeleuchtung",
+                    "rücklage", "ruecklage",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "betriebskostenabrechnung", "betriebskosten",
+                    "hausverwaltung",
+                ],
+                "weight": 1.1,
+            },
+            DocumentType.GEWERBESCHEIN: {
+                "keywords": [
+                    "gewerbeschein", "gewerbeberechtigung",
+                    "gewerbeanmeldung",
+                    "gewerbeordnung",
+                    "bezirkshauptmannschaft", "magistrat",
+                    "gewerbetreibende", "gewerbetreibender",
+                    "standort", "betriebsstandort",
+                    "gewerbe", "handelsgewerbe",
+                    "gisa", "gewerbeinformationssystem",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "gewerbeschein", "gewerbeberechtigung",
+                    "gewerbeanmeldung",
+                ],
+                "weight": 1.3,
+            },
+            DocumentType.KONTOAUSZUG: {
+                "keywords": [
+                    "kontoauszug", "kontobewegungen",
+                    "buchungsdetails", "buchungstext",
+                    "valuta", "wertstellung",
+                    "iban", "bic",
+                    "saldo", "anfangssaldo", "endsaldo",
+                    "haben", "soll",
+                    "überweisung", "ueberweisung",
+                    "lastschrift", "gutschrift",
+                    "kontonummer", "bankleitzahl",
+                    "auszugsnummer",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "kontoauszug", "kontobewegungen",
+                    "auszugsnummer", "buchungsdetails",
+                ],
+                "weight": 1.0,
             },
         }
 
@@ -320,7 +803,10 @@ class DocumentClassifier:
 
     def _classify_by_patterns(self, text: str) -> Dict:
         """
-        Classify document using keyword pattern matching
+        Classify document using keyword pattern matching.
+
+        Matches against both the original text and an umlaut-normalized version
+        so that OCR output using ä/ö/ü or ae/oe/ue is handled equally well.
 
         Args:
             text: Extracted text from OCR
@@ -329,17 +815,126 @@ class DocumentClassifier:
             Dictionary with type and confidence
         """
         text_lower = text.lower()
+        # Also create umlaut-normalized version for fallback matching
+        text_normalized = _normalize_umlauts(text_lower)
 
-        # Early detection: E1 forms are multi-page and contain keywords that match
-        # many other types (Lohnzettel, Bescheid, etc.). Check the first page for
-        # definitive E1 markers to avoid misclassification.
-        first_page = text_lower[:1500]
-        if any(marker in first_page for marker in [
-            "e 1-pdf", "e 1-edv", "e 1,",
+        def _contains(haystack: str, haystack_norm: str, needle: str) -> bool:
+            """Check if needle is in haystack OR its umlaut-normalized form."""
+            if needle in haystack:
+                return True
+            # Also try the normalized form of the needle against normalized text
+            return _normalize_umlauts(needle) in haystack_norm
+
+        # Early detection: Payslips (Gehaltszettel / Lohnzettel) contain keywords
+        # like "arbeitnehmerveranlagung" that also appear in E1 forms. Detect
+        # payslips FIRST so they don't get misclassified as E1.
+        first_page = text_lower[:2000]
+        first_page_norm = text_normalized[:2000]
+        payslip_markers = [
+            "auszahlungsmonat",      # "Auszahlungsmonat: 01.2024"
+            "personalnummer",        # employee number
+            "summe bezüge",          # total earnings
+            "summe bezuege",         # umlaut-normalized
+            "summe abzüge",          # total deductions
+            "summe abzuege",         # umlaut-normalized
+            "gehaltszettel",         # payslip header
+            "gehaltsabrechnung",     # salary statement
+            "lohnabrechnung",        # wage statement
+            "gehalt/entsch",         # salary/compensation line item
+        ]
+        payslip_hits = sum(
+            1 for m in payslip_markers
+            if _contains(first_page, first_page_norm, m)
+        )
+        if payslip_hits >= 2:
+            return {"type": DocumentType.LOHNZETTEL, "confidence": 0.92}
+
+        # Early detection: L1 employee tax return (Arbeitnehmerveranlagung)
+        # Must be checked BEFORE E1 because L1 also contains "arbeitnehmerveranlagung"
+        l1_markers = [
+            "l 1-pdf", "l1-pdf", "l 1-edv", "l1-edv",
+            "formular l 1", "formular l1",
+            "erklärung zur arbeitnehmerveranlagung",
+            "erklaerung zur arbeitnehmerveranlagung",
+        ]
+        if any(_contains(first_page, first_page_norm, m) for m in l1_markers):
+            # Further distinguish L1k and L1ab sub-forms
+            l1k_markers = ["l 1k", "l1k", "beilage für kinder", "beilage fuer kinder",
+                           "familienbonus plus", "kindermehrbetrag"]
+            if any(_contains(first_page, first_page_norm, m) for m in l1k_markers):
+                return {"type": DocumentType.L1K_BEILAGE, "confidence": 0.90}
+            l1ab_markers = ["l 1ab", "l1ab", "absetzbeträge", "absetzbetraege",
+                            "alleinverdienerabsetzbetrag", "alleinerzieherabsetzbetrag",
+                            "pendlerpauschale"]
+            if any(_contains(first_page, first_page_norm, m) for m in l1ab_markers):
+                return {"type": DocumentType.L1AB_BEILAGE, "confidence": 0.90}
+            return {"type": DocumentType.L1_FORM, "confidence": 0.90}
+
+        # Early detection: L1k / L1ab without L1 main form marker
+        l1k_standalone = ["l 1k-pdf", "l1k-pdf", "l 1k,", "l1k,",
+                          "beilage für kinder", "beilage fuer kinder"]
+        if any(_contains(first_page, first_page_norm, m) for m in l1k_standalone):
+            return {"type": DocumentType.L1K_BEILAGE, "confidence": 0.88}
+        l1ab_standalone = ["l 1ab-pdf", "l1ab-pdf", "l 1ab,", "l1ab,"]
+        if any(_contains(first_page, first_page_norm, m) for m in l1ab_standalone):
+            return {"type": DocumentType.L1AB_BEILAGE, "confidence": 0.88}
+
+        # Early detection: E1a self-employment supplement
+        e1a_markers = ["e 1a-pdf", "e1a-pdf", "e 1a-edv", "e1a-edv",
+                       "formular e 1a", "formular e1a",
+                       "einkünfte aus selbständiger arbeit",
+                       "einkuenfte aus selbstaendiger arbeit"]
+        if any(_contains(first_page, first_page_norm, m) for m in e1a_markers):
+            return {"type": DocumentType.E1A_BEILAGE, "confidence": 0.90}
+
+        # Early detection: E1b rental income supplement
+        e1b_markers = ["e 1b-pdf", "e1b-pdf", "e 1b-edv", "e1b-edv",
+                       "formular e 1b", "formular e1b",
+                       "einkünfte aus vermietung und verpachtung",
+                       "einkuenfte aus vermietung und verpachtung"]
+        if any(_contains(first_page, first_page_norm, m) for m in e1b_markers):
+            return {"type": DocumentType.E1B_BEILAGE, "confidence": 0.90}
+
+        # Early detection: E1kv capital gains supplement
+        e1kv_markers = ["e 1kv-pdf", "e1kv-pdf", "e 1kv-edv", "e1kv-edv",
+                        "formular e 1kv", "formular e1kv",
+                        "einkünfte aus kapitalvermögen",
+                        "einkuenfte aus kapitalvermoegen"]
+        if any(_contains(first_page, first_page_norm, m) for m in e1kv_markers):
+            return {"type": DocumentType.E1KV_BEILAGE, "confidence": 0.90}
+
+        # Early detection: U1 annual VAT declaration
+        u1_markers = ["umsatzsteuererklärung", "umsatzsteuererklaerung",
+                      "formular u 1", "formular u1", "u 1-pdf", "u1-pdf"]
+        if any(_contains(first_page, first_page_norm, m) for m in u1_markers):
+            return {"type": DocumentType.U1_FORM, "confidence": 0.90}
+
+        # Early detection: U30 VAT advance return (UVA)
+        u30_markers = ["umsatzsteuervoranmeldung", "u 30-pdf", "u30-pdf",
+                       "formular u 30", "formular u30"]
+        if any(_contains(first_page, first_page_norm, m) for m in u30_markers):
+            return {"type": DocumentType.U30_FORM, "confidence": 0.90}
+
+        # Early detection: E1 main form (after sub-forms are checked)
+        e1_markers = [
+            "e 1-pdf", "e 1-edv", "e1-pdf",
+            "e 1, seite",
             "einkommensteuererklärung für",
             "einkommensteuererklaerung fuer",
-        ]):
+            "einkommensteuererklaerung fur",
+            "formular e 1", "formular e1",
+            "bundesministerium für finanzen",
+            "bundesministerium fuer finanzen",
+        ]
+        # Only match E1 main form if none of the sub-form markers matched
+        if any(_contains(first_page, first_page_norm, m) for m in e1_markers):
             return {"type": DocumentType.E1_FORM, "confidence": 0.90}
+
+        # Early detection: Arbeitnehmerveranlagung without explicit L1/E1 marker
+        # This is typically an L1 form
+        anv_markers = ["arbeitnehmerinnenveranlagung", "arbeitnehmerveranlagung"]
+        if any(_contains(first_page, first_page_norm, m) for m in anv_markers):
+            return {"type": DocumentType.L1_FORM, "confidence": 0.85}
 
         scores = {}
 
@@ -351,7 +946,8 @@ class DocumentClassifier:
             required_keywords = pattern_info.get("required_keywords", [])
             if required_keywords:
                 required_found = all(
-                    keyword in text_lower for keyword in required_keywords
+                    _contains(text_lower, text_normalized, keyword)
+                    for keyword in required_keywords
                 )
                 if not required_found:
                     scores[doc_type] = 0.0
@@ -361,7 +957,8 @@ class DocumentClassifier:
             required_any = pattern_info.get("required_any", [])
             if required_any:
                 any_found = any(
-                    keyword in text_lower for keyword in required_any
+                    _contains(text_lower, text_normalized, keyword)
+                    for keyword in required_any
                 )
                 if not any_found:
                     scores[doc_type] = 0.0
@@ -369,7 +966,7 @@ class DocumentClassifier:
 
             # Count keyword matches
             for keyword in pattern_info["keywords"]:
-                if keyword in text_lower:
+                if _contains(text_lower, text_normalized, keyword):
                     keyword_matches += 1
 
             # Calculate score
@@ -379,13 +976,17 @@ class DocumentClassifier:
 
                 # Boost score if required keywords are present
                 if required_keywords and all(
-                    keyword in text_lower for keyword in required_keywords
+                    _contains(text_lower, text_normalized, keyword)
+                    for keyword in required_keywords
                 ):
                     score *= 1.2
 
                 # Boost score for required_any matches
                 if required_any:
-                    any_count = sum(1 for k in required_any if k in text_lower)
+                    any_count = sum(
+                        1 for k in required_any
+                        if _contains(text_lower, text_normalized, k)
+                    )
                     score *= (1.0 + 0.1 * any_count)
 
             scores[doc_type] = min(score, 1.0)
@@ -480,6 +1081,66 @@ class DocumentClassifier:
         english_count = sum(1 for word in english_words if word in text_lower)
 
         return "de" if german_count > english_count else "en"
+
+    def detect_asset_type(self, text: str) -> Optional[str]:
+        """
+        Detect if a Kaufvertrag is for a vehicle, equipment, or real estate.
+
+        Returns asset_type string (e.g. 'vehicle', 'computer') or None for real estate.
+        """
+        text_lower = text.lower()
+        text_norm = _normalize_umlauts(text_lower)
+
+        vehicle_keywords = [
+            "fahrgestellnummer", "fahrzeug", "kfz", "pkw", "lkw",
+            "zulassung", "erstzulassung", "typenschein", "kilometerstand",
+            "motorleistung", "hubraum", "kennzeichen", "auto",
+            "kraftfahrzeug", "personenkraftwagen",
+        ]
+        ev_keywords = ["elektro", "e-auto", "elektrofahrzeug", "batterie", "kwh", "ladekabel"]
+        computer_keywords = [
+            "laptop", "notebook", "computer", "pc", "macbook", "imac",
+            "tablet", "ipad", "server", "workstation",
+        ]
+        phone_keywords = ["smartphone", "iphone", "handy", "mobiltelefon", "samsung galaxy"]
+        furniture_keywords = ["schreibtisch", "bürostuhl", "buerostuhl", "büromöbel", "bueromoebel", "regal"]
+        machinery_keywords = ["maschine", "anlage", "cnc", "fräse", "fraese", "drehbank", "presse"]
+        software_keywords = [
+            "software",
+            "lizenz",
+            "dauerlizenz",
+            "perpetual",
+            "einmallizenz",
+            "einmal-lizenz",
+        ]
+        tools_keywords = ["werkzeug", "bohrmaschine", "säge", "saege", "schrauber"]
+
+        def _hits(keywords):
+            return sum(1 for kw in keywords if kw in text_lower or _normalize_umlauts(kw) in text_norm)
+
+        scores = {
+            "vehicle": _hits(vehicle_keywords),
+            "electric_vehicle": _hits(ev_keywords),
+            "computer": _hits(computer_keywords),
+            "phone": _hits(phone_keywords),
+            "office_furniture": _hits(furniture_keywords),
+            "machinery": _hits(machinery_keywords),
+            "software": _hits(software_keywords),
+            "tools": _hits(tools_keywords),
+        }
+
+        # EV is a sub-type of vehicle — combine
+        if scores["electric_vehicle"] >= 2:
+            return "electric_vehicle"
+        if scores["vehicle"] >= 2:
+            return "vehicle"
+
+        # Find best non-vehicle match
+        best = max(scores, key=scores.get)
+        if scores[best] >= 2 and best not in ("vehicle", "electric_vehicle"):
+            return best
+
+        return None  # real estate or unknown
 
     def suggest_document_type(self, characteristics: Dict) -> DocumentType:
         """

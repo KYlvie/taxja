@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useConfirm } from '../../hooks/useConfirm';
+import { propertyService } from '../../services/propertyService';
 import { Property, PropertyStatus, PropertyType } from '../../types/property';
 import './PropertyList.css';
 
@@ -21,6 +23,7 @@ const PropertyList = ({
   isLoading = false,
 }: PropertyListProps) => {
   const { t } = useTranslation();
+  const { confirm: showConfirm } = useConfirm();
   const [showArchived, setShowArchived] = useState(false);
 
   const formatCurrency = (amount: number) => {
@@ -68,26 +71,70 @@ const PropertyList = ({
     return Math.max(0, depreciableValue - accumulated);
   };
 
-  const handleDeleteClick = (property: Property, e: React.MouseEvent) => {
+  const handleDeleteClick = async (property: Property, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    const confirmMessage = t('properties.confirmDelete', {
-      address: property.address,
-    });
-    
-    if (window.confirm(confirmMessage)) {
-      onDelete(property.id);
+    try {
+      // First check impact without deleting (force=false)
+      const result = await propertyService.checkDeleteImpact(property.id);
+      
+      // Property already gone (404 handled gracefully)
+      if (result.deleted) {
+        onDelete(property.id);
+        return;
+      }
+
+      const { transaction_count, recurring_count, loan_count } = result.impact || { transaction_count: 0, recurring_count: 0, loan_count: 0 };
+      const hasLinkedData = transaction_count > 0 || recurring_count > 0 || loan_count > 0;
+
+      if (hasLinkedData) {
+        const impactLines: string[] = [];
+        if (transaction_count > 0) {
+          impactLines.push(t('properties.deleteImpactTransactions', { count: transaction_count }));
+        }
+        if (recurring_count > 0) {
+          impactLines.push(t('properties.deleteImpactRecurring', { count: recurring_count }));
+        }
+        if (loan_count > 0) {
+          impactLines.push(t('properties.deleteImpactLoans', { count: loan_count }));
+        }
+        
+        const confirmMessage = t('properties.confirmDeleteWithImpact', {
+          address: property.address,
+          impact: impactLines.join('\n'),
+        });
+        
+        const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete') });
+        if (ok) {
+          onDelete(property.id);
+        }
+      } else {
+        // No linked data, simple confirm
+        const confirmMessage = t('properties.confirmDelete', { address: property.address });
+        const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete') });
+        if (ok) {
+          onDelete(property.id);
+        }
+      }
+    } catch {
+      // If impact check fails, fall back to simple confirm
+      const confirmMessage = t('properties.confirmDelete', { address: property.address });
+      const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete') });
+      if (ok) {
+        onDelete(property.id);
+      }
     }
   };
 
-  const handleArchiveClick = (property: Property, e: React.MouseEvent) => {
+  const handleArchiveClick = async (property: Property, e: React.MouseEvent) => {
     e.stopPropagation();
     
     const confirmMessage = t('properties.confirmArchive', {
       address: property.address,
     });
     
-    if (window.confirm(confirmMessage)) {
+    const ok2 = await showConfirm(confirmMessage, { variant: 'warning', confirmText: t('properties.archive') });
+    if (ok2) {
       onArchive(property);
     }
   };
@@ -95,6 +142,21 @@ const PropertyList = ({
   const filteredProperties = showArchived
     ? properties
     : properties.filter((p) => p.status !== PropertyStatus.ARCHIVED);
+
+  const getAssetIcon = (property: Property): string => {
+    const at = (property as any).asset_type || 'real_estate';
+    const icons: Record<string, string> = {
+      real_estate: '🏠', vehicle: '🚗', electric_vehicle: '⚡🚗',
+      computer: '💻', phone: '📱', office_furniture: '🪑',
+      machinery: '⚙️', tools: '🔧', software: '💿', other_equipment: '📦',
+    };
+    return icons[at] || '🏠';
+  };
+
+  const isRealEstate = (property: Property): boolean => {
+    const at = (property as any).asset_type;
+    return !at || at === 'real_estate';
+  };
 
   if (isLoading) {
     return (
@@ -169,6 +231,7 @@ const PropertyList = ({
           const accumulated = calculateAccumulatedDepreciation(property);
           const remaining = calculateRemainingValue(property);
           const isRental = property.property_type !== PropertyType.OWNER_OCCUPIED;
+          const isRE = isRealEstate(property);
 
           return (
             <div
@@ -178,14 +241,22 @@ const PropertyList = ({
             >
               <div className="property-card-header">
                 <div className="property-address">
-                  <h3>{property.address}</h3>
+                  <h3>{getAssetIcon(property)} {isRE ? property.address : ((property as any).name || property.address)}</h3>
                   <div className="property-badges">
                     <span className={`status-badge ${property.status}`}>
                       {t(`properties.status.${property.status}`)}
                     </span>
-                    <span className={`type-badge ${property.property_type}`}>
-                      {t(`properties.types.${property.property_type}`)}
-                    </span>
+                    {isRE ? (
+                      <span className={`type-badge ${property.property_type}`}>
+                        {t(`properties.types.${property.property_type}`)}
+                      </span>
+                    ) : (
+                      <span className="type-badge other-asset">
+                        {String(
+                          t(`properties.assetTypes.${(property as any).asset_type}`, (property as any).asset_type)
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="property-actions">
@@ -225,10 +296,10 @@ const PropertyList = ({
                     <span className="info-value">{formatDate(property.purchase_date)}</span>
                   </div>
                   <div className="info-item">
-                    <span className="info-label">{t('properties.buildingValue')}</span>
-                    <span className="info-value">{formatCurrency(property.building_value)}</span>
+                    <span className="info-label">{isRE ? t('properties.buildingValue') : t('properties.purchasePrice')}</span>
+                    <span className="info-value">{formatCurrency(isRE ? property.building_value : property.purchase_price)}</span>
                   </div>
-                  {isRental && (
+                  {isRE && isRental && (
                     <>
                       <div className="info-item">
                         <span className="info-label">{t('properties.depreciationRate')}</span>
@@ -244,7 +315,7 @@ const PropertyList = ({
                       </div>
                     </>
                   )}
-                  {property.property_type === PropertyType.MIXED_USE && (
+                  {isRE && property.property_type === PropertyType.MIXED_USE && (
                     <div className="info-item">
                       <span className="info-label">{t('properties.rentalPercentage')}</span>
                       <span className="info-value">{property.rental_percentage}%</span>
@@ -252,7 +323,7 @@ const PropertyList = ({
                   )}
                 </div>
 
-                {isRental && (
+                {isRE && isRental && (
                   <div className="depreciation-progress">
                     <div className="progress-bar">
                       <div
@@ -288,14 +359,14 @@ const PropertyList = ({
         <table className="property-table">
           <thead>
             <tr>
-              <th>{t('properties.address')}</th>
+              <th>{t('properties.assetName', '名称')}</th>
               <th>{t('properties.type')}</th>
               <th>{t('properties.purchaseDate')}</th>
-              <th>{t('properties.buildingValue')}</th>
+              <th>{t('properties.purchasePrice')}</th>
               <th>{t('properties.depreciationRate')}</th>
               <th>{t('properties.accumulatedDepreciation')}</th>
               <th>{t('properties.remainingValue')}</th>
-              <th>{t('properties.status')}</th>
+              <th>{t('properties.statusLabel')}</th>
               <th>{t('common.actions')}</th>
             </tr>
           </thead>
@@ -304,6 +375,7 @@ const PropertyList = ({
               const accumulated = calculateAccumulatedDepreciation(property);
               const remaining = calculateRemainingValue(property);
               const isRental = property.property_type !== PropertyType.OWNER_OCCUPIED;
+              const isRE = isRealEstate(property);
 
               return (
                 <tr
@@ -313,7 +385,7 @@ const PropertyList = ({
                 >
                   <td className="address-cell">
                     <div className="address-content">
-                      <strong>{property.address}</strong>
+                      <strong>{getAssetIcon(property)} {isRE ? property.address : ((property as any).name || property.address)}</strong>
                       {property.sale_date && (
                         <span className="sale-date-small">
                           {t('properties.soldOn', { date: formatDate(property.sale_date) })}
@@ -322,18 +394,26 @@ const PropertyList = ({
                     </div>
                   </td>
                   <td>
-                    <span className={`type-badge ${property.property_type}`}>
-                      {t(`properties.types.${property.property_type}`)}
-                    </span>
+                    {isRE ? (
+                      <span className={`type-badge ${property.property_type}`}>
+                        {t(`properties.types.${property.property_type}`)}
+                      </span>
+                    ) : (
+                      <span className="type-badge other-asset">
+                        {String(
+                          t(`properties.assetTypes.${(property as any).asset_type}`, (property as any).asset_type)
+                        )}
+                      </span>
+                    )}
                   </td>
                   <td>{formatDate(property.purchase_date)}</td>
-                  <td className="amount">{formatCurrency(property.building_value)}</td>
-                  <td>{isRental ? formatPercentage(property.depreciation_rate) : '—'}</td>
+                  <td className="amount">{formatCurrency(isRE ? property.building_value : property.purchase_price)}</td>
+                  <td>{isRE && isRental ? formatPercentage(property.depreciation_rate) : '—'}</td>
                   <td className="amount depreciation">
-                    {isRental ? formatCurrency(accumulated) : '—'}
+                    {isRE && isRental ? formatCurrency(accumulated) : '—'}
                   </td>
                   <td className="amount remaining">
-                    {isRental ? formatCurrency(remaining) : '—'}
+                    {isRE && isRental ? formatCurrency(remaining) : '—'}
                   </td>
                   <td>
                     <span className={`status-badge ${property.status}`}>

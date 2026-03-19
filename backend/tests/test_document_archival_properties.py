@@ -5,7 +5,7 @@ Property 26: Document archival association integrity
 Validates: Requirements 19.8, 19.9, 24.1, 24.7
 """
 import pytest
-from hypothesis import given, strategies as st, assume, settings
+from hypothesis import HealthCheck, given, strategies as st, assume, settings
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -19,10 +19,17 @@ from app.services.document_archival_service import DocumentArchivalService
 @st.composite
 def document_strategy(draw):
     """Generate a valid document"""
+    safe_text = st.text(
+        min_size=1,
+        alphabet=st.characters(
+            blacklist_characters="\x00",
+            blacklist_categories=("Cs",),
+        ),
+    )
     return {
         "document_type": draw(st.sampled_from(list(DocumentType))),
-        "file_path": draw(st.text(min_size=10, max_size=100)),
-        "file_name": draw(st.text(min_size=5, max_size=50)),
+        "file_path": draw(safe_text.filter(lambda value: 10 <= len(value) <= 100)),
+        "file_name": draw(safe_text.filter(lambda value: 5 <= len(value) <= 50)),
         "file_size": draw(st.integers(min_value=100, max_value=10_000_000)),
         "mime_type": draw(st.sampled_from(["image/jpeg", "image/png", "application/pdf"])),
         "confidence_score": draw(st.floats(min_value=0.0, max_value=1.0)),
@@ -32,11 +39,19 @@ def document_strategy(draw):
 @st.composite
 def transaction_strategy(draw):
     """Generate a valid transaction"""
+    safe_text = st.text(
+        min_size=5,
+        max_size=200,
+        alphabet=st.characters(
+            blacklist_characters="\x00",
+            blacklist_categories=("Cs",),
+        ),
+    )
     return {
         "type": draw(st.sampled_from(list(TransactionType))),
         "amount": draw(st.decimals(min_value=Decimal("0.01"), max_value=Decimal("100000.00"), places=2)),
-        "date": draw(st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2026, 12, 31))),
-        "description": draw(st.text(min_size=5, max_size=200)),
+        "transaction_date": draw(st.dates(min_value=datetime(2020, 1, 1).date(), max_value=datetime(2026, 12, 31).date())),
+        "description": draw(safe_text),
     }
 
 
@@ -44,7 +59,11 @@ class TestDocumentArchivalProperties:
     """Property-based tests for document archival"""
 
     @given(document_strategy())
-    @settings(max_examples=50)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26a_document_archival_preserves_data(self, db_session, test_user, document_data):
         """
         Property 26a: Archiving a document preserves all document data
@@ -92,7 +111,11 @@ class TestDocumentArchivalProperties:
         assert document.confidence_score == original_confidence, "Confidence score should not change"
 
     @given(document_strategy(), transaction_strategy())
-    @settings(max_examples=50)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26b_transaction_deletion_archives_documents(
         self, db_session, test_user, document_data, transaction_data
     ):
@@ -140,7 +163,11 @@ class TestDocumentArchivalProperties:
         assert document.transaction_id == transaction.id, "Transaction link should be preserved"
 
     @given(st.lists(document_strategy(), min_size=1, max_size=10))
-    @settings(max_examples=30)
+    @settings(
+        max_examples=30,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26c_multiple_documents_archival(self, db_session, test_user, documents_data):
         """
         Property 26c: Archiving multiple documents for a transaction works correctly
@@ -152,7 +179,7 @@ class TestDocumentArchivalProperties:
             user_id=test_user.id,
             type=TransactionType.EXPENSE,
             amount=Decimal("100.00"),
-            date=datetime(2026, 1, 1),
+            transaction_date=datetime(2026, 1, 1).date(),
             description="Test transaction",
         )
         db_session.add(transaction)
@@ -191,7 +218,11 @@ class TestDocumentArchivalProperties:
             assert doc.archived_at is not None, "All documents should have archived timestamp"
 
     @given(document_strategy())
-    @settings(max_examples=50)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26d_restore_reverses_archival(self, db_session, test_user, document_data):
         """
         Property 26d: Restoring an archived document reverses the archival
@@ -228,7 +259,11 @@ class TestDocumentArchivalProperties:
         assert document.archived_at is None, "Archived timestamp should be cleared"
 
     @given(st.integers(min_value=1, max_value=3000))
-    @settings(max_examples=30)
+    @settings(
+        max_examples=30,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26e_retention_policy_respects_age(self, db_session, test_user, days_old):
         """
         Property 26e: Retention policy correctly identifies documents by age
@@ -265,7 +300,11 @@ class TestDocumentArchivalProperties:
             pass
 
     @given(document_strategy())
-    @settings(max_examples=50)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_26f_unarchived_documents_not_affected_by_retention(
         self, db_session, test_user, document_data
     ):

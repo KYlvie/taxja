@@ -3,8 +3,7 @@ Unit tests for AI Tax Assistant.
 Tests RAG retrieval, response generation, disclaimer inclusion, and multi-language support.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 
 from app.services.vector_db_service import VectorDBService
 from app.services.rag_retrieval_service import RAGRetrievalService
@@ -16,13 +15,13 @@ from app.models.chat_message import ChatMessage, MessageRole
 class TestVectorDBService:
     """Test vector database service"""
     
-    @patch('app.services.vector_db_service.chromadb.Client')
+    @patch('app.services.vector_db_service.chromadb.PersistentClient')
     @patch('app.services.vector_db_service.SentenceTransformer')
     def test_add_documents(self, mock_transformer, mock_client):
         """Test adding documents to vector database"""
         # Setup mocks
         mock_collection = Mock()
-        mock_client.return_value.get_collection.return_value = mock_collection
+        mock_client.return_value.get_or_create_collection.return_value = mock_collection
         mock_transformer.return_value.encode.return_value = [[0.1, 0.2, 0.3]]
         
         # Create service
@@ -43,13 +42,13 @@ class TestVectorDBService:
         # Verify collection.add was called
         mock_collection.add.assert_called_once()
     
-    @patch('app.services.vector_db_service.chromadb.Client')
+    @patch('app.services.vector_db_service.chromadb.PersistentClient')
     @patch('app.services.vector_db_service.SentenceTransformer')
     def test_query_documents(self, mock_transformer, mock_client):
         """Test querying documents from vector database"""
         # Setup mocks
         mock_collection = Mock()
-        mock_client.return_value.get_collection.return_value = mock_collection
+        mock_client.return_value.get_or_create_collection.return_value = mock_collection
         mock_transformer.return_value.encode.return_value = [[0.1, 0.2, 0.3]]
         
         mock_collection.query.return_value = {
@@ -172,7 +171,7 @@ class TestRAGRetrievalService:
         
         # Verify formatting
         assert "Income tax is progressive" in formatted
-        assert "50000" in formatted
+        assert "€50,000.00" in formatted
         assert "employee" in formatted
 
 
@@ -180,8 +179,8 @@ class TestAIAssistantService:
     """Test AI Assistant service"""
     
     @patch('app.services.ai_assistant_service.get_rag_retrieval_service')
-    @patch('app.services.ai_assistant_service.openai.chat.completions.create')
-    def test_generate_response_with_disclaimer(self, mock_openai, mock_get_rag):
+    @patch('app.services.ai_assistant_service.AIAssistantService._generate_openai_response')
+    def test_generate_response_with_disclaimer(self, mock_openai_response, mock_get_rag):
         """Test that AI response includes disclaimer"""
         # Setup mocks
         mock_rag_service = Mock()
@@ -193,10 +192,7 @@ class TestAIAssistantService:
         }
         mock_rag_service.format_context_for_prompt.return_value = "Context"
         
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "Income tax is calculated progressively."
-        mock_openai.return_value = mock_response
+        mock_openai_response.return_value = "Income tax is calculated progressively."
         
         # Create service
         service = AIAssistantService()
@@ -218,8 +214,8 @@ class TestAIAssistantService:
         assert "Steuerberater" in response
     
     @patch('app.services.ai_assistant_service.get_rag_retrieval_service')
-    @patch('app.services.ai_assistant_service.openai.chat.completions.create')
-    def test_multi_language_support(self, mock_openai, mock_get_rag):
+    @patch('app.services.ai_assistant_service.AIAssistantService._generate_openai_response')
+    def test_multi_language_support(self, mock_openai_response, mock_get_rag):
         """Test multi-language support (German, English, Chinese)"""
         # Setup mocks
         mock_rag_service = Mock()
@@ -231,10 +227,7 @@ class TestAIAssistantService:
         }
         mock_rag_service.format_context_for_prompt.return_value = "Context"
         
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "Response"
-        mock_openai.return_value = mock_response
+        mock_openai_response.return_value = "Response"
         
         # Create service
         service = AIAssistantService()
@@ -268,8 +261,8 @@ class TestAIAssistantService:
         assert "免责声明" in response_zh
     
     @patch('app.services.ai_assistant_service.get_rag_retrieval_service')
-    @patch('app.services.ai_assistant_service.openai.chat.completions.create')
-    def test_explain_ocr_result(self, mock_openai, mock_get_rag):
+    @patch('app.services.ai_assistant_service.AIAssistantService._generate_openai_response')
+    def test_explain_ocr_result(self, mock_openai_response, mock_get_rag):
         """Test OCR result explanation"""
         # Setup mocks
         mock_rag_service = Mock()
@@ -281,10 +274,7 @@ class TestAIAssistantService:
         }
         mock_rag_service.format_context_for_prompt.return_value = "Context"
         
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "This receipt shows groceries. Office supplies are deductible."
-        mock_openai.return_value = mock_response
+        mock_openai_response.return_value = "This receipt shows groceries. Office supplies are deductible."
         
         # Create service
         service = AIAssistantService()
@@ -308,8 +298,8 @@ class TestAIAssistantService:
         assert "Disclaimer" in explanation
     
     @patch('app.services.ai_assistant_service.get_rag_retrieval_service')
-    @patch('app.services.ai_assistant_service.openai.chat.completions.create')
-    def test_suggest_tax_optimization(self, mock_openai, mock_get_rag):
+    @patch('app.services.ai_assistant_service.AIAssistantService._generate_openai_response')
+    def test_suggest_tax_optimization(self, mock_openai_response, mock_get_rag):
         """Test tax optimization suggestions"""
         # Setup mocks
         mock_rag_service = Mock()
@@ -321,10 +311,7 @@ class TestAIAssistantService:
         }
         mock_rag_service.format_context_for_prompt.return_value = "Context"
         
-        mock_response = Mock()
-        mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = "Consider claiming commuting allowance."
-        mock_openai.return_value = mock_response
+        mock_openai_response.return_value = "Consider claiming commuting allowance."
         
         # Create service
         service = AIAssistantService()
@@ -423,13 +410,9 @@ class TestChatHistoryService:
 
 # Fixtures
 @pytest.fixture
-def db_session():
-    """Mock database session"""
-    from unittest.mock import MagicMock
-    session = MagicMock()
-    session.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
-    session.query.return_value.filter.return_value.count.return_value = 0
-    return session
+def db_session(db):
+    """Use the shared isolated test database session."""
+    return db
 
 
 # Property-based tests
@@ -446,10 +429,8 @@ def test_disclaimer_always_included(message, language):
     
     This validates Requirement 38.4: Append disclaimer to every response.
     """
-    service = AIAssistantService()
-    
     # Get disclaimer for language
-    disclaimer = service.DISCLAIMERS.get(language, service.DISCLAIMERS["de"])
+    disclaimer = AIAssistantService.DISCLAIMERS.get(language, AIAssistantService.DISCLAIMERS["de"])
     
     # Verify disclaimer exists and contains required elements
     assert "⚠️" in disclaimer
@@ -464,11 +445,9 @@ def test_multi_language_disclaimer(language):
     
     This validates Requirement 38.3: Generate response in user's language.
     """
-    service = AIAssistantService()
-    
     # Verify disclaimer exists for language
-    assert language in service.DISCLAIMERS
-    disclaimer = service.DISCLAIMERS[language]
+    assert language in AIAssistantService.DISCLAIMERS
+    disclaimer = AIAssistantService.DISCLAIMERS[language]
     
     # Verify disclaimer is not empty
     assert len(disclaimer) > 0

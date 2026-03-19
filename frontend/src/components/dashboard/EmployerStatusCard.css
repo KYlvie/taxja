@@ -1,0 +1,231 @@
+.employer-status-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.employer-status-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 34%);
+  pointer-events: none;
+}
+
+.employer-status-card.tone-attention {
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.employer-status-card.tone-healthy {
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.employer-status-header,
+.employer-status-grid,
+.employer-status-history {
+  position: relative;
+  z-index: 1;
+}
+
+.employer-status-subtitle {
+  margin: 6px 0 0;
+  max-width: 760px;
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.employer-status-link {
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.employer-status-link:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-primary);
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+}
+
+.employer-status-alert {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.employer-status-alert strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.employer-status-alert p {
+  margin: 0;
+  color: #92400e;
+  font-size: 0.84rem;
+}
+
+.employer-status-grid {
+  margin-bottom: 18px;
+}
+
+.employer-status-deadline {
+  font-size: 1.1rem;
+}
+
+.employer-status-history {
+  position: relative;
+  z-index: 1;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.employer-status-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.employer-status-history-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.employer-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.employer-status-pill.pending {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.employer-status-pill.archived {
+  color: #065f46;
+  background: rgba(16, 185, 129, 0.14);
+}
+
+.employer-status-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.employer-status-history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.employer-status-history-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.employer-status-year {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.06);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+
+.employer-status-history-meta {
+  min-width: 0;
+}
+
+.employer-status-employer {
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employer-status-doc-count {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+
+.employer-status-history-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.employer-status-amount {
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.employer-status-empty {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .employer-status-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .employer-status-link {
+    width: 100%;
+  }
+
+  .employer-status-history-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .employer-status-history-side {
+    width: 100%;
+    align-items: flex-start;
+  }
+}

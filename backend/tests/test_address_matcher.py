@@ -2,31 +2,17 @@
 import pytest
 from datetime import date
 from decimal import Decimal
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session
 
-from app.db.base import Base
 from app.models.property import Property, PropertyStatus, PropertyType
 from app.models.user import User
 from app.services.address_matcher import AddressMatcher, AddressMatch
 
 
-# Test database setup
-TEST_DATABASE_URL = "sqlite:///:memory:"
-
-
 @pytest.fixture
-def db_session():
-    """Create a test database session"""
-    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(bind=engine)
-    session = SessionLocal()
-    
-    yield session
-    
-    session.close()
-    Base.metadata.drop_all(bind=engine)
+def db_session(db: Session):
+    """Reuse the shared isolated SQLite test session."""
+    yield db
 
 
 @pytest.fixture

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { PropertyComparison } from './PropertyComparison';
 import { propertyService } from '../../services/propertyService';
 
@@ -30,6 +31,13 @@ vi.mock('recharts', () => ({
 }));
 
 describe('PropertyComparison', () => {
+  const renderComparison = () =>
+    render(
+      <MemoryRouter>
+        <PropertyComparison />
+      </MemoryRouter>
+    );
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -39,7 +47,7 @@ describe('PropertyComparison', () => {
       () => new Promise(() => {}) // Never resolves
     );
 
-    render(<PropertyComparison />);
+    renderComparison();
     
     expect(screen.getByText('common.loading')).toBeInTheDocument();
   });
@@ -47,7 +55,7 @@ describe('PropertyComparison', () => {
   it('renders empty state when no properties', async () => {
     vi.mocked(propertyService.comparePortfolio).mockResolvedValue([]);
 
-    render(<PropertyComparison />);
+    renderComparison();
 
     await waitFor(() => {
       expect(screen.getByText('properties.portfolio.noProperties')).toBeInTheDocument();
@@ -86,7 +94,7 @@ describe('PropertyComparison', () => {
 
     vi.mocked(propertyService.comparePortfolio).mockResolvedValue(mockData);
 
-    render(<PropertyComparison />);
+    renderComparison();
 
     await waitFor(() => {
       expect(screen.getByText('properties.portfolio.propertyComparison')).toBeInTheDocument();
@@ -106,7 +114,7 @@ describe('PropertyComparison', () => {
       new Error(errorMessage)
     );
 
-    render(<PropertyComparison />);
+    renderComparison();
 
     await waitFor(() => {
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -132,7 +140,7 @@ describe('PropertyComparison', () => {
 
     vi.mocked(propertyService.comparePortfolio).mockResolvedValue(mockData);
 
-    render(<PropertyComparison />);
+    renderComparison();
 
     await waitFor(() => {
       expect(screen.getByLabelText('dashboard.taxYear')).toBeInTheDocument();

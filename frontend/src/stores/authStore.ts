@@ -6,8 +6,13 @@ interface User {
   email: string;
   name: string;
   user_type: string;
+  vat_status?: string | null;
+  gewinnermittlungsart?: string | null;
+  employer_mode?: 'none' | 'occasional' | 'regular';
+  employer_region?: string | null;
   two_factor_enabled: boolean;
   disclaimer_accepted?: boolean;
+  is_admin?: boolean;
 }
 
 interface AuthState {
@@ -31,12 +36,14 @@ export const useAuthStore = create<AuthState>()(
           token,
           isAuthenticated: true,
         }),
-      logout: () =>
+      logout: () => {
+        sessionStorage.removeItem('taxja_ai_greeting_shown');
         set({
           user: null,
           token: null,
           isAuthenticated: false,
-        }),
+        });
+      },
       updateUser: (userData) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...userData } : null,

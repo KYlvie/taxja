@@ -8,6 +8,7 @@ import {
   TransactionType,
   IncomeCategory,
   ExpenseCategory,
+  LineItem,
 } from '../../types/transaction';
 import { usePropertyStore } from '../../stores/propertyStore';
 import { suggestCategory } from '../../utils/categoryMatcher';
@@ -93,6 +94,14 @@ const TransactionForm = ({
   const aiDecision = transaction?.is_deductible;
   const hasAiDecision = transaction?.is_deductible !== undefined;
 
+  // Line items state
+  const [lineItems, setLineItems] = useState<LineItem[]>(
+    transaction?.line_items && transaction.line_items.length > 0
+      ? transaction.line_items
+      : []
+  );
+  const hasLineItems = lineItems.length > 0;
+
   // Fetch properties on mount
   useEffect(() => {
     fetchProperties();
@@ -168,6 +177,36 @@ const TransactionForm = ({
   // Get active properties for dropdown
   const activeProperties = properties.filter(p => p.status === 'active');
 
+  // ── Line item helpers ─────────────────────────────────────────────
+  const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
+    setLineItems(prev => prev.map((item, i) =>
+      i === index ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const removeLineItem = (index: number) => {
+    setLineItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addLineItem = () => {
+    setLineItems(prev => [
+      ...prev,
+      {
+        description: '',
+        amount: 0,
+        quantity: 1,
+        is_deductible: false,
+        sort_order: prev.length,
+      },
+    ]);
+  };
+
+  // All expense categories for line item dropdown
+  const lineItemCategoryOptions = Object.values(ExpenseCategory).map(cat => ({
+    value: cat,
+    label: t(`transactions.categories.${cat}`),
+  }));
+
   // Wrap onSubmit to inject reviewed/locked when user overrides AI decision
   const handleFormSubmit = (data: TransactionFormData) => {
     const submitData: any = { ...data };
@@ -178,6 +217,15 @@ const TransactionForm = ({
       if (submitData.deduction_reason && !submitData.deduction_reason.startsWith('[')) {
         submitData.deduction_reason = `[Benutzer-Korrektur] ${submitData.deduction_reason}`;
       }
+    }
+    // Include line items if present
+    if (hasLineItems) {
+      submitData.line_items = lineItems
+        .filter(li => li.description.trim() !== '' && li.amount > 0)
+        .map((li, idx) => ({
+          ...li,
+          sort_order: idx,
+        }));
     }
     onSubmit(submitData);
   };
@@ -355,8 +403,8 @@ const TransactionForm = ({
         </div>
       )}
 
-      {/* Deductibility Override Section */}
-      {transaction && hasAiDecision && (
+      {/* Deductibility Override Section — only for expenses */}
+      {transaction && hasAiDecision && transactionType !== TransactionType.INCOME && (
         <div className="deductibility-override-section">
           <div className="deductibility-current">
             <span className="deductibility-label">{t('transactions.deductible')}:</span>
@@ -426,6 +474,80 @@ const TransactionForm = ({
                     ))
                   : transaction.deduction_reason}
               </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Line Items Section — only when editing a transaction that has them, or user adds them */}
+      {transaction && transactionType === TransactionType.EXPENSE && (
+        <div className="line-items-section">
+          <div className="line-items-header">
+            <span className="line-items-title">📋 {t('transactions.lineItems.title')}</span>
+            {!hasLineItems && (
+              <button type="button" className="btn-add-line-item" onClick={addLineItem}>
+                + {t('transactions.lineItems.addItem')}
+              </button>
+            )}
+          </div>
+
+          {hasLineItems && (
+            <div className="line-items-edit-list">
+              {lineItems.map((item, idx) => (
+                <div key={idx} className="line-item-edit-row">
+                  <div className="line-item-edit-main">
+                    <input
+                      type="text"
+                      className="line-item-input line-item-desc-input"
+                      placeholder={t('transactions.lineItems.descriptionPlaceholder')}
+                      value={item.description}
+                      onChange={e => updateLineItem(idx, 'description', e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      className="line-item-input line-item-amount-input"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={item.amount || ''}
+                      onChange={e => updateLineItem(idx, 'amount', parseFloat(e.target.value) || 0)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-remove-line-item"
+                      onClick={() => removeLineItem(idx)}
+                      title={t('transactions.lineItems.removeItem')}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="line-item-edit-meta">
+                    <select
+                      className="line-item-select"
+                      value={item.category || ''}
+                      onChange={e => updateLineItem(idx, 'category', e.target.value || undefined)}
+                    >
+                      <option value="">{t('transactions.lineItems.selectCategory')}</option>
+                      {lineItemCategoryOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <label className="line-item-deductible-toggle">
+                      <input
+                        type="checkbox"
+                        checked={item.is_deductible}
+                        onChange={e => updateLineItem(idx, 'is_deductible', e.target.checked)}
+                      />
+                      <span className={item.is_deductible ? 'deductible-yes' : 'deductible-no'}>
+                        {item.is_deductible ? t('transactions.deductibleYes') : t('transactions.notDeductible')}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+              <button type="button" className="btn-add-line-item" onClick={addLineItem}>
+                + {t('transactions.lineItems.addItem')}
+              </button>
             </div>
           )}
         </div>
