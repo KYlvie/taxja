@@ -6,6 +6,7 @@ import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { userService, type UserProfile } from '../services/userService';
 import { aiToast } from '../stores/aiToastStore';
 import DataExport from '../components/reports/DataExport';
+import ClassificationRules from '../components/transactions/ClassificationRules';
 import AccountManagementSection from '../components/account/AccountManagementSection';
 import './ProfilePage.css';
 
@@ -753,6 +754,14 @@ const ProfilePage = () => {
       <section className="profile-section privacy-section">
         <h2>{t('profile.privacyAndData')}</h2>
         <DataExport />
+      </section>
+
+      <section className="profile-section">
+        <h2>{t('classificationRules.pageTitle', 'Classification Rules')}</h2>
+        <p style={{ margin: '0 0 16px', color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
+          {t('classificationRules.pageSubtitle', 'Rules are auto-created when you correct a transaction category. They ensure future similar transactions are classified the same way.')}
+        </p>
+        <ClassificationRules />
       </section>
 
       {/* Account Management (Cancel Subscription + Delete Account) */}

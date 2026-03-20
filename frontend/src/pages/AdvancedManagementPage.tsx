@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { normalizeLanguage } from '../utils/locale';
 import './AdvancedManagementPage.css';
 
-type AdvancedCardId = 'assets' | 'rules' | 'classification' | 'tax-tools';
+type AdvancedCardId = 'assets' | 'rules' | 'tax-tools';
 
 type AdvancedCard = {
   id: AdvancedCardId;
@@ -50,14 +50,6 @@ const copy: Record<'de' | 'en' | 'zh', LangCopy> = {
         primaryTo: '/recurring',
       },
       {
-        id: 'classification',
-        icon: '✨',
-        title: 'AI-Klassifizierungsregeln',
-        subtitle: 'Gelernte Zuordnungsregeln verwalten',
-        primaryLabel: 'Regeln anzeigen',
-        primaryTo: '/classification-rules',
-      },
-      {
         id: 'tax-tools',
         icon: '📊',
         title: 'Steuer-Tools',
@@ -92,14 +84,6 @@ const copy: Record<'de' | 'en' | 'zh', LangCopy> = {
         primaryTo: '/recurring',
       },
       {
-        id: 'classification',
-        icon: '✨',
-        title: 'AI Classification Rules',
-        subtitle: 'Manage learned categorization rules',
-        primaryLabel: 'View Rules',
-        primaryTo: '/classification-rules',
-      },
-      {
         id: 'tax-tools',
         icon: '📊',
         title: 'Tax Tools',
@@ -132,14 +116,6 @@ const copy: Record<'de' | 'en' | 'zh', LangCopy> = {
         subtitle: '管理每月自动记账',
         primaryLabel: '打开规则',
         primaryTo: '/recurring',
-      },
-      {
-        id: 'classification',
-        icon: '✨',
-        title: 'AI分类规则',
-        subtitle: '管理 AI 学习到的分类规则',
-        primaryLabel: '查看规则',
-        primaryTo: '/classification-rules',
       },
       {
         id: 'tax-tools',

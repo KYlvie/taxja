@@ -28,7 +28,6 @@ import SubscriptionManagement from '../pages/SubscriptionManagement';
 import DeleteAccountWizard from '../components/account/DeleteAccountWizard';
 import LegalPage from '../pages/LegalPage';
 import CompanyPage from '../pages/CompanyPage';
-import ClassificationRulesPage from '../pages/ClassificationRulesPage';
 import CreditHistoryPage from '../pages/CreditHistoryPage';
 
 // Protected route wrapper
@@ -197,7 +196,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'classification-rules',
-        element: <ClassificationRulesPage />,
+        element: <Navigate to="/profile" replace />,
       },
       {
         path: 'account/delete',

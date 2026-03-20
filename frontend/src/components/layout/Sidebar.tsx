@@ -45,7 +45,6 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
         location.pathname.startsWith(`${path}/`) ||
         location.pathname.startsWith('/properties') ||
         location.pathname.startsWith('/recurring') ||
-        location.pathname.startsWith('/classification-rules') ||
         location.pathname.startsWith('/tax-tools')
       );
     }
