@@ -90,8 +90,8 @@ docker-compose.override.yml
 alembic/versions/*.pyc
 
 # ML models (large binary files)
-models/*.pkl
-models/*.joblib
+backend/models/**/*.pkl
+backend/models/**/*.joblib
 
 # MinIO data
 minio_data/
@@ -109,6 +109,35 @@ create_template_table.py
 update_*.cjs
 backend/test_*.py
 backend/fix_*.py
+backend/reset_db.py
+backend/_*.py
+*.ps1
+
+# Test output artifacts
+backend/pytest-*.txt
+backend/test_e1_output.pdf
+
+# Tokens/secrets
+token.txt
+
+# ML model versions (auto-managed by ml_classifier.py)
+backend/models/versions/
+
+# Test data packs
+test_data/
+
+# Frontend temp/debug artifacts
+frontend/.tmp-*
+frontend/%TEMP%/
+
+# Frontend implementation tracking docs
+frontend/TASK_*.md
+frontend/CHECKPOINT_*.md
+frontend/*_COMPLETION*.md
+frontend/*_SUMMARY*.md
+frontend/*_IMPLEMENTATION*.md
+frontend/SIMPLE_*.md
+frontend/PHASE_*.md
 
 # Claude Code config
 .claude/
