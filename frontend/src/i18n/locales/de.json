@@ -1716,21 +1716,52 @@
       "title": "Prüfungsbereitschafts-Checkliste",
       "subtitle": "Steuerjahr {{year}}",
       "loadError": "Prüfungscheckliste konnte nicht geladen werden",
+      "fix": "Beheben",
       "status": {
         "ready": "Prüfungsbereit",
         "needs_attention": "Aufmerksamkeit erforderlich",
         "not_ready": "Nicht bereit"
       },
-      "missingDocuments": "{{count}} fehlende Dokumente",
-      "complianceIssues": "{{count}} Compliance-Probleme",
+      "criticalIssues": "{{count}} kritische(s) Problem(e)",
+      "warningIssues": "{{count}} Warnung(en)",
       "allGood": "Alle Prüfungen bestanden",
       "categories": {
         "transactions": "Transaktionsaufzeichnungen",
         "documents": "Belege",
         "deductions": "Abzugsdokumentation",
         "vat": "USt-Berechnungen",
-        "completeness": "Datenvollständigkeit"
+        "completeness": "Datenvollständigkeit",
+        "duplicates": "Duplikaterkennung"
       },
+      "stats": {
+        "transactions": "Transaktionen",
+        "docRate": "Belegquote",
+        "income": "Gesamteinnahmen",
+        "deductible": "Abzugsfähig"
+      },
+      "messages": {
+        "transactionsOk": "{{count}} Transaktionen erfasst",
+        "transactionsFail": "Noch keine Transaktionen erfasst",
+        "documentsOk": "{{count}} Belege hochgeladen",
+        "documentsWarn": "{{count}} Belege hochgeladen, {{gap}} von {{required}} abzugsfähigen Transaktionen fehlen Belege",
+        "deductionsOk": "Alle {{count}} Abzüge haben verknüpfte Belege",
+        "deductionsWarn": "{{count}} abzugsfähige Transaktionen ohne verknüpfte Belege",
+        "vatOk": "USt auf {{count}} Transaktionen erfasst",
+        "vatBelowThreshold": "Unter der USt-Schwelle (Kleinunternehmerregelung)",
+        "vatFail": "Einnahmen \u20ac{{income}} überschreiten die \u20ac55.000-Schwelle, aber keine USt erfasst",
+        "completenessOk": "Alle Transaktionen sind kategorisiert",
+        "completenessWarn": "{{count}} Transaktionen ohne Kategorie",
+        "duplicatesWarn": "{{count}} Gruppe(n) potenzieller Duplikate erkannt"
+      },
+      "recommendations": {
+        "transactions": "Fügen Sie Ihre Einnahmen- und Ausgabentransaktionen hinzu.",
+        "documents": "Laden Sie Rechnungen oder Quittungen für abzugsfähige Transaktionen hoch. Dies ist für die Prüfungskonformität entscheidend.",
+        "deductions": "Verknüpfen Sie Belege mit abzugsfähigen Transaktionen. Abzüge über \u20ac500 benötigen Belege.",
+        "vat": "Sie müssen sich möglicherweise für die USt registrieren. Fügen Sie USt-Beträge zu allen Einnahmentransaktionen hinzu.",
+        "completeness": "Kategorisieren Sie alle Transaktionen für eine genaue Steuerberechnung.",
+        "duplicates": "Überprüfen und entfernen Sie doppelte Transaktionen, um Doppelzählung zu vermeiden."
+      },
+      "duplicateCount": "{{count}} identisch",
       "disclaimer": {
         "title": "Wichtiger Hinweis",
         "text": "Diese Checkliste dient nur als Referenz. Die endgültigen Prüfungsanforderungen können abweichen. Konsultieren Sie bei komplexen Situationen einen Steuerberater."

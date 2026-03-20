@@ -1,17 +1,42 @@
 import api from './api';
 
+export interface AuditAffectedItem {
+  id?: number;
+  description?: string;
+  amount?: number;
+  date?: string;
+  count?: number;
+  ids?: number[];
+}
+
 export interface AuditChecklistItem {
   category: string;
   status: 'pass' | 'warning' | 'fail';
-  message: string;
-  details?: string[];
+  count: number;
+  required?: number;
+  gap?: number;
+  threshold?: number;
+  income?: number;
+  below_threshold?: boolean;
+  affected?: AuditAffectedItem[];
+  action?: string;
+}
+
+export interface AuditChecklistSummary {
+  total_transactions: number;
+  total_income: number;
+  total_expenses: number;
+  total_deductible: number;
+  documentation_rate: number;
 }
 
 export interface AuditChecklist {
   overall_status: 'ready' | 'needs_attention' | 'not_ready';
+  compliance_score: number;
   items: AuditChecklistItem[];
-  missing_documents: number;
-  compliance_issues: number;
+  summary: AuditChecklistSummary;
+  critical_count: number;
+  warning_count: number;
 }
 
 export interface DataExportResponse {

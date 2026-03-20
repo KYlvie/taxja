@@ -1719,21 +1719,52 @@
       "title": "Audit Readiness Checklist",
       "subtitle": "Tax year {{year}}",
       "loadError": "Failed to load audit checklist",
+      "fix": "Fix",
       "status": {
         "ready": "Ready for Audit",
         "needs_attention": "Needs Attention",
         "not_ready": "Not Ready"
       },
-      "missingDocuments": "{{count}} missing documents",
-      "complianceIssues": "{{count}} compliance issues",
+      "criticalIssues": "{{count}} critical issue(s)",
+      "warningIssues": "{{count}} warning(s)",
       "allGood": "All checks passed",
       "categories": {
         "transactions": "Transaction Records",
         "documents": "Supporting Documents",
         "deductions": "Deduction Documentation",
-        "vat": "VAT Calculations",
-        "completeness": "Data Completeness"
+        "vat": "VAT (USt)",
+        "completeness": "Data Completeness",
+        "duplicates": "Duplicate Detection"
       },
+      "stats": {
+        "transactions": "Transactions",
+        "docRate": "Doc. Coverage",
+        "income": "Total Income",
+        "deductible": "Deductible"
+      },
+      "messages": {
+        "transactionsOk": "{{count}} transactions recorded",
+        "transactionsFail": "No transactions recorded yet",
+        "documentsOk": "{{count}} documents uploaded",
+        "documentsWarn": "{{count}} documents uploaded, {{gap}} of {{required}} deductible transactions missing receipts",
+        "deductionsOk": "All {{count}} deductions have linked documents",
+        "deductionsWarn": "{{count}} deductible transactions without linked documents",
+        "vatOk": "VAT recorded on {{count}} transactions",
+        "vatBelowThreshold": "Below VAT threshold (Kleinunternehmerregelung)",
+        "vatFail": "Income \u20ac{{income}} exceeds \u20ac55,000 threshold but no VAT recorded",
+        "completenessOk": "All transactions are categorized",
+        "completenessWarn": "{{count}} transactions without category",
+        "duplicatesWarn": "{{count}} group(s) of potential duplicate transactions detected"
+      },
+      "recommendations": {
+        "transactions": "Add your income and expense transactions to get started.",
+        "documents": "Upload invoices or receipts for deductible transactions. This is critical for audit compliance.",
+        "deductions": "Link supporting documents to deductible transactions. Deductions over \u20ac500 require receipts.",
+        "vat": "You may need to register for VAT (Umsatzsteuer). Add VAT amounts to all income transactions.",
+        "completeness": "Categorize all transactions for accurate tax calculation.",
+        "duplicates": "Review and remove duplicate transactions to avoid double-counting."
+      },
+      "duplicateCount": "{{count}} identical",
       "disclaimer": {
         "title": "Important Notice",
         "text": "This checklist is for reference only. Final audit requirements may vary. Consult a Steuerberater for complex situations."

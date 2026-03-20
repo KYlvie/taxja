@@ -109,24 +109,23 @@ def get_audit_checklist(
     summary = _build_summary(transactions)
 
     items = []
-    missing_docs = 0
-    compliance_issues = 0
+    critical_count = 0
+    warning_count = 0
 
     # Check 1: Transaction records
     if summary["transaction_count"] > 0:
         items.append({
             "category": "transactions",
             "status": "pass",
-            "message": f"{summary['transaction_count']} transactions recorded for {tax_year}",
+            "count": summary["transaction_count"],
         })
     else:
         items.append({
             "category": "transactions",
             "status": "fail",
-            "message": f"No transactions found for {tax_year}",
-            "details": ["Add your income and expense transactions to get started"],
+            "count": 0,
         })
-        compliance_issues += 1
+        critical_count += 1
 
     # Check 2: Supporting documents
     doc_count = db.query(func.count(Document.id)).filter(
@@ -137,34 +136,44 @@ def get_audit_checklist(
     deductible_count = sum(1 for t in transactions if t.is_deductible)
     if deductible_count > 0 and doc_count < deductible_count:
         gap = deductible_count - doc_count
-        missing_docs = gap
         items.append({
             "category": "documents",
             "status": "warning",
-            "message": f"{doc_count} documents uploaded, {deductible_count} deductible transactions",
-            "details": [f"Consider uploading receipts for {gap} more deductible transactions"],
+            "count": doc_count,
+            "required": deductible_count,
+            "gap": gap,
+            "action": "documents",
         })
+        warning_count += 1
     else:
         items.append({
             "category": "documents",
             "status": "pass",
-            "message": f"{doc_count} supporting documents uploaded",
+            "count": doc_count,
         })
 
     # Check 3: Deduction documentation
-    undocumented = sum(1 for t in transactions if t.is_deductible and not t.document_id)
-    if undocumented > 0:
+    undocumented_txns = [
+        {"id": t.id, "description": t.description, "amount": float(t.amount), "date": t.transaction_date.isoformat()}
+        for t in transactions if t.is_deductible and not t.document_id
+    ]
+    if undocumented_txns:
         items.append({
             "category": "deductions",
-            "status": "warning",
-            "message": f"{undocumented} deductible transactions without linked documents",
-            "details": ["Link supporting documents to deductible transactions for audit readiness"],
+            "status": "warning" if len(undocumented_txns) <= 5 else "fail",
+            "count": len(undocumented_txns),
+            "affected": undocumented_txns[:5],
+            "action": "transactions",
         })
+        if len(undocumented_txns) > 5:
+            critical_count += 1
+        else:
+            warning_count += 1
     else:
         items.append({
             "category": "deductions",
             "status": "pass",
-            "message": "All deductible transactions have supporting documents",
+            "count": deductible_count,
         })
 
     # Check 4: VAT
@@ -174,53 +183,99 @@ def get_audit_checklist(
             items.append({
                 "category": "vat",
                 "status": "pass",
-                "message": f"VAT recorded on {len(vat_transactions)} transactions",
+                "count": len(vat_transactions),
             })
         else:
             items.append({
                 "category": "vat",
-                "status": "warning",
-                "message": "Income exceeds \u20ac55,000 threshold but no VAT recorded",
-                "details": ["You may need to register for VAT (Umsatzsteuer)"],
+                "status": "fail",
+                "count": 0,
+                "threshold": 55000,
+                "income": float(summary["total_income"]),
             })
-            compliance_issues += 1
+            critical_count += 1
     else:
         items.append({
             "category": "vat",
             "status": "pass",
-            "message": "Below VAT threshold (Kleinunternehmerregelung)",
+            "count": len(vat_transactions),
+            "below_threshold": True,
         })
 
     # Check 5: Data completeness
-    no_category = sum(1 for t in transactions if not t.income_category and not t.expense_category)
-    if no_category > 0:
+    uncategorized_txns = [
+        {"id": t.id, "description": t.description, "amount": float(t.amount), "date": t.transaction_date.isoformat()}
+        for t in transactions if not t.income_category and not t.expense_category
+    ]
+    if uncategorized_txns:
         items.append({
             "category": "completeness",
             "status": "warning",
-            "message": f"{no_category} transactions without category",
-            "details": ["Categorize all transactions for accurate tax calculation"],
+            "count": len(uncategorized_txns),
+            "affected": uncategorized_txns[:5],
+            "action": "transactions",
         })
+        warning_count += 1
     else:
         items.append({
             "category": "completeness",
             "status": "pass",
-            "message": "All transactions are categorized",
+            "count": summary["transaction_count"],
         })
 
+    # Check 6: Duplicate detection
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for t in transactions:
+        key = (t.transaction_date, float(t.amount), t.type.value)
+        groups[key].append(t)
+    duplicate_groups = [
+        {
+            "date": key[0].isoformat(),
+            "amount": key[1],
+            "count": len(txns),
+            "ids": [t.id for t in txns],
+        }
+        for key, txns in groups.items() if len(txns) > 1
+    ]
+    if duplicate_groups:
+        items.append({
+            "category": "duplicates",
+            "status": "warning",
+            "count": len(duplicate_groups),
+            "affected": duplicate_groups[:5],
+            "action": "transactions",
+        })
+        warning_count += 1
+
+    # Compliance score
+    total_penalty = (critical_count * 20) + (warning_count * 5)
+    compliance_score = max(0, 100 - total_penalty)
+
     # Overall status
-    statuses = [item["status"] for item in items]
-    if "fail" in statuses:
+    if critical_count > 0:
         overall = "not_ready"
-    elif "warning" in statuses:
+    elif warning_count > 0:
         overall = "needs_attention"
     else:
         overall = "ready"
 
     return {
         "overall_status": overall,
+        "compliance_score": compliance_score,
         "items": items,
-        "missing_documents": missing_docs,
-        "compliance_issues": compliance_issues,
+        "summary": {
+            "total_transactions": summary["transaction_count"],
+            "total_income": float(summary["total_income"]),
+            "total_expenses": float(summary["total_expenses"]),
+            "total_deductible": float(summary["total_deductible"]),
+            "documentation_rate": round(
+                (sum(1 for t in transactions if t.document_id) / len(transactions) * 100)
+                if transactions else 0, 1
+            ),
+        },
+        "critical_count": critical_count,
+        "warning_count": warning_count,
     }
 
 

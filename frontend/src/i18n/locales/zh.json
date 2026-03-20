@@ -1478,21 +1478,52 @@
       "title": "审计准备检查清单",
       "subtitle": "税务年度 {{year}}",
       "loadError": "加载审计检查清单失败",
+      "fix": "去修复",
       "status": {
         "ready": "已准备就绪",
         "needs_attention": "需要关注",
         "not_ready": "尚未准备"
       },
-      "missingDocuments": "{{count}} 份缺失文档",
-      "complianceIssues": "{{count}} 项合规问题",
+      "criticalIssues": "{{count}} 项严重问题",
+      "warningIssues": "{{count}} 项需注意",
       "allGood": "所有检查均已通过",
       "categories": {
         "transactions": "交易记录",
         "documents": "凭证文档",
-        "deductions": "抵扣项文档",
-        "vat": "增值税 (USt) 计算",
-        "completeness": "数据完整性"
+        "deductions": "抵扣项凭证",
+        "vat": "增值税 (USt)",
+        "completeness": "数据完整性",
+        "duplicates": "重复检测"
       },
+      "stats": {
+        "transactions": "交易总数",
+        "docRate": "凭证覆盖率",
+        "income": "总收入",
+        "deductible": "可抵扣总额"
+      },
+      "messages": {
+        "transactionsOk": "已录入 {{count}} 笔交易",
+        "transactionsFail": "尚未录入任何交易",
+        "documentsOk": "已上传 {{count}} 份凭证",
+        "documentsWarn": "已上传 {{count}} 份凭证，{{required}} 笔可抵扣交易中有 {{gap}} 笔缺少凭证",
+        "deductionsOk": "{{count}} 笔抵扣项均已关联凭证",
+        "deductionsWarn": "{{count}} 笔抵扣交易尚未关联凭证",
+        "vatOk": "{{count}} 笔交易已记录增值税",
+        "vatBelowThreshold": "收入低于小企业免税门槛 (Kleinunternehmerregelung)",
+        "vatFail": "总收入 \u20ac{{income}} 超过 \u20ac55,000 门槛，但未记录增值税",
+        "completenessOk": "所有交易均已分类",
+        "completenessWarn": "{{count}} 笔交易缺少分类",
+        "duplicatesWarn": "检测到 {{count}} 组疑似重复交易"
+      },
+      "recommendations": {
+        "transactions": "请添加您的收入和支出交易记录。",
+        "documents": "请为可抵扣交易上传发票或收据，这对税务审计至关重要。",
+        "deductions": "请为抵扣交易关联相关凭证。超过 \u20ac500 的抵扣项必须有凭证。",
+        "vat": "您可能需要注册增值税 (Umsatzsteuer)，请为所有收入交易添加增值税信息。",
+        "completeness": "请为所有交易选择正确的分类，以确保税务计算准确。",
+        "duplicates": "请检查并删除重复交易，避免重复计算。"
+      },
+      "duplicateCount": "{{count}} 笔相同",
       "disclaimer": {
         "title": "重要提示",
         "text": "本检查清单仅供参考。最终审计要求可能有所不同。复杂情况请咨询税务顾问。"
