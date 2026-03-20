@@ -170,7 +170,7 @@ const PropertyList = ({
   if (properties.length === 0) {
     return (
       <div className="property-list-empty">
-        <div className="empty-icon">🏠</div>
+        <div className="empty-icon">📦</div>
         <h3>{t('properties.noProperties')}</h3>
         <p>{t('properties.noPropertiesDescription')}</p>
       </div>
