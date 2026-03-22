@@ -28,6 +28,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'readonly' | 'edit'>('readonly');
+  const [entityResult, setEntityResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [aiExplanation, setAIExplanation] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -91,30 +93,80 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const handleConfirm = async () => {
     try {
       setSaving(true);
-      
-      // Always send corrections with doc type and txn type info
+      setEntityResult(null);
+
+      // Step 1: Save OCR corrections
       const dataToSend = {
         ...editedData,
         _document_type: selectedDocType,
         _transaction_type: selectedTxnType,
       };
-      
+
       await documentService.correctOCR(documentId, dataToSend);
 
-      // Refresh recurring & properties in case sync updated them
+      // Step 2: If there's a pending import_suggestion, trigger entity creation
+      const ocrResult = reviewData?.document?.ocr_result;
+      const parsed = typeof ocrResult === 'string' ? JSON.parse(ocrResult) : ocrResult;
+      const suggestion = parsed?.import_suggestion;
+
+      if (suggestion?.status === 'pending') {
+        const sType = suggestion.type as string;
+        try {
+          if (sType === 'create_recurring_income') {
+            await documentService.confirmRecurring(documentId);
+          } else if (sType === 'create_recurring_expense') {
+            await documentService.confirmRecurringExpense(documentId);
+          } else if (sType === 'create_property') {
+            await documentService.confirmProperty(documentId);
+          } else if (sType === 'create_asset') {
+            await documentService.confirmAsset(documentId);
+          } else if (sType === 'create_loan') {
+            await documentService.confirmLoan(documentId);
+          } else if (sType?.startsWith('import_') && sType !== 'import_bank_statement') {
+            await documentService.confirmTaxData(documentId);
+          }
+        } catch (entityErr: any) {
+          // OCR corrections are already saved; show entity error but don't navigate away
+          setEntityResult({ type: 'error', message: entityErr?.response?.data?.detail || entityErr?.message || 'Entity creation failed' });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Refresh stores
       useRefreshStore.getState().refreshRecurring();
       useRefreshStore.getState().refreshProperties();
       useRefreshStore.getState().refreshTransactions();
 
-      if (onConfirm) {
-        onConfirm();
+      // Reload review data to show linked entities, switch to readonly
+      const updatedData = await documentService.getDocumentForReview(documentId);
+      setReviewData(updatedData);
+      setEditedData(updatedData.extracted_data || {});
+      setMode('readonly');
+
+      if (suggestion?.status === 'pending') {
+        setEntityResult({ type: 'success', message: t('documents.review.entityCreated', 'Created successfully') });
       } else {
-        navigate('/documents');
+        // No entity to create — behave like before
+        if (onConfirm) {
+          onConfirm();
+        } else {
+          navigate('/documents');
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || t('documents.review.saveError'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setMode('readonly');
+    setEntityResult(null);
+    // Reset edits to original extracted data
+    if (reviewData) {
+      setEditedData(reviewData.extracted_data || {});
     }
   };
 
@@ -261,6 +313,45 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         )}
       </div>
 
+      {/* ── Linked entity panels ── */}
+      {(() => {
+        const ocrRaw = document.ocr_result;
+        const ocrParsed = typeof ocrRaw === 'string' ? JSON.parse(ocrRaw) : ocrRaw;
+        const sug = ocrParsed?.import_suggestion;
+        const entities: { type: string; id: string | number; label: string }[] = [];
+        if ((document as any).transaction_id) {
+          entities.push({ type: 'transaction', id: (document as any).transaction_id, label: t('documents.linkedEntity.transaction', 'Transaction created') });
+        }
+        if (sug && (sug.status === 'confirmed' || sug.status === 'auto-created')) {
+          if (sug.recurring_id) entities.push({ type: 'recurring', id: sug.recurring_id, label: t('documents.linkedEntity.recurring', 'Recurring transaction created') });
+          if (sug.data?.matched_property_id) entities.push({ type: 'property', id: sug.data.matched_property_id, label: t('documents.linkedEntity.property', 'Property linked') });
+          if (sug.asset_id) entities.push({ type: 'asset', id: sug.asset_id, label: t('documents.linkedEntity.asset', 'Asset created') });
+        }
+        if (entities.length === 0) return null;
+        return (
+          <div className="ocr-linked-entities">
+            {entities.map((e) => (
+              <div key={`${e.type}-${e.id}`} className={`ocr-linked-entity ocr-linked-entity--${e.type}`}>
+                <strong>{e.label}</strong>
+                <button className="btn btn-primary btn-sm" onClick={() => {
+                  if (e.type === 'recurring') navigate('/recurring');
+                  else if (e.type === 'property' || e.type === 'asset') navigate(`/properties/${e.id}`);
+                  else navigate('/transactions');
+                }}>
+                  {t('documents.linkedEntity.open', 'Open')}
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {entityResult && (
+        <div className={`review-entity-result review-entity-result--${entityResult.type}`}>
+          {entityResult.type === 'success' ? '✅' : '❌'} {entityResult.message}
+        </div>
+      )}
+
       <div className="review-content">
         <div className="document-preview">
           <h3>{t('documents.review.preview')}</h3>
@@ -277,6 +368,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
 
         <div className="extracted-data">
           <h3>{t('documents.review.extractedData')}</h3>
+          <fieldset disabled={mode === 'readonly' || saving} className="review-form-fieldset">
 
           <div className="form-group">
             <label>{t('documents.documentType')}</label>
@@ -648,24 +740,36 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                 )}
               </div>
             )}
+          </fieldset>
         </div>
       </div>
 
       <div className="review-actions">
-        <button
-          className="btn btn-secondary"
-          onClick={handleCancel}
-          disabled={saving}
-        >
-          {t('common.cancel')}
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={handleConfirm}
-          disabled={saving}
-        >
-          {saving ? t('common.saving') : t('documents.review.confirmAndCreate')}
-        </button>
+        {mode === 'edit' ? (
+          <>
+            <button
+              className="btn btn-secondary"
+              onClick={handleCancelEdit}
+              disabled={saving}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleConfirm}
+              disabled={saving}
+            >
+              {saving ? t('common.saving') : t('documents.review.confirmAndCreate')}
+            </button>
+          </>
+        ) : (
+          <button
+            className="btn btn-primary"
+            onClick={() => setMode('edit')}
+          >
+            {t('common.edit', 'Edit')}
+          </button>
+        )}
       </div>
 
       {/* AI Chat Widget with document context */}

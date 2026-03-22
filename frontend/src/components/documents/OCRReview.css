@@ -354,4 +354,76 @@
   .review-actions .btn {
     width: 100%;
   }
+
+  .ocr-linked-entity {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ── Linked entity panels ── */
+.ocr-linked-entities {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ocr-linked-entity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4, 16px);
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 14px);
+  border: 1px solid var(--color-border, rgba(99, 102, 241, 0.12));
+  background: var(--color-surface, rgba(255, 255, 255, 0.82));
+}
+
+.ocr-linked-entity strong {
+  font-size: 0.88rem;
+  color: var(--color-text, #0a0a0f);
+}
+
+.ocr-linked-entity--recurring { border-left: 3px solid #818cf8; }
+.ocr-linked-entity--property { border-left: 3px solid #10b981; }
+.ocr-linked-entity--transaction { border-left: 3px solid #06b6d4; }
+.ocr-linked-entity--asset { border-left: 3px solid #f59e0b; }
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  min-height: 32px;
+}
+
+/* ── Entity creation result ── */
+.review-entity-result {
+  padding: 10px 16px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+.review-entity-result--success {
+  background: rgba(209, 250, 229, 0.92);
+  color: #059669;
+  border: 1px solid rgba(134, 239, 172, 0.5);
+}
+
+.review-entity-result--error {
+  background: rgba(254, 226, 226, 0.88);
+  color: #dc2626;
+  border: 1px solid rgba(252, 165, 165, 0.5);
+}
+
+/* ── Fieldset reset ── */
+.review-form-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.review-form-fieldset:disabled {
+  opacity: 0.85;
 }
