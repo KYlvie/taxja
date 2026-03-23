@@ -1,0 +1,192 @@
+{
+  "pricing": {
+    "title": "Planini Sec",
+    "subtitle": "14 gunluk Pro deneme suresiyle baslayin, ardindan ihtiyaclariniza uygun plani secin",
+    "free": "Ucretsiz",
+    "recommended": "Onerilen",
+    "per_month": "/ay",
+    "per_month_billed_yearly": "/ay, yillik faturalandirilir",
+    "billed_as": "Yillik {{amount}} EUR olarak faturalandirilir",
+    "trial_info": "Yeni kullanicilar 14 gunluk Pro deneme suresi alir. Baslamak icin kredi karti gerekmez.",
+    "support": "Sorulariniz mi var? Bize support@taxja.com adresinden ulasin",
+    "billing": {
+      "monthly": "Aylik",
+      "yearly": "Yillik",
+      "save": "%{{percent}} tasarruf edin"
+    },
+    "plans": {
+      "free": {
+        "name": "Ucretsiz"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "Ayda 30 islem",
+      "basic_tax_calc": "Temel vergi hesaplamasi",
+      "unlimited_transactions": "Sinirsiz islem",
+      "ocr_limit": "Ayda 20 belge taramasi",
+      "full_tax_calc": "Tam vergi hesaplamasi",
+      "multi_language": "Coklu dil (DE, EN, ZH)",
+      "vat_svs": "KDV ve SVS hesaplamalari",
+      "property_management": "Mulk yonetimi",
+      "bank_import": "Banka ekstresi iceri aktarimi",
+      "recurring_suggestions": "Akilli tekrarlayan oneriler",
+      "everything_plus": "Plus'taki her sey",
+      "unlimited_ocr": "Sinirsiz belge taramasi",
+      "ai_assistant": "Yapay Zeka Vergi Asistani",
+      "e1_generation": "E1 formu olusturma",
+      "advanced_reports": "Gelismis raporlar (EA, Bilanz)",
+      "priority_support": "Oncelikli destek",
+      "ocr": "Belge taramasi"
+    },
+    "buttons": {
+      "get_started": "Baslayin",
+      "subscribe": "Abone Ol",
+      "upgrade": "Yukselt",
+      "start_trial": "14 Gunluk Pro Denemesini Basla",
+      "loading": "Yukleniyor..."
+    },
+    "errors": {
+      "checkout_failed": "Odeme baslatma basarisiz oldu. Lutfen tekrar deneyin."
+    }
+  },
+  "subscription": {
+    "loading": "Abonelik detaylari yukleniyor...",
+    "manage": "Aboneligi Yonet",
+    "manage_title": "Aboneligi Yonet",
+    "current_plan": "Mevcut Plan",
+    "free": "Ucretsiz",
+    "per_month": "/ay",
+    "per_year": "/yil",
+    "not_applicable": "Uygulanamaz",
+    "trial_days_remaining": "{{days}} gun kaldi",
+    "trial_message": "Pro deneme surenizde. Tum ozellikleri korumak icin yukseltme yapin!",
+    "trial_active": "{{date}} tarihine kadar ucretsiz deneme surenizdesiniz",
+    "period_start": "Donem Baslangici",
+    "period_end": "Donem Sonu",
+    "billing_cycle": "Fatura Dongusu",
+    "next_billing": "Sonraki Fatura Tarihi",
+    "canceling": "Iptal Ediliyor",
+    "ends_on": "{{date}} tarihinde sona erer",
+    "cancel_notice": "Aboneliginiz mevcut donemin sonunda iptal edilecektir",
+    "credits_title": "Krediler",
+    "credits_available": "Kullanilabilir krediler",
+    "overage_mode": "Asim",
+    "overage_on": "Acik",
+    "overage_off": "Kapali",
+    "overage_unavailable": "Kulanilamiyor",
+    "overage_suspended": "Duraklatildi",
+    "overage_rate": "{{rate}} / kredi",
+    "overage_estimate": "Tahmini {{amount}}",
+    "overage_toggle_error": "Asim modu guncellenemedi.",
+    "overage_payment_due_title": "Asim duraklatildi",
+    "overage_payment_due_message": "Odenmemis faturaniz Stripe'da odenene kadar asim duraklatilmistir.",
+    "resolve_billing": "Faturalandirmayi cozumle",
+    "billing_portal_error": "Faturalandirma portali acilamadi.",
+    "usage_title": "Bu Donemdeki Kullanim",
+    "unlimited": "Sinirsiz",
+    "quota_exceeded": "Kota asildi",
+    "change_plan": "Plan Degistir",
+    "reactivate": "Aboneligi Yeniden Etkinlestir",
+    "cancel": "Aboneligi Iptal Et",
+    "payment_method": "Odeme Yontemi",
+    "payment_managed": "Odeme yontemi Stripe uzerinden yonetilmektedir.",
+    "manage_payment": "Odeme Yontemini Yonet",
+    "billing_history": "Fatura Gecmisi",
+    "no_history": "Henuz fatura gecmisi bulunmamaktadir.",
+    "cancel_confirm_title": "Aboneligi Iptal Et?",
+    "cancel_confirm_message": "Aboneliginiz {{date}} tarihine kadar aktif kalacaktir. Bu tarihten sonra Ucretsiz plana dusuruleceksiniz.",
+    "confirm_cancel": "Evet, Iptal Et",
+    "change_plan_title": "Plan Degistir",
+    "change_plan_message": "Yeni bir plan secmek icin fiyatlandirma sayfasina yonlendirileceksiniz.",
+    "continue": "Devam Et",
+    "cancel_success": "Aboneliginiz mevcut donemin sonunda iptal edilecektir.",
+    "cancel_error": "Abonelik iptali basarisiz oldu. Lutfen tekrar deneyin.",
+    "reactivate_success": "Aboneliginiz yeniden etkinlestirildi!",
+    "reactivate_error": "Abonelik yeniden etkinlestirme basarisiz oldu. Lutfen tekrar deneyin.",
+    "status": {
+      "active": "Aktif",
+      "trialing": "Deneme",
+      "past_due": "Gecmis Odeme",
+      "canceled": "Iptal Edildi"
+    },
+    "billing": {
+      "monthly": "Aylik",
+      "yearly": "Yillik"
+    },
+    "resources": {
+      "transactions": "Islemler",
+      "ocr_scans": "Belge Taramalari",
+      "ai_conversations": "YZ Gorusmeleri"
+    }
+  },
+  "usage": {
+    "title": "Kaynak Kullanimi",
+    "resets_on": "Sifirlanma: {{date}}",
+    "unlimited": "Sinirsiz",
+    "quota_exceeded": "Kota asildi",
+    "quota_warning": "Limite yaklasildi (%{{percent}})",
+    "transactions": "Islemler",
+    "ocr_scans": "Belge Taramalari",
+    "ai_conversations": "YZ Gorusmeleri"
+  },
+  "upgrade": {
+    "title": "{{plan}} Planina Yukselt",
+    "description": "{{feature}} ozelligi {{plan}} planinda kullanilabilir. Bu ozelligi ve daha fazlasini acmak icin simdi yukseltme yapin!",
+    "benefits_title": "Elde edecekleriniz:",
+    "button": "Simdi Yukselt",
+    "cancel": "Belki Daha Sonra",
+    "trial_note": "Pro planinin 14 gunluk ucretsiz denemesiyle baslayin",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "Belge Taramasi",
+      "unlimited_ocr": "Sinirsiz Belge Taramasi",
+      "ai_assistant": "Yapay Zeka Vergi Asistani",
+      "e1_generation": "E1 Formu Olusturma",
+      "advanced_reports": "Gelismis Raporlar",
+      "api_access": "API Erisimi",
+      "unlimited_transactions": "Sinirsiz Islemler"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Sinirsiz islem",
+        "2": "Ayda 20 belge taramasi",
+        "3": "Tam vergi hesaplamalari",
+        "4": "Coklu dil destegi",
+        "5": "KDV ve SVS hesaplamalari"
+      },
+      "pro": {
+        "1": "Sinirsiz belge taramasi",
+        "2": "Yapay zeka destekli vergi yardimi",
+        "3": "Otomatik E1 formu olusturma",
+        "4": "Gelismis analitik ve raporlar",
+        "5": "Oncelikli musteri destegi"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Odeme Basarili!",
+    "success_message": "Abone oldugunuz icin tesekkurler! Odemeniz basariyla islendi.",
+    "plan_activated": "{{plan}} planiniz artik aktif!",
+    "detail_1": "Tum ozelliklere tam erisim",
+    "detail_2": "Faturalandirma bugun baslar",
+    "detail_3": "Istediginiz zaman iptal edin",
+    "session_id": "Oturum Kimligl",
+    "continue_dashboard": "Kontrol Paneline Devam Et",
+    "view_subscription": "Abonelik Detaylarini Goruntule",
+    "support": "Sorulariniz mi var? Bize support@taxja.com adresinden ulasin"
+  },
+  "common": {
+    "back": "Geri",
+    "cancel": "Iptal",
+    "nevermind": "Bos ver"
+  }
+}

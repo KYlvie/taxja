@@ -1,139 +1,252 @@
 .bescheid-import {
-  padding: 1.5rem;
-  max-width: 800px;
+  padding: 20px;
+}
+
+.bescheid-shell {
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+.tax-import-review {
+  max-width: 1400px;
+}
+
+.tax-import-review .review-content {
+  grid-template-columns: minmax(380px, 0.95fr) minmax(0, 1.15fr);
+}
+
+.tax-import-preview-container {
+  border: 1px solid var(--color-border, #d9ddea);
+  border-radius: var(--radius-sm, 12px);
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.tax-import-preview-frame,
+.tax-import-preview-image,
+.tax-import-preview-fallback {
+  display: block;
+  width: 100%;
+  min-height: 720px;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.tax-import-preview-image {
+  object-fit: contain;
+}
+
+.tax-import-preview-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  line-height: 1.6;
+  background: #0f172a;
 }
 
 .bescheid-import h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.25rem;
+  margin: 0 0 8px;
+  font-size: 28px;
+  color: var(--color-text);
 }
 
 .bescheid-desc {
-  color: var(--text-secondary, #666);
-  margin-bottom: 1.5rem;
+  margin: 0 0 20px;
+  color: var(--color-text-secondary, #666);
+  line-height: 1.6;
 }
 
 .bescheid-error {
+  margin-bottom: 16px;
+  padding: 12px 14px;
   background: #fef2f2;
   color: #dc2626;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md, 12px);
 }
 
 .bescheid-loading {
+  padding: 40px 20px;
   text-align: center;
-  padding: 2rem;
-  color: var(--text-secondary, #666);
+  color: var(--color-text-secondary, #666);
 }
 
-.bescheid-preview h4 {
-  margin: 0 0 1rem;
-  font-size: 1.1rem;
-}
-
-.bescheid-confidence {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  background: #e0f2fe;
-  color: #0369a1;
-  margin-bottom: 1rem;
-}
-
-.bescheid-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.bescheid-field {
-  background: var(--bg-secondary, #f8f9fa);
-  padding: 0.75rem;
-  border-radius: 8px;
-}
-
-.bescheid-field label {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--text-secondary, #666);
-  margin-bottom: 0.25rem;
-}
-
-.bescheid-field span {
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.bescheid-field.highlight-green span {
-  color: #16a34a;
-}
-
-.bescheid-field.highlight-red span {
-  color: #dc2626;
+.bescheid-surface {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-lg, 18px);
+  padding: 24px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
 }
 
 .bescheid-section {
-  margin-bottom: 1.25rem;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border-light, #eef2f7);
+}
+
+.bescheid-section:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.bescheid-section-header {
+  margin-bottom: 16px;
 }
 
 .bescheid-section h5 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  color: var(--text-secondary, #555);
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.bescheid-form-grid,
+.bescheid-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.bescheid-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bescheid-field label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #555);
+}
+
+.bescheid-field span {
+  min-height: 50px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border, #d9ddea);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-bg, #f8fafc);
+  color: var(--color-text);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.bescheid-input {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--color-border, #d9ddea);
+  border-radius: var(--radius-md, 12px);
+  background: #fff;
+  padding: 12px 14px;
+  font-size: 15px;
+  color: var(--color-text-primary, #111827);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bescheid-input:focus {
+  outline: none;
+  border-color: rgba(99, 102, 241, 0.42);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.bescheid-field.highlight-green label {
+  color: #15803d;
+}
+
+.bescheid-field.highlight-red label {
+  color: #dc2626;
+}
+
+.bescheid-subsection {
+  margin-top: 18px;
+}
+
+.bescheid-subsection-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #555);
+}
+
+.bescheid-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .bescheid-vv-row {
   display: flex;
   justify-content: space-between;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 6px;
-  margin-bottom: 0.25rem;
-  font-size: 0.9rem;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border-light, #eef2f7);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-bg, #f8fafc);
+  font-size: 14px;
+  color: var(--color-text);
 }
 
-.bescheid-actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-color, #e5e7eb);
+.bescheid-vv-row span:last-child {
+  font-weight: 600;
 }
 
 .bescheid-success {
   text-align: center;
-  padding: 2rem 1rem;
 }
 
-.bescheid-success h3 {
-  color: #16a34a;
-  margin-bottom: 0.5rem;
+.bescheid-success p {
+  margin: 0 0 20px;
+  color: var(--color-text-secondary, #666);
+  line-height: 1.6;
 }
 
 .bescheid-transactions {
-  margin: 1.5rem 0;
+  margin: 20px 0;
   text-align: left;
 }
 
 .bescheid-txn-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--bg-secondary, #f8f9fa);
-  border-radius: 6px;
-  margin-bottom: 0.25rem;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-light, #eef2f7);
+  border-radius: var(--radius-md, 12px);
+  background: var(--color-bg, #f8fafc);
+  margin-bottom: 8px;
 }
 
 .bescheid-txn-row .txn-desc {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: 14px;
 }
 
 .bescheid-txn-row .txn-amount {
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .bescheid-import {
+    padding: 16px;
+  }
+
+  .bescheid-surface {
+    padding: 18px;
+  }
+
+  .tax-import-review .review-content {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-import-preview-frame,
+  .tax-import-preview-image,
+  .tax-import-preview-fallback {
+    min-height: 420px;
+  }
 }

@@ -1,0 +1,192 @@
+{
+  "pricing": {
+    "title": "Odaberite svoj plan",
+    "subtitle": "Pocnite sa 14-dnevnim Pro probnim periodom, a zatim odaberite plan koji vam odgovara",
+    "free": "Besplatno",
+    "recommended": "Preporuceno",
+    "per_month": "/mjesecno",
+    "per_month_billed_yearly": "/mjesecno, godisnja naplata",
+    "billed_as": "Naplacuje se kao {{amount}} EUR/godisnje",
+    "trial_info": "Novi korisnici dobijaju 14-dnevni Pro probni period. Kreditna kartica nije potrebna za pocetak.",
+    "support": "Imate pitanja? Kontaktirajte nas na support@taxja.com",
+    "billing": {
+      "monthly": "Mjesecno",
+      "yearly": "Godisnje",
+      "save": "Ustedite {{percent}}%"
+    },
+    "plans": {
+      "free": {
+        "name": "Besplatno"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "30 transakcija/mjesecno",
+      "basic_tax_calc": "Osnovni porezni obracun",
+      "unlimited_transactions": "Neogranicen broj transakcija",
+      "ocr_limit": "20 skeniranja dokumenata/mjesecno",
+      "full_tax_calc": "Potpuni porezni obracun",
+      "multi_language": "Vise jezika (DE, EN, ZH)",
+      "vat_svs": "PDV i SVS obracuni",
+      "property_management": "Upravljanje nekretninama",
+      "bank_import": "Uvoz bankovnih izvoda",
+      "recurring_suggestions": "Pametni ponavljajuci prijedlozi",
+      "everything_plus": "Sve iz Plus plana",
+      "unlimited_ocr": "Neograniceno skeniranje dokumenata",
+      "ai_assistant": "AI Porezni asistent",
+      "e1_generation": "Generisanje E1 obrasca",
+      "advanced_reports": "Napredni izvjestaji (EA, Bilanz)",
+      "priority_support": "Prioritetna podrska",
+      "ocr": "Skeniranje dokumenata"
+    },
+    "buttons": {
+      "get_started": "Pocnite",
+      "subscribe": "Pretplatite se",
+      "upgrade": "Nadogradite",
+      "start_trial": "Zapocnite 14-dnevni Pro probni period",
+      "loading": "Ucitavanje..."
+    },
+    "errors": {
+      "checkout_failed": "Pokretanje naplate nije uspjelo. Molimo pokusajte ponovo."
+    }
+  },
+  "subscription": {
+    "loading": "Ucitavanje detalja pretplate...",
+    "manage": "Upravljanje pretplatom",
+    "manage_title": "Upravljanje pretplatom",
+    "current_plan": "Trenutni plan",
+    "free": "Besplatno",
+    "per_month": "/mjesecno",
+    "per_year": "/godisnje",
+    "not_applicable": "N/P",
+    "trial_days_remaining": "{{days}} dana preostalo",
+    "trial_message": "u vasem Pro probnom periodu. Nadogradite da zadrzite sve funkcije!",
+    "trial_active": "Na besplatnom probnom periodu ste do {{date}}",
+    "period_start": "Pocetak perioda",
+    "period_end": "Kraj perioda",
+    "billing_cycle": "Ciklus naplate",
+    "next_billing": "Sljedeci datum naplate",
+    "canceling": "Otkazivanje",
+    "ends_on": "Zavrsava {{date}}",
+    "cancel_notice": "Vasa pretplata ce biti otkazana na kraju trenutnog perioda",
+    "credits_title": "Krediti",
+    "credits_available": "Dostupni krediti",
+    "overage_mode": "Prekoracenje",
+    "overage_on": "Ukljuceno",
+    "overage_off": "Iskljuceno",
+    "overage_unavailable": "Nedostupno",
+    "overage_suspended": "Pauzirano",
+    "overage_rate": "{{rate}} / kredit",
+    "overage_estimate": "Procjena {{amount}}",
+    "overage_toggle_error": "Azuriranje rezima prekoracenja nije uspjelo.",
+    "overage_payment_due_title": "Prekoracenje pauzirano",
+    "overage_payment_due_message": "Prekoracenje je pauzirano dok se neplaceni racun ne podmiri u Stripeu.",
+    "resolve_billing": "Rijesite naplatu",
+    "billing_portal_error": "Otvaranje portala za naplatu nije uspjelo.",
+    "usage_title": "Potrosnja u ovom periodu",
+    "unlimited": "Neograniceno",
+    "quota_exceeded": "Kvota prekoracena",
+    "change_plan": "Promijenite plan",
+    "reactivate": "Ponovo aktivirajte pretplatu",
+    "cancel": "Otkazite pretplatu",
+    "payment_method": "Nacin placanja",
+    "payment_managed": "Nacin placanja se upravlja putem Stripea.",
+    "manage_payment": "Upravljajte nacinom placanja",
+    "billing_history": "Historija naplate",
+    "no_history": "Historija naplate jos nije dostupna.",
+    "cancel_confirm_title": "Otkazati pretplatu?",
+    "cancel_confirm_message": "Vasa pretplata ce ostati aktivna do {{date}}. Nakon toga, bicete prebaceni na Besplatni plan.",
+    "confirm_cancel": "Da, otkazite",
+    "change_plan_title": "Promijenite plan",
+    "change_plan_message": "Bicete preusmjereni na stranicu s cijenama kako biste odabrali novi plan.",
+    "continue": "Nastavite",
+    "cancel_success": "Vasa pretplata ce biti otkazana na kraju trenutnog perioda.",
+    "cancel_error": "Otkazivanje pretplate nije uspjelo. Molimo pokusajte ponovo.",
+    "reactivate_success": "Vasa pretplata je ponovo aktivirana!",
+    "reactivate_error": "Ponovna aktivacija pretplate nije uspjela. Molimo pokusajte ponovo.",
+    "status": {
+      "active": "Aktivna",
+      "trialing": "Probni period",
+      "past_due": "Dospjelo",
+      "canceled": "Otkazano"
+    },
+    "billing": {
+      "monthly": "Mjesecno",
+      "yearly": "Godisnje"
+    },
+    "resources": {
+      "transactions": "Transakcije",
+      "ocr_scans": "Skeniranja dokumenata",
+      "ai_conversations": "AI Razgovori"
+    }
+  },
+  "usage": {
+    "title": "Potrosnja resursa",
+    "resets_on": "Resetovanje: {{date}}",
+    "unlimited": "Neograniceno",
+    "quota_exceeded": "Kvota prekoracena",
+    "quota_warning": "Priblizavanje limitu ({{percent}}%)",
+    "transactions": "Transakcije",
+    "ocr_scans": "Skeniranja dokumenata",
+    "ai_conversations": "AI Razgovori"
+  },
+  "upgrade": {
+    "title": "Nadogradite na {{plan}}",
+    "description": "{{feature}} je dostupna na {{plan}} planu. Nadogradite sada da otkljucate ovu i druge funkcije!",
+    "benefits_title": "Sta dobijate:",
+    "button": "Nadogradite sada",
+    "cancel": "Mozda kasnije",
+    "trial_note": "Zapocnite sa 14-dnevnim besplatnim probnim periodom Pro plana",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "Skeniranje dokumenata",
+      "unlimited_ocr": "Neograniceno skeniranje dokumenata",
+      "ai_assistant": "AI Porezni asistent",
+      "e1_generation": "Generisanje E1 obrasca",
+      "advanced_reports": "Napredni izvjestaji",
+      "api_access": "API Pristup",
+      "unlimited_transactions": "Neogranicen broj transakcija"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Neogranicen broj transakcija",
+        "2": "20 skeniranja dokumenata mjesecno",
+        "3": "Potpuni porezni obracuni",
+        "4": "Podrska za vise jezika",
+        "5": "PDV i SVS obracuni"
+      },
+      "pro": {
+        "1": "Neograniceno skeniranje dokumenata",
+        "2": "AI podrska za porezna pitanja",
+        "3": "Automatsko generisanje E1 obrasca",
+        "4": "Napredna analitika i izvjestaji",
+        "5": "Prioritetna korisnicka podrska"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Placanje uspjesno!",
+    "success_message": "Hvala vam na pretplati! Vase placanje je uspjesno obradeno.",
+    "plan_activated": "Vas {{plan}} plan je sada aktivan!",
+    "detail_1": "Puni pristup svim funkcijama",
+    "detail_2": "Naplata pocinje danas",
+    "detail_3": "Otkazite u bilo kojem trenutku",
+    "session_id": "ID sesije",
+    "continue_dashboard": "Nastavite na kontrolnu plocu",
+    "view_subscription": "Pogledajte detalje pretplate",
+    "support": "Imate pitanja? Kontaktirajte nas na support@taxja.com"
+  },
+  "common": {
+    "back": "Nazad",
+    "cancel": "Otkazite",
+    "nevermind": "Nema veze"
+  }
+}

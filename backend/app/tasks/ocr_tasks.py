@@ -3093,15 +3093,32 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     }
 
 
-@celery_app.task(base=OCRTask, bind=True, soft_time_limit=300, time_limit=360)
+@celery_app.task(
+    base=OCRTask,
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+    autoretry_for=(IOError, ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=120,
+    retry_jitter=True,
+    max_retries=3,
+)
 def process_document_ocr(self, document_id: int) -> Dict[str, Any]:
     """
     Process single document OCR in background.
     Uses the AI-orchestrated pipeline for classification, validation, and suggestions.
     Falls back to run_ocr_sync if the pipeline is unavailable.
+
+    Transient errors (IOError, ConnectionError, TimeoutError) are re-raised so
+    Celery's autoretry mechanism can handle them with exponential backoff.
+    Non-transient pipeline failures fall back to the legacy sync path.
     """
     try:
         return run_ocr_pipeline(document_id)
+    except (IOError, ConnectionError, TimeoutError):
+        # Let Celery autoretry handle transient errors
+        raise
     except Exception as e:
         logger.warning(
             f"Pipeline failed for document {document_id}, falling back to legacy: {e}"

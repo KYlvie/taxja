@@ -1,0 +1,210 @@
+{
+  "seeded_at": "2026-03-21T00:36:29.296110",
+  "zip_path": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+  "extract_only": false,
+  "password": "Eval2026!",
+  "users": [
+    {
+      "key": "alpha",
+      "id": 40,
+      "email": "alpha.sensitive-eval@taxja.local",
+      "name": "DI Maria Steiner",
+      "business_name": "DI Maria Steiner",
+      "user_type": "self_employed"
+    },
+    {
+      "key": "beta",
+      "id": 41,
+      "email": "beta.sensitive-eval@taxja.local",
+      "name": "Mag. Thomas Thenneberg",
+      "business_name": "Thenneberg Immobilien",
+      "user_type": "landlord"
+    },
+    {
+      "key": "gamma",
+      "id": 42,
+      "email": "gamma.sensitive-eval@taxja.local",
+      "name": "Ing. Klaus Bauer",
+      "business_name": null,
+      "user_type": "landlord"
+    }
+  ],
+  "properties": [
+    {
+      "key": "beta_main_property",
+      "id": "b8062488-cb49-4588-90cb-362f0ece6208",
+      "user_id": 41,
+      "name": "Wiedner Hauptstr. 63/2/14"
+    },
+    {
+      "key": "gamma_main_property",
+      "id": "24887acd-b7a6-4e3f-bfab-b753c7a2cff3",
+      "user_id": 42,
+      "name": "Argentinierstrasse 21/Top 12"
+    }
+  ],
+  "recurring_transactions": [
+    {
+      "id": 47,
+      "user_id": 40,
+      "description": "Insurance premium (berufshaftpflicht)",
+      "amount": "799.20",
+      "frequency": "annually",
+      "recurring_type": "insurance_premium",
+      "property_id": null
+    },
+    {
+      "id": 48,
+      "user_id": 41,
+      "description": "Immorent Mietzahlung",
+      "amount": "2184.00",
+      "frequency": "monthly",
+      "recurring_type": "other_expense",
+      "property_id": "b8062488-cb49-4588-90cb-362f0ece6208"
+    },
+    {
+      "id": 49,
+      "user_id": 41,
+      "description": "Insurance premium (gebaeudeversicherung)",
+      "amount": "892.40",
+      "frequency": "annually",
+      "recurring_type": "insurance_premium",
+      "property_id": "b8062488-cb49-4588-90cb-362f0ece6208"
+    }
+  ],
+  "transactions": [
+    {
+      "id": 1318,
+      "user_id": 40,
+      "description": "A01 Ausgangsrechnung Q1",
+      "amount": "14640.00",
+      "type": "income"
+    },
+    {
+      "id": 1319,
+      "user_id": 40,
+      "description": "A09 Pagro Bueromaterial",
+      "amount": "96.95",
+      "type": "expense"
+    },
+    {
+      "id": 1320,
+      "user_id": 40,
+      "description": "A19 OMV Tankbeleg",
+      "amount": "69.93",
+      "type": "expense"
+    }
+  ],
+  "documents": [
+    {
+      "key": "alpha_invoice_income_q1",
+      "persona_key": "alpha",
+      "document_type": "invoice",
+      "zip_path": "testsuite_final/alpha_self_employed_IT/input_documents/A01_Ausgangsrechnung_Q1.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\A01_Ausgangsrechnung_Q1.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/A01_Ausgangsrechnung_Q1.pdf",
+      "document_id": 275
+    },
+    {
+      "key": "alpha_invoice_expense_pagro",
+      "persona_key": "alpha",
+      "document_type": "invoice",
+      "zip_path": "testsuite_final/alpha_self_employed_IT/input_documents/A09_Pagro_Bueromaterial.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\A09_Pagro_Bueromaterial.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/A09_Pagro_Bueromaterial.pdf",
+      "document_id": 276
+    },
+    {
+      "key": "alpha_receipt_omv",
+      "persona_key": "alpha",
+      "document_type": "receipt",
+      "zip_path": "testsuite_final/alpha_self_employed_IT/input_documents/A19_OMV_Tankbeleg.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\A19_OMV_Tankbeleg.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/A19_OMV_Tankbeleg.pdf",
+      "document_id": 277
+    },
+    {
+      "key": "alpha_bank_statement_bankaustria",
+      "persona_key": "alpha",
+      "document_type": "bank_statement",
+      "zip_path": "testsuite_realistic/Bank_Austria_Kontoauszug_3pages_43txn.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-realistic-multipage.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\Bank_Austria_Kontoauszug_3pages_43txn.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/Bank_Austria_Kontoauszug_3pages_43txn.pdf",
+      "document_id": 278
+    },
+    {
+      "key": "alpha_purchase_contract_passat",
+      "persona_key": "alpha",
+      "document_type": "purchase_contract",
+      "zip_path": "testsuite_final/alpha_self_employed_IT/input_documents/A14_PKW_Kaufvertrag_Passat.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\A14_PKW_Kaufvertrag_Passat.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/A14_PKW_Kaufvertrag_Passat.pdf",
+      "document_id": 279
+    },
+    {
+      "key": "alpha_insurance_policy",
+      "persona_key": "alpha",
+      "document_type": "versicherungsbestaetigung",
+      "zip_path": "testsuite_final/alpha_self_employed_IT/input_documents/A16_Berufshaftpflicht_2024.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\alpha\\A16_Berufshaftpflicht_2024.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/alpha/A16_Berufshaftpflicht_2024.pdf",
+      "document_id": 280
+    },
+    {
+      "key": "beta_rental_contract_thenneberg",
+      "persona_key": "beta",
+      "document_type": "rental_contract",
+      "zip_path": "testsuite_final/beta_employee_landlord/input_documents/B02_Mietvertrag_Thenneberg.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\beta\\B02_Mietvertrag_Thenneberg.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/beta/B02_Mietvertrag_Thenneberg.pdf",
+      "document_id": 281
+    },
+    {
+      "key": "beta_loan_contract_bank",
+      "persona_key": "beta",
+      "document_type": "loan_contract",
+      "zip_path": "testsuite_final/beta_employee_landlord/input_documents/B04_Kredit_Zinsbescheinigung.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\beta\\B04_Kredit_Zinsbescheinigung.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/beta/B04_Kredit_Zinsbescheinigung.pdf",
+      "document_id": 282
+    },
+    {
+      "key": "beta_loan_contract_erste_bank_5s",
+      "persona_key": "gamma",
+      "document_type": "loan_contract",
+      "zip_path": "B14_Kreditvertrag_Erste_Bank_5S.pdf",
+      "source_archive": null,
+      "source_file": "C:\\Users\\yk1e25\\Downloads\\B14_Kreditvertrag_Erste_Bank_5S.pdf",
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\gamma\\B14_Kreditvertrag_Erste_Bank_5S.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/gamma/B14_Kreditvertrag_Erste_Bank_5S.pdf",
+      "document_id": 283
+    },
+    {
+      "key": "beta_building_insurance",
+      "persona_key": "beta",
+      "document_type": "versicherungsbestaetigung",
+      "zip_path": "testsuite_final/beta_employee_landlord/input_documents/B06_Gebaeudeversicherung.pdf",
+      "source_archive": "C:\\Users\\yk1e25\\Downloads\\taxja-testsuite-v6-complete.zip",
+      "source_file": null,
+      "extracted_path": "C:\\Users\\yk1e25\\OneDrive - University of Southampton\\Documents\\kiro\\backend\\.codex-eval\\sensitive_documents\\beta\\B06_Gebaeudeversicherung.pdf",
+      "storage_key": "seed-eval/sensitive-documents-v6/beta/B06_Gebaeudeversicherung.pdf",
+      "document_id": 284
+    }
+  ]
+}

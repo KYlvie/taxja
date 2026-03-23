@@ -1,0 +1,389 @@
+/* ── Date Input ── */
+
+.date-input {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+}
+
+/* ── Trigger button ── */
+.date-input__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast);
+  gap: 8px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.date-input__trigger:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+}
+
+.date-input__trigger:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.date-input__trigger[aria-expanded='true'] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.date-input__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--color-bg-soft);
+}
+
+.date-input__trigger--error {
+  border-color: var(--color-danger);
+}
+
+.date-input__trigger--error:focus-visible,
+.date-input__trigger--error[aria-expanded='true'] {
+  box-shadow: 0 0 0 3px var(--color-danger-light);
+}
+
+.date-input__trigger--placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ── Trigger label ── */
+.date-input__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Calendar icon ── */
+.date-input__icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-muted);
+}
+
+/* ── Clear button ── */
+.date-input__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.date-input__clear:hover {
+  background: var(--color-text-muted);
+  color: var(--color-surface);
+}
+
+.date-input__clear svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* ── Size: sm ── */
+.date-input--sm .date-input__trigger {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+}
+
+.date-input--sm .date-input__dropdown {
+  border-radius: var(--radius-sm);
+}
+
+/* ── Dropdown portal ── */
+.date-input__dropdown {
+  position: fixed;
+  z-index: 9999;
+  width: 300px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-strong);
+  box-shadow: var(--shadow-md);
+  padding: 12px;
+
+  /* animation */
+  opacity: 0;
+  transform: scale(0.97) translateY(-4px);
+  transform-origin: top center;
+  animation: di-dropdown-in var(--transition-fast) forwards;
+}
+
+.date-input__dropdown--above {
+  transform-origin: bottom center;
+  transform: scale(0.97) translateY(4px);
+}
+
+@keyframes di-dropdown-in {
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ── Navigation header ── */
+.date-input__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.date-input__nav-label {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  user-select: none;
+}
+
+.date-input__nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.date-input__nav-btn:hover {
+  background: var(--color-primary-50);
+  color: var(--color-text);
+}
+
+.date-input__nav-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-100);
+}
+
+.date-input__nav-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Day names row ── */
+.date-input__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+
+.date-input__weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+/* ── Calendar grid ── */
+.date-input__calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+/* ── Day cells ── */
+.date-input__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  user-select: none;
+}
+
+.date-input__day:hover:not(.date-input__day--disabled):not(.date-input__day--selected) {
+  background: var(--color-primary-50);
+}
+
+.date-input__day:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-100);
+}
+
+.date-input__day--today:not(.date-input__day--selected) {
+  box-shadow: inset 0 0 0 1.5px var(--color-border-hover);
+  font-weight: 600;
+}
+
+.date-input__day--selected {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.date-input__day--selected:hover {
+  background: var(--color-primary-dark);
+}
+
+.date-input__day--outside {
+  opacity: 0.4;
+}
+
+.date-input__day--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Month / Year picker grid ── */
+.date-input__grid-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 8px 4px;
+}
+
+.date-input__grid-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.date-input__grid-cell:hover {
+  background: var(--color-primary-50);
+}
+
+.date-input__grid-cell--selected {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.date-input__grid-cell--selected:hover {
+  background: var(--color-primary-dark, var(--color-primary));
+}
+
+.date-input__grid-cell--today:not(.date-input__grid-cell--selected) {
+  box-shadow: inset 0 0 0 1.5px var(--color-primary);
+  font-weight: 600;
+}
+
+/* ── Today button (footer) ── */
+.date-input__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.date-input__today-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.date-input__today-btn:hover {
+  background: var(--color-primary-50);
+}
+
+.date-input__today-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-100);
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .date-input__trigger {
+    min-height: 48px;
+    font-size: 16px;
+    padding: 12px 14px;
+  }
+
+  .date-input--sm .date-input__trigger {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .date-input__dropdown {
+    width: 320px;
+  }
+
+  .date-input__day {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+}

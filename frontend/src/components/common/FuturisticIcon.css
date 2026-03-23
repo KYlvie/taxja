@@ -1,0 +1,137 @@
+.f-icon {
+  --f-icon-glow: rgba(99, 102, 241, 0.18);
+  --f-icon-line: rgba(99, 102, 241, 0.42);
+  --f-icon-fill-a: rgba(255, 255, 255, 0.96);
+  --f-icon-fill-b: rgba(238, 242, 255, 0.92);
+  --f-icon-text: #4f46e5;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--f-icon-text);
+  background:
+    linear-gradient(135deg, var(--f-icon-fill-a), var(--f-icon-fill-b)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.24));
+  border: 1px solid var(--f-icon-line);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.45) inset,
+    0 0 18px var(--f-icon-glow);
+  clip-path: polygon(0 11px, 11px 0, calc(100% - 11px) 0, 100% 11px, 100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px));
+}
+
+.f-icon__core,
+.f-icon__scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.f-icon__core {
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.78), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 45%),
+    linear-gradient(90deg, transparent 12%, rgba(255, 255, 255, 0.18) 12%, rgba(255, 255, 255, 0.18) 13%, transparent 13%, transparent 87%, rgba(255, 255, 255, 0.18) 87%, rgba(255, 255, 255, 0.18) 88%, transparent 88%);
+}
+
+.f-icon__scan {
+  inset: 5px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.f-icon__node {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.38;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.f-icon__node--tl {
+  top: 7px;
+  left: 7px;
+}
+
+.f-icon__node--br {
+  right: 7px;
+  bottom: 7px;
+}
+
+.f-icon__glyph {
+  position: relative;
+  z-index: 1;
+  width: 52%;
+  height: 52%;
+}
+
+.f-icon--xs {
+  width: 24px;
+  height: 24px;
+  border-radius: 9px;
+}
+
+.f-icon--sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.f-icon--md {
+  width: 40px;
+  height: 40px;
+}
+
+.f-icon--lg {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+}
+
+.f-icon--xl {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+}
+
+.f-icon--cyan {
+  --f-icon-glow: rgba(6, 182, 212, 0.16);
+  --f-icon-line: rgba(6, 182, 212, 0.3);
+  --f-icon-fill-b: rgba(236, 254, 255, 0.92);
+  --f-icon-text: #0f766e;
+}
+
+.f-icon--emerald {
+  --f-icon-glow: rgba(16, 185, 129, 0.14);
+  --f-icon-line: rgba(16, 185, 129, 0.28);
+  --f-icon-fill-b: rgba(236, 253, 245, 0.92);
+  --f-icon-text: #047857;
+}
+
+.f-icon--amber {
+  --f-icon-glow: rgba(245, 158, 11, 0.16);
+  --f-icon-line: rgba(245, 158, 11, 0.28);
+  --f-icon-fill-b: rgba(255, 251, 235, 0.94);
+  --f-icon-text: #b45309;
+}
+
+.f-icon--rose {
+  --f-icon-glow: rgba(244, 63, 94, 0.16);
+  --f-icon-line: rgba(244, 63, 94, 0.26);
+  --f-icon-fill-b: rgba(255, 241, 242, 0.94);
+  --f-icon-text: #be123c;
+}
+
+.f-icon--slate {
+  --f-icon-glow: rgba(100, 116, 139, 0.12);
+  --f-icon-line: rgba(100, 116, 139, 0.28);
+  --f-icon-fill-b: rgba(241, 245, 249, 0.94);
+  --f-icon-text: #334155;
+}

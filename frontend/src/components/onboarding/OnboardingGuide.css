@@ -1,0 +1,490 @@
+/* ═══════════════════════════════════════════════════════════
+   OnboardingGuide — Spotlight + 3D Robot + Floating Text
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Overlay = full-screen dark backdrop ── */
+.obg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(6, 6, 18, 0.55);
+  animation: obgFadeIn 0.4s ease-out both;
+}
+.obg-overlay--exit {
+  animation: obgFadeOut 0.3s ease-in forwards;
+  pointer-events: none;
+}
+@keyframes obgFadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes obgFadeOut { from { opacity: 1 } to { opacity: 0 } }
+
+/* ── Force sidebar open during onboarding (bypass React state) ── */
+.sidebar[data-obg-open="true"] {
+  transform: translateX(0) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* ── Spotlight glow ring (target pops through via z-index 10001) ── */
+.obg-spotlight {
+  position: fixed;
+  z-index: 10001;
+  border-radius: 10px;
+  border: 2.5px solid rgba(6, 182, 212, 0.85);
+  box-shadow:
+    0 0 12px 3px rgba(6, 182, 212, 0.5),
+    0 0 30px 8px rgba(6, 182, 212, 0.25),
+    0 0 60px 16px rgba(6, 182, 212, 0.1),
+    inset 0 0 16px rgba(6, 182, 212, 0.15);
+  pointer-events: none;
+  animation: obgSpotlightPulse 2s ease-in-out infinite;
+  transition:
+    top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes obgSpotlightPulse {
+  0%, 100% {
+    border-color: rgba(6, 182, 212, 0.85);
+    box-shadow:
+      0 0 12px 3px rgba(6, 182, 212, 0.5),
+      0 0 30px 8px rgba(6, 182, 212, 0.25),
+      0 0 60px 16px rgba(6, 182, 212, 0.1),
+      inset 0 0 16px rgba(6, 182, 212, 0.15);
+  }
+  50% {
+    border-color: rgba(6, 182, 212, 1);
+    box-shadow:
+      0 0 18px 5px rgba(6, 182, 212, 0.65),
+      0 0 40px 12px rgba(6, 182, 212, 0.35),
+      0 0 80px 24px rgba(6, 182, 212, 0.15),
+      inset 0 0 20px rgba(6, 182, 212, 0.2);
+  }
+}
+
+/* ── Robot + Text wrappers (positioned independently) ── */
+.obg-robot-wrap {
+  pointer-events: auto;
+  transition:
+    top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.obg-text-wrap {
+  pointer-events: auto;
+  transition:
+    top 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Robot entrance: scale up + spin + wobble ── */
+.obg-robot-wave {
+  animation: obgEntrance 1.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+@keyframes obgEntrance {
+  0%   { transform: scale(0.3) rotateY(0deg); opacity: 0; }
+  30%  { transform: scale(1.05) rotateY(360deg); opacity: 1; }
+  45%  { transform: scale(0.97) rotateY(360deg) rotate(5deg); }
+  55%  { transform: scale(1.02) rotateY(360deg) rotate(-4deg); }
+  65%  { transform: scale(0.99) rotateY(360deg) rotate(3deg); }
+  75%  { transform: scale(1.01) rotateY(360deg) rotate(-2deg); }
+  85%  { transform: scale(1) rotateY(360deg) rotate(1deg); }
+  100% { transform: scale(1) rotateY(360deg) rotate(0deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   3D Humanoid Robot
+   ═══════════════════════════════════════════════════════════ */
+.obg-robot {
+  position: relative;
+  width: 500px;
+  height: 500px;
+  perspective: 900px;
+  cursor: grab;
+}
+.obg-robot:active { cursor: grabbing; }
+
+.obg-robot-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.obg-robot-disc {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+/* Rings */
+.obg-robot-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  box-sizing: border-box;
+  transform: translateZ(0);
+}
+.obg-robot-ring-1 {
+  width: 340px; height: 340px;
+  border-width: 2px;
+  border-color: rgba(6, 182, 212, 0.18);
+  animation: obgRingSpin 8s linear infinite;
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.08), inset 0 0 30px rgba(6, 182, 212, 0.04);
+}
+.obg-robot-ring-2 {
+  width: 440px; height: 440px;
+  border-width: 2px;
+  border-color: rgba(168, 85, 247, 0.14);
+  animation: obgRingSpin 12s linear infinite reverse;
+  box-shadow: 0 0 36px rgba(168, 85, 247, 0.08), inset 0 0 36px rgba(168, 85, 247, 0.04);
+}
+@keyframes obgRingSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+/* ═══════════════════════════════════════════════════════════
+   Humanoid Bot Parts
+   ═══════════════════════════════════════════════════════════ */
+.obg-bot {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateZ(2px);
+}
+
+/* Antenna */
+.obg-bot-antenna {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: -1px;
+}
+.obg-bot-antenna-stem {
+  width: 4px; height: 28px;
+  background: rgba(6, 182, 212, 0.5);
+  border-radius: 2px;
+}
+.obg-bot-antenna-tip {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #22d3ee 30%, rgba(6, 182, 212, 0.3));
+  animation: obgAntennaGlow 2s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+}
+@keyframes obgAntennaGlow {
+  0%, 100% { box-shadow: 0 0 6px rgba(6, 182, 212, 0.4); transform: scale(1); }
+  50%      { box-shadow: 0 0 14px rgba(6, 182, 212, 0.8); transform: scale(1.25); }
+}
+
+/* Head */
+.obg-bot-head {
+  width: 110px; height: 90px;
+  background: linear-gradient(180deg, #e0f7fa, #80deea);
+  border-radius: 28px 28px 20px 20px;
+  position: relative;
+  border: 2.5px solid rgba(6, 182, 212, 0.3);
+  box-shadow: 0 4px 24px rgba(6, 182, 212, 0.25), inset 0 2px 0 rgba(255,255,255,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  padding-top: 6px;
+}
+
+/* Eyes */
+.obg-bot-eye {
+  width: 22px; height: 26px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #0e7490, #155e75);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+  animation: obgEyeBlink 4s ease-in-out infinite;
+  position: relative;
+}
+.obg-bot-eye::after {
+  content: '';
+  position: absolute;
+  top: 4px; left: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.85);
+}
+@keyframes obgEyeBlink {
+  0%, 42%, 48%, 100% { transform: scaleY(1); }
+  45%                 { transform: scaleY(0.1); }
+}
+
+/* Mouth */
+.obg-bot-mouth {
+  position: absolute;
+  bottom: 12px;
+  width: 28px; height: 8px;
+  border-radius: 0 0 14px 14px;
+  background: rgba(14, 116, 144, 0.4);
+}
+
+/* Neck */
+.obg-bot-neck {
+  width: 28px; height: 10px;
+  background: linear-gradient(180deg, #80deea, #4dd0e1);
+  border-radius: 0 0 5px 5px;
+}
+
+/* Body */
+.obg-bot-body {
+  width: 120px; height: 80px;
+  background: linear-gradient(180deg, #b2ebf2, #4dd0e1);
+  border-radius: 6px 6px 10px 10px;
+  position: relative;
+  border: 1.5px solid rgba(6, 182, 212, 0.25);
+  box-shadow: 0 3px 12px rgba(6, 182, 212, 0.15);
+}
+
+/* Chest light */
+.obg-bot-chest-light {
+  position: absolute;
+  top: 16px; left: 50%;
+  transform: translateX(-50%);
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.9), rgba(6, 182, 212, 0.15));
+  animation: obgChestPulse 2.5s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+}
+@keyframes obgChestPulse {
+  0%, 100% { opacity: 0.6; box-shadow: 0 0 4px rgba(6, 182, 212, 0.3); }
+  50%      { opacity: 1;   box-shadow: 0 0 12px rgba(6, 182, 212, 0.7); }
+}
+
+/* Arms */
+.obg-bot-arm {
+  position: absolute;
+  width: 24px; height: 60px;
+  background: linear-gradient(180deg, #80deea, #4dd0e1);
+  border-radius: 12px;
+  top: 6px;
+  border: 2px solid rgba(6, 182, 212, 0.2);
+}
+.obg-bot-arm-l {
+  left: -28px;
+  transform-origin: top center;
+  animation: obgArmL 3s ease-in-out infinite;
+}
+.obg-bot-arm-r {
+  right: -28px;
+  transform-origin: top center;
+  animation: obgArmR 3s ease-in-out 0.4s infinite;
+}
+@keyframes obgArmL {
+  0%, 100% { transform: rotate(8deg); }
+  50%      { transform: rotate(-6deg); }
+}
+@keyframes obgArmR {
+  0%, 100% { transform: rotate(-8deg); }
+  50%      { transform: rotate(6deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Floating Text (no box — raw glowing text)
+   ═══════════════════════════════════════════════════════════ */
+.obg-text {
+  max-width: 420px;
+  animation: obgTextIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes obgTextIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.obg-text-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  animation: obgSlideIn 0.35s ease-out;
+}
+.obg-text-icon {
+  color: #22d3ee;
+  filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.5));
+  flex-shrink: 0;
+}
+.obg-text-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #e0f7fa;
+  margin: 0;
+  text-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+  font-family: var(--font-display, inherit);
+}
+
+@keyframes obgSlideIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.obg-text-body {
+  margin-bottom: 14px;
+  animation: obgSlideIn 0.35s ease-out;
+}
+.obg-text-msg {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: rgba(224, 247, 250, 0.85);
+  margin: 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Cursor */
+.obg-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: #22d3ee;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: obgCursorBlink 0.8s step-end infinite;
+  box-shadow: 0 0 4px rgba(6, 182, 212, 0.6);
+}
+@keyframes obgCursorBlink { 0%, 100% { opacity: 1 } 50% { opacity: 0 } }
+
+/* Typing dots */
+.obg-typing-dots { display: flex; gap: 5px; padding: 6px 0; }
+.obg-typing-dots span {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #22d3ee;
+  opacity: 0.4;
+  animation: obgDotBounce 1.2s ease-in-out infinite;
+}
+.obg-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.obg-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes obgDotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30%           { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Step dots ── */
+.obg-dots {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.obg-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transition: all 0.3s ease;
+}
+.obg-dot--active {
+  background: #22d3ee;
+  transform: scale(1.3);
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.6);
+}
+.obg-dot--done {
+  background: rgba(6, 182, 212, 0.5);
+}
+
+/* ── Buttons ── */
+.obg-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+.obg-actions--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.obg-actions-main { display: flex; gap: 8px; }
+
+.obg-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-family: var(--font-sans, inherit);
+}
+.obg-btn--skip {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+}
+.obg-btn--skip:hover { color: rgba(255, 255, 255, 0.8); text-decoration: underline; }
+
+.obg-btn--prev {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.obg-btn--prev:hover { background: rgba(255, 255, 255, 0.1); }
+
+.obg-btn--next {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.8), rgba(99, 102, 241, 0.7));
+  color: #fff;
+  box-shadow: 0 3px 14px rgba(6, 182, 212, 0.3);
+  min-width: 88px;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.obg-btn--next:hover {
+  box-shadow: 0 5px 20px rgba(6, 182, 212, 0.45);
+  transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Mobile
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .obg-text { max-width: 280px; }
+
+  .obg-robot { width: 200px; height: 200px; }
+  .obg-robot-ring-1 { width: 140px; height: 140px; }
+  .obg-robot-ring-2 { width: 180px; height: 180px; }
+
+  .obg-bot-head { width: 48px; height: 40px; gap: 12px; border-radius: 14px 14px 10px 10px; }
+  .obg-bot-eye  { width: 10px; height: 12px; border-radius: 4px; }
+  .obg-bot-body { width: 52px; height: 36px; }
+  .obg-bot-arm  { width: 11px; height: 28px; }
+  .obg-bot-arm-l { left: -13px; }
+  .obg-bot-arm-r { right: -13px; }
+  .obg-bot-neck { width: 14px; height: 5px; }
+  .obg-bot-chest-light { width: 14px; height: 14px; top: 8px; }
+  .obg-bot-mouth { width: 14px; height: 4px; bottom: 6px; }
+  .obg-bot-antenna-stem { height: 12px; width: 2.5px; }
+  .obg-bot-antenna-tip { width: 9px; height: 9px; }
+
+  .obg-actions { flex-direction: column-reverse; gap: 6px; }
+  .obg-actions-main { width: 100%; }
+  .obg-btn--next, .obg-btn--prev { flex: 1; text-align: center; }
+  .obg-btn--skip { width: 100%; text-align: center; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Reduced motion
+   ═══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .obg-overlay, .obg-spotlight,
+  .obg-robot-wrap, .obg-text-wrap,
+  .obg-text, .obg-text-header, .obg-text-body,
+  .obg-robot-ring-1, .obg-robot-ring-2,
+  .obg-bot-eye, .obg-bot-arm-l, .obg-bot-arm-r,
+  .obg-bot-antenna-tip, .obg-bot-chest-light,
+  .obg-dot, .obg-actions, .obg-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+  .obg-cursor { animation: none; opacity: 0; }
+  .obg-typing-dots span { animation: none; opacity: 0.6; }
+}

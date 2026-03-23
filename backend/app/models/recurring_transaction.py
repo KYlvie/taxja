@@ -158,6 +158,8 @@ class RecurringTransaction(Base):
         Returns:
             Next generation date
         """
+        import calendar
+
         if self.frequency == RecurrenceFrequency.WEEKLY:
             from datetime import timedelta
             return from_date + timedelta(weeks=1)
@@ -171,7 +173,9 @@ class RecurringTransaction(Base):
             if month > 12:
                 month = 1
                 year += 1
-            day = min(self.day_of_month or from_date.day, 28)  # Safe day
+            target_day = self.day_of_month or from_date.day
+            max_day = calendar.monthrange(year, month)[1]
+            day = min(target_day, max_day)
             return date(year, month, day)
         elif self.frequency == RecurrenceFrequency.QUARTERLY:
             # Add 3 months
@@ -180,13 +184,17 @@ class RecurringTransaction(Base):
             while month > 12:
                 month -= 12
                 year += 1
-            day = min(self.day_of_month or from_date.day, 28)
+            target_day = self.day_of_month or from_date.day
+            max_day = calendar.monthrange(year, month)[1]
+            day = min(target_day, max_day)
             return date(year, month, day)
         elif self.frequency == RecurrenceFrequency.ANNUALLY:
             # Add 1 year
             year = from_date.year + 1
             month = from_date.month
-            day = min(self.day_of_month or from_date.day, 28)
+            target_day = self.day_of_month or from_date.day
+            max_day = calendar.monthrange(year, month)[1]
+            day = min(target_day, max_day)
             return date(year, month, day)
         
         return from_date
