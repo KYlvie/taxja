@@ -153,6 +153,8 @@ export interface Transaction {
   line_items?: LineItem[];
   deductible_amount?: number;
   non_deductible_amount?: number;
+  bank_reconciled?: boolean;
+  bank_reconciled_at?: string;
   // Recurring fields
   is_recurring?: boolean;
   recurring_frequency?: string;

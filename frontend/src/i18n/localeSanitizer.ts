@@ -78,8 +78,50 @@ const MOJIBAKE_HINTS = [
   '\u00e5',
 ];
 
+const buildExportAndSearchHotfix = (
+  exportCsv: string,
+  exportPdf: string,
+  searchPlaceholder: string,
+  searchDeductPlaceholder: string
+): LocaleObject => ({
+  actions: {
+    exportCsv,
+    exportPdf,
+  },
+  classificationRules: {
+    searchPlaceholder,
+    searchDeductPlaceholder,
+  },
+  dashboard: {
+    quickStart: {
+      exportCsv,
+      exportPdf,
+    },
+  },
+  healthCheck: {
+    gettingStarted: {
+      exportCsv,
+      exportPdf,
+    },
+  },
+  quickActions: {
+    exportCsv,
+    exportPdf,
+  },
+  transactions: {
+    exportCsv,
+    exportPdf,
+  },
+});
+
 const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
   de: {
+    ...buildExportAndSearchHotfix(
+      'CSV exportieren',
+      'PDF exportieren',
+      'Nach Beschreibung oder Kategorie suchen...',
+      'Nach Beschreibung suchen...'
+    ),
     tour: {
       taxTools: {
         employer: {
@@ -102,6 +144,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
     },
   },
   zh: {
+    ...buildExportAndSearchHotfix(
+      '\u5bfc\u51fa CSV',
+      '\u5bfc\u51fa PDF',
+      '\u6309\u63cf\u8ff0\u6216\u7c7b\u522b\u641c\u7d22...',
+      '\u6309\u63cf\u8ff0\u641c\u7d22...'
+    ),
     tour: {
       taxTools: {
         employer: {
@@ -112,6 +160,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
     },
   },
   fr: {
+    ...buildExportAndSearchHotfix(
+      'Exporter en CSV',
+      'Exporter en PDF',
+      'Rechercher par description ou cat\u00e9gorie...',
+      'Rechercher par description...'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Documents d\u2019actifs en attente',
@@ -222,6 +276,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
     },
   },
   pl: {
+    ...buildExportAndSearchHotfix(
+      'Eksportuj CSV',
+      'Eksportuj PDF',
+      'Szukaj po opisie lub kategorii...',
+      'Szukaj po opisie...'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Oczekuj\u0105ce dokumenty aktyw\u00f3w',
@@ -262,6 +322,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
     },
   },
   tr: {
+    ...buildExportAndSearchHotfix(
+      'CSV olarak disa aktar',
+      'PDF olarak disa aktar',
+      'Aciklama veya kategoriye gore ara...',
+      'Aciklamaya gore ara...'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Bekleyen varl\u0131k belgeleri',

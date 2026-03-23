@@ -381,7 +381,9 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       await documentService.correctOCR(documentId, dataToSend);
 
       // If not yet confirmed, also call confirm endpoint
-      const isConfirmed = extracted_data?.confirmed || reviewData?.document?.transaction_id;
+      const isConfirmed =
+        Boolean(extracted_data?.confirmed ?? reviewData?.document?.ocr_result?.confirmed)
+        || Boolean(reviewData?.document?.transaction_id);
       if (!isConfirmed) {
         try {
           await documentService.confirmOCR(documentId);
@@ -460,6 +462,9 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   }
 
   const { document, extracted_data, suggestions } = reviewData;
+  const isConfirmed =
+    Boolean(extracted_data?.confirmed ?? document.ocr_result?.confirmed)
+    || Boolean(document.transaction_id);
   const translatedSuggestions = (suggestions ?? []).map((suggestion) =>
     translateDocumentSuggestionText(
       suggestion.replace(
@@ -1694,9 +1699,9 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         >
           {saving
             ? t('common.saving')
-            : (extracted_data?.confirmed || reviewData?.document?.transaction_id)
-              ? t('common.save')
-              : t('documents.reviewAction', 'Review')
+            : isConfirmed
+              ? t('common.save', 'Save')
+              : t('common.confirm', 'Confirm')
           }
         </button>
       </div>

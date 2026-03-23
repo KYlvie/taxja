@@ -3637,8 +3637,6 @@ def correct_ocr_results(
 
         refresh_contract_role_sensitive_suggestions(db, document)
 
-        flag_modified(document, "ocr_result")
-
     
 
     db.commit()

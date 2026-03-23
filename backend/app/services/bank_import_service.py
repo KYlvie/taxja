@@ -178,6 +178,21 @@ class BankImportService:
             )
             self.db.add(existing_import)
             self.db.flush()
+        else:
+            source_updated_at = (
+                getattr(document, "updated_at", None)
+                or getattr(document, "processed_at", None)
+                or getattr(document, "created_at", None)
+            )
+            import_updated_at = existing_import.updated_at or existing_import.created_at
+            has_existing_lines = bool(existing_import.lines)
+
+            if has_existing_lines and (
+                source_updated_at is None
+                or import_updated_at is None
+                or source_updated_at <= import_updated_at
+            ):
+                return existing_import
 
         # Rebuild the batch from the latest OCR suggestion to keep document reprocesses coherent.
         for line in list(existing_import.lines):

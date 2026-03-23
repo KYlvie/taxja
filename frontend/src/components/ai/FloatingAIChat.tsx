@@ -216,15 +216,18 @@ const FloatingAIChat = () => {
     }
   }, [pendingConfirmation, isMobile]);
 
+  // Fetch credit balance when panel opens or on first load (avoid infinite loop by not including creditBalance in deps)
+  const creditBalanceInitialized = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
 
-    if (panelOpen || mobileOpen || creditBalance === null) {
+    if (panelOpen || mobileOpen || !creditBalanceInitialized.current) {
+      creditBalanceInitialized.current = true;
       void fetchCreditBalance();
     }
-  }, [isAuthenticated, panelOpen, mobileOpen, creditBalance, fetchCreditBalance]);
+  }, [isAuthenticated, panelOpen, mobileOpen, fetchCreditBalance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isMobile) {

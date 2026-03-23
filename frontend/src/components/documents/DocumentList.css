@@ -308,21 +308,47 @@
 .export-zip-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   width: auto;
-  padding: 0 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.22);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
 }
 
 .export-zip-btn:hover {
-  color: var(--color-primary);
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 16px 32px rgba(79, 70, 229, 0.28);
 }
 
 .export-zip-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+.export-zip-btn .icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.export-zip-btn__format {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .spinner-inline {

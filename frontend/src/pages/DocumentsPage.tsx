@@ -7,6 +7,7 @@ import DocumentUpload from '../components/documents/DocumentUpload';
 import { translateDeductionReason } from '../utils/translateDeductionReason';
 import DocumentList from '../components/documents/DocumentList';
 import OCRReview from '../components/documents/OCRReview';
+import BankStatementWorkbench from '../components/documents/BankStatementWorkbench';
 import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
 import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
@@ -25,6 +26,7 @@ import i18n from '../i18n';
 import { formatTransactionCategoryLabel } from '../utils/formatTransactionCategoryLabel';
 import { getApiErrorMessage, getLineItemReconciliationError } from '../utils/apiError';
 import isDocumentPresentationResolverEnabled from '../documents/presentation/featureFlag';
+import normalizeDocumentType from '../documents/presentation/normalizeDocumentType';
 import { resolveDocumentPresentation } from '../documents/presentation/resolveDocumentPresentation';
 import { resolveControlPolicy } from '../documents/presentation/resolveControlPolicy';
 import type {
@@ -1405,6 +1407,22 @@ const DocumentsPage = () => {
     navigate('/documents', { replace: true });
   };
 
+  const handleWorkbenchDocumentUpdated = useCallback((updated: Document) => {
+    if (reviewingDocument?.id === updated.id) {
+      setReviewingDocument(updated);
+    }
+    if (viewingDocument?.id === updated.id) {
+      setViewingDocument(updated);
+    }
+  }, [reviewingDocument?.id, viewingDocument?.id]);
+
+  const handleOpenBankWorkbench = useCallback(() => {
+    if (!viewingDocument) return;
+    setReviewingDocument(viewingDocument);
+    setViewingDocument(null);
+    navigate(`/documents/${viewingDocument.id}`, { replace: true });
+  }, [navigate, viewingDocument]);
+
   const handleCloseViewer = () => {
     setViewingDocument(null);
     setLinkedTransaction(null);
@@ -1597,26 +1615,6 @@ const DocumentsPage = () => {
     }
   }, [viewingDocument, t]);
 
-  const handleConfirmBankTransactions = useCallback(async (indices: number[]) => {
-    if (!viewingDocument) return;
-    setConfirmingAction('bank_import');
-    setConfirmResult(null);
-    try {
-      await documentService.confirmBankTransactions(viewingDocument.id, indices);
-      setConfirmResult({ type: 'success', message: t('documents.suggestion.taxDataConfirmed') });
-      aiToast(t('documents.suggestion.taxDataConfirmed'), 'success');
-      useRefreshStore.getState().refreshTransactions();
-      useRefreshStore.getState().refreshDashboard();
-      const updated = await documentService.getDocument(viewingDocument.id);
-      setViewingDocument(updated);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || err?.message || 'Error';
-      setConfirmResult({ type: 'error', message: detail });
-    } finally {
-      setConfirmingAction(null);
-    }
-  }, [viewingDocument, t]);
-
   const handleDownloadDocument = async () => {
     if (!viewingDocument) return;
     try {
@@ -1627,6 +1625,44 @@ const DocumentsPage = () => {
       aiToast(t('documents.downloadFailed', 'Download failed'), 'error');
     }
   };
+
+  const renderGenericDocumentReview = useCallback((document: Document) => {
+    const normalizedType = normalizeDocumentType(document.document_type as string, document);
+
+    if (normalizedType === 'bank_statement') {
+      return (
+        <BankStatementWorkbench
+          document={document}
+          onDocumentUpdated={handleWorkbenchDocumentUpdated}
+          onCancel={handleReviewCancel}
+          onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+          onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+          hasPrevDocument={hasPrevDoc}
+          hasNextDocument={hasNextDoc}
+        />
+      );
+    }
+
+    return (
+      <OCRReview
+        documentId={Number(document.id)}
+        presentationTemplate="generic_review"
+        onConfirm={handleReviewComplete}
+        onCancel={handleReviewCancel}
+        onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+        onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+        hasPrevDocument={hasPrevDoc}
+        hasNextDocument={hasNextDoc}
+      />
+    );
+  }, [
+    handleReviewCancel,
+    handleReviewComplete,
+    handleWorkbenchDocumentUpdated,
+    hasNextDoc,
+    hasPrevDoc,
+    navigateToDocument,
+  ]);
 
   const handleOpenLinkedTransaction = () => {
     if (!viewingDocument?.transaction_id) return;
@@ -1842,17 +1878,7 @@ const DocumentsPage = () => {
               />
             )}
             renderGenericReview={() => (
-              <OCRReview
-                documentId={Number(reviewingDocument.id)}
-
-                presentationTemplate="generic_review"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
+              renderGenericDocumentReview(reviewingDocument)
             )}
             renderTaxImport={() => (
               <OCRReview
@@ -1874,15 +1900,7 @@ const DocumentsPage = () => {
 
     return (
       <div className="documents-page">
-        <OCRReview
-          documentId={Number(reviewingDocument.id)}
-          onConfirm={handleReviewComplete}
-          onCancel={handleReviewCancel}
-          onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-          onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-          hasPrevDocument={hasPrevDoc}
-          hasNextDocument={hasNextDoc}
-        />
+        {renderGenericDocumentReview(reviewingDocument)}
       </div>
     );
   }
@@ -1913,17 +1931,7 @@ const DocumentsPage = () => {
               />
             )}
             renderGenericReview={() => (
-              <OCRReview
-                documentId={Number(viewingDocument.id)}
-
-                presentationTemplate="generic_review"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
+              renderGenericDocumentReview(viewingDocument)
             )}
             renderTaxImport={() => (
               <OCRReview
@@ -1939,6 +1947,14 @@ const DocumentsPage = () => {
               />
             )}
           />
+        </div>
+      );
+    }
+
+    if (normalizeDocumentType(viewingDocument.document_type as string, viewingDocument) === 'bank_statement') {
+      return (
+        <div className="documents-page">
+          {renderGenericDocumentReview(viewingDocument)}
         </div>
       );
     }
@@ -3236,7 +3252,7 @@ const DocumentsPage = () => {
                     onConfirmLoan={handleConfirmLoan}
                     onConfirmLoanRepayment={handleConfirmLoanRepayment}
                     onConfirmTaxData={handleConfirmTaxData}
-                    onConfirmBankTransactions={handleConfirmBankTransactions}
+                    onOpenBankWorkbench={handleOpenBankWorkbench}
                     confirmDisabled={disabled}
                     confirmDisabledReason={reason}
                     documentId={viewingDocument.id}

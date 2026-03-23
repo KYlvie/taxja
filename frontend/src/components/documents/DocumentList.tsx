@@ -406,9 +406,18 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     }
   };
 
+  const isPendingReview = (doc: Document): boolean => {
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    if (doc.ocr_status === 'failed' || doc.ocr_status === 'processing' || !doc.processed_at) {
+      return false;
+    }
+
+    return Boolean(doc.needs_review || (doc.ocr_result && !ocr.confirmed));
+  };
+
   const needsConfirmation = (doc: Document): boolean => {
     const ocr = (doc.ocr_result || {}) as Record<string, any>;
-    return Boolean(doc.processed_at && doc.ocr_result && !ocr.confirmed);
+    return Boolean(isPendingReview(doc) && doc.ocr_result && !ocr.confirmed);
   };
 
   const handleReviewClick = async (doc: Document, event: React.MouseEvent) => {
@@ -507,8 +516,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       return { label: t('documents.status.processing', 'Processing'), tone: 'processing' };
     }
 
-    // Pending confirmation: processed but not confirmed and no transaction yet
-    if (!isConfirmed && !hasTransaction) {
+    if (isPendingReview(doc)) {
       return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
     }
 
@@ -575,7 +583,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       ? t('documents.groups.all')
       : t(`documents.groups.${activeGroup}`);
 
-  const reviewCount = yearFilteredDocuments.filter((document) => document.needs_review).length;
+  const reviewCount = yearFilteredDocuments.filter((document) => isPendingReview(document)).length;
   const totalPages = Math.ceil(total / pageSize);
   const hasActiveFilters = Boolean(
     filters.search || filters.start_date || filters.end_date || filters.needs_review
@@ -584,7 +592,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderGridItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-card ${needsConfirmation(document) ? 'pending-review-row' : ''}`}
+      className={`document-card ${isPendingReview(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-card-top">
@@ -662,7 +670,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderListItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-row ${needsConfirmation(document) ? 'pending-review-row' : ''}`}
+      className={`document-row ${isPendingReview(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-main-cell">
@@ -921,6 +929,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                     <DownloadIcon />
                   )}
                   <span>{t('common.export')}</span>
+                  <span className="export-zip-btn__format" aria-hidden="true">ZIP</span>
                 </button>
                 <Select value={String(pageSize)} onChange={v => { setPageSize(Number(v)); setPage(1); }}
                   aria-label={t('documents.pageSize')} size="sm"

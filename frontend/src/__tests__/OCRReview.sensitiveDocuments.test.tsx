@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -12,6 +12,7 @@ const downloadDocument = vi.fn();
 const retryOcr = vi.fn();
 const confirmTaxData = vi.fn();
 const correctOCR = vi.fn();
+const confirmOCR = vi.fn();
 
 vi.mock('react-i18next', () => ({
   initReactI18next: {
@@ -26,6 +27,9 @@ vi.mock('react-i18next', () => ({
       }
       return key;
     },
+    i18n: {
+      language: 'zh',
+    },
   }),
 }));
 
@@ -37,6 +41,7 @@ vi.mock('../services/documentService', () => ({
     retryOcr: (...args: any[]) => retryOcr(...args),
     confirmTaxData: (...args: any[]) => confirmTaxData(...args),
     correctOCR: (...args: any[]) => correctOCR(...args),
+    confirmOCR: (...args: any[]) => confirmOCR(...args),
   },
 }));
 
@@ -63,8 +68,91 @@ describe('OCRReview sensitive document panels', () => {
     vi.clearAllMocks();
     downloadDocument.mockResolvedValue(new Blob(['pdf']));
     correctOCR.mockResolvedValue({});
+    confirmOCR.mockResolvedValue({});
     global.URL.createObjectURL = vi.fn(() => 'blob:test');
     global.URL.revokeObjectURL = vi.fn();
+  });
+
+  it('shows a confirm action for pending generic review documents', async () => {
+    getDocumentForReview.mockResolvedValueOnce({
+      document: {
+        id: 300,
+        user_id: 7,
+        document_type: 'receipt',
+        file_path: '/tmp/pending-receipt.pdf',
+        file_name: 'pending-receipt.pdf',
+        file_size: 1000,
+        mime_type: 'application/pdf',
+        confidence_score: 0.42,
+        needs_review: true,
+        created_at: '2026-03-20T00:00:00Z',
+        updated_at: '2026-03-20T00:00:00Z',
+        raw_text: '',
+        ocr_result: {},
+      },
+      extracted_data: {
+        amount: 18.5,
+        date: '2026-03-01',
+        merchant: 'Billa',
+        confidence: {},
+      },
+      suggestions: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <OCRReview documentId={300} />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(getDocumentForReview).toHaveBeenCalledWith(300));
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+  });
+
+  it('uses persisted confirmation state from ocr_result for the primary action', async () => {
+    getDocumentForReview.mockResolvedValueOnce({
+      document: {
+        id: 304,
+        user_id: 7,
+        document_type: 'svs_notice',
+        file_path: '/tmp/svs-confirmed.pdf',
+        file_name: 'svs-confirmed.pdf',
+        file_size: 1000,
+        mime_type: 'application/pdf',
+        confidence_score: 0.95,
+        needs_review: false,
+        created_at: '2026-03-20T00:00:00Z',
+        updated_at: '2026-03-20T00:00:00Z',
+        raw_text: '',
+        ocr_result: {
+          confirmed: true,
+          confirmed_at: '2026-03-23T22:35:01.536798',
+          confirmed_by: 46,
+        },
+      },
+      extracted_data: {
+        tax_year: 2024,
+        taxpayer_name: 'Mag. Eva Wimmer',
+        confidence: {},
+      },
+      suggestions: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <OCRReview documentId={304} />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(getDocumentForReview).toHaveBeenCalledWith(304));
+
+    const saveButton = screen.getByRole('button', { name: 'Save' });
+    expect(saveButton).toBeInTheDocument();
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(correctOCR).toHaveBeenCalledTimes(1));
+    expect(confirmOCR).not.toHaveBeenCalled();
   });
 
   it('renders borrower-only role controls for loan contracts', async () => {
@@ -324,7 +412,7 @@ describe('OCRReview sensitive document panels', () => {
     await waitFor(() => expect(getDocumentForReview).toHaveBeenCalledWith(305));
 
     fireEvent.click(screen.getByRole('button', { name: 'transactions.types.income' }));
-    fireEvent.click(screen.getByRole('button', { name: 'documents.review.confirmAndCreate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => expect(correctOCR).toHaveBeenCalledTimes(1));
     expect(correctOCR).toHaveBeenCalledWith(
@@ -338,7 +426,7 @@ describe('OCRReview sensitive document panels', () => {
     );
   });
 
-  it('uses cancel to return from edit mode to readonly and discard unsaved receipt transaction-type changes', async () => {
+  it('does not save receipt transaction-type changes when cancel is pressed', async () => {
     getDocumentForReview.mockResolvedValueOnce({
       document: {
         id: 306,
@@ -369,7 +457,7 @@ describe('OCRReview sensitive document panels', () => {
       suggestions: [],
     });
 
-    const { container } = render(
+    render(
       <MemoryRouter>
         <OCRReview documentId={306} />
       </MemoryRouter>
@@ -380,28 +468,6 @@ describe('OCRReview sensitive document panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'transactions.types.income' }));
     fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
 
-    const actionBar = container.querySelector('.review-actions');
-    expect(actionBar).not.toBeNull();
-    expect(actionBar?.textContent).toContain('Edit');
-    expect(actionBar?.textContent).not.toContain('documents.review.confirmAndCreate');
-
-    fireEvent.click(within(actionBar as HTMLElement).getByRole('button', { name: 'Edit' }));
-
-    const updatedActionBar = container.querySelector('.review-actions');
-    expect(updatedActionBar).not.toBeNull();
-    fireEvent.click(
-      within(updatedActionBar as HTMLElement).getByRole('button', {
-        name: 'documents.review.confirmAndCreate',
-      }),
-    );
-
-    await waitFor(() => expect(correctOCR).toHaveBeenCalledTimes(1));
-    expect(correctOCR).toHaveBeenCalledWith(
-      306,
-      expect.objectContaining({
-        _document_type: 'receipt',
-        _transaction_type: 'expense',
-      })
-    );
+    expect(correctOCR).not.toHaveBeenCalled();
   });
 });

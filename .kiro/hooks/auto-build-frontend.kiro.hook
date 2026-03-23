@@ -16,5 +16,7 @@
     "type": "runCommand",
     "command": "cd frontend && npx vite build",
     "timeout": 120
-  }
+  },
+  "workspaceFolderName": "kiro",
+  "shortName": "auto-build-frontend"
 }

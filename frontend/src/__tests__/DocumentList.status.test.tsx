@@ -13,12 +13,12 @@ const { getDocuments } = vi.hoisted(() => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      options?.defaultValue ??
+    t: (key: string, options?: string | { defaultValue?: string }) =>
+      (typeof options === 'string' ? options : options?.defaultValue) ??
       (
         {
-          'documents.statusTransactionCreated': '已生成交易',
-          'documents.statusReady': '已识别',
+          'documents.status.transactionCreated': '已生成交易',
+          'documents.status.recognized': '已识别',
           'documents.groups.all': '全部文档',
           'documents.groups.expense': '票据发票',
           'documents.groups.employment': '工资与雇佣',
@@ -31,7 +31,7 @@ vi.mock('react-i18next', () => ({
           'documents.groups.other': '其他',
           'documents.list.name': '文件',
           'documents.list.type': '分类',
-          'documents.list.date': '日期',
+          'documents.list.uploadDate': '日期',
           'documents.list.size': '大小',
           'documents.list.confidence': '识别可信度',
           'documents.list.status': '状态',
@@ -58,8 +58,9 @@ vi.mock('../services/documentService', () => ({
 }));
 
 vi.mock('../stores/aiAdvisorStore', () => ({
-  useAIAdvisorStore: (selector: (state: { pushMessage: ReturnType<typeof vi.fn> }) => unknown) =>
-    selector({ pushMessage: vi.fn() }),
+  useAIAdvisorStore: (
+    selector: (state: { pushMessage: ReturnType<typeof vi.fn> }) => unknown
+  ) => selector({ pushMessage: vi.fn() }),
 }));
 
 vi.mock('../mobile/files', () => ({
@@ -93,8 +94,11 @@ describe('DocumentList status', () => {
           confidence_score: 1,
           needs_review: false,
           transaction_id: 1151,
+          ocr_result: { confirmed: true },
+          ocr_status: 'completed',
           created_at: '2026-03-18T02:09:54.000Z',
           updated_at: '2026-03-18T02:09:54.000Z',
+          processed_at: '2026-03-18T02:09:54.000Z',
         },
       ],
       total: 1,
@@ -107,9 +111,9 @@ describe('DocumentList status', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('已生成交易')).toBeInTheDocument();
+      expect(screen.getByText('Transaction created')).toBeInTheDocument();
     });
 
-    expect(screen.queryByText('已识别')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recognized')).not.toBeInTheDocument();
   });
 });

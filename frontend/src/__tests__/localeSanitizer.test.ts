@@ -32,6 +32,22 @@ const getValue = (value: Record<string, unknown>, key: string): unknown =>
     return (current as Record<string, unknown>)[segment];
   }, value);
 
+const collectStringValues = (value: unknown): string[] => {
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectStringValues);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value).flatMap(collectStringValues);
+  }
+
+  return [];
+};
+
 describe('localeSanitizer', () => {
   it('repairs common cp1252 control-character corruption', () => {
     expect(repairMojibakeText('Valeur du b\u00e2timent (\u0080)')).toBe('Valeur du b\u00e2timent (\u20ac)');
@@ -56,6 +72,12 @@ describe('localeSanitizer', () => {
       'tour.taxTools.employer.message',
       'tour.taxTools.audit.title',
       'tour.taxTools.audit.message',
+      'tour.taxTools.assetReport.title',
+      'tour.taxTools.assetReport.message',
+      'transactions.exportCsv',
+      'transactions.exportPdf',
+      'classificationRules.searchPlaceholder',
+      'classificationRules.searchDeductPlaceholder',
     ];
 
     for (const locale of Object.values(locales)) {
@@ -65,12 +87,24 @@ describe('localeSanitizer', () => {
     }
   });
 
+  it('does not leave common mojibake markers in sanitized locales', () => {
+    const mojibakePattern = /(Ã|Â|â€|â€“|â€”|â€¦|�)/;
+
+    for (const [language, locale] of Object.entries(locales)) {
+      for (const text of collectStringValues(locale)) {
+        expect(text, `${language} locale still contains mojibake: ${text}`).not.toMatch(mojibakePattern);
+      }
+    }
+  });
+
   it('returns repaired and patched values after sanitization', () => {
-    expect(getValue(locales.de, 'properties.purchasePrice')).toBe('Kaufpreis (€)');
+    expect(getValue(locales.de, 'properties.purchasePrice')).toBe('Kaufpreis (\u20ac)');
+    expect(getValue(locales.fr, 'properties.purchasePrice')).toBe("Prix d'achat (\u20ac)");
     expect(getValue(locales.fr, 'liabilities.documents.pendingHint')).toBe(
       'Les contrats confirm\u00e9s deviennent automatiquement des dettes. Les contrats encore en r\u00e9vision ou avec des champs manquants restent ici jusqu\u2019\u00e0 ce que vous les terminiez dans Documents.'
     );
     expect(getValue(locales.zh, 'tour.taxTools.employer.title')).toBe('\u96c7\u4e3b\u7a0e\u52a1\u8bc1\u660e');
     expect(getValue(locales.pl, 'tour.taxTools.audit.title')).toBe('Lista kontrolna audytu');
+    expect(getValue(locales.tr, 'transactions.exportCsv')).toBe('CSV olarak disa aktar');
   });
 });

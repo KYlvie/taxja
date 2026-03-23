@@ -29,7 +29,7 @@ export interface SuggestionCardFactoryProps extends SuggestionCardProps {
   onConfirmLoan?: () => void;
   onConfirmLoanRepayment?: () => void;
   onConfirmTaxData?: () => void;
-  onConfirmBankTransactions?: (indices: number[]) => void;
+  onOpenBankWorkbench?: () => void;
 }
 
 /** Map of suggestion type → card component for non-generic types */
@@ -82,9 +82,8 @@ const SuggestionCardFactory: React.FC<SuggestionCardFactoryProps> = (props) => {
   // Bank statement — special card with transaction selection
   if (type === 'import_bank_statement') {
     return <KontoauszugSuggestionCard {...props}
-      onConfirm={props.onConfirmTaxData || props.onConfirm}
-      onConfirmBankTransactions={props.onConfirmBankTransactions}
-      confirmActionKey="bank_import" />;
+      onConfirm={props.onOpenBankWorkbench || props.onConfirm}
+      confirmActionKey="bank_workbench" />;
   }
 
   // Tax form types — specific cards

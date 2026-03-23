@@ -65,6 +65,8 @@ class TransactionBase(BaseModel):
     vat_rate: Optional[Decimal] = Field(None, ge=0, le=1, description="VAT rate (e.g., 0.20 for 20%)")
     vat_amount: Optional[Decimal] = Field(None, ge=0, description="VAT amount")
     document_id: Optional[int] = Field(None, description="Associated document ID")
+    bank_reconciled: bool = Field(default=False, description="Whether this transaction was reconciled against a bank statement")
+    bank_reconciled_at: Optional[datetime] = Field(None, description="When the transaction was reconciled against a bank statement")
     
     @field_validator('type')
     @classmethod
