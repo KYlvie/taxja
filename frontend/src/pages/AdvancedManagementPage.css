@@ -24,8 +24,9 @@
 
 .advanced-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
+  align-items: stretch;
 }
 
 .advanced-card {
@@ -43,9 +44,10 @@
 .advanced-card:nth-child(4) { animation-delay: 240ms; }
 
 .advanced-card-icon {
-  font-size: 2.4rem;
-  line-height: 1;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
 }
 
 .advanced-card h2 {
@@ -78,7 +80,6 @@
 
 @media (max-width: 900px) {
   .advanced-grid {
-    grid-template-columns: 1fr;
     max-width: 420px;
     margin: 0 auto;
   }

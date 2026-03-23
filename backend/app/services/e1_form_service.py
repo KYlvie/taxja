@@ -14,8 +14,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.user import User, UserType
 from app.models.property import Property, PropertyStatus
+from app.services.posting_line_utils import iter_posting_records, sum_postings
 
 
 def generate_tax_form_data(
@@ -49,51 +51,48 @@ def generate_tax_form_data(
 
 
 def _sum_by_income_cat(transactions: list, cat: IncomeCategory) -> Decimal:
-    return sum(
-        (t.amount or Decimal("0"))
-        for t in transactions
-        if t.type == TransactionType.INCOME and t.income_category == cat
+    return sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.INCOME},
+        categories={cat.value if hasattr(cat, "value") else str(cat)},
+        include_private_use=False,
     )
 
 
 def _sum_by_expense_cat(transactions: list, cats: list, deductible_only: bool = False) -> Decimal:
-    """Sum expenses by category, using line-item-level amounts when available."""
-    total = Decimal("0")
-    for t in transactions:
-        if t.type != TransactionType.EXPENSE:
-            continue
-        cat_values = {c.value if hasattr(c, "value") else str(c) for c in cats}
-        if t.has_line_items:
-            for li in t.line_items:
-                li_cat = li.category or "other"
-                if li_cat not in cat_values:
-                    continue
-                if deductible_only and not li.is_deductible:
-                    continue
-                total += li.amount * li.quantity
-        else:
-            if t.expense_category not in cats:
-                continue
-            if deductible_only and not t.is_deductible:
-                continue
-            total += t.amount or Decimal("0")
-    return total
+    """Sum expense postings by category using canonical line items."""
+    return sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        categories={c.value if hasattr(c, "value") else str(c) for c in cats},
+        deductible_only=deductible_only,
+        include_private_use=False,
+    )
 
 
 def _sum_deductible_expenses(transactions: list) -> Decimal:
-    """Sum all deductible expenses using line-item-level deductibility."""
-    return sum(
-        (t.deductible_amount or Decimal("0"))
-        for t in transactions
-        if t.type == TransactionType.EXPENSE
+    """Sum all deductible expense postings using canonical line items."""
+    return sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        deductible_only=True,
+        include_private_use=False,
     )
 
 
 def _sum_vat(transactions: list, tx_type: TransactionType) -> Decimal:
+    posting_types = (
+        {LineItemPostingType.INCOME}
+        if tx_type == TransactionType.INCOME
+        else {LineItemPostingType.EXPENSE, LineItemPostingType.ASSET_ACQUISITION}
+    )
     return sum(
-        (t.vat_amount or Decimal("0"))
-        for t in transactions
-        if t.type == tx_type and t.vat_amount
+        (
+            record.vat_amount
+            for record in iter_posting_records(transactions, include_private_use=False)
+            if record.posting_type in posting_types and record.vat_amount
+        ),
+        Decimal("0"),
     )
 
 
@@ -802,10 +801,10 @@ def _generate_k1_form(
     from app.services.koest_calculator import KoEstCalculator
 
     # All income is corporate revenue for GmbH
-    total_revenue = sum(
-        (t.amount or Decimal("0"))
-        for t in transactions
-        if t.type == TransactionType.INCOME
+    total_revenue = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.INCOME},
+        include_private_use=False,
     )
     total_expenses = _sum_deductible_expenses(transactions)
 

@@ -1,7 +1,10 @@
 """API endpoints for recurring transactions"""
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import get_current_user, get_db
 from app.models.user import User
@@ -56,8 +59,6 @@ def list_recurring_transactions(
     
     # Convert ORM objects to response models, resolving source document IDs
     # Use direct queries to avoid relationship loading issues with encrypted fields
-    import logging
-    logger = logging.getLogger(__name__)
     from app.models.property import Property
     from app.models.property_loan import PropertyLoan
 
@@ -236,6 +237,7 @@ def create_recurring_transaction(
         recurring_type=data.recurring_type,
         property_id=data.property_id,
         loan_id=data.loan_id,
+        liability_id=data.liability_id,
         description=data.description,
         amount=data.amount,
         transaction_type=data.transaction_type,
@@ -270,12 +272,9 @@ def update_recurring_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Update a recurring transaction. If end_date is set in the past, deactivate and delete future transactions."""
-    import logging
     from datetime import date as date_type
     from sqlalchemy import or_
     from app.models.transaction import Transaction
-
-    logger = logging.getLogger(__name__)
 
     recurring = db.query(RecurringTransaction).filter(
         RecurringTransaction.id == recurring_id,

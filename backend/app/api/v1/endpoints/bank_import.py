@@ -4,10 +4,14 @@ Bank Import API Endpoints
 Endpoints for importing transactions from bank statements.
 """
 
+import logging
 from fastapi import APIRouter, Depends, Response, UploadFile, File, Form, HTTPException, status
 from typing import Optional
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
+from app.core.error_messages import get_error_message
 from app.services.bank_import_service import BankImportService, ImportFormat
 from app.services.csv_parser import BankFormat
 from app.services.credit_service import CreditService, InsufficientCreditsError
@@ -51,17 +55,18 @@ async def import_transactions(
     """
     
     # Validate file format
+    language = getattr(current_user, 'language', 'de') or 'de'
     if import_format == ImportFormat.CSV:
         if not file.filename.endswith(('.csv', '.CSV')):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must have .csv extension for CSV format"
+                detail=get_error_message("file_must_have_csv_extension", language)
             )
     elif import_format == ImportFormat.MT940:
         if not file.filename.endswith(('.mt940', '.MT940', '.sta', '.STA', '.txt', '.TXT')):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must have .mt940, .sta, or .txt extension for MT940 format"
+                detail=get_error_message("file_must_have_mt940_extension", language)
             )
     
     # --- Credit deduction ---
@@ -86,16 +91,18 @@ async def import_transactions(
         try:
             file_content = content.decode('iso-8859-1')
         except Exception as e:
+            logger.exception("Failed to decode uploaded bank file")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to decode file: {str(e)}"
+                detail="file_decode_error"
             )
     except Exception as e:
+        logger.exception("Failed to read uploaded bank file")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to read file: {str(e)}"
+            detail="import_failed"
         )
-    
+
     # Import transactions
     import_service = BankImportService(db=db)
     
@@ -110,9 +117,10 @@ async def import_transactions(
             bank_format=bank_format,
         )
     except Exception as e:
+        logger.exception("Bank import failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Import failed: {str(e)}"
+            detail="import_failed"
         )
     
     response.headers["X-Credits-Remaining"] = str(
@@ -154,16 +162,18 @@ async def preview_import(
         try:
             file_content = content.decode('iso-8859-1')
         except Exception as e:
+            logger.exception("Failed to decode uploaded bank file for preview")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to decode file: {str(e)}"
+                detail="file_decode_error"
             )
     except Exception as e:
+        logger.exception("Failed to read uploaded bank file for preview")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to read file: {str(e)}"
+            detail="import_failed"
         )
-    
+
     # Preview import
     import_service = BankImportService(db=None)
     
@@ -174,9 +184,10 @@ async def preview_import(
             bank_format=bank_format,
         )
     except Exception as e:
+        logger.exception("Bank import preview failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Preview failed: {str(e)}"
+            detail="import_failed"
         )
     
     if not preview["valid"]:

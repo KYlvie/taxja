@@ -25,6 +25,7 @@ from app.services.document_pipeline_orchestrator import (
     OCR_TO_DB_TYPE_MAP,
     CONFIRMATION_REQUIRED_TYPES,
 )
+from app.models.document import DocumentType as DBDocumentType
 from app.services.document_classifier import DocumentType as OCRDocumentType
 from app.services.ocr_engine import OCREngine, OCRResult
 
@@ -73,9 +74,83 @@ def _make_document(
     return doc
 
 
+@patch("sqlalchemy.orm.attributes.flag_modified")
+def test_bank_statement_tax_form_suggestion_persists_direction_metadata_without_polluting_payload(
+    _mock_flag_modified,
+):
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+    document = _make_document(
+        file_name="kontoauszug.pdf",
+        doc_type=DBDocumentType.BANK_STATEMENT,
+        ocr_result={
+            "bank_name": "Bank Austria",
+            "iban": "AT421200051588776655",
+            "_seed_eval": {"sample_key": "bank-statement"},
+        },
+    )
+    result = PipelineResult(document_id=1, raw_text="Kontoauszug Soll Haben")
+
+    with patch.object(
+        orchestrator,
+        "_build_bank_statement_direction_metadata",
+        return_value={
+            "document_transaction_direction": "unknown",
+            "document_transaction_direction_source": "statement_mixed_flow",
+            "document_transaction_direction_confidence": 0.2,
+            "transaction_direction_resolution": {
+                "candidate": "unknown",
+                "gate_enabled": False,
+            },
+            "commercial_document_semantics": "unknown",
+            "is_reversal": False,
+        },
+    ):
+        suggestion = orchestrator._build_tax_form_suggestion(
+            document,
+            DBDocumentType.BANK_STATEMENT,
+            result,
+        )
+
+    assert suggestion is not None
+    assert suggestion["type"] == "import_bank_statement"
+    assert suggestion["data"]["bank_name"] == "Bank Austria"
+    assert "document_transaction_direction" not in suggestion["data"]
+    assert document.ocr_result["document_transaction_direction"] == "unknown"
+    assert document.ocr_result["transaction_direction_resolution"]["gate_enabled"] is False
+
+
 # ---------------------------------------------------------------------------
 # Classification tests (unchanged — still valid)
 # ---------------------------------------------------------------------------
+
+@patch("app.services.storage_service.StorageService")
+def test_stage_ocr_passes_document_provider_override_to_engine(mock_storage_class):
+    mock_storage = mock_storage_class.return_value
+    mock_storage.download_file.return_value = b"fake-image"
+
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+    orchestrator.ocr_engine = MagicMock()
+    orchestrator._log_audit = MagicMock()
+
+    expected_result = _make_ocr_result()
+    orchestrator.ocr_engine.process_document.return_value = expected_result
+
+    document = _make_document(
+        ocr_result={"_pipeline": {"ocr_provider_override": "anthropic"}}
+    )
+    result = PipelineResult(document_id=1)
+
+    actual = orchestrator._stage_ocr(document, result)
+
+    assert actual is expected_result
+    orchestrator.ocr_engine.process_document.assert_called_once_with(
+        b"fake-image",
+        mime_type=document.mime_type,
+        vision_provider_preference="anthropic",
+    )
+
 
 class TestClassification:
     """Test multi-signal classification arbitration."""
@@ -126,6 +201,20 @@ class TestClassification:
             result = orchestrator._classify_by_filename(fname)
             assert result == DBDocumentType.RENTAL_CONTRACT, f"Failed for {fname}"
 
+    def test_filename_loan_variants(self):
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = MagicMock()
+        from app.models.document import DocumentType as DBDocumentType
+
+        for fname in [
+            "kreditvertrag.pdf",
+            "B04_Kredit_Zinsbescheinigung.pdf",
+            "wohnbaukredit_2024.pdf",
+            "darlehen_erste_bank.pdf",
+        ]:
+            result = orchestrator._classify_by_filename(fname)
+            assert result == DBDocumentType.LOAN_CONTRACT, f"Failed for {fname}"
+
     def test_filename_no_match(self):
         orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
         orchestrator.db = MagicMock()
@@ -144,13 +233,42 @@ class TestClassification:
         document = _make_document(file_name="IMG_20250115.jpg")
         ocr_result = _make_ocr_result(
             doc_type=OCRDocumentType.UNKNOWN, confidence=0.2,
-            raw_text="BILLA Supermarkt Summe EUR 42.50"
+            raw_text=(
+                "BILLA Supermarkt Wien Filiale 123 Einkaufsbeleg "
+                "Summe EUR 42.50 MwSt 3.86 Kartenzahlung Danke fuer Ihren Einkauf"
+            )
         )
         result = PipelineResult(document_id=1)
 
         db_type = orchestrator._stage_classify(document, ocr_result, result)
         assert db_type == DBDocumentType.RECEIPT
         assert result.classification.method == "llm"
+        mock_llm.assert_called_once()
+
+    def test_keyword_override_when_loan_terms_present(self):
+        """Loan-specific OCR text should promote OTHER to LOAN_CONTRACT."""
+        db = MagicMock()
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = db
+
+        document = _make_document(file_name="scan_loan.pdf")
+        ocr_result = _make_ocr_result(
+            doc_type=OCRDocumentType.UNKNOWN,
+            confidence=0.21,
+            raw_text=(
+                "Erste Bank Kreditkonto 515-112233 Kreditnehmer: Mag. Thomas Gruber "
+                "Wohnbaukredit ETW Thenneberg Zinsaufwand 2024 EUR 3.840,00 "
+                "Tilgung 2024 EUR 4.392,00"
+            ),
+        )
+        result = PipelineResult(document_id=1)
+
+        from app.models.document import DocumentType as DBDocumentType
+        db_type = orchestrator._stage_classify(document, ocr_result, result)
+
+        assert db_type == DBDocumentType.LOAN_CONTRACT
+        assert result.classification.method == "keyword"
+        assert result.classification.confidence >= 0.62
 
     def test_ocr_type_mapping(self):
         from app.models.document import DocumentType as DBDocumentType
@@ -1083,6 +1201,45 @@ class TestKreditvertragSuggestion:
 
         assert suggestion["data"]["matched_property_id"] is None
 
+    def test_property_address_fallback_matches_existing_property(self):
+        """Loan suggestions should link a property by OCR address when upload context is absent."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
+
+        mock_property = MagicMock()
+        mock_property.id = 84
+        mock_property.address = "Argentinierstrasse 21, 1234 Wien"
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+
+        doc = _make_document(
+            file_name="kreditvertrag.pdf",
+            user_id=1,
+            ocr_result={
+                "loan_amount": 200000,
+                "interest_rate": 3.5,
+                "property_address": "Argentinierstrasse 21, 1234 Wien",
+            },
+        )
+        result = PipelineResult(document_id=1)
+
+        with patch("app.services.address_matcher.AddressMatcher") as matcher_cls:
+            matcher = matcher_cls.return_value
+            matcher.match_address.return_value = [
+                SimpleNamespace(property=mock_property, confidence=0.92)
+            ]
+
+            out = _build_kreditvertrag_suggestion(db, doc, result)
+
+        suggestion = out["import_suggestion"]
+        assert suggestion["type"] == "create_loan"
+        assert suggestion["data"]["matched_property_id"] == "84"
+        assert suggestion["data"]["matched_property_address"] == "Argentinierstrasse 21, 1234 Wien"
+        assert suggestion["data"]["no_property_match"] is False
+
     def test_invalid_ocr_result_returns_none(self):
         """Non-dict ocr_result returns None suggestion."""
         from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
@@ -1119,5 +1276,37 @@ class TestKreditvertragStageDispatch:
         orchestrator._stage_suggest(document, DBDocumentType.LOAN_CONTRACT, ocr_result, result)
 
         orchestrator._build_kreditvertrag_suggestion.assert_called_once_with(document, result)
+
+    def test_loan_contract_ignores_transaction_match_preemption(self):
+        """Loan contracts should not be hijacked by generic transaction dedup matches."""
+        from app.models.document import DocumentType as DBDocumentType
+
+        db = MagicMock()
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = db
+        orchestrator._log_audit = MagicMock()
+        orchestrator._get_processing_decision_service = MagicMock()
+        orchestrator._get_processing_decision_service.return_value.build_phase_two_decision.return_value = MagicMock(
+            primary_actions=["loan_contract"],
+            secondary_actions=[],
+            model_dump=lambda mode="json": {"primary_actions": ["loan_contract"], "secondary_actions": []},
+        )
+
+        document = _make_document(
+            file_name="B04_Kredit_Zinsbescheinigung.pdf",
+            ocr_result={"matched_existing": {"type": "transaction", "id": 99, "reason": "old transaction match"}},
+        )
+        result = PipelineResult(document_id=1)
+        ocr_result = _make_ocr_result(
+            doc_type=OCRDocumentType.UNKNOWN,
+            confidence=0.2,
+            extracted_data={"loan_amount": 250000, "interest_rate": 3.1},
+        )
+        orchestrator._build_kreditvertrag_suggestion = MagicMock(return_value={"type": "create_loan"})
+
+        orchestrator._stage_suggest(document, DBDocumentType.LOAN_CONTRACT, ocr_result, result)
+
+        orchestrator._build_kreditvertrag_suggestion.assert_called_once_with(document, result)
+        assert not any(s.get("type") == "link_to_existing" for s in result.suggestions)
         assert result.stage_reached == PipelineStage.SUGGEST
         assert len(result.suggestions) == 1

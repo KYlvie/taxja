@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
+import DateInput from '../common/DateInput';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PaymentEventLog.css';
 
 interface PaymentEvent {
@@ -21,7 +24,7 @@ interface Filters {
 }
 
 const PaymentEventLog: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [events, setEvents] = useState<PaymentEvent[]>([]);
   const [expandedEvent, setExpandedEvent] = useState<number | null>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -117,17 +120,15 @@ const PaymentEventLog: React.FC = () => {
       <div className="filters">
         <div className="filter-group">
           <label>{t('admin.payment_events.event_type')}</label>
-          <select
-            value={filters.event_type}
-            onChange={(e) => handleFilterChange('event_type', e.target.value)}
-          >
-            <option value="">{t('admin.filters.all')}</option>
-            <option value="checkout.session.completed">Checkout Completed</option>
-            <option value="invoice.payment_succeeded">Payment Succeeded</option>
-            <option value="invoice.payment_failed">Payment Failed</option>
-            <option value="customer.subscription.updated">Subscription Updated</option>
-            <option value="customer.subscription.deleted">Subscription Deleted</option>
-          </select>
+          <Select value={filters.event_type} onChange={v => handleFilterChange('event_type', v)}
+            placeholder={t('admin.filters.all')} size="sm"
+            options={[
+              { value: 'checkout.session.completed', label: 'Checkout Completed' },
+              { value: 'invoice.payment_succeeded', label: 'Payment Succeeded' },
+              { value: 'invoice.payment_failed', label: 'Payment Failed' },
+              { value: 'customer.subscription.updated', label: 'Subscription Updated' },
+              { value: 'customer.subscription.deleted', label: 'Subscription Deleted' },
+            ]} />
         </div>
 
         <div className="filter-group">
@@ -142,19 +143,21 @@ const PaymentEventLog: React.FC = () => {
 
         <div className="filter-group">
           <label>{t('admin.payment_events.date_from')}</label>
-          <input
-            type="date"
+          <DateInput
             value={filters.date_from}
-            onChange={(e) => handleFilterChange('date_from', e.target.value)}
+            onChange={(val) => handleFilterChange('date_from', val)}
+            locale={getLocaleForLanguage(i18n.language)}
+            todayLabel={String(t('common.today', 'Today'))}
           />
         </div>
 
         <div className="filter-group">
           <label>{t('admin.payment_events.date_to')}</label>
-          <input
-            type="date"
+          <DateInput
             value={filters.date_to}
-            onChange={(e) => handleFilterChange('date_to', e.target.value)}
+            onChange={(val) => handleFilterChange('date_to', val)}
+            locale={getLocaleForLanguage(i18n.language)}
+            todayLabel={String(t('common.today', 'Today'))}
           />
         </div>
       </div>

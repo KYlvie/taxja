@@ -148,6 +148,34 @@ class UserClassificationService:
         )
         return rule
 
+    def delete_rules_for_description(
+        self,
+        user_id: int,
+        description: str,
+        *,
+        txn_type: Optional[str] = None,
+        exclude_txn_type: Optional[str] = None,
+    ) -> int:
+        """Delete rules for one normalized description with optional type filters."""
+        norm = normalize_description(description)
+        if not norm:
+            return 0
+
+        query = self.db.query(UserClassificationRule).filter(
+            UserClassificationRule.user_id == user_id,
+            UserClassificationRule.normalized_description == norm,
+        )
+
+        if txn_type is not None:
+            query = query.filter(UserClassificationRule.txn_type == txn_type)
+        if exclude_txn_type is not None:
+            query = query.filter(UserClassificationRule.txn_type != exclude_txn_type)
+
+        deleted = query.delete(synchronize_session=False)
+        if deleted:
+            self.db.flush()
+        return deleted
+
     def delete_rule(self, user_id: int, rule_id: int) -> bool:
         """Delete a specific user rule."""
         deleted = (

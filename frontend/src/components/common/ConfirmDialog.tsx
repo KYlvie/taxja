@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Bot, CheckCircle2, Info, TriangleAlert, Trash2, type LucideIcon } from 'lucide-react';
+import FuturisticIcon, { type FuturisticIconTone } from './FuturisticIcon';
 import './ConfirmDialog.css';
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
   title?: string;
   message: string;
+  messageNode?: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   variant?: 'info' | 'warning' | 'danger' | 'success';
@@ -18,6 +21,7 @@ const ConfirmDialog = ({
   isOpen,
   title,
   message,
+  messageNode,
   confirmText,
   cancelText,
   variant = 'info',
@@ -66,11 +70,11 @@ const ConfirmDialog = ({
 
   if (!isOpen) return null;
 
-  const variantEmoji: Record<string, string> = {
-    info: '💡',
-    warning: '⚠️',
-    danger: '🗑️',
-    success: '✅',
+  const variantIcon: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+    info: { icon: Info, tone: 'violet' },
+    warning: { icon: TriangleAlert, tone: 'amber' },
+    danger: { icon: Trash2, tone: 'rose' },
+    success: { icon: CheckCircle2, tone: 'emerald' },
   };
 
   const btnClass = 'cfd-btn cfd-btn--' + variant;
@@ -81,12 +85,14 @@ const ConfirmDialog = ({
         {/* AI Assistant header */}
         <div className="cfd-header">
           <div className="cfd-avatar">
-            <span className="cfd-avatar-icon">🤖</span>
+            <span className="cfd-avatar-icon">
+              <FuturisticIcon icon={Bot} tone="violet" size="sm" />
+            </span>
             <span className="cfd-avatar-pulse" />
           </div>
           <div className="cfd-header-info">
             <span className="cfd-assistant-name">Taxja AI</span>
-            <span className="cfd-status">{isTyping ? t('ai.typing', '正在输入...') : t('ai.online', '在线')}</span>
+            <span className="cfd-status">{isTyping ? t('ai.typing', 'Typing...') : t('ai.online', 'Online')}</span>
           </div>
         </div>
 
@@ -94,7 +100,9 @@ const ConfirmDialog = ({
         <div className="cfd-chat">
           {showMessage && (
             <div className="cfd-bubble-row">
-              <div className="cfd-bubble-avatar">🤖</div>
+              <div className="cfd-bubble-avatar">
+                <FuturisticIcon icon={Bot} tone="violet" size="xs" />
+              </div>
               <div className={'cfd-bubble cfd-bubble--' + variant}>
                 {isTyping ? (
                   <div className="cfd-typing-dots">
@@ -104,10 +112,15 @@ const ConfirmDialog = ({
                   <>
                     {title && (
                       <div className="cfd-bubble-title">
-                        {variantEmoji[variant]} {title}
+                        <FuturisticIcon icon={variantIcon[variant].icon} tone={variantIcon[variant].tone} size="xs" /> {title}
                       </div>
                     )}
-                    <div className="cfd-bubble-text">{typedText}</div>
+                    <div className="cfd-bubble-text">
+                      {typedText}
+                      {messageNode && typedText.length >= message.length && (
+                        <div className="cfd-bubble-extra" style={{ marginTop: '8px' }}>{messageNode}</div>
+                      )}
+                    </div>
                   </>
                 )}
               </div>

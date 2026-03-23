@@ -61,6 +61,8 @@ class OrchestratorResponse:
     intent: UserIntent
     data: Optional[Dict[str, Any]] = None  # structured payload (calculations, etc.)
     suggestions: Optional[List[str]] = None  # follow-up suggestions
+    show_disclaimer: bool = False  # whether frontend should show tax disclaimer
+    source_tier: Optional[str] = None  # rag | llm | lightweight | rule_based
 
 
 # ---------------------------------------------------------------------------
@@ -286,20 +288,44 @@ def _extract_numeric_params(message: str) -> Dict[str, Any]:
     """Extract monetary amounts and year from message text."""
     params: Dict[str, Any] = {}
 
-    # Extract amounts like €50000, 50.000€, 50000 Euro, etc.
+    # Extract amounts like €50000, 50.000€, 50000 Euro, 12万欧, etc.
     amount_patterns = [
         r"€\s?([\d.,]+)",
         r"([\d.,]+)\s?€",
-        r"([\d.,]+)\s?(?:euro|EUR)",
-        r"(?:einkommen|income|收入|umsatz|turnover|营业额|gehalt|salary|工资)[:\s]*([\d.,]+)",
+        r"([\d.,]+)\s?(?:euro|EUR|欧元|欧)",
+        r"([\d.,]+)\s?万\s?(?:欧元|欧|€|euro|EUR)",
+        r"(?:einkommen|income|收入|umsatz|turnover|营业额|gehalt|salary|工资|税前)[:\s]*([\d.,]+)",
     ]
+    wan_pattern = re.compile(r"([\d.,]+)\s?万", re.IGNORECASE)
     amounts = []
     for pat in amount_patterns:
         for m in re.finditer(pat, message, re.IGNORECASE):
             raw = m.group(1) if m.group(1) else m.group(0)
             raw = _normalize_number(raw)
             try:
-                amounts.append(float(raw))
+                val = float(raw)
+                # Check if this was a 万 (10k) pattern
+                if "万" in pat:
+                    val *= 10000
+                amounts.append(val)
+            except ValueError:
+                pass
+    # Fallback: detect 万 multiplier in standalone numbers (e.g. "7万")
+    if not amounts:
+        for m in wan_pattern.finditer(message):
+            raw = _normalize_number(m.group(1))
+            try:
+                amounts.append(float(raw) * 10000)
+            except ValueError:
+                pass
+    # Last resort: find any standalone large number
+    if not amounts:
+        for m in re.finditer(r"\b(\d[\d.,]{2,})\b", message):
+            raw = _normalize_number(m.group(1))
+            try:
+                val = float(raw)
+                if val >= 100:
+                    amounts.append(val)
             except ValueError:
                 pass
     if amounts:
@@ -364,12 +390,12 @@ def _llm_intent_fallback(message: str) -> Optional[IntentResult]:
     """
     Use a cheap LLM call to classify intent when regex patterns fail.
 
-    Results are cached by MD5 of the first 100 characters of the message
+    Results are cached by SHA-256 of the first 100 characters of the message
     to avoid collisions between semantically different questions while
     still deduplicating identical or near-identical inputs.
     """
     import hashlib
-    cache_key = hashlib.md5(message[:100].lower().strip().encode()).hexdigest()[:16]
+    cache_key = hashlib.sha256(message[:100].lower().strip().encode()).hexdigest()[:16]
 
     if cache_key in _intent_cache:
         return _intent_cache[cache_key]
@@ -669,6 +695,48 @@ def _format_income_tax(data: Dict, language: str) -> str:
             f"• 有效税率：{rate:.1f}%\n"
             f"• 净收入：€{net:,.2f}"
         ),
+        "fr": (
+            f"📊 Calcul de l'impôt sur le revenu {year} :\n"
+            f"• Revenu brut : €{gross:,.2f}\n"
+            f"• Impôt sur le revenu : €{total:,.2f}\n"
+            f"• Taux effectif : {rate:.1f}%\n"
+            f"• Revenu net : €{net:,.2f}"
+        ),
+        "ru": (
+            f"📊 Расчёт подоходного налога {year}:\n"
+            f"• Валовой доход: €{gross:,.2f}\n"
+            f"• Подоходный налог: €{total:,.2f}\n"
+            f"• Эффективная ставка: {rate:.1f}%\n"
+            f"• Чистый доход: €{net:,.2f}"
+        ),
+        "hu": (
+            f"📊 Jövedelemadó-számítás {year}:\n"
+            f"• Bruttó jövedelem: €{gross:,.2f}\n"
+            f"• Jövedelemadó: €{total:,.2f}\n"
+            f"• Effektív adókulcs: {rate:.1f}%\n"
+            f"• Nettó jövedelem: €{net:,.2f}"
+        ),
+        "pl": (
+            f"📊 Obliczenie podatku dochodowego {year}:\n"
+            f"• Dochód brutto: €{gross:,.2f}\n"
+            f"• Podatek dochodowy: €{total:,.2f}\n"
+            f"• Efektywna stawka: {rate:.1f}%\n"
+            f"• Dochód netto: €{net:,.2f}"
+        ),
+        "tr": (
+            f"📊 Gelir Vergisi Hesaplaması {year}:\n"
+            f"• Brüt gelir: €{gross:,.2f}\n"
+            f"• Gelir vergisi: €{total:,.2f}\n"
+            f"• Efektif oran: {rate:.1f}%\n"
+            f"• Net gelir: €{net:,.2f}"
+        ),
+        "bs": (
+            f"📊 Obračun poreza na dohodak {year}:\n"
+            f"• Bruto prihod: €{gross:,.2f}\n"
+            f"• Porez na dohodak: €{total:,.2f}\n"
+            f"• Efektivna stopa: {rate:.1f}%\n"
+            f"• Neto prihod: €{net:,.2f}"
+        ),
     }
     return templates.get(language, templates["de"])
 
@@ -699,6 +767,54 @@ def _format_vat(data: Dict, language: str) -> str:
             f"• 增值税额：€{data['vat_amount']:,.2f}\n"
             f"• 含税总额：€{data['total_with_vat']:,.2f}\n"
             f"• 小企业免税：{'是 ✅' if data['is_small_business'] else '否 ❌'}"
+        ),
+        "fr": (
+            f"📊 Calcul de la TVA :\n"
+            f"• Chiffre d'affaires : €{data['revenue']:,.2f}\n"
+            f"• Taux de TVA : {data['vat_rate']}%\n"
+            f"• Montant de TVA : €{data['vat_amount']:,.2f}\n"
+            f"• Total (TTC) : €{data['total_with_vat']:,.2f}\n"
+            f"• Exonération petite entreprise : {'Oui ✅' if data['is_small_business'] else 'Non ❌'}"
+        ),
+        "ru": (
+            f"📊 Расчёт НДС:\n"
+            f"• Выручка: €{data['revenue']:,.2f}\n"
+            f"• Ставка НДС: {data['vat_rate']}%\n"
+            f"• Сумма НДС: €{data['vat_amount']:,.2f}\n"
+            f"• Итого (с НДС): €{data['total_with_vat']:,.2f}\n"
+            f"• Освобождение малого бизнеса: {'Да ✅' if data['is_small_business'] else 'Нет ❌'}"
+        ),
+        "hu": (
+            f"📊 ÁFA-számítás:\n"
+            f"• Árbevétel: €{data['revenue']:,.2f}\n"
+            f"• ÁFA-kulcs: {data['vat_rate']}%\n"
+            f"• ÁFA összeg: €{data['vat_amount']:,.2f}\n"
+            f"• Összesen (bruttó): €{data['total_with_vat']:,.2f}\n"
+            f"• Kisvállalkozói mentesség: {'Igen ✅' if data['is_small_business'] else 'Nem ❌'}"
+        ),
+        "pl": (
+            f"📊 Obliczenie VAT:\n"
+            f"• Przychód: €{data['revenue']:,.2f}\n"
+            f"• Stawka VAT: {data['vat_rate']}%\n"
+            f"• Kwota VAT: €{data['vat_amount']:,.2f}\n"
+            f"• Razem (brutto): €{data['total_with_vat']:,.2f}\n"
+            f"• Zwolnienie dla małych firm: {'Tak ✅' if data['is_small_business'] else 'Nie ❌'}"
+        ),
+        "tr": (
+            f"📊 KDV Hesaplaması:\n"
+            f"• Gelir: €{data['revenue']:,.2f}\n"
+            f"• KDV oranı: {data['vat_rate']}%\n"
+            f"• KDV tutarı: €{data['vat_amount']:,.2f}\n"
+            f"• Toplam (brüt): €{data['total_with_vat']:,.2f}\n"
+            f"• Küçük işletme muafiyeti: {'Evet ✅' if data['is_small_business'] else 'Hayır ❌'}"
+        ),
+        "bs": (
+            f"📊 Obračun PDV-a:\n"
+            f"• Prihod: €{data['revenue']:,.2f}\n"
+            f"• Stopa PDV-a: {data['vat_rate']}%\n"
+            f"• Iznos PDV-a: €{data['vat_amount']:,.2f}\n"
+            f"• Ukupno (bruto): €{data['total_with_vat']:,.2f}\n"
+            f"• Oslobođenje za mala preduzeća: {'Da ✅' if data['is_small_business'] else 'Ne ❌'}"
         ),
     }
     return templates.get(language, templates["de"])
@@ -734,6 +850,60 @@ def _format_svs(data: Dict, language: str) -> str:
             f"• 自雇预备金：€{data['self_employed_provision']:,.2f}\n"
             f"• 合计：€{data['total_contributions']:,.2f}"
         ),
+        "fr": (
+            f"📊 Cotisations SVS :\n"
+            f"• Revenu annuel : €{data['annual_income']:,.2f}\n"
+            f"• Assurance maladie : €{data['health_insurance']:,.2f}\n"
+            f"• Assurance retraite : €{data['pension_insurance']:,.2f}\n"
+            f"• Assurance accident : €{data['accident_insurance']:,.2f}\n"
+            f"• Prévoyance indépendant : €{data['self_employed_provision']:,.2f}\n"
+            f"• Total : €{data['total_contributions']:,.2f}"
+        ),
+        "ru": (
+            f"📊 Взносы SVS:\n"
+            f"• Годовой доход: €{data['annual_income']:,.2f}\n"
+            f"• Медицинское страхование: €{data['health_insurance']:,.2f}\n"
+            f"• Пенсионное страхование: €{data['pension_insurance']:,.2f}\n"
+            f"• Страхование от несчастных случаев: €{data['accident_insurance']:,.2f}\n"
+            f"• Резерв самозанятого: €{data['self_employed_provision']:,.2f}\n"
+            f"• Итого: €{data['total_contributions']:,.2f}"
+        ),
+        "hu": (
+            f"📊 SVS-járulékok:\n"
+            f"• Éves jövedelem: €{data['annual_income']:,.2f}\n"
+            f"• Egészségbiztosítás: €{data['health_insurance']:,.2f}\n"
+            f"• Nyugdíjbiztosítás: €{data['pension_insurance']:,.2f}\n"
+            f"• Balesetbiztosítás: €{data['accident_insurance']:,.2f}\n"
+            f"• Önfoglalkoztatói tartalék: €{data['self_employed_provision']:,.2f}\n"
+            f"• Összesen: €{data['total_contributions']:,.2f}"
+        ),
+        "pl": (
+            f"📊 Składki SVS:\n"
+            f"• Roczny dochód: €{data['annual_income']:,.2f}\n"
+            f"• Ubezpieczenie zdrowotne: €{data['health_insurance']:,.2f}\n"
+            f"• Ubezpieczenie emerytalne: €{data['pension_insurance']:,.2f}\n"
+            f"• Ubezpieczenie wypadkowe: €{data['accident_insurance']:,.2f}\n"
+            f"• Rezerwa samozatrudnionego: €{data['self_employed_provision']:,.2f}\n"
+            f"• Razem: €{data['total_contributions']:,.2f}"
+        ),
+        "tr": (
+            f"📊 SVS Primleri:\n"
+            f"• Yıllık gelir: €{data['annual_income']:,.2f}\n"
+            f"• Sağlık sigortası: €{data['health_insurance']:,.2f}\n"
+            f"• Emeklilik sigortası: €{data['pension_insurance']:,.2f}\n"
+            f"• Kaza sigortası: €{data['accident_insurance']:,.2f}\n"
+            f"• Serbest meslek karşılığı: €{data['self_employed_provision']:,.2f}\n"
+            f"• Toplam: €{data['total_contributions']:,.2f}"
+        ),
+        "bs": (
+            f"📊 SVS doprinosi:\n"
+            f"• Godišnji prihod: €{data['annual_income']:,.2f}\n"
+            f"• Zdravstveno osiguranje: €{data['health_insurance']:,.2f}\n"
+            f"• Penzijsko osiguranje: €{data['pension_insurance']:,.2f}\n"
+            f"• Osiguranje od nezgoda: €{data['accident_insurance']:,.2f}\n"
+            f"• Rezerva za samozaposlene: €{data['self_employed_provision']:,.2f}\n"
+            f"• Ukupno: €{data['total_contributions']:,.2f}"
+        ),
     }
     return templates.get(language, templates["de"])
 
@@ -762,6 +932,48 @@ def _format_kest(data: Dict, language: str) -> str:
             f"• 已预扣：€{data['total_already_withheld']:,.2f}\n"
             f"• 待缴纳：€{data['remaining_tax_due']:,.2f}"
         ),
+        "fr": (
+            f"📊 Calcul KESt :\n"
+            f"• Revenus du capital bruts : €{data['total_gross']:,.2f}\n"
+            f"• KESt total : €{data['total_tax']:,.2f}\n"
+            f"• Déjà retenu : €{data['total_already_withheld']:,.2f}\n"
+            f"• Reste à payer : €{data['remaining_tax_due']:,.2f}"
+        ),
+        "ru": (
+            f"📊 Расчёт KESt:\n"
+            f"• Валовой доход от капитала: €{data['total_gross']:,.2f}\n"
+            f"• Итого KESt: €{data['total_tax']:,.2f}\n"
+            f"• Уже удержано: €{data['total_already_withheld']:,.2f}\n"
+            f"• К оплате: €{data['remaining_tax_due']:,.2f}"
+        ),
+        "hu": (
+            f"📊 KESt-számítás:\n"
+            f"• Bruttó tőkejövedelem: €{data['total_gross']:,.2f}\n"
+            f"• KESt összesen: €{data['total_tax']:,.2f}\n"
+            f"• Már levonva: €{data['total_already_withheld']:,.2f}\n"
+            f"• Fizetendő: €{data['remaining_tax_due']:,.2f}"
+        ),
+        "pl": (
+            f"📊 Obliczenie KESt:\n"
+            f"• Dochód kapitałowy brutto: €{data['total_gross']:,.2f}\n"
+            f"• KESt łącznie: €{data['total_tax']:,.2f}\n"
+            f"• Już potrącono: €{data['total_already_withheld']:,.2f}\n"
+            f"• Do zapłaty: €{data['remaining_tax_due']:,.2f}"
+        ),
+        "tr": (
+            f"📊 KESt Hesaplaması:\n"
+            f"• Brüt sermaye geliri: €{data['total_gross']:,.2f}\n"
+            f"• Toplam KESt: €{data['total_tax']:,.2f}\n"
+            f"• Zaten kesilen: €{data['total_already_withheld']:,.2f}\n"
+            f"• Kalan borç: €{data['remaining_tax_due']:,.2f}"
+        ),
+        "bs": (
+            f"📊 Obračun KESt:\n"
+            f"• Bruto prihod od kapitala: €{data['total_gross']:,.2f}\n"
+            f"• Ukupno KESt: €{data['total_tax']:,.2f}\n"
+            f"• Već zadržano: €{data['total_already_withheld']:,.2f}\n"
+            f"• Preostalo za uplatu: €{data['remaining_tax_due']:,.2f}"
+        ),
     }
     return templates.get(language, templates["de"])
 
@@ -782,6 +994,30 @@ def _format_deductibility(data: Dict, language: str) -> str:
         ),
         "zh": (
             f"{'✅ 可抵扣' if is_ded else '❌ 不可抵扣'}：{desc}\n"
+            f"{expl}"
+        ),
+        "fr": (
+            f"{'✅ Déductible' if is_ded else '❌ Non déductible'} : {desc}\n"
+            f"{expl}"
+        ),
+        "ru": (
+            f"{'✅ Вычитается' if is_ded else '❌ Не вычитается'}: {desc}\n"
+            f"{expl}"
+        ),
+        "hu": (
+            f"{'✅ Levonható' if is_ded else '❌ Nem vonható le'}: {desc}\n"
+            f"{expl}"
+        ),
+        "pl": (
+            f"{'✅ Podlega odliczeniu' if is_ded else '❌ Nie podlega odliczeniu'}: {desc}\n"
+            f"{expl}"
+        ),
+        "tr": (
+            f"{'✅ Düşülebilir' if is_ded else '❌ Düşülemez'}: {desc}\n"
+            f"{expl}"
+        ),
+        "bs": (
+            f"{'✅ Odbitno' if is_ded else '❌ Nije odbitno'}: {desc}\n"
             f"{expl}"
         ),
     }
@@ -808,6 +1044,36 @@ def _format_classification(data: Dict, language: str) -> str:
             f"🏷️ 分类结果：{cat}\n"
             f"• 置信度：{conf:.0%}\n"
             f"• 方法：{method}"
+        ),
+        "fr": (
+            f"🏷️ Classification : {cat}\n"
+            f"• Confiance : {conf:.0%}\n"
+            f"• Méthode : {method}"
+        ),
+        "ru": (
+            f"🏷️ Классификация: {cat}\n"
+            f"• Уверенность: {conf:.0%}\n"
+            f"• Метод: {method}"
+        ),
+        "hu": (
+            f"🏷️ Besorolás: {cat}\n"
+            f"• Megbízhatóság: {conf:.0%}\n"
+            f"• Módszer: {method}"
+        ),
+        "pl": (
+            f"🏷️ Klasyfikacja: {cat}\n"
+            f"• Pewność: {conf:.0%}\n"
+            f"• Metoda: {method}"
+        ),
+        "tr": (
+            f"🏷️ Sınıflandırma: {cat}\n"
+            f"• Güven: {conf:.0%}\n"
+            f"• Yöntem: {method}"
+        ),
+        "bs": (
+            f"🏷️ Klasifikacija: {cat}\n"
+            f"• Pouzdanost: {conf:.0%}\n"
+            f"• Metoda: {method}"
         ),
     }
     return templates.get(language, templates["de"])
@@ -836,6 +1102,42 @@ def _format_what_if(data: Dict, language: str) -> str:
             f"• 假设（€{data['scenario_income']:,.0f}）：税额 €{data['scenario_tax']:,.2f}\n"
             f"• 差额：{direction}€{diff:,.2f}"
         ),
+        "fr": (
+            f"🔮 Simulation hypothétique :\n"
+            f"• Actuel (€{data['base_income']:,.0f}) : Impôt €{data['base_tax']:,.2f}\n"
+            f"• Scénario (€{data['scenario_income']:,.0f}) : Impôt €{data['scenario_tax']:,.2f}\n"
+            f"• Différence : {direction}€{diff:,.2f}"
+        ),
+        "ru": (
+            f"🔮 Моделирование «что если»:\n"
+            f"• Текущий (€{data['base_income']:,.0f}): Налог €{data['base_tax']:,.2f}\n"
+            f"• Сценарий (€{data['scenario_income']:,.0f}): Налог €{data['scenario_tax']:,.2f}\n"
+            f"• Разница: {direction}€{diff:,.2f}"
+        ),
+        "hu": (
+            f"🔮 Mi lenne, ha szimuláció:\n"
+            f"• Jelenlegi (€{data['base_income']:,.0f}): Adó €{data['base_tax']:,.2f}\n"
+            f"• Forgatókönyv (€{data['scenario_income']:,.0f}): Adó €{data['scenario_tax']:,.2f}\n"
+            f"• Különbség: {direction}€{diff:,.2f}"
+        ),
+        "pl": (
+            f'🔮 Symulacja „co jeśli":\n'
+            f"• Obecny (€{data['base_income']:,.0f}): Podatek €{data['base_tax']:,.2f}\n"
+            f"• Scenariusz (€{data['scenario_income']:,.0f}): Podatek €{data['scenario_tax']:,.2f}\n"
+            f"• Różnica: {direction}€{diff:,.2f}"
+        ),
+        "tr": (
+            f"🔮 Ya olsaydı simülasyonu:\n"
+            f"• Mevcut (€{data['base_income']:,.0f}): Vergi €{data['base_tax']:,.2f}\n"
+            f"• Senaryo (€{data['scenario_income']:,.0f}): Vergi €{data['scenario_tax']:,.2f}\n"
+            f"• Fark: {direction}€{diff:,.2f}"
+        ),
+        "bs": (
+            f'🔮 Simulacija „šta ako":\n'
+            f"• Trenutno (€{data['base_income']:,.0f}): Porez €{data['base_tax']:,.2f}\n"
+            f"• Scenarij (€{data['scenario_income']:,.0f}): Porez €{data['scenario_tax']:,.2f}\n"
+            f"• Razlika: {direction}€{diff:,.2f}"
+        ),
     }
     return templates.get(language, templates["de"])
 
@@ -861,36 +1163,78 @@ _SUGGESTIONS: Dict[UserIntent, Dict[str, List[str]]] = {
         "de": ["SVS-Beiträge berechnen", "Absetzbeträge prüfen", "Was-wäre-wenn Simulation"],
         "en": ["Calculate SVS contributions", "Check deductions", "What-if simulation"],
         "zh": ["计算SVS社保", "检查抵扣项", "假设模拟"],
+        "fr": ["Calculer les cotisations SVS", "Vérifier les déductions", "Simulation hypothétique"],
+        "ru": ["Рассчитать взносы SVS", "Проверить вычеты", "Моделирование «что если»"],
+        "hu": ["SVS-járulékok kiszámítása", "Levonások ellenőrzése", "Mi lenne, ha szimuláció"],
+        "pl": ["Oblicz składki SVS", "Sprawdź odliczenia", 'Symulacja „co jeśli"'],
+        "tr": ["SVS primlerini hesapla", "Kesintileri kontrol et", "Ya olsaydı simülasyonu"],
+        "bs": ["Izračunaj SVS doprinose", "Provjeri odbitke", 'Simulacija „šta ako"'],
     },
     UserIntent.CALCULATE_VAT: {
         "de": ["Einkommensteuer berechnen", "Kleinunternehmerregelung erklärt"],
         "en": ["Calculate income tax", "Small business exemption explained"],
         "zh": ["计算所得税", "小企业免税规则说明"],
+        "fr": ["Calculer l'impôt sur le revenu", "Exonération petite entreprise expliquée"],
+        "ru": ["Рассчитать подоходный налог", "Освобождение малого бизнеса"],
+        "hu": ["Jövedelemadó kiszámítása", "Kisvállalkozói mentesség magyarázata"],
+        "pl": ["Oblicz podatek dochodowy", "Wyjaśnienie zwolnienia dla małych firm"],
+        "tr": ["Gelir vergisini hesapla", "Küçük işletme muafiyeti açıklaması"],
+        "bs": ["Izračunaj porez na dohodak", "Objašnjenje oslobođenja za mala preduzeća"],
     },
     UserIntent.CALCULATE_SVS: {
         "de": ["Einkommensteuer berechnen", "Gewinnfreibetrag prüfen"],
         "en": ["Calculate income tax", "Check profit allowance"],
         "zh": ["计算所得税", "检查利润免税额"],
+        "fr": ["Calculer l'impôt sur le revenu", "Vérifier l'abattement sur les bénéfices"],
+        "ru": ["Рассчитать подоходный налог", "Проверить льготу на прибыль"],
+        "hu": ["Jövedelemadó kiszámítása", "Nyereségkedvezmény ellenőrzése"],
+        "pl": ["Oblicz podatek dochodowy", "Sprawdź ulgę od zysku"],
+        "tr": ["Gelir vergisini hesapla", "Kâr muafiyetini kontrol et"],
+        "bs": ["Izračunaj porez na dohodak", "Provjeri olakšicu za dobit"],
     },
     UserIntent.CHECK_DEDUCTIBILITY: {
         "de": ["Alle Absetzbeträge anzeigen", "Steuer berechnen"],
         "en": ["Show all deductions", "Calculate tax"],
         "zh": ["显示所有抵扣项", "计算税额"],
+        "fr": ["Afficher toutes les déductions", "Calculer l'impôt"],
+        "ru": ["Показать все вычеты", "Рассчитать налог"],
+        "hu": ["Összes levonás megjelenítése", "Adó kiszámítása"],
+        "pl": ["Pokaż wszystkie odliczenia", "Oblicz podatek"],
+        "tr": ["Tüm kesintileri göster", "Vergiyi hesapla"],
+        "bs": ["Prikaži sve odbitke", "Izračunaj porez"],
     },
     UserIntent.SUMMARIZE_STATUS: {
         "de": ["Steuer berechnen", "Optimierungsvorschläge", "Dokumente hochladen"],
         "en": ["Calculate tax", "Optimization suggestions", "Upload documents"],
         "zh": ["计算税额", "优化建议", "上传文档"],
+        "fr": ["Calculer l'impôt", "Suggestions d'optimisation", "Télécharger des documents"],
+        "ru": ["Рассчитать налог", "Предложения по оптимизации", "Загрузить документы"],
+        "hu": ["Adó kiszámítása", "Optimalizálási javaslatok", "Dokumentumok feltöltése"],
+        "pl": ["Oblicz podatek", "Propozycje optymalizacji", "Prześlij dokumenty"],
+        "tr": ["Vergiyi hesapla", "Optimizasyon önerileri", "Belge yükle"],
+        "bs": ["Izračunaj porez", "Prijedlozi za optimizaciju", "Učitaj dokumente"],
     },
     UserIntent.EXPLAIN_DOCUMENT: {
         "de": ["Was bedeuten die KZ-Felder?", "Ist dieses Dokument korrekt?", "Steuer berechnen"],
         "en": ["What do the KZ fields mean?", "Is this document correct?", "Calculate tax"],
         "zh": ["KZ字段是什么意思？", "这个文档正确吗？", "计算税额"],
+        "fr": ["Que signifient les champs KZ ?", "Ce document est-il correct ?", "Calculer l'impôt"],
+        "ru": ["Что означают поля KZ?", "Этот документ правильный?", "Рассчитать налог"],
+        "hu": ["Mit jelentenek a KZ mezők?", "Helyes ez a dokumentum?", "Adó kiszámítása"],
+        "pl": ["Co oznaczają pola KZ?", "Czy ten dokument jest poprawny?", "Oblicz podatek"],
+        "tr": ["KZ alanları ne anlama geliyor?", "Bu belge doğru mu?", "Vergiyi hesapla"],
+        "bs": ["Šta znače KZ polja?", "Je li ovaj dokument ispravan?", "Izračunaj porez"],
     },
     UserIntent.SYSTEM_HELP: {
         "de": ["Wie lade ich Dokumente hoch?", "Wie berechne ich meine Steuer?", "Wie verwalte ich Immobilien?"],
         "en": ["How do I upload documents?", "How do I calculate my tax?", "How do I manage properties?"],
         "zh": ["怎么上传文档？", "怎么计算税额？", "怎么管理房产？"],
+        "fr": ["Comment télécharger des documents ?", "Comment calculer mon impôt ?", "Comment gérer mes biens immobiliers ?"],
+        "ru": ["Как загрузить документы?", "Как рассчитать налог?", "Как управлять недвижимостью?"],
+        "hu": ["Hogyan tölthetek fel dokumentumokat?", "Hogyan számíthatom ki az adómat?", "Hogyan kezelhetem az ingatlanokat?"],
+        "pl": ["Jak przesłać dokumenty?", "Jak obliczyć mój podatek?", "Jak zarządzać nieruchomościami?"],
+        "tr": ["Belgeleri nasıl yüklerim?", "Vergimi nasıl hesaplarım?", "Mülkleri nasıl yönetirim?"],
+        "bs": ["Kako da učitam dokumente?", "Kako da izračunam porez?", "Kako da upravljam nekretninama?"],
     },
 }
 
@@ -918,6 +1262,30 @@ DISCLAIMERS = {
     "zh": (
         "\n\n⚠️ **免责声明**：本回答仅供参考，不构成税务咨询。"
         "请以FinanzOnline最终结果为准。"
+    ),
+    "fr": (
+        "\n\n⚠️ **Avertissement** : Cette réponse est fournie à titre informatif uniquement et "
+        "ne constitue pas un conseil fiscal. Veuillez utiliser FinanzOnline pour la déclaration fiscale définitive."
+    ),
+    "ru": (
+        "\n\n⚠️ **Отказ от ответственности**: Этот ответ предназначен только для информационных целей и "
+        "не является налоговой консультацией. Для окончательной подачи налоговой декларации используйте FinanzOnline."
+    ),
+    "hu": (
+        "\n\n⚠️ **Felelősségkizárás**: Ez a válasz kizárólag tájékoztató jellegű, és "
+        "nem minősül adótanácsadásnak. A végleges adóbevalláshoz kérjük, használja a FinanzOnline-t."
+    ),
+    "pl": (
+        "\n\n⚠️ **Zastrzeżenie**: Ta odpowiedź ma charakter wyłącznie informacyjny i "
+        "nie stanowi porady podatkowej. Do ostatecznego rozliczenia podatkowego proszę użyć FinanzOnline."
+    ),
+    "tr": (
+        "\n\n⚠️ **Sorumluluk Reddi**: Bu yanıt yalnızca bilgilendirme amaçlıdır ve "
+        "vergi danışmanlığı niteliği taşımaz. Nihai vergi beyannamesi için lütfen FinanzOnline'ı kullanın."
+    ),
+    "bs": (
+        "\n\n⚠️ **Odricanje odgovornosti**: Ovaj odgovor služi samo u informativne svrhe i "
+        "ne predstavlja porezno savjetovanje. Za konačnu poreznu prijavu koristite FinanzOnline."
     ),
 }
 
@@ -959,6 +1327,72 @@ _SYSTEM_OVERVIEW: Dict[str, str] = {
         "📊 **Reports** — Auto-generated tax reports\n"
         "🤖 **AI Assistant** — That's me! Tax questions & usage guidance\n\n"
         "What would you like to know?"
+    ),
+    "fr": (
+        "👋 **Bienvenue sur Taxja !**\n\n"
+        "Une plateforme de gestion fiscale autrichienne :\n\n"
+        "📄 **Documents** — Téléchargez factures, reçus, contrats (reconnaissance IA)\n"
+        "💰 **Transactions** — Gérez revenus/dépenses (classification IA)\n"
+        "🏠 **Biens immobiliers** — Gérez immeubles et actifs (amortissement automatique)\n"
+        "🧮 **Outils fiscaux** — Calculs et simulations : impôt, TVA, SVS\n"
+        "📊 **Rapports** — Rapports fiscaux générés automatiquement\n"
+        "🤖 **Assistant IA** — C'est moi ! Questions fiscales et aide à l'utilisation\n\n"
+        "Que souhaitez-vous savoir ?"
+    ),
+    "ru": (
+        "👋 **Добро пожаловать в Taxja!**\n\n"
+        "Австрийская платформа управления налогами:\n\n"
+        "📄 **Документы** — Загружайте счета, квитанции, договоры (распознавание ИИ)\n"
+        "💰 **Транзакции** — Управляйте доходами/расходами (классификация ИИ)\n"
+        "🏠 **Недвижимость** — Управляйте недвижимостью и активами (автоамортизация)\n"
+        "🧮 **Налоговые инструменты** — Расчёты и моделирование: налог, НДС, SVS\n"
+        "📊 **Отчёты** — Автоматически сформированные налоговые отчёты\n"
+        "🤖 **ИИ-ассистент** — Это я! Налоговые вопросы и помощь по использованию\n\n"
+        "Что вы хотели бы узнать?"
+    ),
+    "hu": (
+        "👋 **Üdvözöljük a Taxja-ban!**\n\n"
+        "Osztrák adókezelő platform:\n\n"
+        "📄 **Dokumentumok** — Számlák, nyugták, szerződések feltöltése (AI felismerés)\n"
+        "💰 **Tranzakciók** — Bevételek/kiadások kezelése (AI besorolás)\n"
+        "🏠 **Ingatlanok** — Ingatlanok és eszközök kezelése (automatikus értékcsökkenés)\n"
+        "🧮 **Adóeszközök** — Jövedelemadó, ÁFA, SVS számítások és szimulációk\n"
+        "📊 **Jelentések** — Automatikusan generált adójelentések\n"
+        "🤖 **AI asszisztens** — Ez én vagyok! Adókérdések és használati útmutató\n\n"
+        "Mit szeretne tudni?"
+    ),
+    "pl": (
+        "👋 **Witamy w Taxja!**\n\n"
+        "Austriacka platforma zarządzania podatkami:\n\n"
+        "📄 **Dokumenty** — Przesyłaj faktury, paragony, umowy (rozpoznawanie AI)\n"
+        "💰 **Transakcje** — Zarządzaj przychodami/wydatkami (klasyfikacja AI)\n"
+        "🏠 **Nieruchomości** — Zarządzaj nieruchomościami i aktywami (automatyczna amortyzacja)\n"
+        "🧮 **Narzędzia podatkowe** — Obliczenia i symulacje: podatek, VAT, SVS\n"
+        "📊 **Raporty** — Automatycznie generowane raporty podatkowe\n"
+        "🤖 **Asystent AI** — To ja! Pytania podatkowe i pomoc w obsłudze\n\n"
+        "Co chciałbyś wiedzieć?"
+    ),
+    "tr": (
+        "👋 **Taxja'ya Hoş Geldiniz!**\n\n"
+        "Avusturya vergi yönetim platformu:\n\n"
+        "📄 **Belgeler** — Fatura, makbuz, sözleşme yükleyin (AI tanıma)\n"
+        "💰 **İşlemler** — Gelir/giderleri yönetin (AI sınıflandırma)\n"
+        "🏠 **Mülkler** — Gayrimenkul ve varlıkları yönetin (otomatik amortisman)\n"
+        "🧮 **Vergi Araçları** — Gelir vergisi, KDV, SVS hesaplamaları ve simülasyonlar\n"
+        "📊 **Raporlar** — Otomatik oluşturulan vergi raporları\n"
+        "🤖 **AI Asistan** — Benim! Vergi soruları ve kullanım rehberliği\n\n"
+        "Ne öğrenmek istersiniz?"
+    ),
+    "bs": (
+        "👋 **Dobrodošli u Taxja!**\n\n"
+        "Austrijska platforma za upravljanje porezima:\n\n"
+        "📄 **Dokumenti** — Učitajte fakture, račune, ugovore (AI prepoznavanje)\n"
+        "💰 **Transakcije** — Upravljajte prihodima/rashodima (AI klasifikacija)\n"
+        "🏠 **Nekretnine** — Upravljajte nekretninama i imovinom (automatska amortizacija)\n"
+        "🧮 **Porezni alati** — Porez na dohodak, PDV, SVS izračuni i simulacije\n"
+        "📊 **Izvještaji** — Automatski generirani porezni izvještaji\n"
+        "🤖 **AI asistent** — To sam ja! Porezna pitanja i upute za korištenje\n\n"
+        "Šta biste željeli znati?"
     ),
 }
 
@@ -1004,10 +1438,19 @@ class AIOrchestrator:
             tax_year = datetime.now().year
 
         # ① Single Groq call: triage + classify + answer system help
+        triage_available = True
         try:
             from app.services.local_ai_triage import get_ai_triage
             triage = get_ai_triage()
-            result = triage.process(message, language)
+            result = triage.process(message, language, conversation_history)
+
+            if result["type"] == "general_chat":
+                # Casual/off-topic: return as-is, no disclaimer, no tax framing
+                return OrchestratorResponse(
+                    text=result["answer"],
+                    intent=UserIntent.UNKNOWN,
+                    suggestions=[],
+                )
 
             if result["type"] == "system_help":
                 return OrchestratorResponse(
@@ -1022,6 +1465,12 @@ class AIOrchestrator:
                 from app.services.local_ai_triage import get_intent_map
                 intent = get_intent_map().get(intent_name, UserIntent.TAX_QA)
                 params = result.get("params", {})
+                # Normalize param keys — LLM may return "income" instead of "amount"
+                if "amount" not in params:
+                    for alias in ("income", "einkommen", "收入", "revenue", "umsatz"):
+                        if alias in params:
+                            params["amount"] = params.pop(alias)
+                            break
                 intent_result = IntentResult(
                     intent=intent, confidence=0.90, params=params
                 )
@@ -1038,25 +1487,37 @@ class AIOrchestrator:
                     return self._handle_rag(
                         message, language, conversation_history or [], tax_year
                     )
-        except Exception as e:
-            logger.debug("AI triage skipped: %s", e)
 
-        # ② Fallback: regex + LLM intent detection (if triage failed)
-        intent_result = detect_intent(message)
-        logger.info(
-            "Intent detected (fallback): %s (confidence=%.2f, params=%s)",
-            intent_result.intent.value,
-            intent_result.confidence,
-            intent_result.params,
-        )
-
-        try:
-            return self._dispatch(
-                intent_result, message, language, conversation_history or [], tax_year
+            # Triage returned "fallback" — LLM worked but couldn't classify.
+            # Go directly to RAG; do NOT fall through to regex (regex has
+            # higher false-positive rate than an LLM that responded).
+            logger.info("Triage returned fallback, routing directly to RAG")
+            return self._handle_rag(
+                message, language, conversation_history or [], tax_year
             )
-        except Exception as exc:
-            logger.exception("Orchestrator dispatch failed: %s", exc)
-            return self._handle_rag(message, language, conversation_history or [], tax_year)
+
+        except Exception as e:
+            # LLM completely unavailable — fall through to regex as last resort
+            triage_available = False
+            logger.debug("AI triage unavailable: %s", e)
+
+        # ② Last resort: regex intent detection (only when LLM is completely down)
+        if not triage_available:
+            intent_result = detect_intent(message)
+            logger.info(
+                "Intent detected (regex fallback): %s (confidence=%.2f, params=%s)",
+                intent_result.intent.value,
+                intent_result.confidence,
+                intent_result.params,
+            )
+            try:
+                return self._dispatch(
+                    intent_result, message, language, conversation_history or [], tax_year
+                )
+            except Exception as exc:
+                logger.exception("Orchestrator dispatch failed: %s", exc)
+
+        return self._handle_rag(message, language, conversation_history or [], tax_year)
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -1104,14 +1565,15 @@ class AIOrchestrator:
         amount = intent.params.get("amount")
         yr = intent.params.get("year", year)
         if not amount:
+            # Re-try extraction from raw message
+            fallback = _extract_numeric_params(message)
+            amount = fallback.get("amount")
+            yr = fallback.get("year", yr)
+        if not amount:
             # No amount found — ask LLM to extract or ask user
             return self._ask_for_params(
                 lang,
-                {
-                    "de": "Bitte geben Sie Ihr Bruttoeinkommen an, z.B. 'Berechne Steuer für €50.000'.",
-                    "en": "Please provide your gross income, e.g. 'Calculate tax for €50,000'.",
-                    "zh": "请提供您的总收入，例如'计算50000欧元的税'。",
-                },
+                "Please provide your gross income, e.g. 'Calculate tax for €50,000'.",
                 UserIntent.CALCULATE_TAX,
             )
         data = self.tools.calculate_income_tax(amount, yr)
@@ -1124,13 +1586,13 @@ class AIOrchestrator:
         amount = intent.params.get("amount")
         yr = intent.params.get("year", year)
         if not amount:
+            fallback = _extract_numeric_params(message)
+            amount = fallback.get("amount")
+            yr = fallback.get("year", yr)
+        if not amount:
             return self._ask_for_params(
                 lang,
-                {
-                    "de": "Bitte geben Sie Ihren Umsatz an, z.B. 'Berechne USt für €40.000'.",
-                    "en": "Please provide your revenue, e.g. 'Calculate VAT for €40,000'.",
-                    "zh": "请提供您的营业额，例如'计算40000欧元的增值税'。",
-                },
+                "Please provide your revenue, e.g. 'Calculate VAT for €40,000'.",
                 UserIntent.CALCULATE_VAT,
             )
         data = self.tools.calculate_vat(amount, yr)
@@ -1143,13 +1605,13 @@ class AIOrchestrator:
         amount = intent.params.get("amount")
         yr = intent.params.get("year", year)
         if not amount:
+            fallback = _extract_numeric_params(message)
+            amount = fallback.get("amount")
+            yr = fallback.get("year", yr)
+        if not amount:
             return self._ask_for_params(
                 lang,
-                {
-                    "de": "Bitte geben Sie Ihr Jahreseinkommen an, z.B. 'Berechne SVS für €60.000'.",
-                    "en": "Please provide your annual income, e.g. 'Calculate SVS for €60,000'.",
-                    "zh": "请提供您的年收入，例如'计算60000欧元的SVS社保'。",
-                },
+                "Please provide your annual income, e.g. 'Calculate SVS for €60,000'.",
                 UserIntent.CALCULATE_SVS,
             )
         data = self.tools.calculate_svs(amount, yr)
@@ -1161,13 +1623,12 @@ class AIOrchestrator:
     ) -> OrchestratorResponse:
         amount = intent.params.get("amount")
         if not amount:
+            fallback = _extract_numeric_params(message)
+            amount = fallback.get("amount")
+        if not amount:
             return self._ask_for_params(
                 lang,
-                {
-                    "de": "Bitte geben Sie Ihre Kapitalerträge an, z.B. 'Berechne KESt für €10.000 Dividenden'.",
-                    "en": "Please provide your capital income, e.g. 'Calculate KESt for €10,000 dividends'.",
-                    "zh": "请提供您的资本收入，例如'计算10000欧元股息的KESt'。",
-                },
+                "Please provide your capital income, e.g. 'Calculate KESt for €10,000 dividends'.",
                 UserIntent.CALCULATE_KEST,
             )
         # Detect income type from message
@@ -1254,11 +1715,7 @@ class AIOrchestrator:
         else:
             return self._ask_for_params(
                 lang,
-                {
-                    "de": "Bitte geben Sie zwei Beträge an, z.B. 'Was wäre wenn: €40.000 vs €60.000'.",
-                    "en": "Please provide two amounts, e.g. 'What if: €40,000 vs €60,000'.",
-                    "zh": "请提供两个金额，例如'假如：40000欧元 vs 60000欧元'。",
-                },
+                "Please provide two amounts, e.g. 'What if: €40,000 vs €60,000'.",
                 UserIntent.WHAT_IF,
             )
         yr = intent.params.get("year", year)
@@ -1370,6 +1827,8 @@ class AIOrchestrator:
         from app.services.llm_service import get_llm_service
         llm = get_llm_service()
 
+        source_tier = None
+
         # 1. Full RAG (LLM + vector search) — skip for Ollama-only (too slow on CPU)
         if llm.is_available and user and not llm.is_ollama_mode:
             try:
@@ -1382,6 +1841,7 @@ class AIOrchestrator:
                     augmented_msg = message
 
                 text = rag.answer(user, augmented_msg, language, year)
+                source_tier = "rag"
             except Exception as exc:
                 logger.warning("Full RAG failed: %s", exc, exc_info=True)
 
@@ -1409,6 +1869,7 @@ class AIOrchestrator:
                     user_financial_summary=financial_summary,
                     conversation_history=history,
                 )
+                source_tier = "llm"
                 logger.info("Direct LLM call succeeded (no RAG retrieval)")
             except Exception as exc:
                 logger.warning("Direct LLM call failed: %s", exc)
@@ -1433,6 +1894,7 @@ class AIOrchestrator:
                         tax_year=year,
                         user_context=user_ctx,
                     )
+                    source_tier = "lightweight"
             except Exception as exc:
                 logger.warning("Lightweight RAG failed: %s", exc)
 
@@ -1440,12 +1902,14 @@ class AIOrchestrator:
         if text is None:
             from app.api.v1.endpoints.ai_assistant import _generate_rule_based_response
             text = _generate_rule_based_response(message, language, {})
+            source_tier = "rule_based"
 
-        disclaimer = DISCLAIMERS.get(language, DISCLAIMERS["de"])
         return OrchestratorResponse(
-            text=text + disclaimer,
+            text=text,
             intent=UserIntent.TAX_QA,
             suggestions=_get_suggestions(UserIntent.TAX_QA, language),
+            show_disclaimer=True,
+            source_tier=source_tier,
         )
 
 
@@ -1459,21 +1923,49 @@ class AIOrchestrator:
         intent: UserIntent,
         data: Dict,
         language: str,
+        source_tier: Optional[str] = None,
     ) -> OrchestratorResponse:
-        """Build a standard response with disclaimer and suggestions."""
-        disclaimer = DISCLAIMERS.get(language, DISCLAIMERS["de"])
+        """Build a standard response with disclaimer flag and suggestions."""
         return OrchestratorResponse(
-            text=text + disclaimer,
+            text=text,
             intent=intent,
             data=data,
             suggestions=_get_suggestions(intent, language),
+            show_disclaimer=True,
+            source_tier=source_tier,
         )
 
     def _ask_for_params(
-        self, language: str, messages: Dict[str, str], intent: UserIntent
+        self, language: str, messages, intent: UserIntent
     ) -> OrchestratorResponse:
-        """Ask user to provide missing parameters."""
-        text = messages.get(language, messages["de"])
+        """Ask user to provide missing parameters.
+
+        `messages` can be:
+          - Dict[str, str]: legacy per-language dict (used as-is)
+          - str: English template, auto-translated via LLM for non-en/de/zh
+        """
+        if isinstance(messages, str):
+            # For de/en/zh use simple hardcoded translations to save LLM calls
+            text = messages
+            if language not in ("en", "de", "zh"):
+                try:
+                    from app.services.llm_service import get_llm_service
+                    llm = get_llm_service()
+                    lang_names = {
+                        "fr": "French", "ru": "Russian", "hu": "Hungarian",
+                        "pl": "Polish", "tr": "Turkish", "bs": "Bosnian",
+                    }
+                    lang_name = lang_names.get(language, language)
+                    text = llm.generate_simple(
+                        system_prompt=f"Translate to {lang_name}. Return ONLY the translation, nothing else.",
+                        user_prompt=messages,
+                        temperature=0.1,
+                        max_tokens=200,
+                    )
+                except Exception:
+                    pass  # Fall back to English
+        else:
+            text = messages.get(language, messages.get("en", messages.get("de", "")))
         return OrchestratorResponse(
             text=text,
             intent=intent,

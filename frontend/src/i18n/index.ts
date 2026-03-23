@@ -6,6 +6,18 @@ import en from './locales/en.json'
 import enSubscription from './locales/en/subscription.json'
 import zh from './locales/zh.json'
 import zhSubscription from './locales/zh/subscription.json'
+import fr from './locales/fr.json'
+import frSubscription from './locales/fr/subscription.json'
+import ru from './locales/ru.json'
+import ruSubscription from './locales/ru/subscription.json'
+import hu from './locales/hu.json'
+import huSubscription from './locales/hu/subscription.json'
+import pl from './locales/pl.json'
+import plSubscription from './locales/pl/subscription.json'
+import tr from './locales/tr.json'
+import trSubscription from './locales/tr/subscription.json'
+import bs from './locales/bs.json'
+import bsSubscription from './locales/bs/subscription.json'
 import { normalizeLanguage } from '../utils/locale'
 
 const mergeLocaleResources = (
@@ -54,11 +66,17 @@ i18n
     resources: {
       de: { translation: mergeLocaleResources(de, deSubscription) },
       en: { translation: mergeLocaleResources(en, enSubscription) },
-      zh: { translation: mergeLocaleResources(zh, zhSubscription) }
+      zh: { translation: mergeLocaleResources(zh, zhSubscription) },
+      fr: { translation: mergeLocaleResources(fr, frSubscription) },
+      ru: { translation: mergeLocaleResources(ru, ruSubscription) },
+      hu: { translation: mergeLocaleResources(hu, huSubscription) },
+      pl: { translation: mergeLocaleResources(pl, plSubscription) },
+      tr: { translation: mergeLocaleResources(tr, trSubscription) },
+      bs: { translation: mergeLocaleResources(bs, bsSubscription) }
     },
     lng: initialLanguage,
     fallbackLng: 'de',
-    supportedLngs: ['de', 'en', 'zh'],
+    supportedLngs: ['de', 'en', 'zh', 'fr', 'ru', 'hu', 'pl', 'tr', 'bs'],
     nonExplicitSupportedLngs: true,
     load: 'languageOnly',
     interpolation: {

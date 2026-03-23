@@ -9,7 +9,7 @@ Austrian VAT rates (2025/2026):
 
 Kleinunternehmerregelung (small business exemption):
 - Threshold: EUR 55,000 gross turnover (since 2025-01-01, previously EUR 35,000)
-- Tolerance: EUR 60,500 (10% overshoot allowed once)
+- Tolerance: EUR 63,250 (15% overshoot allowed once)
 
 Source: https://www.usp.gv.at/en/themen/steuern-finanzen/umsatzsteuer-ueberblick/
 """
@@ -30,6 +30,8 @@ class VATRateType(Enum):
     STANDARD = "standard"          # 20%
     REDUCED_10 = "reduced_10"      # 10%
     REDUCED_13 = "reduced_13"      # 13%
+    REDUCED_5 = "reduced_5"        # 5% (essential foods, since 2024)
+    ZERO_RATED = "zero_rated"      # 0% (menstrual products, contraceptives)
     EXEMPT = "exempt"              # 0% (Kleinunternehmer or genuine exemption)
 
 
@@ -42,6 +44,7 @@ class Transaction:
     vat_opted_in: bool = False  # For residential rental VAT opt-in
     category: Optional[str] = None  # expense_category or income_category value
     description: Optional[str] = None  # For keyword-based rate detection
+    is_reverse_charge: bool = False  # §19 UStG: foreign B2B service (e.g. SaaS from EU)
 
 
 @dataclass
@@ -55,6 +58,15 @@ class VATLineItem:
 
 
 @dataclass
+class ReverseChargeItem:
+    """Individual reverse-charge transaction for UVA reporting"""
+    description: str
+    net_amount: Decimal
+    vat_rate: Decimal
+    vat_amount: Decimal  # Self-assessed VAT (both output + input, net zero for Vorsteuer-eligible)
+
+
+@dataclass
 class VATResult:
     """Result of VAT calculation"""
     exempt: bool
@@ -65,6 +77,10 @@ class VATResult:
     warning: Optional[str] = None
     line_items: List[VATLineItem] = field(default_factory=list)
     rates_applied: Dict[str, Decimal] = field(default_factory=dict)
+    # Reverse charge (§19 UStG) — UVA fields KZ 057 (taxable amount) and KZ 066 (VAT)
+    reverse_charge_items: List[ReverseChargeItem] = field(default_factory=list)
+    reverse_charge_kz057: Decimal = Decimal('0.00')  # Total taxable amount (Bemessungsgrundlage)
+    reverse_charge_kz066: Decimal = Decimal('0.00')  # Total self-assessed VAT
 
 
 class VATCalculator:
@@ -73,7 +89,7 @@ class VATCalculator:
 
     Key features:
     - Small business exemption (Kleinunternehmerregelung): EUR 55,000 threshold
-    - Tolerance rule: EUR 60,500 (10% overshoot, once)
+    - Tolerance rule: EUR 63,250 (15% overshoot, once)
     - Standard rate: 20%
     - Reduced 10%: residential rental, accommodation, food, books, transport
     - Reduced 13%: live animals/plants, artist, film/circus, sporting events
@@ -86,8 +102,10 @@ class VATCalculator:
     _DEFAULT_STANDARD_RATE = Decimal('0.20')
     _DEFAULT_REDUCED_RATE_10 = Decimal('0.10')
     _DEFAULT_REDUCED_RATE_13 = Decimal('0.13')
+    _DEFAULT_REDUCED_RATE_5 = Decimal('0.05')
+    _DEFAULT_ZERO_RATE = Decimal('0.00')
     _DEFAULT_SMALL_BUSINESS_THRESHOLD = Decimal('55000.00')
-    _DEFAULT_TOLERANCE_THRESHOLD = Decimal('60500.00')
+    _DEFAULT_TOLERANCE_THRESHOLD = Decimal('63250.00')
 
     def __init__(self, vat_config: Optional[Dict] = None):
         """
@@ -103,6 +121,8 @@ class VATCalculator:
             self.STANDARD_RATE = Decimal(str(vat_config.get('standard', self._DEFAULT_STANDARD_RATE)))
             self.REDUCED_RATE_10 = Decimal(str(vat_config.get('residential', self._DEFAULT_REDUCED_RATE_10)))
             self.REDUCED_RATE_13 = Decimal(str(vat_config.get('reduced_13', self._DEFAULT_REDUCED_RATE_13)))
+            self.REDUCED_RATE_5 = Decimal(str(vat_config.get('reduced_5', self._DEFAULT_REDUCED_RATE_5)))
+            self.ZERO_RATE = Decimal(str(vat_config.get('zero_rated', self._DEFAULT_ZERO_RATE)))
             self.SMALL_BUSINESS_THRESHOLD = Decimal(str(
                 vat_config.get('small_business_threshold', self._DEFAULT_SMALL_BUSINESS_THRESHOLD)
             ))
@@ -113,6 +133,8 @@ class VATCalculator:
             self.STANDARD_RATE = self._DEFAULT_STANDARD_RATE
             self.REDUCED_RATE_10 = self._DEFAULT_REDUCED_RATE_10
             self.REDUCED_RATE_13 = self._DEFAULT_REDUCED_RATE_13
+            self.REDUCED_RATE_5 = self._DEFAULT_REDUCED_RATE_5
+            self.ZERO_RATE = self._DEFAULT_ZERO_RATE
             self.SMALL_BUSINESS_THRESHOLD = self._DEFAULT_SMALL_BUSINESS_THRESHOLD
             self.TOLERANCE_THRESHOLD = self._DEFAULT_TOLERANCE_THRESHOLD
 
@@ -154,6 +176,21 @@ class VATCalculator:
         'eintrittskarte', 'ticket',
     }
 
+    # Keywords for 0% zero-rated (menstrual/contraceptive products)
+    ZERO_RATED_KEYWORDS: Set[str] = {
+        'tampon', 'binde', 'menstruation', 'menstrual',
+        'kondom', 'condom', 'verhütung', 'contraceptive',
+        'pille', 'birth control',
+    }
+
+    # Keywords for 5% reduced rate (essential foods)
+    REDUCED_5_KEYWORDS: Set[str] = {
+        'grundnahrungsmittel', 'brot', 'bread', 'mehl', 'flour',
+        'milch', 'milk', 'butter', 'eier', 'eggs',
+        'zucker', 'sugar', 'reis', 'rice', 'nudeln', 'pasta',
+        'speiseöl', 'cooking oil',
+    }
+
     def determine_vat_rate(
         self,
         category: Optional[str] = None,
@@ -191,9 +228,15 @@ class VATCalculator:
         if cat_lower in self.REDUCED_13_CATEGORIES:
             return (self.REDUCED_RATE_13, VATRateType.REDUCED_13)
 
-        # Description keyword matching (check 13% first ? more specific)
+        # Description keyword matching (check most specific first)
         if description:
             desc_lower = description.lower()
+            for kw in self.ZERO_RATED_KEYWORDS:
+                if kw in desc_lower:
+                    return (self.ZERO_RATE, VATRateType.ZERO_RATED)
+            for kw in self.REDUCED_5_KEYWORDS:
+                if kw in desc_lower:
+                    return (self.REDUCED_RATE_5, VATRateType.REDUCED_5)
             for kw in self.REDUCED_13_KEYWORDS:
                 if kw in desc_lower:
                     return (self.REDUCED_RATE_13, VATRateType.REDUCED_13)
@@ -226,6 +269,8 @@ class VATCalculator:
 
         # Check small business exemption (Kleinunternehmerregelung)
         if gross_turnover <= self.SMALL_BUSINESS_THRESHOLD:
+            # Kleinunternehmer: no VAT obligation, no reverse charge
+            # (KU is exempt from USt — RC does not apply)
             return VATResult(
                 exempt=True,
                 reason=(
@@ -235,7 +280,7 @@ class VATCalculator:
                 ),
             )
 
-        # Check tolerance rule (10% overshoot)
+        # Check tolerance rule (15% overshoot) — still exempt, no RC
         if gross_turnover <= self.TOLERANCE_THRESHOLD:
             return VATResult(
                 exempt=True,
@@ -245,14 +290,16 @@ class VATCalculator:
                     f"Exempt this year, but exemption cancelled next year."
                 ),
                 warning=(
-                    "Your turnover exceeds EUR 55,000 but is within the 10% tolerance. "
+                    "Your turnover exceeds EUR 55,000 but is within the 15% tolerance. "
                     "You are exempt this year, but will be VAT-liable next year. "
                     "Consider consulting a Steuerberater about voluntary registration "
                     "to deduct input VAT (Vorsteuerabzug)."
                 ),
             )
 
-        # Above threshold: calculate VAT with correct rates per transaction
+        # Above threshold: regelbesteuert — calculate VAT + reverse charge
+        rc_items, rc_kz057, rc_kz066 = self.calculate_reverse_charge(transactions)
+
         line_items: List[VATLineItem] = []
         output_vat = Decimal('0.00')
         input_vat = Decimal('0.00')
@@ -298,6 +345,17 @@ class VATCalculator:
         input_vat = input_vat.quantize(Decimal('0.01'))
         net_vat = (output_vat - input_vat).quantize(Decimal('0.01'))
 
+        # For Vorsteuer-eligible businesses, reverse charge is net-zero:
+        # self-assessed output VAT + equal input VAT deduction cancel out.
+        # But we still report KZ 057/066 for UVA.
+        # (output_vat and input_vat each increase by rc_kz066, net unchanged)
+        if rc_items:
+            output_vat += rc_kz066
+            input_vat += rc_kz066
+            output_vat = output_vat.quantize(Decimal('0.01'))
+            input_vat = input_vat.quantize(Decimal('0.01'))
+            net_vat = (output_vat - input_vat).quantize(Decimal('0.01'))
+
         return VATResult(
             exempt=False,
             output_vat=output_vat,
@@ -305,7 +363,58 @@ class VATCalculator:
             net_vat=net_vat,
             line_items=line_items,
             rates_applied=rates_summary,
+            reverse_charge_items=rc_items,
+            reverse_charge_kz057=rc_kz057,
+            reverse_charge_kz066=rc_kz066,
         )
+
+    def calculate_reverse_charge(
+        self,
+        transactions: List[Transaction],
+    ) -> tuple[List[ReverseChargeItem], Decimal, Decimal]:
+        """
+        Calculate reverse-charge self-assessment for §19 UStG transactions.
+
+        When an Austrian business receives a service from a foreign EU business
+        (e.g., SaaS subscriptions, cloud hosting, freelance services), the
+        recipient must self-assess VAT at 20% (standard rate).
+
+        For the UVA (Umsatzsteuervoranmeldung):
+        - KZ 057: Taxable amount (Bemessungsgrundlage)
+        - KZ 066: Self-assessed VAT (20% of KZ 057)
+
+        If the recipient is Vorsteuer-eligible, the self-assessed VAT is
+        simultaneously deductible as input VAT, making it net-zero.
+
+        Args:
+            transactions: List of transactions (only is_reverse_charge=True processed)
+
+        Returns:
+            (reverse_charge_items, kz057_total, kz066_total)
+        """
+        items: List[ReverseChargeItem] = []
+        kz057 = Decimal('0.00')
+        kz066 = Decimal('0.00')
+
+        for txn in transactions:
+            if not txn.is_reverse_charge:
+                continue
+
+            amount = txn.amount if isinstance(txn.amount, Decimal) else Decimal(str(txn.amount))
+            # Reverse charge applies at 20% standard rate
+            vat_amount = (amount * self.STANDARD_RATE).quantize(Decimal('0.01'))
+
+            items.append(ReverseChargeItem(
+                description=txn.description or f"Reverse Charge ({txn.category or 'foreign service'})",
+                net_amount=amount.quantize(Decimal('0.01')),
+                vat_rate=self.STANDARD_RATE,
+                vat_amount=vat_amount,
+            ))
+
+            kz057 += amount
+            kz066 += vat_amount
+
+        return items, kz057.quantize(Decimal('0.01')), kz066.quantize(Decimal('0.01'))
 
     def check_small_business_exemption(self, gross_turnover: Decimal) -> bool:
         """Check if small business exemption applies."""

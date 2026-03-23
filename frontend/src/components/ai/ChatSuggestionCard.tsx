@@ -11,11 +11,31 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, X, Loader2, Undo2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Banknote,
+  Building2,
+  Check,
+  ClipboardList,
+  Eye,
+  FileText,
+  House,
+  Landmark,
+  Loader2,
+  ReceiptText,
+  Undo2,
+  Wallet,
+  X,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
 import { useRefreshStore } from '../../stores/refreshStore';
+import { getLocaleForLanguage } from '../../utils/locale';
+import i18nInstance from '../../i18n';
 import AIAvatar from './AIAvatar';
+import FuturisticIcon, { type FuturisticIconTone } from '../common/FuturisticIcon';
 import type { SuggestionChatMessage } from '../../stores/aiAdvisorStore';
 
 interface ChatSuggestionCardProps {
@@ -23,16 +43,18 @@ interface ChatSuggestionCardProps {
 }
 
 /** Map suggestion types to display icons */
-const typeIcons: Record<string, string> = {
-  create_property: '🏠',
-  create_asset: '🚗',
-  create_recurring_income: '💰',
-  create_recurring_expense: '💸',
-  create_loan: '🏦',
-  import_lohnzettel: '📄',
-  import_l1: '📋',
-  import_e1a: '📋',
-  import_bank_statement: '🏧',
+const typeIcons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+  create_property: { icon: House, tone: 'cyan' },
+  create_asset: { icon: Building2, tone: 'emerald' },
+  create_recurring_income: { icon: Wallet, tone: 'emerald' },
+  create_recurring_expense: { icon: Banknote, tone: 'rose' },
+  create_loan: { icon: Landmark, tone: 'amber' },
+  create_loan_repayment: { icon: Landmark, tone: 'amber' },
+  import_lohnzettel: { icon: FileText, tone: 'cyan' },
+  import_l1: { icon: ClipboardList, tone: 'amber' },
+  import_e1a: { icon: ClipboardList, tone: 'amber' },
+  import_bank_statement: { icon: ReceiptText, tone: 'violet' },
+  link_to_existing: { icon: Banknote, tone: 'amber' },
 };
 
 /** Extract key display fields from extracted data */
@@ -41,7 +63,7 @@ function getDisplayRows(data: Record<string, any>, _suggestionType: string): Arr
 
   if (data.amount || data.purchase_price || data.monthly_rent) {
     const amount = data.amount || data.purchase_price || data.monthly_rent;
-    rows.push({ label: 'Amount', value: `€ ${Number(amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}` });
+    rows.push({ label: 'Amount', value: `€ ${Number(amount).toLocaleString(getLocaleForLanguage(i18nInstance.language), { minimumFractionDigits: 2 })}` });
   }
 
   if (data.vendor || data.seller || data.landlord || data.employer) {
@@ -60,6 +82,14 @@ function getDisplayRows(data: Record<string, any>, _suggestionType: string): Arr
     rows.push({ label: 'Item', value: data.asset_name || data.description || data.item });
   }
 
+  // For link_to_existing: show match reason
+  if (data.matched_type) {
+    rows.push({ label: 'Match Type', value: data.matched_type });
+  }
+  if (data.reason) {
+    rows.push({ label: 'Reason', value: data.reason });
+  }
+
   return rows.slice(0, 5); // Max 5 rows
 }
 
@@ -71,6 +101,8 @@ function getTypeName(suggestionType: string, t: any): string {
     create_recurring_income: t('ai.suggestion.recurringIncome', 'Recurring Income'),
     create_recurring_expense: t('ai.suggestion.recurringExpense', 'Recurring Expense'),
     create_loan: t('ai.suggestion.loan', 'Loan'),
+    create_loan_repayment: t('ai.suggestion.loanRepayment', 'Loan Repayment'),
+    link_to_existing: t('ai.suggestion.linkExisting', 'Duplicate Detected'),
   };
   if (suggestionType.startsWith('import_')) {
     return t('ai.suggestion.taxData', 'Tax Data');
@@ -101,7 +133,8 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
     };
   }, []);
 
-  const icon = typeIcons[message.suggestionType] || '📋';
+  const navigate = useNavigate();
+  const iconMeta = typeIcons[message.suggestionType] || { icon: ClipboardList, tone: 'slate' as FuturisticIconTone };
   const typeName = getTypeName(message.suggestionType, t);
   const rows = getDisplayRows(message.extractedData, message.suggestionType);
   const lang = i18n.language?.slice(0, 2) || 'en';
@@ -119,13 +152,28 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
     : t('common.dismiss', 'Dismiss');
 
   const handleConfirm = async () => {
-    if (!message.action) {
-      setResult({ type: 'error', text: t('ai.suggestion.noAction', 'Action configuration missing. Please refresh.') });
-      return;
-    }
     setLoading(true);
     setResult(null);
     try {
+      // Special handling for link_to_existing (AI dedup match)
+      if (message.suggestionType === 'link_to_existing') {
+        await documentService.executeAction(
+          `/documents/${message.documentId}/link-existing`,
+          'POST',
+          { action: 'confirm' }
+        );
+        updateSuggestionStatus(message.documentId, 'confirmed');
+        setResult({ type: 'success', text: t('ai.suggestion.linked', 'Document linked to existing record. No duplicate created.') });
+        refreshAll();
+        setLoading(false);
+        return;
+      }
+
+      if (!message.action) {
+        setResult({ type: 'error', text: t('ai.suggestion.noAction', 'Action configuration missing. Please refresh.') });
+        setLoading(false);
+        return;
+      }
       await documentService.executeAction(message.action.endpoint, message.action.method, message.action.payload);
       updateSuggestionStatus(message.documentId, 'confirmed');
       setResult({ type: 'success', text: t('ai.suggestion.confirmed', 'Created successfully!') });
@@ -169,7 +217,16 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
 
   const handleDismiss = async () => {
     try {
-      await documentService.dismissSuggestion(message.documentId);
+      if (message.suggestionType === 'link_to_existing') {
+        // Reject AI dedup match — allow normal processing
+        await documentService.executeAction(
+          `/documents/${message.documentId}/link-existing`,
+          'POST',
+          { action: 'reject' }
+        );
+      } else {
+        await documentService.dismissSuggestion(message.documentId);
+      }
       updateSuggestionStatus(message.documentId, 'dismissed');
     } catch {
       // Silent dismiss failure
@@ -184,12 +241,19 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
     <div className="chat-msg assistant">
       <AIAvatar />
       <div className="chat-msg-bubble">
-        <p style={{ margin: '0 0 6px', fontSize: '0.84rem' }}>
-          {icon} {t('ai.suggestion.found', 'I found something in your document:')}
+        <p className="chat-suggestion-intro">
+          <span className="chat-suggestion-intro-icon">
+            <FuturisticIcon icon={iconMeta.icon} tone={iconMeta.tone} size="xs" />
+          </span>
+          <span>
+            {message.extractedData?.file_name
+              ? t('ai.suggestion.foundInFile', 'I found something in "{{fileName}}":', { fileName: message.extractedData.file_name })
+              : t('ai.suggestion.found', 'I found something in your document:')}
+          </span>
         </p>
 
         <div className="chat-recurring-card">
-          <div style={{ fontWeight: 600, fontSize: '0.82rem', marginBottom: 6 }}>
+          <div className="chat-suggestion-title">
             {typeName}
           </div>
 
@@ -202,9 +266,20 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
             ))}
           </div>
 
+          {/* View document link */}
+          {message.documentId && (
+            <button
+              className="chat-suggestion-view-doc"
+              onClick={() => navigate(`/documents/${message.documentId}`)}
+              type="button"
+            >
+              <Eye size={13} /> {t('ai.suggestion.viewDocument', 'View document')}
+            </button>
+          )}
+
           {/* Action buttons — only when actionable */}
           {isActionable && !result && (
-            <div className="chat-recurring-actions" style={{ marginTop: 8 }}>
+            <div className="chat-recurring-actions">
               <button
                 className="chat-recurring-btn confirm"
                 onClick={handleConfirm}
@@ -225,34 +300,21 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
 
           {/* Needs input hint */}
           {message.status === 'needs_input' && !result && (
-            <div style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: 6, fontStyle: 'italic' }}>
+            <div className="chat-suggestion-note">
               {t('ai.suggestion.needsInput', 'Please answer the follow-up questions below first.')}
             </div>
           )}
 
           {/* Result message */}
           {result && (
-            <div className={`chat-recurring-result ${result.type === 'success' ? 'confirmed' : ''}`}
-              style={{ marginTop: 8, fontSize: '0.8rem' }}>
-              {result.type === 'success' ? <Check size={14} /> : '❌'} {result.text}
+            <div className={`chat-recurring-result ${result.type === 'success' ? 'confirmed' : ''}`}>
+              {result.type === 'success' ? <Check size={14} /> : <XCircle size={14} />} {result.text}
               {/* Task 24: Undo button — 10 second countdown after confirm */}
               {showUndo && (
                 <button
                   type="button"
                   onClick={handleUndo}
-                  style={{
-                    marginLeft: 8,
-                    padding: '2px 8px',
-                    fontSize: '0.75rem',
-                    background: 'none',
-                    border: '1px solid var(--color-border, #e2e8f0)',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    color: 'var(--color-text-secondary, #64748b)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 3,
-                  }}
+                  className="chat-suggestion-undo"
                 >
                   <Undo2 size={11} />
                   {t('ai.suggestion.undo', 'Undo')} ({undoCountdown}s)
@@ -263,12 +325,12 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
 
           {/* Already confirmed/dismissed state */}
           {isConfirmed && !result && (
-            <div className="chat-recurring-result confirmed" style={{ marginTop: 8, fontSize: '0.8rem' }}>
+            <div className="chat-recurring-result confirmed">
               <Check size={14} /> {t('ai.suggestion.alreadyConfirmed', 'Confirmed')}
             </div>
           )}
           {isDismissed && !result && (
-            <div style={{ marginTop: 8, fontSize: '0.8rem', opacity: 0.5 }}>
+            <div className="chat-dismissed-note">
               {t('ai.suggestion.dismissed', 'Dismissed')}
             </div>
           )}

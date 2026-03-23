@@ -16,7 +16,14 @@ function LocationProbe() {
 }
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: () => undefined,
+  },
   useTranslation: () => ({
+    i18n: {
+      language: 'zh',
+    },
     t: (key: string, fallback?: string | { defaultValue?: string }) => {
       if (typeof fallback === 'string') return fallback;
       if (fallback && typeof fallback === 'object' && typeof fallback.defaultValue === 'string') {
@@ -74,45 +81,25 @@ describe('DocumentsPage linked transaction entry', () => {
     global.URL.createObjectURL = vi.fn(() => 'blob:test');
     global.URL.revokeObjectURL = vi.fn();
 
-    getDocument
-      .mockResolvedValueOnce({
-        id: 118,
-        user_id: 1,
-        document_type: 'receipt',
-        file_path: '/tmp/receipt.pdf',
-        file_name: 'receipt.pdf',
-        file_size: 100,
-        mime_type: 'application/pdf',
-        confidence_score: 0.92,
-        needs_review: false,
-        transaction_id: 1151,
-        created_at: '2026-03-17T00:00:00Z',
-        updated_at: '2026-03-17T00:00:00Z',
-        ocr_result: {
-          merchant: 'OAMTC',
-          amount: 237.9,
-          line_items: [],
-        },
-      })
-      .mockResolvedValueOnce({
-        id: 118,
-        user_id: 1,
-        document_type: 'receipt',
-        file_path: '/tmp/receipt.pdf',
-        file_name: 'receipt.pdf',
-        file_size: 100,
-        mime_type: 'application/pdf',
-        confidence_score: 0.92,
-        needs_review: false,
-        transaction_id: 1151,
-        created_at: '2026-03-17T00:00:00Z',
-        updated_at: '2026-03-17T00:00:00Z',
-        ocr_result: {
-          merchant: 'OAMTC',
-          amount: 237.9,
-          line_items: [],
-        },
-      });
+    getDocument.mockResolvedValue({
+      id: 118,
+      user_id: 1,
+      document_type: 'receipt',
+      file_path: '/tmp/receipt.pdf',
+      file_name: 'receipt.pdf',
+      file_size: 100,
+      mime_type: 'application/pdf',
+      confidence_score: 0.92,
+      needs_review: false,
+      transaction_id: 1151,
+      created_at: '2026-03-17T00:00:00Z',
+      updated_at: '2026-03-17T00:00:00Z',
+      ocr_result: {
+        merchant: 'OAMTC',
+        amount: 237.9,
+        line_items: [],
+      },
+    });
 
     downloadDocument.mockResolvedValue(new Blob(['pdf']));
     getById.mockResolvedValue({
@@ -139,9 +126,9 @@ describe('DocumentsPage linked transaction entry', () => {
     );
 
     await waitFor(() => expect(getDocument).toHaveBeenCalledWith(118));
-    await waitFor(() => expect(screen.getByRole('button', { name: '已生成交易，前往查看' })).toBeInTheDocument());
+    const openButton = await screen.findByRole('button', { name: 'Open transaction' });
 
-    fireEvent.click(screen.getByRole('button', { name: '已生成交易，前往查看' }));
+    fireEvent.click(openButton);
 
     await waitFor(() => {
       expect(screen.getByTestId('location-probe')).toHaveTextContent('/transactions?transactionId=1151');

@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
 import reportService, { EAReport as EAReportData } from '../../services/reportService';
 import YearWarning from './YearWarning';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './EAReport.css';
 
 const EAReport = () => {
@@ -43,7 +45,7 @@ const EAReport = () => {
     }
   };
 
-  const fmt = (n: number) => new Intl.NumberFormat('de-AT', {
+  const fmt = (n: number) => new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
     style: 'currency', currency: 'EUR', minimumFractionDigits: 2,
   }).format(n);
 
@@ -70,11 +72,8 @@ const EAReport = () => {
       <div className="ea-controls">
         <div className="form-group">
           <label htmlFor="ea-year">{t('reports.taxYear')}</label>
-          <select id="ea-year" value={taxYear} onChange={e => setTaxYear(+e.target.value)}>
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <Select id="ea-year" value={String(taxYear)} onChange={v => setTaxYear(Number(v))}
+            options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))} size="sm" />
         </div>
         <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
           {loading ? t('common.loading') : t('reports.ea.generate')}

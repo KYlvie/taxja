@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { documentService } from '../../services/documentService';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './DeleteDocumentDialog.css';
 
 interface DeleteDocumentDialogProps {
@@ -51,7 +52,7 @@ const DeleteDocumentDialog = ({
   onConfirm,
   onCancel,
 }: DeleteDocumentDialogProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [relatedData, setRelatedData] = useState<RelatedData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedMode, setSelectedMode] = useState<'document_only' | 'with_data'>('document_only');
@@ -88,14 +89,14 @@ const DeleteDocumentDialog = ({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
     }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-AT');
+    return new Date(dateString).toLocaleDateString(getLocaleForLanguage(i18n.language));
   };
 
   const handleConfirm = () => {
@@ -113,7 +114,7 @@ const DeleteDocumentDialog = ({
             </div>
             <div className="cfd-header-info">
               <span className="cfd-assistant-name">Taxja AI</span>
-              <span className="cfd-status">{t('ai.typing', '正在输入...')}</span>
+              <span className="cfd-status">{t('ai.typing', 'Typing...')}</span>
             </div>
           </div>
           <div className="cfd-chat">
@@ -141,7 +142,7 @@ const DeleteDocumentDialog = ({
           <div className="cfd-header-info">
             <span className="cfd-assistant-name">Taxja AI</span>
             <span className="cfd-status">
-              {isTyping ? t('ai.typing', '正在输入...') : t('ai.online', '在线')}
+              {isTyping ? t('ai.typing', 'Typing...') : t('ai.online', 'Online')}
             </span>
           </div>
         </div>
@@ -171,20 +172,20 @@ const DeleteDocumentDialog = ({
                       )}
                       {relatedData.related_data.linked_mietvertrag && (
                         <div className="ddd-related-item">
-                          <strong>{t('documents.deleteDialog.linkedMietvertrag', '关联租赁合同')}:</strong>
+                          <strong>{t('documents.deleteDialog.linkedMietvertrag', 'Linked Rental Contract')}:</strong>
                           <span>📄 {relatedData.related_data.linked_mietvertrag.file_name}</span>
                           <span className="ddd-meta ddd-meta--warn">
-                            {t('documents.deleteDialog.linkedMietvertragWarn', '选择"删除关联"将一并删除此租赁合同')}
+                            {t('documents.deleteDialog.linkedMietvertragWarn', 'Choosing \'Delete Everything\' will also delete this rental contract and its recurring transactions')}
                           </span>
                         </div>
                       )}
                       {relatedData.related_data.recurring_transactions && relatedData.related_data.recurring_transactions.length > 0 && (
                         <div className="ddd-related-item">
-                          <strong>{t('documents.deleteDialog.recurringTransactions', '定期交易')} ({relatedData.related_data.recurring_transactions.length}):</strong>
+                          <strong>{t('documents.deleteDialog.recurringTransactions', 'Recurring Transactions')} ({relatedData.related_data.recurring_transactions.length}):</strong>
                           {relatedData.related_data.recurring_transactions.map((r) => (
                             <div key={r.id} className="ddd-txn">
                               <span>{r.description}</span>
-                              <span>{formatCurrency(r.amount)} • {r.frequency}{r.is_active ? '' : ` (${t('common.expired', '已过期')})`}</span>
+                              <span>{formatCurrency(r.amount)} • {r.frequency}{r.is_active ? '' : ` (${t('common.expired', 'Expired')})`}</span>
                             </div>
                           ))}
                         </div>

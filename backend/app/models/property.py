@@ -33,6 +33,8 @@ class PropertyStatus(str, Enum):
     ACTIVE = "active"
     SOLD = "sold"
     ARCHIVED = "archived"
+    SCRAPPED = "scrapped"
+    WITHDRAWN = "withdrawn"
 
 
 class Property(Base):
@@ -138,6 +140,7 @@ class Property(Base):
     status = Column(SQLEnum(PropertyStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=PropertyStatus.ACTIVE, index=True)
     sale_date = Column(Date, nullable=True)
     sale_price = Column(Numeric(12, 2), nullable=True)  # ImmoESt: Veräußerungserlös
+    disposal_reason = Column(String(30), nullable=True)  # sold, scrapped, fully_depreciated, private_withdrawal
 
     # ImmoESt exemption flags
     hauptwohnsitz = Column(Boolean, default=False, nullable=False)  # §30 Abs 2 Z 1 EStG
@@ -189,6 +192,7 @@ class Property(Base):
     user = relationship("User", back_populates="properties")
     transactions = relationship("Transaction", back_populates="property", foreign_keys="Transaction.property_id")
     loans = relationship("PropertyLoan", back_populates="property", cascade="all, delete-orphan")
+    liabilities = relationship("Liability", back_populates="linked_property", foreign_keys="Liability.linked_property_id")
     policy_snapshots = relationship("AssetPolicySnapshot", back_populates="property", cascade="all, delete-orphan")
     asset_events = relationship("AssetEvent", back_populates="property", cascade="all, delete-orphan")
     

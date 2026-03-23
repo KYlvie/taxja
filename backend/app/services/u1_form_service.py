@@ -15,6 +15,7 @@ from sqlalchemy import extract
 
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User
+from app.services.posting_line_utils import recoverable_input_vat_for_transaction
 
 
 # VAT rates
@@ -90,8 +91,8 @@ def generate_u1_form_data(
             else:
                 revenue_exempt += amount
 
-        elif t.type == TransactionType.EXPENSE and vat > 0:
-            vorsteuer += vat
+        elif t.type in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
+            vorsteuer += recoverable_input_vat_for_transaction(t)
 
     total_vat = vat_20 + vat_10 + vat_13
     zahllast = total_vat - vorsteuer  # positive = owe, negative = refund

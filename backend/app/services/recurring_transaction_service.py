@@ -11,8 +11,10 @@ from app.models.recurring_transaction import (
     RecurringTransactionType
 )
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.core.transaction_enum_coercion import coerce_expense_category, coerce_income_category
 from app.models.property import Property, PropertyStatus
 from app.models.property_loan import PropertyLoan
+from app.models.liability import Liability
 
 
 class RecurringTransactionService:
@@ -104,7 +106,8 @@ class RecurringTransactionService:
         monthly_interest: Decimal,
         start_date: date,
         end_date: Optional[date] = None,
-        day_of_month: int = 1
+        day_of_month: int = 1,
+        liability_id: Optional[int] = None,
     ) -> RecurringTransaction:
         """
         Create a recurring transaction for loan interest payments.
@@ -128,6 +131,7 @@ class RecurringTransactionService:
             user_id=user_id,
             recurring_type=RecurringTransactionType.LOAN_INTEREST,
             loan_id=loan_id,
+            liability_id=liability_id,
             property_id=loan.property_id,
             description=f"Loan interest - {loan.lender_name}",
             amount=monthly_interest,
@@ -205,6 +209,7 @@ class RecurringTransactionService:
         end_date: Optional[date] = None,
         day_of_month: int = 1,
         source_document_id: Optional[int] = None,
+        liability_id: Optional[int] = None,
     ) -> RecurringTransaction:
         """
         Create a recurring transaction for standalone loan repayments.
@@ -225,9 +230,10 @@ class RecurringTransactionService:
         recurring = RecurringTransaction(
             user_id=user_id,
             recurring_type=RecurringTransactionType.LOAN_REPAYMENT,
+            liability_id=liability_id,
             description=description,
             amount=monthly_payment,
-            transaction_type="expense",
+            transaction_type=TransactionType.LIABILITY_REPAYMENT.value,
             category="loan_repayment",
             frequency=RecurrenceFrequency.MONTHLY,
             start_date=start_date,
@@ -395,8 +401,9 @@ class RecurringTransactionService:
                         state_changed = True
                 else:
                     transaction = self._generate_transaction_from_recurring(recurring, gen_date)
-                    generated_transactions.append(transaction)
-                    state_changed = True
+                    if transaction is not None:
+                        generated_transactions.append(transaction)
+                        state_changed = True
 
                 # Advance to next occurrence
                 recurring.last_generated_date = gen_date
@@ -448,26 +455,40 @@ class RecurringTransactionService:
         self,
         recurring: RecurringTransaction,
         transaction_date: date
-    ) -> Transaction:
-        """Generate a transaction from a recurring transaction"""
-        
+    ) -> Optional[Transaction]:
+        """Generate a transaction from a recurring transaction."""
+
+        # Legacy standalone loan repayments were modeled as expenses, which
+        # distorted both bookkeeping and tax reports. Keep the template for
+        # reference, but stop generating expense transactions from it.
+        if recurring.recurring_type == RecurringTransactionType.LOAN_REPAYMENT:
+            return None
+
         # Determine transaction type and category
-        if recurring.transaction_type == "income":
+        if recurring.transaction_type == TransactionType.INCOME.value:
             txn_type = TransactionType.INCOME
-            income_category = IncomeCategory.RENTAL if recurring.recurring_type == RecurringTransactionType.RENTAL_INCOME else None
+            income_category = coerce_income_category(recurring.category)
+            if income_category is None and recurring.recurring_type == RecurringTransactionType.RENTAL_INCOME:
+                income_category = IncomeCategory.RENTAL
             expense_category = None
-        else:
+            is_deductible = False
+        elif recurring.transaction_type == TransactionType.EXPENSE.value:
             txn_type = TransactionType.EXPENSE
             income_category = None
             # Map recurring type to expense category
             expense_category_map = {
                 RecurringTransactionType.LOAN_INTEREST: ExpenseCategory.LOAN_INTEREST,
                 RecurringTransactionType.INSURANCE_PREMIUM: ExpenseCategory.INSURANCE,
-                RecurringTransactionType.LOAN_REPAYMENT: ExpenseCategory.LOAN_INTEREST,
             }
-            expense_category = expense_category_map.get(
+            expense_category = coerce_expense_category(recurring.category) or expense_category_map.get(
                 recurring.recurring_type, ExpenseCategory.OTHER
             )
+            is_deductible = True
+        else:
+            txn_type = TransactionType(recurring.transaction_type)
+            income_category = None
+            expense_category = None
+            is_deductible = False
         
         transaction = Transaction(
             user_id=recurring.user_id,
@@ -478,7 +499,8 @@ class RecurringTransactionService:
             income_category=income_category,
             expense_category=expense_category,
             property_id=recurring.property_id,
-            is_deductible=recurring.transaction_type == "expense",
+            liability_id=recurring.liability_id,
+            is_deductible=is_deductible,
             is_system_generated=True,
             source_recurring_id=recurring.id,
         )

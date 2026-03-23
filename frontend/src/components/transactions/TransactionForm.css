@@ -434,21 +434,6 @@
   flex-wrap: wrap;
 }
 
-.line-item-select {
-  flex: 1;
-  min-width: 120px;
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-family: inherit;
-  background: white;
-}
-
-.line-item-select:focus {
-  outline: none;
-  border-color: #6366f1;
-}
 
 .line-item-deductible-toggle {
   display: flex;

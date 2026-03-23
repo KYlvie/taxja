@@ -122,18 +122,39 @@
   color: var(--color-danger);
 }
 
+.type-badge.asset_acquisition,
+.type-badge.liability_repayment,
+.type-badge.tax_payment {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.type-badge.liability_drawdown {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.type-badge.transfer {
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
+}
+
 .amount {
   font-size: 18px;
   font-weight: 600;
   font-family: var(--font-mono);
 }
 
-.amount.income {
+.amount.positive {
   color: var(--color-success);
 }
 
-.amount.expense {
+.amount.negative {
   color: var(--color-danger);
+}
+
+.amount.neutral {
+  color: var(--color-text-secondary);
 }
 
 .category-badge {

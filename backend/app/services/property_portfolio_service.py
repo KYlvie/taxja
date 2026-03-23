@@ -77,10 +77,11 @@ class PropertyPortfolioService:
         if year is None:
             year = date.today().year
         
-        # Get all active properties for user
+        # Get all active real estate properties for user (exclude devices, vehicles, etc.)
         properties = self.db.query(Property).filter(
             Property.user_id == user_id,
-            Property.status == PropertyStatus.ACTIVE
+            Property.status == PropertyStatus.ACTIVE,
+            Property.asset_type == "real_estate",
         ).all()
         
         if not properties:
@@ -96,8 +97,9 @@ class PropertyPortfolioService:
             )
             
             # Calculate rental yield (net income / purchase price * 100)
+            # Skip placeholder properties (purchase_price <= 0.01) to avoid absurd percentages
             rental_yield = Decimal("0")
-            if property.purchase_price > 0:
+            if property.purchase_price > Decimal("0.01"):
                 rental_yield = (
                     metrics.net_rental_income / property.purchase_price * Decimal("100")
                 )
@@ -365,11 +367,12 @@ class PropertyPortfolioService:
             try:
                 # Link transaction (validates ownership internally)
                 self.property_service.link_transaction_to_property(
-                    property_id, transaction_id, user_id
+                    transaction_id, property_id, user_id
                 )
                 results["successful"] += 1
                 
             except Exception as e:
+                self.db.rollback()
                 results["failed"] += 1
                 results["errors"].append({
                     "transaction_id": transaction_id,

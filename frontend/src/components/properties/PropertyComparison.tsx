@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
 import { propertyService } from '../../services/propertyService';
 import SubpageBackLink from '../common/SubpageBackLink';
 import {
@@ -12,6 +13,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PropertyComparison.css';
 
 interface PropertyComparisonData {
@@ -31,8 +33,12 @@ interface PropertyComparisonData {
 type SortField = 'address' | 'rental_income' | 'expenses' | 'net_income' | 'rental_yield' | 'expense_ratio';
 type SortOrder = 'asc' | 'desc';
 
-export const PropertyComparison: React.FC = () => {
-  const { t } = useTranslation();
+type PropertyComparisonProps = {
+  embedded?: boolean;
+};
+
+export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded = false }) => {
+  const { t, i18n } = useTranslation();
   const [comparisons, setComparisons] = useState<PropertyComparisonData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +79,7 @@ export const PropertyComparison: React.FC = () => {
 
   // Format currency
   const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,
@@ -150,28 +156,22 @@ export const PropertyComparison: React.FC = () => {
   }
 
   return (
-    <div className="property-comparison">
+    <div className={`property-comparison${embedded ? ' property-comparison--embedded' : ''}`}>
       {/* Header with filters */}
       <div className="comparison-header">
-        <div className="header-content">
-          <SubpageBackLink to="/advanced" />
-          <h2>{t('properties.portfolio.propertyComparison')}</h2>
-          <p className="subtitle">{t('properties.portfolio.propertyComparisonDescription')}</p>
-        </div>
+        {!embedded && (
+          <div className="header-content">
+            <SubpageBackLink to="/advanced" />
+            <h2>{t('properties.portfolio.propertyComparison')}</h2>
+            <p className="subtitle">{t('properties.portfolio.propertyComparisonDescription')}</p>
+          </div>
+        )}
         
         <div className="filters">
           <div className="filter-group">
             <label htmlFor="year-filter">{t('dashboard.taxYear')}</label>
-            <select
-              id="year-filter"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
-              className="filter-select"
-            >
-              {yearOptions.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+            <Select id="year-filter" value={String(year)} onChange={v => setYear(Number(v))}
+              options={yearOptions.map(y => ({ value: String(y), label: String(y) }))} size="sm" />
           </div>
         </div>
       </div>

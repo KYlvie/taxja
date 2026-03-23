@@ -38,6 +38,41 @@ ASSET_ACQUISITION_KINDS = {
 }
 
 
+VALID_DISPOSAL_REASONS = {"sold", "scrapped", "fully_depreciated", "private_withdrawal"}
+
+
+class DisposalRequest(BaseModel):
+    """Request schema for disposing of an asset/property"""
+    disposal_reason: str = Field(
+        ...,
+        description="Reason for disposal: sold, scrapped, fully_depreciated, private_withdrawal"
+    )
+    disposal_date: date = Field(..., description="Date of disposal")
+    sale_price: Optional[Decimal] = Field(
+        None,
+        gt=0,
+        le=Decimal("100000000"),
+        description="Sale price (required when disposal_reason is 'sold')"
+    )
+
+    @field_validator("disposal_reason")
+    @classmethod
+    def validate_disposal_reason(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in VALID_DISPOSAL_REASONS:
+            raise ValueError(
+                f"Invalid disposal_reason '{v}'. "
+                f"Must be one of: {sorted(VALID_DISPOSAL_REASONS)}"
+            )
+        return v
+
+    @model_validator(mode="after")
+    def validate_sale_price_required_for_sold(self):
+        if self.disposal_reason == "sold" and self.sale_price is None:
+            raise ValueError("sale_price is required when disposal_reason is 'sold'")
+        return self
+
+
 class PropertyBase(BaseModel):
     """Base property schema with common fields"""
     property_type: PropertyType = Field(
@@ -415,6 +450,7 @@ class PropertyResponse(BaseModel):
     accumulated_depreciation: Optional[Decimal] = Decimal("0")
     status: PropertyStatus
     sale_date: Optional[date]
+    disposal_reason: Optional[str] = None
     kaufvertrag_document_id: Optional[int]
     mietvertrag_document_id: Optional[int]
     created_at: datetime
@@ -835,6 +871,7 @@ class AssetResponse(BaseModel):
     supplier: Optional[str]
     accumulated_depreciation: Decimal
     status: PropertyStatus
+    disposal_reason: Optional[str] = None
     kaufvertrag_document_id: Optional[int]
     created_at: datetime
     updated_at: datetime

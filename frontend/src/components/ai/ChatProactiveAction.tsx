@@ -10,10 +10,12 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Check, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { useAIAdvisorStore, type ProactiveMessage } from '../../stores/aiAdvisorStore';
 import { useRefreshStore } from '../../stores/refreshStore';
+import { getLocaleForLanguage } from '../../utils/locale';
 
 interface ChatProactiveActionProps {
   message: ProactiveMessage;
@@ -33,6 +35,7 @@ export function isActionableProactive(msg: ProactiveMessage): boolean {
 
 export default function ChatProactiveAction({ message }: ChatProactiveActionProps) {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const lang = i18n.language?.slice(0, 2) || 'en';
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -120,29 +123,36 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
   const isConfirmed = message.actionStatus === 'confirmed';
   const isDismissed = message.actionStatus === 'dismissed';
   const isPending = message.actionStatus === 'pending';
+  const linkActions = [
+    message.link
+      ? {
+          href: message.link,
+          label:
+            message.linkLabel ||
+            (message.link.startsWith('/documents/')
+              ? t('ai.proactive.viewDocument', 'View document')
+              : t('ai.proactive.viewDetails', 'View details')),
+        }
+      : null,
+    message.secondaryLink
+      ? {
+          href: message.secondaryLink,
+          label: message.secondaryLinkLabel || t('ai.proactive.viewDocument', 'View document'),
+        }
+      : null,
+  ].filter((action): action is { href: string; label: string } => Boolean(action));
 
   return (
     <>
       {/* Action buttons — only for pending actionable messages */}
       {isPending && !result && (
-        <div className="chat-recurring-card" style={{ marginTop: 8 }}>
+        <div className="chat-recurring-card">
           {/* Expandable details */}
           {message.actionData && (
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '0.78rem',
-                color: 'var(--color-primary)',
-                padding: '2px 0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                marginBottom: expanded ? 6 : 0,
-              }}
+              className="chat-proactive-toggle"
             >
               {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               {t('ai.proactive.viewDetails', 'View details')}
@@ -150,7 +160,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
           )}
 
           {expanded && message.actionData && (
-            <div className="chat-recurring-details" style={{ marginBottom: 8 }}>
+            <div className="chat-recurring-details">
               {Object.entries(message.actionData)
                 .filter(([key]) => !key.startsWith('suggestion_') && key !== 'decision' && key !== 'quality_gate_decision')
                 .slice(0, 6)
@@ -159,7 +169,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                     <span>{key.replace(/_/g, ' ')}</span>
                     <span className="chat-recurring-value">
                       {typeof val === 'number'
-                        ? `€ ${val.toLocaleString('de-AT', { minimumFractionDigits: 2 })}`
+                        ? `€ ${val.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`
                         : String(val)}
                     </span>
                   </div>
@@ -184,6 +194,22 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
               <X size={14} /> {dismissLabel}
             </button>
           </div>
+
+          {linkActions.length > 0 && (
+            <div className="chat-inline-link-actions">
+              {linkActions.map((action) => (
+                <button
+                  key={`${message.id}-${action.href}`}
+                  type="button"
+                  className="chat-recurring-btn dismiss chat-inline-link-btn"
+                  onClick={() => navigate(action.href)}
+                >
+                  <ArrowRight size={14} />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -191,7 +217,6 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
       {result && (
         <div
           className={`chat-recurring-result ${result.type === 'success' ? 'confirmed' : ''}`}
-          style={{ marginTop: 8, fontSize: '0.8rem' }}
         >
           {result.type === 'success' ? <Check size={14} /> : '❌'} {result.text}
         </div>
@@ -199,14 +224,14 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
 
       {/* Already confirmed */}
       {isConfirmed && !result && (
-        <div className="chat-recurring-result confirmed" style={{ marginTop: 6, fontSize: '0.8rem' }}>
+        <div className="chat-recurring-result confirmed">
           <Check size={14} /> {t('ai.proactive.alreadyConfirmed', 'Confirmed')}
         </div>
       )}
 
       {/* Already dismissed */}
       {isDismissed && !result && (
-        <div style={{ marginTop: 6, fontSize: '0.8rem', opacity: 0.5 }}>
+        <div className="chat-dismissed-note">
           {t('ai.proactive.alreadyDismissed', 'Dismissed')}
         </div>
       )}

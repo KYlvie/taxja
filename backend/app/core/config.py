@@ -1,7 +1,11 @@
 """Application Configuration"""
+import logging
+import secrets
 from typing import List
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -19,11 +23,67 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
     
+    # Frontend URL (used in verification emails, password reset links)
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # Security
-    SECRET_KEY: str
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ENCRYPTION_KEY: str  # AES-256 key
+
+    # Cookie settings
+    COOKIE_DOMAIN: str = ".taxja.at"  # Covers taxja.at + subdomains (e.g. api.taxja.at)
+    COOKIE_SECURE: bool = True        # HTTPS only — required for production
+    COOKIE_SAMESITE: str = "lax"      # "lax" for access, "strict" for refresh
+    COOKIE_PATH: str = "/api/v1"
+
+    # CSRF
+    CSRF_SECRET_KEY: str = ""
+
+    # Token blacklist TTL (>= refresh token expiry)
+    TOKEN_BLACKLIST_TTL_SECONDS: int = 604800  # 7 days
+
+    # Debug mode (controls Swagger docs visibility)
+    DEBUG: bool = True
+
+    # Metrics endpoint authentication
+    METRICS_SECRET: str = ""
+
+    # Trusted host validation (comma-separated string, parsed via property)
+    ALLOWED_HOSTS: str = "*"
+
+    @field_validator("SECRET_KEY", mode="before")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if not v or len(v) < 32:
+            generated = secrets.token_urlsafe(64)
+            logger.warning(
+                "SECRET_KEY is missing or too short — generated a random key. "
+                "Set SECRET_KEY in .env for production."
+            )
+            return generated
+        return v
+
+    @field_validator("CSRF_SECRET_KEY", mode="before")
+    @classmethod
+    def validate_csrf_secret_key(cls, v: str) -> str:
+        if not v or len(v) < 32:
+            generated = secrets.token_urlsafe(64)
+            logger.warning(
+                "CSRF_SECRET_KEY is missing or too short — generated a random key. "
+                "Set CSRF_SECRET_KEY in .env for production."
+            )
+            return generated
+        return v
+
+    @property
+    def allowed_hosts_list(self) -> List[str]:
+        """Parse ALLOWED_HOSTS comma-separated string into a list."""
+        if not self.ALLOWED_HOSTS or self.ALLOWED_HOSTS.strip() == "*":
+            return ["*"]
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",")]
     
     # Database
     POSTGRES_SERVER: str
@@ -69,6 +129,9 @@ class Settings(BaseSettings):
     # LLM / OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-opus-4-1-20250805"
+    ANTHROPIC_VISION_MODEL: str = "claude-opus-4-1-20250805"
 
     # GPT-OSS-120B (self-hosted via vLLM)
     GPT_OSS_ENABLED: bool = False
@@ -105,6 +168,36 @@ class Settings(BaseSettings):
     HISTORICAL_IMPORT_RETENTION_DAYS: int = 90
     HISTORICAL_IMPORT_MIN_CONFIDENCE: float = 0.7
     HISTORICAL_IMPORT_ENABLE_AUTO_LINK: bool = True
+    SENSITIVE_DOCUMENT_MODE: str = ""
+    CONTRACT_ROLE_MODE: str = "legacy"
+
+    @field_validator("SENSITIVE_DOCUMENT_MODE", mode="before")
+    @classmethod
+    def normalize_sensitive_document_mode(cls, v: str) -> str:
+        if v is None:
+            return ""
+        mode = str(v).strip().lower()
+        if not mode:
+            return ""
+        if mode not in {"legacy", "shadow", "strict"}:
+            logger.warning(
+                "Unsupported SENSITIVE_DOCUMENT_MODE '%s' - ignoring value.",
+                v,
+            )
+            return ""
+        return mode
+
+    @field_validator("CONTRACT_ROLE_MODE", mode="before")
+    @classmethod
+    def normalize_contract_role_mode(cls, v: str) -> str:
+        mode = (v or "legacy").strip().lower()
+        if mode not in {"legacy", "shadow", "strict"}:
+            logger.warning(
+                "Unsupported CONTRACT_ROLE_MODE '%s' - falling back to 'legacy'.",
+                v,
+            )
+            return "legacy"
+        return mode
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""
@@ -125,6 +218,9 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@taxja.at"
     SMTP_FROM_NAME: str = "Taxja"
     SMTP_USE_TLS: bool = True
+
+    # Contact form
+    CONTACT_EMAIL: str = "office@oohk.com"
 
 
 settings = Settings()

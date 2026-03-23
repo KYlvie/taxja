@@ -258,6 +258,12 @@ export const documentService = {
     return response.data;
   },
 
+  // Confirm standalone loan repayment creation from Kreditvertrag OCR suggestion
+  confirmLoanRepayment: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-loan-repayment`);
+    return response.data;
+  },
+
   // Confirm asset creation from vehicle/equipment Kaufvertrag OCR suggestion
   confirmAsset: async (id: number, confirmation?: AssetSuggestionConfirmationPayload): Promise<any> => {
     const response = await api.post(`/documents/${id}/confirm-asset`, confirmation || {});

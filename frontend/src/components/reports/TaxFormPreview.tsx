@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
 import reportService, { TaxFormData, TaxFormField, EligibleForm } from '../../services/reportService';
 import YearWarning from './YearWarning';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './TaxFormPreview.css';
 
 /** Section definitions matching official BMF form layout */
@@ -103,7 +105,7 @@ const TaxFormPreview = () => {
   const [selectedFormType, setSelectedFormType] = useState<string>('MAIN');
   const [loadingForms, setLoadingForms] = useState(false);
 
-  const lang = (i18n.language.split('-')[0] || 'de') as 'de' | 'en' | 'zh';
+  const lang = (i18n.language.split('-')[0] || 'de') as 'de' | 'en' | 'zh' | 'fr' | 'ru';
 
   // Fetch eligible forms when year changes
   useEffect(() => {
@@ -174,7 +176,7 @@ const TaxFormPreview = () => {
     return editedValues[key] !== undefined ? editedValues[key] : field.value;
   };
 
-  const fmt = (n: number) => new Intl.NumberFormat('de-AT', {
+  const fmt = (n: number) => new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
     style: 'currency', currency: 'EUR', minimumFractionDigits: 2,
   }).format(n);
 
@@ -373,23 +375,26 @@ const TaxFormPreview = () => {
             {t('taxFormPreview.selectForm', 'Formular auswaehlen')}
           </div>
           <div className="tf-form-tabs">
-            {/* Main form tab */}
-            <button
-              className={`tf-form-tab ${selectedFormType === 'MAIN' ? 'active' : ''}`}
-              onClick={() => { setSelectedFormType('MAIN'); setFormData(null); }}
-              title={mainForms[0] ? getEligibleFormDesc(mainForms[0]) : ''}
-            >
-              <span className="tf-tab-icon">{FORM_ICONS[mainForms[0]?.form_type || 'E1']}</span>
-              <span className="tf-tab-info">
-                <span className="tf-tab-name-primary">
-                  {mainForms[0] ? getEligibleFormName(mainForms[0]) : t('taxFormPreview.mainForm', 'Hauptformular')}
+            {/* Main form tabs — render ALL main forms (E1, L1, K1) */}
+            {mainForms.map((mf, idx) => (
+              <button
+                key={mf.form_type}
+                className={`tf-form-tab ${(idx === 0 && selectedFormType === 'MAIN') || selectedFormType === mf.form_type ? 'active' : ''}`}
+                onClick={() => { setSelectedFormType(idx === 0 ? 'MAIN' : mf.form_type); setFormData(null); }}
+                title={getEligibleFormDesc(mf)}
+              >
+                <span className="tf-tab-icon">{FORM_ICONS[mf.form_type] || '\uD83D\uDCC4'}</span>
+                <span className="tf-tab-info">
+                  <span className="tf-tab-name-primary">
+                    {getEligibleFormName(mf)}
+                  </span>
+                  <span className="tf-tab-meta">
+                    <span className="tf-tab-code">{mf.form_type}</span>
+                    {mf.has_template && <span className="tf-tab-official" title={t('taxFormPreview.officialPdfAvailable', 'Offizielles BMF-PDF verfügbar')}>{'\uD83C\uDDE6\uD83C\uDDF9'}</span>}
+                  </span>
                 </span>
-                <span className="tf-tab-meta">
-                  <span className="tf-tab-code">{mainForms[0]?.form_type || 'E1'}</span>
-                  {mainForms[0]?.has_template && <span className="tf-tab-official" title={t('taxFormPreview.officialPdfAvailable', 'Offizielles BMF-PDF verfügbar')}>{'\uD83C\uDDE6\uD83C\uDDF9'}</span>}
-                </span>
-              </span>
-            </button>
+              </button>
+            ))}
             {/* Supplementary form tabs */}
             {supplementaryForms.map(form => (
               <button
@@ -419,11 +424,8 @@ const TaxFormPreview = () => {
       <div className="tf-controls">
         <div className="form-group">
           <label htmlFor="tf-year">{t('reports.taxYear')}</label>
-          <select id="tf-year" value={taxYear} onChange={e => setTaxYear(+e.target.value)}>
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <Select id="tf-year" value={String(taxYear)} onChange={v => setTaxYear(Number(v))}
+            options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))} size="sm" />
         </div>
         <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
           {loading ? t('common.loading') : t('reports.taxForm.generate')}

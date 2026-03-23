@@ -12,6 +12,8 @@ interface BescheidImportProps {
   ocrText: string;
   documentId?: number;
   initialParseResult?: BescheidParseResult | null;
+  onRetry?: () => Promise<void> | void;
+  retrying?: boolean;
   onImportComplete?: (result: BescheidImportResult) => void;
   onCancel?: () => void;
   onPrevDocument?: () => void;
@@ -80,6 +82,7 @@ const BescheidImport = ({
 }: BescheidImportProps) => {
   const { t, i18n } = useTranslation();
   const language = i18n?.language || 'en';
+  const [mode, setMode] = useState<'readonly' | 'edit'>('edit');
   const [parseResult, setParseResult] = useState<BescheidParseResult | null>(initialParseResult ?? null);
   const [importResult, setImportResult] = useState<BescheidImportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -109,7 +112,23 @@ const BescheidImport = ({
     setLoading(true);
     setError(null);
     try {
-      const result = await reportService.importBescheid(ocrText, documentId);
+      const editedData = {
+        tax_year: editableData.tax_year,
+        taxpayer_name: editableData.taxpayer_name,
+        finanzamt: editableData.finanzamt,
+        steuernummer: editableData.steuernummer,
+        einkommen: editableData.einkommen,
+        festgesetzte_einkommensteuer: editableData.festgesetzte_einkommensteuer,
+        abgabengutschrift: editableData.abgabengutschrift,
+        abgabennachforderung: editableData.abgabennachforderung,
+        einkuenfte_nichtselbstaendig: editableData.einkuenfte_nichtselbstaendig,
+        einkuenfte_vermietung: editableData.einkuenfte_vermietung,
+        werbungskosten_pauschale: editableData.werbungskosten_pauschale,
+        telearbeitspauschale: editableData.telearbeitspauschale,
+        vermietung_details: parseResult?.vermietung_details ?? [],
+      };
+
+      const result = await reportService.importBescheid(ocrText, documentId, editedData);
       setImportResult(result);
       setStep('imported');
       onImportComplete?.(result);
@@ -125,6 +144,7 @@ const BescheidImport = ({
     setImportResult(null);
     setError(null);
     setStep('preview');
+    setMode('edit');
   }, [initialParseResult, ocrText, documentId]);
 
   useEffect(() => {
@@ -136,7 +156,6 @@ const BescheidImport = ({
       return;
     }
     void handleParse();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialParseResult, ocrText, loading, error, parseResult]);
 
   const fmt = (val: number | string | null | undefined) => {
@@ -159,6 +178,16 @@ const BescheidImport = ({
     .filter(([, value]) => !String(value ?? '').trim())
     .map(([, , label]) => t('documents.review.verifyFieldSuggestion', { field: label }));
 
+  const handleReviewCancel = () => {
+    if (mode === 'edit' && parseResult) {
+      setEditableData(buildEditableData(parseResult));
+      setMode('readonly');
+      return;
+    }
+
+    onCancel?.();
+  };
+
   if (step === 'imported' && importResult) {
     return (
       <div className="bescheid-import">
@@ -172,8 +201,12 @@ const BescheidImport = ({
                 <span>{importResult.tax_year ?? '-'}</span>
               </div>
               <div className="bescheid-field">
+                <label>{t('documents.taxData.recordId')}</label>
+                <span>{importResult.tax_filing_data_id}</span>
+              </div>
+              <div className="bescheid-field">
                 <label>{t('documents.taxData.dataType')}</label>
-                <span>bescheid</span>
+                <span>{importResult.data_type}</span>
               </div>
             </div>
             {onCancel && (
@@ -219,6 +252,25 @@ const BescheidImport = ({
         {t('documents.bescheid.description')}
       </div>
 
+      <div className="review-mode-toolbar">
+        <button
+          type="button"
+          className={`btn ${mode === 'readonly' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setMode('readonly')}
+          disabled={loading}
+        >
+          {t('documents.review.readonlyMode')}
+        </button>
+        <button
+          type="button"
+          className={`btn ${mode === 'edit' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setMode('edit')}
+          disabled={loading}
+        >
+          {t('common.edit')}
+        </button>
+      </div>
+
       {error && <div className="bescheid-error">{error}</div>}
 
       {loading && <div className="bescheid-loading">{t('common.loading')}</div>}
@@ -244,6 +296,7 @@ const BescheidImport = ({
             <div className="extracted-data">
               <h3>{t('documents.review.extractedData')}</h3>
               <fieldset className="review-form-fieldset" disabled={loading}>
+              <fieldset className="review-form-fieldset" disabled={mode === 'readonly' || loading}>
                 <section className="bescheid-section">
                   <div className="bescheid-section-header">
                     <h5>{t('documents.bescheid.parsePreview')}</h5>
@@ -352,12 +405,18 @@ const BescheidImport = ({
 
       {parseResult && !loading && (
         <div className="review-actions">
-          <button className="btn btn-secondary" onClick={() => onCancel?.()} disabled={loading}>
+          <button className="btn btn-secondary" onClick={handleReviewCancel} disabled={loading}>
             {t('common.cancel')}
           </button>
-          <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
-            {loading ? t('common.saving') : t('common.save')}
-          </button>
+          {mode === 'edit' ? (
+            <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
+              {t('documents.taxData.confirmButton')}
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={() => setMode('edit')} disabled={loading}>
+              {t('common.edit')}
+            </button>
+          )}
         </div>
       )}
     </div>

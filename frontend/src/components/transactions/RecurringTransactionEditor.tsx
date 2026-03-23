@@ -6,6 +6,7 @@ import {
   RecurringTransactionItem,
   UpdateAndRegenerateData,
 } from '../../services/recurringTransactionService';
+import Select from '../common/Select';
 import './RecurringTransactionEditor.css';
 
 interface RecurringTransactionEditorProps {
@@ -35,7 +36,7 @@ const RecurringTransactionEditor = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset } = useForm<FormData>();
+  const { register, handleSubmit, watch, reset } = useForm<FormData>();
 
   useEffect(() => {
     const load = async () => {
@@ -137,12 +138,13 @@ const RecurringTransactionEditor = ({
             </div>
             <div className="form-group">
               <label>{t('recurring.frequency.label')}</label>
-              <select {...register('frequency')}>
-                <option value="monthly">{t('recurring.frequency.monthly')}</option>
-                <option value="quarterly">{t('recurring.frequency.quarterly')}</option>
-                <option value="annually">{t('recurring.frequency.annually')}</option>
-                <option value="weekly">{t('recurring.frequency.weekly')}</option>
-              </select>
+              <Select {...register('frequency')} value={watch('frequency') || ''}
+                options={[
+                  { value: 'monthly', label: t('recurring.frequency.monthly') },
+                  { value: 'quarterly', label: t('recurring.frequency.quarterly') },
+                  { value: 'annually', label: t('recurring.frequency.annually') },
+                  { value: 'weekly', label: t('recurring.frequency.weekly') },
+                ]} />
             </div>
           </div>
 

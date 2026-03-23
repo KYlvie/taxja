@@ -7,7 +7,7 @@ Implements:
    - Investitionsbedingter Freibetrag: 13%/7%/4.5% of profit above €33,000,
      requires qualifying fixed asset or securities investment
 2. Basispauschalierung - Flat-rate expense deduction
-   - Turnover up to €320,000: 13.5% of turnover as flat-rate expenses
+   - Turnover up to €220,000: 12% of turnover as flat-rate expenses
    - Certain professions (Kaufmännische/technische Beratung): 6%
    - Cannot be combined with actual expense tracking in the same year
 3. Kleinunternehmerregelung helpers
@@ -35,7 +35,7 @@ class ExpenseMethod(str, Enum):
 
 class ProfessionType(str, Enum):
     """Profession category for flat-rate expense percentage."""
-    GENERAL = "general"          # 13.5% flat rate
+    GENERAL = "general"          # 12% flat rate (§17 EStG)
     CONSULTING = "consulting"    # 6% (kaufmännische/technische Beratung, Schriftsteller, etc.)
 
 
@@ -50,14 +50,17 @@ GRUNDFREIBETRAG_MAX = Decimal("4950.00")  # 15% × 33,000
 
 # Investment-based tiers (§10 Abs 1 Z 2 EStG)
 # Profit above €33,000 is split into tiers with decreasing rates.
+# Tier 1: €33,000–€178,000 (width €145,000) at 13%
+# Tier 2: €178,000–€353,000 (width €175,000) at 7%
+# Tier 3: €353,000–€583,000 (width €230,000) at 4.5%
 INVESTMENT_TIERS: List[tuple[Decimal, Decimal, Decimal]] = [
     # (tier_width, rate, cumulative_start)
-    (Decimal("175000.00"), Decimal("0.13"), GRUNDFREIBETRAG_PROFIT_LIMIT),
-    (Decimal("175000.00"), Decimal("0.07"), GRUNDFREIBETRAG_PROFIT_LIMIT + Decimal("175000.00")),
-    (Decimal("230000.00"), Decimal("0.045"), GRUNDFREIBETRAG_PROFIT_LIMIT + Decimal("350000.00")),
+    (Decimal("145000.00"), Decimal("0.13"), GRUNDFREIBETRAG_PROFIT_LIMIT),
+    (Decimal("175000.00"), Decimal("0.07"), GRUNDFREIBETRAG_PROFIT_LIMIT + Decimal("145000.00")),
+    (Decimal("230000.00"), Decimal("0.045"), GRUNDFREIBETRAG_PROFIT_LIMIT + Decimal("320000.00")),
 ]
-# Above €580,000 profit → no further investment-based allowance
-INVESTMENT_FREIBETRAG_CAP = Decimal("580000.00")
+# Above €583,000 profit → no further investment-based allowance
+INVESTMENT_FREIBETRAG_CAP = Decimal("583000.00")
 MAX_TOTAL_FREIBETRAG = Decimal("46400.00")  # max per taxpayer per year
 
 
@@ -72,20 +75,20 @@ class SelfEmployedConfig:
     grundfreibetrag_max: Decimal = Decimal("4950.00")
     investment_tiers: List[tuple[Decimal, Decimal, Decimal]] = None  # type: ignore[assignment]
     max_total_freibetrag: Decimal = Decimal("46400.00")
-    flat_rate_turnover_limit: Decimal = Decimal("320000.00")
-    flat_rate_general: Decimal = Decimal("0.135")
+    flat_rate_turnover_limit: Decimal = Decimal("220000.00")
+    flat_rate_general: Decimal = Decimal("0.12")
     flat_rate_consulting: Decimal = Decimal("0.06")
     kleinunternehmer_threshold: Decimal = Decimal("55000.00")
-    kleinunternehmer_tolerance: Decimal = Decimal("60500.00")
+    kleinunternehmer_tolerance: Decimal = Decimal("63250.00")
     ust_voranmeldung_monthly_threshold: Decimal = Decimal("100000.00")
 
     def __post_init__(self):
         if self.investment_tiers is None:
             limit = self.grundfreibetrag_profit_limit
             self.investment_tiers = [
-                (Decimal("175000.00"), Decimal("0.13"), limit),
-                (Decimal("175000.00"), Decimal("0.07"), limit + Decimal("175000.00")),
-                (Decimal("230000.00"), Decimal("0.045"), limit + Decimal("350000.00")),
+                (Decimal("145000.00"), Decimal("0.13"), limit),
+                (Decimal("175000.00"), Decimal("0.07"), limit + Decimal("145000.00")),
+                (Decimal("230000.00"), Decimal("0.045"), limit + Decimal("320000.00")),
             ]
 
     @classmethod
@@ -137,10 +140,10 @@ class SelfEmployedConfig:
                 se.get("max_total_freibetrag", "46400.00")
             )),
             flat_rate_turnover_limit=Decimal(str(
-                se.get("flat_rate_turnover_limit", "320000.00")
+                se.get("flat_rate_turnover_limit", "220000.00")
             )),
             flat_rate_general=Decimal(str(
-                se.get("flat_rate_general", "0.135")
+                se.get("flat_rate_general", "0.12")
             )),
             flat_rate_consulting=Decimal(str(
                 se.get("flat_rate_consulting", "0.06")
@@ -149,7 +152,7 @@ class SelfEmployedConfig:
                 se.get("kleinunternehmer_threshold", "55000.00")
             )),
             kleinunternehmer_tolerance=Decimal(str(
-                se.get("kleinunternehmer_tolerance", "60500.00")
+                se.get("kleinunternehmer_tolerance", "63250.00")
             )),
             ust_voranmeldung_monthly_threshold=Decimal(str(
                 se.get("ust_voranmeldung_monthly_threshold", "100000.00")
@@ -173,6 +176,7 @@ def calculate_gewinnfreibetrag(
     profit: Decimal,
     qualifying_investment: Decimal = Decimal("0.00"),
     config: Optional[SelfEmployedConfig] = None,
+    ifb_claimed_investment: Decimal = Decimal("0.00"),
 ) -> GewinnfreibetragResult:
     """
     Calculate the Gewinnfreibetrag (§10 EStG).
@@ -182,6 +186,9 @@ def calculate_gewinnfreibetrag(
         qualifying_investment: Total acquisition cost of qualifying fixed assets
             or securities purchased in the same calendar year.
         config: Year-specific configuration. Uses defaults if None.
+        ifb_claimed_investment: Investment amount already claimed for IFB (§11 EStG).
+            Subtracted from qualifying_investment to enforce mutual exclusion —
+            the same asset cannot be used for both IFB and investitionsbedingter GFB.
 
     Returns:
         GewinnfreibetragResult with breakdown.
@@ -193,6 +200,11 @@ def calculate_gewinnfreibetrag(
         profit = Decimal(str(profit))
     if not isinstance(qualifying_investment, Decimal):
         qualifying_investment = Decimal(str(qualifying_investment))
+    if not isinstance(ifb_claimed_investment, Decimal):
+        ifb_claimed_investment = Decimal(str(ifb_claimed_investment))
+
+    # §11 EStG mutual exclusion: reduce qualifying investment by IFB-claimed amount
+    qualifying_investment = max(qualifying_investment - ifb_claimed_investment, Decimal("0.00"))
 
     if profit <= Decimal("0"):
         return GewinnfreibetragResult(details="Kein Gewinn — kein Freibetrag.")
@@ -268,8 +280,8 @@ def calculate_gewinnfreibetrag(
 # ---------------------------------------------------------------------------
 
 # Thresholds and rates (valid from 2025 assessment onward, configurable per year)
-FLAT_RATE_TURNOVER_LIMIT = Decimal("320000.00")  # max turnover to use flat-rate
-FLAT_RATE_GENERAL = Decimal("0.135")              # 13.5% for most professions
+FLAT_RATE_TURNOVER_LIMIT = Decimal("220000.00")  # max turnover to use flat-rate (§17 EStG)
+FLAT_RATE_GENERAL = Decimal("0.12")               # 12% for most professions (§17 EStG)
 FLAT_RATE_CONSULTING = Decimal("0.06")            # 6% for consulting/writing etc.
 
 # Additional deductions allowed ON TOP of flat-rate:
@@ -380,7 +392,7 @@ def calculate_basispauschalierung(
 # ---------------------------------------------------------------------------
 
 KLEINUNTERNEHMER_THRESHOLD = Decimal("55000.00")   # gross turnover
-KLEINUNTERNEHMER_TOLERANCE = Decimal("60500.00")    # 10% overshoot, once in 5 years
+KLEINUNTERNEHMER_TOLERANCE = Decimal("63250.00")    # 15% overshoot, once in 5 years
 UST_VORANMELDUNG_MONTHLY_THRESHOLD = Decimal("100000.00")  # monthly UVA if > €100k
 
 
@@ -561,7 +573,7 @@ def compare_expense_methods(
             actual_profit=actual_taxable.quantize(Decimal("0.01")),
             difference=Decimal("0.00"),
             recommended_method=ExpenseMethod.ACTUAL,
-            reason="Basispauschalierung nicht anwendbar (Umsatz > €320.000).",
+            reason="Basispauschalierung nicht anwendbar (Umsatz > €220.000).",
         )
 
     if flat_taxable < actual_taxable:

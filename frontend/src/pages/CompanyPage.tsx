@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { normalizeLanguage } from '../utils/locale';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
+import SubpageBackLink from '../components/common/SubpageBackLink';
 import './CompanyPage.css';
 
 /* ═══ Hooks ═══ */
@@ -706,14 +707,36 @@ const ServiceOrbit = ({ services, renderIcon }: {
   services: { title: string; desc: string }[];
   renderIcon: (i: number) => React.ReactNode;
 }) => {
-  const [active, setActive] = useState<number | null>(null);
+  const [active, setActive] = useState(0);
+  const [isSceneHovered, setIsSceneHovered] = useState(false);
   const discRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
-  const tilt = useRef({ rx: 0, ry: 0, targetRx: 12, targetRy: 0, autoAngle: 0, hovering: false });
+  const tilt = useRef({ rx: 0, ry: 0, targetRx: 12, targetRy: 0, autoAngle: 0, hovering: false, rz: 0, targetRz: 0 });
+
+  useEffect(() => {
+    if (services.length <= 1 || isSceneHovered) return;
+
+    const intervalId = window.setInterval(() => {
+      setActive((current) => (current + 1) % services.length);
+    }, 3600);
+
+    return () => window.clearInterval(intervalId);
+  }, [isSceneHovered, services.length]);
+
+  // Sync disc rotation to active node
+  useEffect(() => {
+    // Each node is at i*60 degrees. Rotate disc so active node goes to top (-90°).
+    tilt.current.targetRz = -(active * 60);
+  }, [active]);
 
   // Mouse-interactive 3D tilt + auto gentle rotation
   useEffect(() => {
     let animId: number;
+
+    const onEnter = () => {
+      tilt.current.hovering = true;
+      setIsSceneHovered(true);
+    };
 
     const onMove = (e: MouseEvent) => {
       const scene = sceneRef.current;
@@ -724,10 +747,12 @@ const ServiceOrbit = ({ services, renderIcon }: {
       tilt.current.targetRx = -y * 70;  // up to ±35 degrees
       tilt.current.targetRy = x * 70;
       tilt.current.hovering = true;
+      setIsSceneHovered(true);
     };
 
     const onLeave = () => {
       tilt.current.hovering = false;
+      setIsSceneHovered(false);
     };
 
     const animate = () => {
@@ -746,13 +771,22 @@ const ServiceOrbit = ({ services, renderIcon }: {
       t.rx += (t.targetRx - t.rx) * 0.18;
       t.ry += (t.targetRy - t.ry) * 0.18;
 
-      disc.style.transform = `rotateX(${t.rx}deg) rotateY(${t.ry}deg)`;
+      // Smooth rotateZ interpolation — handle wrapping for shortest path
+      let rzDiff = t.targetRz - t.rz;
+      // Normalize to [-180, 180] for shortest rotation path
+      while (rzDiff > 180) rzDiff -= 360;
+      while (rzDiff < -180) rzDiff += 360;
+      t.rz += rzDiff * 0.08;
+
+      disc.style.transform = `rotateX(${t.rx}deg) rotateY(${t.ry}deg) rotateZ(${t.rz}deg)`;
+      disc.style.setProperty('--disc-rz', `${t.rz}deg`);
 
       animId = requestAnimationFrame(animate);
     };
 
     const scene = sceneRef.current;
     if (scene) {
+      scene.addEventListener('mouseenter', onEnter);
       scene.addEventListener('mousemove', onMove);
       scene.addEventListener('mouseleave', onLeave);
     }
@@ -761,6 +795,7 @@ const ServiceOrbit = ({ services, renderIcon }: {
     return () => {
       cancelAnimationFrame(animId);
       if (scene) {
+        scene.removeEventListener('mouseenter', onEnter);
         scene.removeEventListener('mousemove', onMove);
         scene.removeEventListener('mouseleave', onLeave);
       }
@@ -778,7 +813,7 @@ const ServiceOrbit = ({ services, renderIcon }: {
             </div>
 
             {/* Center core — hidden when detail is visible */}
-            <div className={`ok-solar-core ${active !== null ? 'ok-solar-core-hidden' : ''}`}>
+            <div className={`ok-solar-core ${isSceneHovered ? 'ok-solar-core-hidden' : ''}`}>
               <div className="ok-solar-core-ring" />
               <div className="ok-solar-core-ring ok-solar-core-ring-2" />
               <span className="ok-solar-core-text">OOHK</span>
@@ -791,8 +826,25 @@ const ServiceOrbit = ({ services, renderIcon }: {
                 key={i}
                 className={`ok-solar-node ${active === i ? 'ok-solar-node-active' : ''}`}
                 style={{ '--node-angle': `${i * 60 - 90}deg`, '--node-hue': `${170 + i * 15}` } as React.CSSProperties}
-                onMouseEnter={() => setActive(i)}
-                onMouseLeave={() => setActive(null)}
+                onMouseEnter={() => {
+                  setIsSceneHovered(true);
+                  setActive(i);
+                }}
+                onFocus={() => {
+                  setIsSceneHovered(true);
+                  setActive(i);
+                }}
+                onClick={() => setActive(i)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setIsSceneHovered(true);
+                    setActive(i);
+                  }
+                }}
+                role="button"
+                aria-pressed={active === i}
+                tabIndex={0}
               >
                 <div className="ok-solar-node-canvas">
                   <NodeCanvas size={200} hue={200 + i * 15} active={active === i} />
@@ -806,14 +858,14 @@ const ServiceOrbit = ({ services, renderIcon }: {
           </div>
 
           {/* Detail HUD panel — centered overlay */}
-          <div className={`ok-solar-detail ${active !== null ? 'ok-solar-detail-visible' : ''}`}>
+          <div className={`ok-solar-detail ${services[active] ? 'ok-solar-detail-visible' : ''}`}>
             <span className="ok-detail-corner ok-detail-corner-tl" />
             <span className="ok-detail-corner ok-detail-corner-tr" />
             <span className="ok-detail-corner ok-detail-corner-bl" />
             <span className="ok-detail-corner ok-detail-corner-br" />
             <div className="ok-detail-scanlines" />
             <div className="ok-detail-energy-bar" />
-            {active !== null && (
+            {services[active] && (
               <>
                 <div className="ok-detail-header">
                   <div className="ok-detail-orb">
@@ -1366,6 +1418,7 @@ const CompanyPage = () => {
   const { i18n } = useTranslation();
   const lang = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
   const c = copy[lang] || copy.en;
+  const backToTaxjaLabel = String(c.backToTaxja).replace(/^←\s*/, '').replace(/^â†\s*/, '');
   const pageRef = usePageEffects();
   const rollingAiTags = [...c.aiTags, ...c.aiTags];
   const rollingEngTags = [...c.engTags, ...c.engTags];
@@ -1374,6 +1427,33 @@ const CompanyPage = () => {
   /* Contact form state */
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle');
+
+  useEffect(() => {
+    const previousScrollRestoration = 'scrollRestoration' in window.history
+      ? window.history.scrollRestoration
+      : null;
+    const resetScroll = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    resetScroll();
+    const frameId = window.requestAnimationFrame(resetScroll);
+    const timeoutId = window.setTimeout(resetScroll, 80);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+      if (previousScrollRestoration) {
+        window.history.scrollRestoration = previousScrollRestoration;
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1424,7 +1504,7 @@ const CompanyPage = () => {
         </div>
         <div className="ok-nav-r">
           <LanguageSwitcher />
-          <Link to="/" className="ok-nav-back">{c.backToTaxja}</Link>
+          <SubpageBackLink to="/" label={backToTaxjaLabel} className="ok-nav-back" />
         </div>
       </nav>
 
@@ -1906,6 +1986,142 @@ const copy: Record<string, CompanyCopy> = {
     formError: 'Failed to send. Please try again or email us directly.',
     legalLink: 'Legal Notice',
     privacyLink: 'Privacy Policy',
+  },
+  fr: {
+    badge: 'AI Agent · Automatisation Intelligente · Développement Sur Mesure',
+    heroLine1: 'Nous Construisons Vos',
+    heroLine2: 'Systèmes de Travail AI Sur Mesure',
+    heroSub: 'OOHK est spécialisé dans la création d\'agents AI personnalisés, la construction de bases de connaissances, l\'automatisation des processus métier et l\'intégration de systèmes. En résumé, nous construisons des systèmes de travail AI qui répondent aux questions, organisent les données et accomplissent les tâches automatiquement.',
+    ctaContact: 'Nous Contacter',
+    ctaProduct: 'Découvrir Taxja →',
+    backToTaxja: '← Taxja',
+    servicesKicker: 'Compétences Clés',
+    servicesTitle: 'Solutions AI pour les Besoins Réels des Entreprises',
+    servicesDesc: 'Nous partons de vos objectifs métier et intégrons les capacités des modèles, les actifs de connaissances et les systèmes existants en des systèmes de travail AI livrables, exploitables et continuellement améliorables.',
+    services: [
+      { title: 'Systèmes d\'Agents AI Sur Mesure', desc: 'Nous concevons des solutions d\'agents AI exécutables et gérables autour du service client, de la collaboration opérationnelle, du traitement fiscal et des flux de travail internes.' },
+      { title: 'Base de Connaissances d\'Entreprise & RAG', desc: 'Nous structurons documents, politiques, FAQ, matériaux métier et historiques en une base de connaissances interrogeable, traçable et continuellement mise à jour.' },
+      { title: 'Automatisation des Processus & Orchestration des Tâches', desc: 'Nous enchaînons e-mails, formulaires, approbations, suivis clients et traitement de données en des flux de travail complets avec déclenchement automatique et exécution stable.' },
+      { title: 'Intégration de Systèmes & Connectivité', desc: 'Nous connectons CRM, ERP, bases de données, tableurs, plateformes internes et services tiers pour que l\'AI s\'intègre véritablement dans vos processus métier existants.' },
+      { title: 'Conception de Solutions & Conseil en Implémentation', desc: 'De l\'identification des scénarios à la priorisation jusqu\'à la conception du parcours d\'implémentation, nous vous aidons à faire avancer vos projets AI avec un investissement maîtrisé.' },
+      { title: 'Applications Sur Mesure & Postes de Travail AI', desc: 'Nous livrons des applications web orientées équipe, des postes de travail internes et des outils légers, garantissant des solutions non seulement présentables mais durablement exploitables.' },
+    ],
+    productsKicker: 'Portefeuille de Produits',
+    productsTitle: 'En Production et en Développement',
+    productsDesc: 'Sur la base de nos capacités techniques, nous construisons des solutions sectorielles réplicables.',
+    products: [
+      { icon: '🧾', name: 'Taxja', desc: 'Assistant fiscal AI pour les contribuables autrichiens. Reconnaissance automatique des reçus, classification intelligente des transactions et génération de rapports fiscaux en un clic.', status: 'live', statusLabel: 'En Production' },
+      { icon: '🏢', name: 'AI Enterprise Workspace', desc: 'Un hub de travail AI unifié pour les PME — intégrant traitement documentaire, gestion de la relation client, analyse financière et questions-réponses sur la base de connaissances interne.', status: 'dev', statusLabel: 'En Développement' },
+      { icon: '🎯', name: 'Solutions AI Sectorielles', desc: 'En s\'appuyant sur l\'expérience de Taxja et d\'autres produits, nous développons des kits d\'outils AI standardisés pour la restauration, le e-commerce, les indépendants et d\'autres secteurs.', status: 'dev', statusLabel: 'Planifié' },
+    ],
+    aboutKicker: 'À Propos',
+    aboutTitle: 'OOHK',
+    aboutDesc: 'Basé en Autriche, OOHK suit l\'approche « entrée sur mesure, accumulation modulaire, itération continue » pour construire des solutions AI pratiques, déployables et des systèmes de travail efficaces.',
+    stats: [
+      { value: '2026', label: 'Fondation' },
+      { value: 'Autriche', label: 'Siège Social' },
+      { value: 'AI-First', label: 'Philosophie Technologique' },
+      { value: 'RGPD', label: 'Conformité des Données' },
+    ],
+    techKicker: 'Technologie',
+    techTitle: 'Capacités AI & Architecture Technique',
+    techDesc: 'Ces capacités sont intégrées dans les produits que nous construisons — tels que Taxja, les espaces de travail AI, les outils de traitement documentaire et les solutions d\'automatisation sectorielle.',
+    aiLabel: 'Capacités AI Fondamentales',
+    aiTags: [
+      { name: 'Agentic Workflow (LangGraph)', desc: 'Orchestration d\'agents multi-étapes avec LangGraph : décomposition de tâches, appel d\'outils et gestion d\'état' },
+      { name: 'Multi-Agent Routing (Manus)', desc: 'Collaboration multi-agents de style Manus avec dispatch intelligent des tâches vers des agents spécialisés' },
+      { name: 'RAG + Vector Search', desc: 'Génération augmentée par récupération avec ChromaDB / pgvector pour des bases de connaissances privées traçables' },
+      { name: 'MCP Protocol', desc: 'Model Context Protocol pour la connexion aux e-mails, CRM, bases de données, calendriers et systèmes externes' },
+      { name: 'Ollama Déploiement Local', desc: 'Exécution locale de modèles open source avec Ollama — les données restent sur site, conforme au RGPD' },
+      { name: 'Multimodal OCR', desc: 'Tesseract + OpenCV + LLM pour la compréhension multimodale de documents : factures, contrats, extraction de tableaux' },
+      { name: 'Agent Skills System', desc: 'Modules de compétences d\'agents enfichables avec chargement à chaud et orchestration composable pour une extension rapide des capacités' },
+      { name: 'Fine-Tuning / Online Learning', desc: 'Apprentissage en ligne et affinage de modèles basés sur les retours utilisateurs pour améliorer continuellement la précision de classification et de recommandation' },
+      { name: 'Prompt Engineering', desc: 'Conception et gestion systématiques de prompts incluant Chain-of-Thought, Few-Shot et d\'autres stratégies avancées' },
+      { name: 'Guardrails & Eval', desc: 'Garde-fous de sortie intégrés, détection d\'hallucinations et frameworks d\'évaluation automatisés pour la stabilité en production' },
+      { name: 'Human-in-the-Loop', desc: 'Revue humaine aux étapes critiques — les actions importantes sont confirmées avant exécution' },
+      { name: 'Voice Agent', desc: 'Conversations vocales, accueil téléphonique et saisie de données vocale pour une interaction multimodale' },
+    ],
+    engLabel: 'Stack Technique',
+    engTags: ['LangGraph', 'LangChain', 'Ollama', 'OpenAI', 'Groq', 'ChromaDB', 'pgvector', 'Tesseract', 'scikit-learn', 'Python', 'FastAPI', 'React', 'TypeScript', 'PostgreSQL', 'Redis', 'Docker', 'Kubernetes', 'Celery', 'MCP', 'Stripe'],
+    contactTitle: 'Construisons Ensemble Votre Système AI',
+    contactDesc: 'Qu\'il s\'agisse d\'un assistant AI personnel, d\'un espace de travail intelligent d\'entreprise ou d\'une solution sectorielle — nous pouvons le réaliser pour vous.',
+    formName: 'Votre Nom',
+    formEmail: 'Votre E-mail',
+    formMessage: 'Décrivez votre besoin…',
+    formSubmit: 'Envoyer le Message',
+    formSending: 'Envoi en cours…',
+    formSuccess: 'Message envoyé ! Nous vous répondrons très bientôt.',
+    formError: 'Échec de l\'envoi. Veuillez réessayer ou nous écrire directement par e-mail.',
+    legalLink: 'Mentions Légales',
+    privacyLink: 'Politique de Confidentialité',
+  },
+  ru: {
+    badge: 'AI Agent · Интеллектуальная Автоматизация · Индивидуальная Разработка',
+    heroLine1: 'Мы Создаём Ваши',
+    heroLine2: 'Индивидуальные AI-Системы',
+    heroSub: 'OOHK специализируется на создании пользовательских AI-агентов, построении баз знаний, автоматизации бизнес-процессов и системной интеграции. Проще говоря, мы создаём AI-системы, которые отвечают на вопросы, систематизируют данные и автоматически выполняют задачи.',
+    ctaContact: 'Связаться с Нами',
+    ctaProduct: 'Узнать о Taxja →',
+    backToTaxja: '← Taxja',
+    servicesKicker: 'Ключевые Компетенции',
+    servicesTitle: 'AI-Решения для Реальных Задач Бизнеса',
+    servicesDesc: 'Мы отталкиваемся от ваших бизнес-целей и объединяем возможности моделей, активы знаний и существующие системы в поставляемые, управляемые и непрерывно совершенствуемые AI-системы.',
+    services: [
+      { title: 'Индивидуальные Системы AI-Агентов', desc: 'Мы проектируем исполняемые и управляемые решения на основе AI-агентов для обслуживания клиентов, операционного взаимодействия, обработки налогов и внутренних рабочих процессов.' },
+      { title: 'Корпоративная База Знаний & RAG', desc: 'Мы структурируем документы, политики, FAQ, бизнес-материалы и исторические записи в поисковую, отслеживаемую и постоянно обновляемую базу знаний.' },
+      { title: 'Автоматизация Процессов & Оркестрация Задач', desc: 'Мы связываем электронную почту, формы, согласования, работу с клиентами и обработку данных в полные рабочие процессы с автоматическим запуском и стабильным выполнением.' },
+      { title: 'Системная Интеграция & Подключение', desc: 'Мы подключаем CRM, ERP, базы данных, электронные таблицы, внутренние платформы и сторонние сервисы, чтобы AI действительно вошёл в ваши существующие бизнес-процессы.' },
+      { title: 'Проектирование Решений & Консалтинг по Внедрению', desc: 'От определения сценариев и расстановки приоритетов до проектирования пути внедрения — мы помогаем продвигать AI-проекты с контролируемыми инвестициями.' },
+      { title: 'Индивидуальные Приложения & AI-Рабочие Станции', desc: 'Мы создаём командно-ориентированные веб-приложения, внутренние рабочие станции и лёгкие инструменты, обеспечивая не только презентабельность, но и долгосрочную работоспособность решений.' },
+    ],
+    productsKicker: 'Портфель Продуктов',
+    productsTitle: 'В Продакшене и в Разработке',
+    productsDesc: 'На основе наших технических возможностей мы создаём тиражируемые отраслевые решения.',
+    products: [
+      { icon: '🧾', name: 'Taxja', desc: 'AI-ассистент по налогам для австрийских налогоплательщиков. Автоматическое распознавание чеков, интеллектуальная классификация транзакций и генерация налоговых отчётов в один клик.', status: 'live', statusLabel: 'В Продакшене' },
+      { icon: '🏢', name: 'AI Enterprise Workspace', desc: 'Единое AI-рабочее пространство для малого и среднего бизнеса — с обработкой документов, управлением клиентами, финансовой аналитикой и внутренней базой знаний.', status: 'dev', statusLabel: 'В Разработке' },
+      { icon: '🎯', name: 'Отраслевые AI-Решения', desc: 'Опираясь на опыт Taxja и других продуктов, мы расширяем стандартизированные AI-инструменты для ресторанного бизнеса, электронной коммерции, фрилансеров и других отраслей.', status: 'dev', statusLabel: 'Запланировано' },
+    ],
+    aboutKicker: 'О Нас',
+    aboutTitle: 'OOHK',
+    aboutDesc: 'Компания OOHK, расположенная в Австрии, следует подходу «индивидуальный вход, модульное накопление, непрерывная итерация» для создания практичных, внедряемых AI-решений и рабочих систем.',
+    stats: [
+      { value: '2026', label: 'Год Основания' },
+      { value: 'Австрия', label: 'Штаб-квартира' },
+      { value: 'AI-First', label: 'Технологическая Философия' },
+      { value: 'GDPR', label: 'Защита Данных' },
+    ],
+    techKicker: 'Технологии',
+    techTitle: 'Возможности AI & Техническая Архитектура',
+    techDesc: 'Эти возможности интегрированы в продукты, которые мы создаём — Taxja, AI-рабочие пространства, инструменты обработки документов и решения для автоматизации отраслей.',
+    aiLabel: 'Ключевые Возможности AI',
+    aiTags: [
+      { name: 'Agentic Workflow (LangGraph)', desc: 'Многоэтапная оркестрация агентов с LangGraph: декомпозиция задач, вызов инструментов и управление состоянием' },
+      { name: 'Multi-Agent Routing (Manus)', desc: 'Мультиагентное сотрудничество в стиле Manus с интеллектуальной диспетчеризацией задач специализированным агентам' },
+      { name: 'RAG + Vector Search', desc: 'Генерация с дополненным извлечением на основе ChromaDB / pgvector для отслеживаемых приватных баз знаний' },
+      { name: 'MCP Protocol', desc: 'Model Context Protocol для подключения к электронной почте, CRM, базам данных, календарям и внешним системам' },
+      { name: 'Ollama Локальное Развёртывание', desc: 'Локальное выполнение моделей с открытым исходным кодом через Ollama — данные остаются на месте, соответствие GDPR' },
+      { name: 'Multimodal OCR', desc: 'Tesseract + OpenCV + LLM для мультимодального понимания документов: счета, контракты, извлечение таблиц' },
+      { name: 'Agent Skills System', desc: 'Подключаемые модули навыков агентов с горячей загрузкой и компонуемой оркестрацией для быстрого расширения возможностей' },
+      { name: 'Fine-Tuning / Online Learning', desc: 'Онлайн-обучение и тонкая настройка моделей на основе обратной связи пользователей для непрерывного повышения точности классификации и рекомендаций' },
+      { name: 'Prompt Engineering', desc: 'Систематическое проектирование и управление промптами, включая Chain-of-Thought, Few-Shot и другие продвинутые стратегии' },
+      { name: 'Guardrails & Eval', desc: 'Встроенные ограничители выходных данных, обнаружение галлюцинаций и автоматизированные фреймворки оценки для стабильности в продакшене' },
+      { name: 'Human-in-the-Loop', desc: 'Человеческая проверка на критических этапах — важные действия выполняются только после подтверждения' },
+      { name: 'Voice Agent', desc: 'Голосовые диалоги, приём звонков и голосовой ввод данных для мультимодального взаимодействия' },
+    ],
+    engLabel: 'Технологический Стек',
+    engTags: ['LangGraph', 'LangChain', 'Ollama', 'OpenAI', 'Groq', 'ChromaDB', 'pgvector', 'Tesseract', 'scikit-learn', 'Python', 'FastAPI', 'React', 'TypeScript', 'PostgreSQL', 'Redis', 'Docker', 'Kubernetes', 'Celery', 'MCP', 'Stripe'],
+    contactTitle: 'Давайте Вместе Построим Вашу AI-Систему',
+    contactDesc: 'Будь то персональный AI-ассистент, интеллектуальное корпоративное рабочее пространство или отраслевое решение — мы можем воплотить это для вас.',
+    formName: 'Ваше Имя',
+    formEmail: 'Ваш E-mail',
+    formMessage: 'Опишите ваши потребности…',
+    formSubmit: 'Отправить Сообщение',
+    formSending: 'Отправка…',
+    formSuccess: 'Сообщение отправлено! Мы свяжемся с вами в ближайшее время.',
+    formError: 'Не удалось отправить. Пожалуйста, попробуйте снова или напишите нам напрямую по электронной почте.',
+    legalLink: 'Правовая Информация',
+    privacyLink: 'Политика Конфиденциальности',
   },
 };
 

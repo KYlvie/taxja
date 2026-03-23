@@ -58,6 +58,21 @@ class KaufvertragData:
 
 class KaufvertragExtractor:
     """Extract structured data from Kaufvertrag OCR text"""
+    LEGAL_ENTITY_SUFFIX_PATTERN = (
+        r"(?:GMBH(?:\s*&\s*CO\.?\s*KG)?|E\.?\s*U\.?|AG|OG|KG|SE|G\.?B\.?R\.?)"
+    )
+    LEGAL_ENTITY_PATTERN = re.compile(
+        rf"([A-ZÄÖÜ0-9][A-ZÄÖÜ0-9&.,'\/\- ]{{2,}}?\b{LEGAL_ENTITY_SUFFIX_PATTERN}\b\.?)",
+        re.IGNORECASE,
+    )
+    ROLE_LABEL_PATTERN = re.compile(
+        r"^(?:käufer|kaeufer|kaufer|verkäufer|verkaeufer|verkaufer|übernehmer|uebernehmer|übergeber|uebergeber|buyer|seller)$",
+        re.IGNORECASE,
+    )
+    CITY_PREFIX_PATTERN = re.compile(
+        r"^(?:Wien|Graz|Linz|Salzburg|Innsbruck|Klagenfurt|Villach|Wels|Sankt\s+Pölten|St\.?\s*Pölten)\s+",
+        re.IGNORECASE,
+    )
     
     def extract(self, text: str) -> KaufvertragData:
         """Main extraction method"""
@@ -274,6 +289,32 @@ class KaufvertragExtractor:
                     data.purchase_price = amount
                     data.field_confidence["purchase_price"] = 0.9
                     break
+
+        if data.purchase_price is None:
+            lines = [line.strip() for line in text.split("\n")]
+            for i, line in enumerate(lines):
+                normalized_line = self._normalize_text(line)
+                if normalized_line not in {"brutto", "kaufpreis brutto"}:
+                    continue
+
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    candidate_line = lines[j].strip()
+                    if not candidate_line:
+                        continue
+                    amount_match = re.search(
+                        rf"(?:EUR|€)?\s*{amt}",
+                        candidate_line,
+                        re.IGNORECASE,
+                    )
+                    if not amount_match:
+                        continue
+
+                    raw = re.sub(r",-+$", "", amount_match.group(1))
+                    amount = self._parse_amount(raw)
+                    if amount and amount > Decimal("1000"):
+                        data.purchase_price = amount
+                        data.field_confidence["purchase_price"] = 0.78
+                        return
     
     def _extract_purchase_date(self, text: str, data: KaufvertragData) -> None:
         """Extract purchase/contract date"""
@@ -461,6 +502,8 @@ class KaufvertragExtractor:
         lines = text.split("\n")
         cleaned_lines = [line.strip() for line in lines]
 
+        self._extract_dual_party_header(cleaned_lines, data)
+
         # Find seller: look for "als Verkaufer" line, then scan backwards for name
         for i, line in enumerate(cleaned_lines):
             if re.search(r"als\s+verk.{0,2}ufer", line, re.IGNORECASE):
@@ -471,8 +514,8 @@ class KaufvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.seller_name = name
                             data.field_confidence["seller_name"] = 0.85
                             break
@@ -483,8 +526,8 @@ class KaufvertragExtractor:
                         line, re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.seller_name = name
                             data.field_confidence["seller_name"] = 0.85
                 break
@@ -498,8 +541,8 @@ class KaufvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.buyer_name = name
                             data.field_confidence["buyer_name"] = 0.85
                             break
@@ -509,8 +552,8 @@ class KaufvertragExtractor:
                         line, re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.buyer_name = name
                             data.field_confidence["buyer_name"] = 0.85
                 break
@@ -527,8 +570,8 @@ class KaufvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.seller_name = name
                             data.field_confidence["seller_name"] = 0.85
                             break
@@ -544,8 +587,8 @@ class KaufvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE,
                     )
                     if name_match:
-                        name = name_match.group(1).strip().rstrip(",")
-                        if len(name) > 3:
+                        name = self._normalize_party_name(name_match.group(1))
+                        if self._is_valid_party_name(name):
                             data.buyer_name = name
                             data.field_confidence["buyer_name"] = 0.85
                             break
@@ -562,9 +605,8 @@ class KaufvertragExtractor:
             for pattern in buyer_patterns:
                 match = re.search(pattern, text)
                 if match:
-                    name = match.group(1).strip().rstrip(",")
-                    name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
-                    if len(name) > 3:
+                    name = self._normalize_party_name(match.group(1))
+                    if self._is_valid_party_name(name):
                         data.buyer_name = name
                         data.field_confidence["buyer_name"] = 0.7
                         break
@@ -580,12 +622,49 @@ class KaufvertragExtractor:
             for pattern in seller_patterns:
                 match = re.search(pattern, text)
                 if match:
-                    name = match.group(1).strip().rstrip(",")
-                    name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
-                    if len(name) > 3:
+                    name = self._normalize_party_name(match.group(1))
+                    if self._is_valid_party_name(name):
                         data.seller_name = name
                         data.field_confidence["seller_name"] = 0.7
                         break
+
+    def _extract_dual_party_header(self, cleaned_lines: List[str], data: KaufvertragData) -> None:
+        """Extract compact vehicle-contract headers like 'Verkaeufer Kaeufer' + org names."""
+        for i, line in enumerate(cleaned_lines):
+            if not (
+                re.search(r"verk.{0,2}ufer", line, re.IGNORECASE)
+                and re.search(r"k.{0,2}ufer", line, re.IGNORECASE)
+            ):
+                continue
+
+            for j in range(i + 1, min(i + 4, len(cleaned_lines))):
+                candidate_line = cleaned_lines[j].strip()
+                if not candidate_line:
+                    continue
+
+                organizations = self._extract_organization_names_from_line(candidate_line)
+                if len(organizations) >= 2:
+                    if not data.seller_name:
+                        data.seller_name = organizations[0]
+                        data.field_confidence["seller_name"] = 0.82
+                    if not data.buyer_name:
+                        data.buyer_name = organizations[1]
+                        data.field_confidence["buyer_name"] = 0.82
+                    return
+
+    def _extract_organization_names_from_line(self, line: str) -> List[str]:
+        matches: List[str] = []
+        seen: set[str] = set()
+        for match in self.LEGAL_ENTITY_PATTERN.finditer(line):
+            candidate = self._normalize_party_name(match.group(1))
+            if not self._is_valid_party_name(candidate):
+                continue
+            lowered = candidate.lower()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            matches.append(candidate)
+        return matches
     
     # --- Notary information extraction ---
     
@@ -652,7 +731,58 @@ class KaufvertragExtractor:
             data.field_confidence["property_type"] = 0.8
     
     # --- Helper methods ---
-    
+
+    def _normalize_party_name(self, raw_name: str) -> str:
+        name = (raw_name or "").strip()
+        name = re.sub(r"^\(.*?\)\s*", "", name)
+        name = re.sub(r"^(?:Herrn?|Frau|Dr\.?|Mag\.?|DI\.?)\s+", "", name, flags=re.IGNORECASE)
+        name = re.sub(
+            r"^(?:käufer|kaeufer|kaufer|verkäufer|verkaeufer|verkaufer|übernehmer|uebernehmer|übergeber|uebergeber)[:\s,.-]+",
+            "",
+            name,
+            flags=re.IGNORECASE,
+        )
+        name = re.sub(r",?\s+(?:geboren|geb\.|wohnhaft|wohnsitz|adresse)\b.*$", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"[,;:\-]+$", "", name)
+
+        if re.search(self.LEGAL_ENTITY_SUFFIX_PATTERN, name, re.IGNORECASE):
+            candidate = self.CITY_PREFIX_PATTERN.sub("", name)
+            if candidate and candidate != name:
+                name = candidate
+
+        name = re.sub(r"\s+", " ", name).strip()
+        return name
+
+    def _is_valid_party_name(self, name: str) -> bool:
+        if not name or len(name) < 4:
+            return False
+        normalized = self._normalize_text(name)
+        if not normalized:
+            return False
+        if self.ROLE_LABEL_PATTERN.match(normalized):
+            return False
+        if normalized in {"brutto", "seite", "kaufvertrag", "preis"}:
+            return False
+
+        has_legal_suffix = bool(re.search(self.LEGAL_ENTITY_SUFFIX_PATTERN, name, re.IGNORECASE))
+        word_count = len(re.findall(r"[A-Za-zÄÖÜäöüß0-9]+", name))
+        return has_legal_suffix or word_count >= 2
+
+    @staticmethod
+    def _normalize_text(value: str | None) -> str:
+        if not value:
+            return ""
+        normalized = value.strip().lower()
+        replacements = str.maketrans({
+            "ä": "ae",
+            "ö": "oe",
+            "ü": "ue",
+            "ß": "ss",
+        })
+        normalized = normalized.translate(replacements)
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        return re.sub(r"\s+", " ", normalized).strip()
+
     @staticmethod
     def _parse_amount(text: str) -> Optional[Decimal]:
         """Parse Austrian/German number format: 1.234,56 or 1234,56 -> 1234.56"""

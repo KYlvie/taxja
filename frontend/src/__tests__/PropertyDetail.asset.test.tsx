@@ -1,4 +1,4 @@
-/* @vitest-environment jsdom */
+﻿/* @vitest-environment jsdom */
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +45,7 @@ vi.mock('../services/recurringService', () => ({
   },
 }));
 
-describe('PropertyDetail asset view', () => {
+describe('PropertyDetail linked document actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getPropertyTransactions.mockResolvedValue([]);
@@ -62,7 +62,7 @@ describe('PropertyDetail asset view', () => {
     getRentalContracts.mockResolvedValue([]);
   });
 
-  it('renders asset-specific tax and depreciation cards without rental contract sections', async () => {
+  it('shows top-level source document actions for depreciable assets', async () => {
     render(
       <MemoryRouter>
         <PropertyDetail
@@ -96,6 +96,7 @@ describe('PropertyDetail asset view', () => {
             accumulated_depreciation: 300,
             annual_depreciation: 300,
             remaining_value: 900,
+            kaufvertrag_document_id: 42,
             status: PropertyStatus.ACTIVE,
             created_at: '2026-03-18T00:00:00Z',
             updated_at: '2026-03-18T00:00:00Z',
@@ -111,10 +112,52 @@ describe('PropertyDetail asset view', () => {
     expect(getRentalContracts).not.toHaveBeenCalled();
     expect(getPropertyMetrics).not.toHaveBeenCalled();
 
-    expect(screen.getByText('资产详情')).toBeInTheDocument();
-    expect(screen.getByText('购置信息')).toBeInTheDocument();
-    expect(screen.getByText('税务处理')).toBeInTheDocument();
-    expect(screen.getByText('折旧摘要')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'MacBook Pro' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '\u67e5\u770b\u8d2d\u7f6e\u6587\u4ef6' })).toHaveAttribute('href', '/documents/42');
+    expect(screen.getByRole('link', { name: '\u7ba1\u7406\u5173\u8054\u6587\u4ef6' })).toHaveAttribute('href', '/documents?property_id=asset-1');
     expect(screen.queryByText('properties.rentalContracts.title')).not.toBeInTheDocument();
+  });
+
+  it('shows top-level contract actions for real-estate properties', async () => {
+    render(
+      <MemoryRouter>
+        <PropertyDetail
+          property={{
+            id: 'property-1',
+            user_id: 1,
+            asset_type: 'real_estate',
+            property_type: PropertyType.RENTAL,
+            rental_percentage: 100,
+            address: 'Argentinierstraße 21, 1234 Wien',
+            street: 'Argentinierstraße 21',
+            city: 'Wien',
+            postal_code: '1234',
+            purchase_date: '2025-03-15',
+            purchase_price: 385000,
+            building_value: 308000,
+            land_value: 77000,
+            grunderwerbsteuer: 13475,
+            notary_fees: 4500,
+            registry_fees: 4235,
+            construction_year: 1928,
+            depreciation_rate: 0.015,
+            kaufvertrag_document_id: 88,
+            mietvertrag_document_id: 91,
+            status: PropertyStatus.ACTIVE,
+            created_at: '2026-03-18T00:00:00Z',
+            updated_at: '2026-03-18T00:00:00Z',
+          }}
+          onEdit={vi.fn()}
+          onArchive={vi.fn()}
+          onBack={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(getPropertyTransactions).toHaveBeenCalledWith('property-1'));
+    expect(getRentalContracts).toHaveBeenCalledWith('property-1');
+
+    expect(screen.getByRole('link', { name: '\u67e5\u770b\u8d2d\u623f\u5408\u540c' })).toHaveAttribute('href', '/documents/88');
+    expect(screen.getByRole('link', { name: '\u67e5\u770b\u79df\u8d41\u5408\u540c' })).toHaveAttribute('href', '/documents/91');
   });
 });

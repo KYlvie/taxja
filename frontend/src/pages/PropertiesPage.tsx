@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../hooks/useConfirm';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { usePropertyStore } from '../stores/propertyStore';
 import { propertyService } from '../services/propertyService';
 import PropertyList from '../components/properties/PropertyList';
 import PropertyForm from '../components/properties/PropertyForm';
 import PropertyDetail from '../components/properties/PropertyDetail';
-import { Property, PropertyFormData } from '../types/property';
+import DisposalDialog from '../components/properties/DisposalDialog';
+import { Property, PropertyFormData, DisposalRequest } from '../types/property';
 import { useRefreshStore } from '../stores/refreshStore';
+import { BarChart3 } from 'lucide-react';
 import './PropertiesPage.css';
 
 const PropertiesPage = () => {
@@ -18,6 +20,9 @@ const PropertiesPage = () => {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | undefined>(undefined);
+  const [otherAssets, setOtherAssets] = useState<any[]>([]);
+  const [disposalTarget, setDisposalTarget] = useState<Property | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const {
     properties,
@@ -28,15 +33,20 @@ const PropertiesPage = () => {
     fetchProperty,
     createProperty,
     updateProperty,
-    archiveProperty,
+    disposeProperty,
     deleteProperty,
     clearError,
   } = usePropertyStore();
 
   const propertiesVersion = useRefreshStore((s) => s.propertiesVersion);
 
+  const refreshAll = (archived = showArchived) => {
+    fetchProperties(archived);
+    propertyService.getAssets(archived).then(r => setOtherAssets(r.assets || [])).catch(() => {});
+  };
+
   useEffect(() => {
-    fetchProperties();
+    refreshAll();
   }, [fetchProperties, propertiesVersion]);
 
   useEffect(() => {
@@ -191,19 +201,27 @@ const PropertiesPage = () => {
     navigate(`/properties/${property.id}`);
   };
 
-  const handleArchiveProperty = async (property: Property) => {
-    const saleDate = prompt(t('properties.enterSaleDate'), new Date().toISOString().split('T')[0]);
-    if (!saleDate) return;
+  const handleArchiveProperty = (property: Property) => {
+    setDisposalTarget(property);
+  };
+
+  const handleShowArchivedChange = (archived: boolean) => {
+    setShowArchived(archived);
+    refreshAll(archived);
+  };
+
+  const handleDispose = async (data: DisposalRequest) => {
+    if (!disposalTarget) return;
     try {
-      await archiveProperty(property.id, saleDate);
+      await disposeProperty(disposalTarget.id, data);
+      setDisposalTarget(null);
       if (propertyId) {
         navigate('/properties');
-      } else {
-        fetchProperties();
       }
+      refreshAll();
     } catch (error) {
-      console.error('Failed to archive property:', error);
-      await showAlert(t('properties.archiveError'), { variant: 'danger' });
+      console.error('Failed to dispose property:', error);
+      await showAlert(t('properties.disposalError'), { variant: 'danger' });
     }
   };
 
@@ -227,6 +245,9 @@ const PropertiesPage = () => {
       return (
         <div className="properties-page">
           <div className="properties-header">
+            <button type="button" className="btn btn-secondary" onClick={handleCancelForm} style={{ marginBottom: '8px' }}>
+              ← {t('common.back', 'Back')}
+            </button>
             <h1>{t('properties.editProperty')}</h1>
           </div>
           <div className="property-form-container">
@@ -242,6 +263,14 @@ const PropertiesPage = () => {
 
     return (
       <div className="properties-page">
+        {disposalTarget && (
+          <DisposalDialog
+            open={!!disposalTarget}
+            property={disposalTarget}
+            onClose={() => setDisposalTarget(null)}
+            onConfirm={handleDispose}
+          />
+        )}
         <PropertyDetail
           property={selectedProperty}
           onEdit={handleEditProperty}
@@ -255,6 +284,14 @@ const PropertiesPage = () => {
   // Show property list view
   return (
     <div className="properties-page">
+      {disposalTarget && (
+        <DisposalDialog
+          open={!!disposalTarget}
+          property={disposalTarget}
+          onClose={() => setDisposalTarget(null)}
+          onConfirm={handleDispose}
+        />
+      )}
       <div className="properties-header">
         <div className="properties-title">
           <h1>{t('properties.title')}</h1>
@@ -281,6 +318,9 @@ const PropertiesPage = () => {
 
       {showForm && (
         <div className="property-form-container">
+          <button type="button" className="btn btn-secondary" onClick={handleCancelForm} style={{ marginBottom: '12px' }}>
+            ← {t('common.back', 'Back')}
+          </button>
           <PropertyForm
             property={editingProperty}
             onSubmit={editingProperty ? handleUpdateProperty : handleCreateProperty}
@@ -290,14 +330,24 @@ const PropertiesPage = () => {
       )}
 
       {!showForm && (
-        <PropertyList
-          properties={properties}
-          isLoading={isLoading}
-          onView={handleViewProperty}
-          onEdit={handleEditProperty}
-          onArchive={handleArchiveProperty}
-          onDelete={handleDeleteProperty}
-        />
+        <>
+          <div className="properties-overview-link" style={{ marginBottom: '16px' }}>
+            <Link to="/properties/portfolio" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <BarChart3 size={16} /> {t('properties.viewOverview', 'Asset overview & comparison')}
+            </Link>
+          </div>
+
+          <PropertyList
+            properties={[...properties, ...otherAssets] as Property[]}
+            isLoading={isLoading}
+            onView={handleViewProperty}
+            onEdit={handleEditProperty}
+            onArchive={handleArchiveProperty}
+            onDelete={handleDeleteProperty}
+            showArchived={showArchived}
+            onShowArchivedChange={handleShowArchivedChange}
+          />
+        </>
       )}
     </div>
   );

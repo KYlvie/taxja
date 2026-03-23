@@ -100,9 +100,9 @@
 }
 
 .empty-icon {
-  font-size: 64px;
+  display: flex;
+  justify-content: center;
   margin-bottom: 16px;
-  opacity: 0.5;
 }
 
 .property-list-empty h3 {
@@ -159,10 +159,17 @@
 }
 
 .property-address h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 16px;
   font-weight: 600;
   color: var(--color-text);
   margin: 0 0 8px 0;
+}
+
+.property-title-icon {
+  flex-shrink: 0;
 }
 
 .property-badges {
@@ -195,6 +202,16 @@
   background: var(--color-text-muted);
   color: var(--color-surface);
   opacity: 0.7;
+}
+
+.status-badge.scrapped {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+.status-badge.withdrawn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
 }
 
 .type-badge {
@@ -322,6 +339,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.property-table-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Table View (Hidden on Mobile) */

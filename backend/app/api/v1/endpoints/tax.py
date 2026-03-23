@@ -5,7 +5,7 @@ Provides tax calculation services including employee refund calculation,
 tax simulation, and flat-rate comparison.
 """
 
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 from decimal import Decimal
 from datetime import datetime
 import logging
@@ -21,11 +21,17 @@ from app.db.base import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import LineItemPostingType
 from app.services.employee_refund_calculator import (
     EmployeeRefundCalculator,
     LohnzettelData,
 )
 from app.services.credit_service import CreditService, InsufficientCreditsError
+from app.services.ifb_calculator import calculate_ifb, IFBAssetType
+from app.services.what_if_simulator import WhatIfSimulator
+from app.services.flat_rate_tax_comparator import FlatRateTaxComparator
+from app.services.savings_suggestion_service import SavingsSuggestionService
+from app.services.posting_line_utils import sum_postings
 
 router = APIRouter()
 
@@ -160,7 +166,8 @@ def calculate_employee_refund(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Employee refund calculation failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")
 
 
 @router.post("/tax/calculate-refund-from-transactions")
@@ -193,7 +200,8 @@ def calculate_refund_from_transactions(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Refund calculation from transactions failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")
 
 
 @router.get("/tax/refund-estimate")
@@ -235,7 +243,8 @@ def estimate_refund_potential(
         )
         return estimate
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Refund estimate calculation failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")
 
 
 # ---------------------------------------------------------------------------
@@ -538,68 +547,72 @@ def simulate_tax_scenario(
             is_deductible = ai_classification["is_deductible"]
 
     # ------------------------------------------------------------------
-    # Step 2: Calculate current tax using TaxCalculationEngine (DB rates)
+    # Step 2+3: Delegate to WhatIfSimulator for tax calculation
     # ------------------------------------------------------------------
-    from app.services.tax_calculation_engine import TaxCalculationEngine
+    from app.schemas.transaction import TransactionCreate
+    from datetime import date as _date
 
-    engine = TaxCalculationEngine(db=db)
+    simulator = WhatIfSimulator(db)
 
-    transactions = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == current_user.id,
-            extract("year", Transaction.transaction_date) == tax_year,
-        )
-        .all()
-    )
+    try:
+        if change_type == "add_expense":
+            # Build a TransactionCreate for the simulator
+            expense_category_val = None
+            if ai_classification and ai_classification.get("category"):
+                try:
+                    expense_category_val = ExpenseCategory(ai_classification["category"])
+                except (ValueError, KeyError):
+                    expense_category_val = None
 
-    current_income = sum(
-        t.amount for t in transactions if t.type == TransactionType.INCOME
-    ) or Decimal("0")
-    current_expenses = sum(
-        t.amount for t in transactions if t.type == TransactionType.EXPENSE
-    ) or Decimal("0")
+            simulation_anchor_date = min(_date(tax_year, 12, 31), _date.today())
 
-    current_net = current_income - current_expenses
-
-    if is_gmbh:
-        from app.services.koest_calculator import KoEstCalculator
-
-        koest_calc = KoEstCalculator()
-        current_tax = koest_calc.calculate(profit=current_net).effective_koest
-    else:
-        calc, _vat_calc, _svs, _ded, _se = engine._get_calculators_for_year(tax_year)
-        current_taxable = calc.apply_exemption(current_net)
-        current_tax = calc.calculate_progressive_tax(current_taxable, tax_year).total_tax
-
-    # ------------------------------------------------------------------
-    # Step 3: Apply scenario and calculate simulated tax
-    # ------------------------------------------------------------------
-    sim_income = current_income
-    sim_expenses = current_expenses
-
-    if change_type == "add_income":
-        sim_income += change_amount
-    elif change_type == "add_expense":
-        if is_deductible:
-            sim_expenses += change_amount
+            expense = TransactionCreate(
+                type=TransactionType.EXPENSE,
+                amount=change_amount,
+                transaction_date=simulation_anchor_date,
+                description=description or "Simulated expense",
+                expense_category=expense_category_val,
+                is_deductible=is_deductible,
+            )
+            sim_result = simulator.simulate_add_expense(
+                user_id=current_user.id,
+                tax_year=tax_year,
+                expense=expense,
+            )
+        elif change_type == "add_income":
+            sim_result = simulator.simulate_income_change(
+                user_id=current_user.id,
+                tax_year=tax_year,
+                income_change=change_amount,
+            )
+        elif change_type == "remove_expense":
+            # remove_expense by amount (no transaction_id) — use income_change
+            # with negative sign to simulate the effect of removing an expense
+            # (removing a deduction increases taxable income)
+            sim_result = simulator.simulate_income_change(
+                user_id=current_user.id,
+                tax_year=tax_year,
+                income_change=change_amount,  # positive = more taxable income
+            )
         else:
-            # Non-deductible expense: no tax impact, but affects net income
-            sim_expenses += change_amount
-    elif change_type == "remove_expense":
-        sim_expenses = max(Decimal("0"), sim_expenses - change_amount)
+            sim_result = simulator.simulate_income_change(
+                user_id=current_user.id,
+                tax_year=tax_year,
+                income_change=change_amount,
+            )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    sim_net = sim_income - sim_expenses
-
-    if is_gmbh:
-        sim_tax = koest_calc.calculate(profit=sim_net).effective_koest
-    else:
-        sim_taxable = calc.apply_exemption(sim_net)
-        sim_tax = calc.calculate_progressive_tax(sim_taxable, tax_year).total_tax
-
-    tax_diff = float(sim_tax - current_tax)
-    current_net_income = float(current_income - current_tax)
-    sim_net_income = float(sim_income - sim_tax)
+    current_tax = Decimal(str(sim_result["current_tax"]))
+    sim_tax = Decimal(str(sim_result["simulated_tax"]))
+    tax_diff = float(sim_result["tax_difference"])
+    # Compute net incomes: simulator provides breakdown but not net income directly.
+    # Use income from breakdown if available, otherwise estimate from tax values.
+    breakdown = sim_result.get("breakdown", {})
+    current_income_val = float(sim_result.get("current_income", 0))
+    sim_income_val = float(sim_result.get("simulated_income", current_income_val))
+    current_net_income = current_income_val - float(current_tax) if current_income_val else 0.0
+    sim_net_income = sim_income_val - float(sim_tax) if sim_income_val else 0.0
 
     # ------------------------------------------------------------------
     # Step 4: Build explanation (use AI explanation if available)
@@ -666,154 +679,77 @@ def compare_flat_rate_tax(
     - § 23 Gewerbebetrieb (business owners)
 
     NOT for: employees, GmbH, landlords (§ 28 rental income).
-
-    For mixed users (self-employed + landlord): Basispauschalierung applies
-    ONLY to the self-employment/business portion. Rental income is always
-    calculated via actual accounting (Einnahmen-Ausgaben-Rechnung).
-
-    Rates are read from TaxConfiguration DB table (deduction_config.self_employed).
     """
-    from app.models.tax_configuration import TaxConfiguration
-
     if tax_year is None:
         tax_year = datetime.now().year
 
-    # --- Load rates from DB ---
-    tax_config = (
-        db.query(TaxConfiguration)
-        .filter(TaxConfiguration.tax_year == tax_year)
-        .first()
-    )
+    comparator = FlatRateTaxComparator(db)
+    result = comparator.compare_methods(user_id=current_user.id, tax_year=tax_year)
 
-    if tax_config and tax_config.deduction_config:
-        se_config = tax_config.deduction_config.get("self_employed", {})
-        flat_rate_pct = Decimal(str(se_config.get("flat_rate_general", "0.12")))
-        max_turnover = Decimal(str(se_config.get("flat_rate_turnover_limit", "220000")))
-        # max deduction = turnover_limit * rate (WKO rule)
-        max_deduction = max_turnover * flat_rate_pct
-    else:
-        # Fallback if no DB config
-        flat_rate_pct = Decimal("0.12")
-        max_turnover = Decimal("220000")
-        max_deduction = Decimal("26400")
+    # Map service output to the existing API response shape
+    if not result.get("eligible", False):
+        # Ineligible — build a minimal response from actual_accounting data
+        actual = result.get("actual_accounting", {})
+        reason = result.get("reason", "not_eligible")
+        return {
+            "tax_year": tax_year,
+            "actualAccounting": {
+                "grossIncome": actual.get("total_income", 0.0),
+                "deductibleExpenses": actual.get("total_expenses", 0.0),
+                "taxableIncome": actual.get("profit", 0.0),
+                "incomeTax": actual.get("income_tax", 0.0),
+                "netIncome": actual.get("net_income", 0.0),
+            },
+            "flatRate": {
+                "grossIncome": actual.get("total_income", 0.0),
+                "flatRateDeduction": 0.0,
+                "flatRatePercentage": 12.0,
+                "basicExemption": 0.0,
+                "taxableIncome": 0.0,
+                "incomeTax": 0.0,
+                "netIncome": 0.0,
+            },
+            "savings": 0.0,
+            "recommendation": "actual",
+            "eligibility": {
+                "isEligible": False,
+                "reason": reason,
+                "maxProfit": float(comparator.TURNOVER_THRESHOLD),
+            },
+        }
 
-    pct_display = float(flat_rate_pct * 100)
-
-    # --- Load transactions ---
-    transactions = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == current_user.id,
-            extract("year", Transaction.transaction_date) == tax_year,
-        )
-        .all()
-    )
-
-    user_type = (
-        current_user.user_type.value
-        if hasattr(current_user.user_type, "value")
-        else str(current_user.user_type)
-    )
-
-    # --- Split income by source for mixed users ---
-    # Basispauschalierung-eligible categories: self_employment, business
-    eligible_income_cats = {"self_employment", "business"}
-
-    business_income = Decimal("0")
-    rental_income = Decimal("0")
-    other_income = Decimal("0")
-    business_expenses = Decimal("0")
-    rental_expenses = Decimal("0")
-    other_expenses = Decimal("0")
-
-    for t in transactions:
-        cat = t.income_category.value if t.income_category and hasattr(t.income_category, "value") else (str(t.income_category) if t.income_category else None)
-        ecat = t.expense_category.value if t.expense_category and hasattr(t.expense_category, "value") else None
-
-        if t.type == TransactionType.INCOME:
-            if cat in eligible_income_cats:
-                business_income += t.amount
-            elif cat == "rental":
-                rental_income += t.amount
-            else:
-                other_income += t.amount
-        elif t.type == TransactionType.EXPENSE and t.is_deductible:
-            # Assign expenses: property-related → rental, else → business
-            if ecat in ("property_maintenance", "property_insurance", "property_management",
-                        "mortgage_interest", "depreciation"):
-                rental_expenses += t.amount
-            elif cat == "rental" or (t.property_id is not None):
-                rental_expenses += t.amount
-            else:
-                business_expenses += t.amount
-
-    gross_income = business_income + rental_income + other_income
-    actual_expenses = business_expenses + rental_expenses
-
-    # --- Eligibility ---
-    is_eligible = business_income <= max_turnover
-    if user_type == "employee":
-        is_eligible = False
-        reason = "not_available_employee"
-    elif user_type == "gmbh":
-        is_eligible = False
-        reason = "not_available_gmbh"
-    elif user_type == "landlord":
-        # Pure landlord — no business income to apply flat rate to
-        is_eligible = False
-        reason = "not_available_landlord"
-    elif business_income == 0:
-        is_eligible = False
-        reason = "no_business_income"
-    elif not is_eligible:
-        reason = "turnover_exceeds_limit"
-    else:
-        reason = "eligible"
-
-    # --- Actual accounting (all income types) ---
-    actual_taxable = max(Decimal("0"), gross_income - actual_expenses - EXEMPTION)
-    actual_tax = _calc_progressive_tax(actual_taxable)
-    actual_net = gross_income - actual_tax
-
-    # --- Flat-rate method ---
-    # Only business income gets flat-rate deduction; rental uses actual expenses
-    flat_biz_deduction = min(business_income * flat_rate_pct, max_deduction)
-    flat_taxable = max(
-        Decimal("0"),
-        (business_income - flat_biz_deduction)
-        + (rental_income - rental_expenses)
-        + other_income
-        - EXEMPTION,
-    )
-    flat_tax = _calc_progressive_tax(flat_taxable)
-    flat_net = gross_income - flat_tax
-
-    savings = float(actual_tax - flat_tax)
-    recommendation = "flat_rate" if savings > 0 and is_eligible else "actual"
+    actual = result.get("actual_accounting", {})
+    # Use 6% flat rate as the primary comparison (most common)
+    flat6 = result.get("flat_rate_6_percent", {})
+    rec = result.get("recommendation", {})
+    savings = rec.get("savings_vs_actual", 0.0)
+    best = rec.get("best_method", "actual_accounting")
+    recommendation = "flat_rate" if best != "actual_accounting" else "actual"
 
     return {
         "tax_year": tax_year,
         "actualAccounting": {
-            "grossIncome": float(gross_income),
-            "deductibleExpenses": float(actual_expenses),
-            "taxableIncome": float(actual_taxable),
-            "incomeTax": float(actual_tax),
-            "netIncome": float(actual_net),
+            "grossIncome": actual.get("total_income", 0.0),
+            "deductibleExpenses": actual.get("total_expenses", 0.0),
+            "taxableIncome": actual.get("profit", 0.0),
+            "incomeTax": actual.get("income_tax", 0.0),
+            "netIncome": actual.get("net_income", 0.0),
         },
         "flatRate": {
-            "grossIncome": float(gross_income),
-            "flatRateDeduction": float(flat_biz_deduction),
-            "flatRatePercentage": pct_display,
-            "taxableIncome": float(flat_taxable),
-            "incomeTax": float(flat_tax),
-            "netIncome": float(flat_net),
+            "grossIncome": flat6.get("total_income", 0.0),
+            "flatRateDeduction": flat6.get("deemed_expenses", 0.0),
+            "flatRatePercentage": float(flat6.get("flat_rate_percentage", "6%").replace("%", "")) if isinstance(flat6.get("flat_rate_percentage"), str) else 6.0,
+            "basicExemption": flat6.get("basic_exemption", 0.0),
+            "taxableIncome": flat6.get("taxable_profit", flat6.get("profit", 0.0)),
+            "incomeTax": flat6.get("income_tax", 0.0),
+            "netIncome": flat6.get("net_income", 0.0),
         },
         "savings": savings,
         "recommendation": recommendation,
         "eligibility": {
-            "isEligible": is_eligible,
-            "reason": reason,
-            "maxProfit": float(max_turnover),
+            "isEligible": True,
+            "reason": "eligible",
+            "maxProfit": float(comparator.TURNOVER_THRESHOLD),
         },
     }
 
@@ -842,13 +778,17 @@ def compare_koest_vs_est(
         .all()
     )
 
-    gross_income = sum(
-        t.amount for t in transactions if t.type == TransactionType.INCOME
-    ) or Decimal("0")
-    deductible_expenses = sum(
-        t.amount for t in transactions
-        if t.type == TransactionType.EXPENSE and t.is_deductible
-    ) or Decimal("0")
+    gross_income = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.INCOME},
+        include_private_use=False,
+    )
+    deductible_expenses = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        deductible_only=True,
+        include_private_use=False,
+    )
 
     profit = gross_income - deductible_expenses
 
@@ -872,6 +812,150 @@ class BescheidImportRequest(BaseModel):
     """Request to import data from Einkommensteuerbescheid OCR text"""
     ocr_text: str = Field(..., description="OCR-extracted text from Steuerberechnung document")
     document_id: Optional[int] = Field(None, description="Linked document ID if uploaded via OCR")
+    edited_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional user-corrected tax data to persist instead of the raw parser output",
+    )
+
+
+def _normalize_tax_import_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _normalize_tax_import_value(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_normalize_tax_import_value(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    if stripped == "":
+        return None
+
+    normalized = (
+        stripped.replace("EUR", "")
+        .replace("€", "")
+        .replace(" ", "")
+    )
+    if normalized.count(",") == 1 and normalized.count(".") >= 1:
+        normalized = normalized.replace(".", "").replace(",", ".")
+    elif normalized.count(",") == 1 and normalized.count(".") == 0:
+        normalized = normalized.replace(",", ".")
+
+    try:
+        numeric = float(normalized)
+        return int(numeric) if numeric.is_integer() else numeric
+    except ValueError:
+        return stripped
+
+
+def _merge_tax_import_data(
+    base_data: Dict[str, Any],
+    edited_data: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    import json as _json
+
+    merged = _json.loads(_json.dumps(base_data or {}))
+    if not edited_data:
+        return merged
+
+    for key, value in edited_data.items():
+        normalized_value = _normalize_tax_import_value(value)
+        if (
+            key == "all_kz_values"
+            and isinstance(normalized_value, dict)
+            and isinstance(merged.get("all_kz_values"), dict)
+        ):
+            merged["all_kz_values"].update(normalized_value)
+            continue
+        merged[key] = normalized_value
+
+    return merged
+
+
+def _confirm_tax_form_data(
+    *,
+    db: Session,
+    current_user: User,
+    data_type: str,
+    suggestion_type: str,
+    data: Dict[str, Any],
+    document_id: Optional[int],
+) -> Dict[str, Any]:
+    import json as _json
+    from sqlalchemy.orm.attributes import flag_modified
+    from app.models.tax_filing_data import TaxFilingData
+
+    document = None
+    if document_id is not None:
+        document = (
+            db.query(Document)
+            .filter(Document.id == document_id, Document.user_id == current_user.id)
+            .first()
+        )
+        if not document:
+            raise HTTPException(status_code=404, detail="document_not_found")
+
+    tax_year = data.get("tax_year") or data.get("year")
+
+    tax_filing = None
+    if document_id is not None:
+        tax_filing = (
+            db.query(TaxFilingData)
+            .filter(
+                TaxFilingData.user_id == current_user.id,
+                TaxFilingData.source_document_id == document_id,
+                TaxFilingData.data_type == data_type,
+            )
+            .first()
+        )
+
+    if tax_filing:
+        tax_filing.tax_year = tax_year
+        tax_filing.data = data
+        tax_filing.status = "confirmed"
+        tax_filing.confirmed_at = datetime.utcnow()
+    else:
+        tax_filing = TaxFilingData(
+            user_id=current_user.id,
+            tax_year=tax_year,
+            data_type=data_type,
+            source_document_id=document_id,
+            data=data,
+            status="confirmed",
+            confirmed_at=datetime.utcnow(),
+        )
+        db.add(tax_filing)
+        db.flush()
+
+    steuernummer = data.get("steuernummer")
+    if isinstance(steuernummer, str) and steuernummer.strip():
+        current_user.tax_number = steuernummer.strip()
+
+    if document is not None:
+        updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+        suggestion = updated_ocr.get("import_suggestion") or {}
+        suggestion.update(
+            {
+                "type": suggestion_type,
+                "status": "confirmed",
+                "data": data,
+                "confidence": float(document.confidence_score or data.get("confidence") or 0.0),
+                "tax_filing_data_id": tax_filing.id,
+            }
+        )
+        updated_ocr["import_suggestion"] = suggestion
+        document.ocr_result = updated_ocr
+        flag_modified(document, "ocr_result")
+
+    db.commit()
+
+    return {
+        "message": f"Tax data ({data_type}) confirmed successfully",
+        "tax_filing_data_id": tax_filing.id,
+        "data_type": data_type,
+        "tax_year": tax_year,
+        "saved_data": data,
+        "document_id": document_id,
+    }
 
 
 @router.post("/tax/import-bescheid")
@@ -881,17 +965,9 @@ def import_einkommensteuerbescheid(
     db: Session = Depends(get_db),
 ):
     """
-    Import data from an Einkommensteuerbescheid (annual income tax assessment).
-
-    Extracts structured tax data from OCR text and creates transactions:
-    - Employment income (KZ 245)
-    - Rental income/loss (V+V from E1b)
-    - Deductions (Werbungskosten, Telearbeitspauschale)
-    - Updates user profile (tax number, children, etc.)
-
-    Returns extracted data summary and list of created transactions.
+    Confirm data from an Einkommensteuerbescheid and persist it as tax filing data.
     """
-    from app.services.bescheid_import_service import BescheidImportService
+    from app.services.bescheid_extractor import BescheidExtractor
 
     if not request.ocr_text or len(request.ocr_text.strip()) < 50:
         raise HTTPException(
@@ -899,18 +975,23 @@ def import_einkommensteuerbescheid(
             detail="OCR text is too short to be a valid Einkommensteuerbescheid",
         )
 
-    import_service = BescheidImportService(db)
-
     try:
-        result = import_service.import_from_ocr_text(
-            text=request.ocr_text,
-            user_id=current_user.id,
+        extractor = BescheidExtractor()
+        parsed = extractor.to_dict(extractor.extract(request.ocr_text))
+        confirmed_data = _merge_tax_import_data(parsed, request.edited_data)
+        result = _confirm_tax_form_data(
+            db=db,
+            current_user=current_user,
+            data_type="einkommensteuerbescheid",
+            suggestion_type="import_bescheid",
+            data=confirmed_data,
             document_id=request.document_id,
         )
     except Exception as e:
+        logger.exception("Failed to parse Einkommensteuerbescheid")
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to parse Einkommensteuerbescheid: {str(e)}",
+            detail="tax_calculation_error",
         )
 
     return result
@@ -1020,6 +1101,10 @@ class E1FormImportRequest(BaseModel):
     """Request to import data from E1 tax declaration form OCR text"""
     ocr_text: str = Field(..., description="OCR-extracted text from E1 form")
     document_id: Optional[int] = Field(None, description="Linked document ID if uploaded")
+    edited_data: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional user-corrected tax data to persist instead of the raw parser output",
+    )
 
 
 @router.post("/tax/import-e1-form")
@@ -1029,16 +1114,9 @@ def import_e1_form(
     db: Session = Depends(get_db),
 ):
     """
-    Import data from an E1 tax declaration form (Einkommensteuererklärung).
-
-    Extracts structured tax data from OCR text and creates transactions:
-    - Income by KZ codes (245, 210, 220, 350, 370, 390)
-    - Deductions (260, 261, 263, 450, 458, 459)
-    - Updates user profile (tax number, children, etc.)
-
-    Returns extracted data summary and list of created transactions.
+    Confirm data from an E1 tax declaration form and persist it as tax filing data.
     """
-    from app.services.e1_form_import_service import E1FormImportService
+    from app.services.e1_form_extractor import E1FormExtractor
 
     if not request.ocr_text or len(request.ocr_text.strip()) < 50:
         raise HTTPException(
@@ -1046,18 +1124,23 @@ def import_e1_form(
             detail="OCR text is too short to be a valid E1 form",
         )
 
-    import_service = E1FormImportService(db)
-
     try:
-        result = import_service.import_from_ocr_text(
-            text=request.ocr_text,
-            user_id=current_user.id,
+        extractor = E1FormExtractor()
+        parsed = extractor.to_dict(extractor.extract(request.ocr_text))
+        confirmed_data = _merge_tax_import_data(parsed, request.edited_data)
+        result = _confirm_tax_form_data(
+            db=db,
+            current_user=current_user,
+            data_type="e1_form",
+            suggestion_type="import_e1",
+            data=confirmed_data,
             document_id=request.document_id,
         )
     except Exception as e:
+        logger.exception("Failed to parse E1 form")
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to parse E1 form: {str(e)}",
+            detail="tax_calculation_error",
         )
 
     return result
@@ -1181,8 +1264,8 @@ async def refresh_knowledge_base(
     try:
         result = await scraper.scrape_and_update(source_ids=source_ids)
     except Exception as e:
-        logger.error(f"Knowledge base refresh failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Scrape failed: {str(e)}")
+        logger.exception("Knowledge base refresh failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")
 
     return result
 
@@ -1238,3 +1321,124 @@ def calculate_grest_endpoint(
         "tier_breakdown": result.tier_breakdown,
         "note": result.note,
     }
+
+
+# ═══ IFB (Investitionsfreibetrag) Calculator ═══
+
+
+class IFBInvestmentItem(BaseModel):
+    description: str = Field(..., description="Description of the asset")
+    asset_type: str = Field(default="standard", description="Asset type: standard, eco_vehicle, eco_heating, eco_insulation, eco_other")
+    acquisition_cost: float = Field(..., gt=0, description="Acquisition/production cost")
+    acquisition_date: Optional[str] = Field(None, description="Acquisition date (ISO format)")
+
+
+class IFBRequest(BaseModel):
+    investments: List[IFBInvestmentItem] = Field(..., min_length=1, description="List of qualifying investments")
+    tax_year: int = Field(default=2026, description="Tax year (IFB available from 2023)")
+
+
+@router.post("/tax/calculate-ifb")
+def calculate_ifb_endpoint(
+    request: IFBRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    response: Response = None,
+):
+    """Calculate Investitionsfreibetrag (§11 EStG) for qualifying investments."""
+    credit_service = CreditService(db, redis_client=None)
+    try:
+        deduction = credit_service.check_and_deduct(
+            user_id=current_user.id,
+            operation="tax_calc",
+        )
+    except InsufficientCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits: {e.required} required, {e.available} available",
+        )
+
+    try:
+        investments = [inv.model_dump() for inv in request.investments]
+        result = calculate_ifb(investments, tax_year=request.tax_year)
+
+        if response is not None:
+            response.headers["X-Credits-Remaining"] = str(
+                deduction.balance_after.available_without_overage
+            )
+
+        db.commit()
+
+        return {
+            "total_eligible_investment": float(result.total_eligible_investment),
+            "total_ifb": float(result.total_ifb),
+            "standard_ifb": float(result.standard_ifb),
+            "eco_ifb": float(result.eco_ifb),
+            "capped": result.capped,
+            "note": result.note,
+            "line_items": [
+                {
+                    "description": item.description,
+                    "asset_type": item.asset_type.value if hasattr(item.asset_type, "value") else str(item.asset_type),
+                    "acquisition_cost": float(item.acquisition_cost),
+                    "rate": float(item.rate),
+                    "ifb_amount": float(item.ifb_amount),
+                    "note": item.note,
+                }
+                for item in result.line_items
+            ],
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("IFB calculation failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")
+
+
+# ═══ Savings Suggestions ═══
+
+
+@router.get("/tax/savings-suggestions")
+def get_savings_suggestions(
+    tax_year: Optional[int] = Query(None, description="Tax year"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    response: Response = None,
+):
+    """Generate personalized tax savings suggestions."""
+    if tax_year is None:
+        tax_year = datetime.now().year
+
+    credit_service = CreditService(db, redis_client=None)
+    try:
+        deduction = credit_service.check_and_deduct(
+            user_id=current_user.id,
+            operation="tax_calc",
+        )
+    except InsufficientCreditsError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient credits: {e.required} required, {e.available} available",
+        )
+
+    try:
+        service = SavingsSuggestionService(db)
+        language = getattr(current_user, "language", None) or "de"
+        suggestions = service.generate_suggestions(
+            user_id=current_user.id,
+            tax_year=tax_year,
+            language=language,
+        )
+
+        if response is not None:
+            response.headers["X-Credits-Remaining"] = str(
+                deduction.balance_after.available_without_overage
+            )
+
+        db.commit()
+        return {"tax_year": tax_year, "suggestions": suggestions}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Savings suggestion generation failed")
+        raise HTTPException(status_code=500, detail="tax_calculation_error")

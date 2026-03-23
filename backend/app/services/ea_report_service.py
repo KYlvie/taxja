@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.user import User, UserType
+from app.services.report_transaction_filters import should_include_in_ea_report
+from app.services.posting_line_utils import (
+    iter_transaction_posting_records,
+    recoverable_input_vat_for_transaction,
+)
 
 
 INCOME_GROUPS = {
@@ -171,7 +177,7 @@ def generate_ea_report(
     language: str = "de",
 ) -> Dict[str, Any]:
     """Generate a structured E/A Rechnung report."""
-    transactions = (
+    all_transactions = (
         db.query(Transaction)
         .filter(
             Transaction.user_id == user.id,
@@ -180,8 +186,9 @@ def generate_ea_report(
         .order_by(Transaction.transaction_date)
         .all()
     )
+    transactions = [t for t in all_transactions if should_include_in_ea_report(t)]
 
-    lang_key = f"label_{language}" if language in ("de", "en", "zh") else "label_de"
+    lang_key = f"label_{language}" if language in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs") else "label_de"
 
     # Build income section
     income_sections = []
@@ -238,64 +245,49 @@ def generate_ea_report(
         return section
 
     for t in transactions:
-        if t.type != TransactionType.EXPENSE:
-            continue
         if t.id in assigned_expense_ids:
             continue
         assigned_expense_ids.add(t.id)
 
-        if t.has_line_items:
-            # Expand line items into individual report rows per category group
-            for li in t.line_items:
-                li_cat = li.category or "other"
-                gk = _cat_to_group.get(li_cat, "sonstige")
-                section = _ensure_section(gk)
-                li_amt = float(li.amount * li.quantity)
-                section["items"].append({
-                    "date": t.transaction_date.isoformat() if t.transaction_date else "",
-                    "description": f"{t.description or ''} — {li.description}",
-                    "amount": li_amt,
-                    "is_deductible": li.is_deductible,
-                })
-                section["subtotal"] += li_amt
-                total_expenses += Decimal(str(li_amt))
-                if li.is_deductible:
-                    section["deductible_subtotal"] += li_amt
-                    total_deductible += Decimal(str(li_amt))
-        else:
-            # Legacy: whole-transaction amount
-            cat_val = (
-                t.expense_category.value
-                if t.expense_category and hasattr(t.expense_category, "value")
-                else str(t.expense_category) if t.expense_category else "other"
-            )
+        expense_records = [
+            record
+            for record in iter_transaction_posting_records(t, include_private_use=False)
+            if record.posting_type == LineItemPostingType.EXPENSE
+        ]
+        if not expense_records:
+            continue
+
+        for record in expense_records:
+            cat_val = record.category or "other"
             gk = _cat_to_group.get(cat_val, "sonstige")
             section = _ensure_section(gk)
-            amt = t.amount or Decimal("0")
+            amt = record.total_amount
+            description = record.description or t.description or ""
+            if record.line_item is not None and t.description and description != t.description:
+                description = f"{t.description} - {description}"
             section["items"].append({
                 "date": t.transaction_date.isoformat() if t.transaction_date else "",
-                "description": t.description or "",
+                "description": description,
                 "amount": float(amt),
-                "is_deductible": t.is_deductible,
+                "is_deductible": record.is_deductible,
             })
             section["subtotal"] += float(amt)
             total_expenses += amt
-            if t.is_deductible:
+            if record.is_deductible:
                 section["deductible_subtotal"] += float(amt)
                 total_deductible += amt
-
     # Remove empty sections
     expense_sections = [s for s in expense_sections if s["items"]]
 
     # VAT summary
     total_vat_collected = Decimal("0")
     total_vat_paid = Decimal("0")
-    for t in transactions:
+    for t in all_transactions:
         if t.vat_amount:
             if t.type == TransactionType.INCOME:
                 total_vat_collected += t.vat_amount
-            else:
-                total_vat_paid += t.vat_amount
+        if t.type in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
+            total_vat_paid += recoverable_input_vat_for_transaction(t)
 
     betriebsergebnis = total_income - total_expenses
 

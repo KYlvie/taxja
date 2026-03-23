@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { dashboardService } from '../../services/dashboardService';
+import { getLocaleForLanguage } from '../../utils/locale';
+import Select from '../common/Select';
 import './WhatIfSimulator.css';
 
 interface SimulationForm {
@@ -34,7 +36,7 @@ interface SimulationResult {
 }
 
 const WhatIfSimulator = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { register, handleSubmit, watch, formState: { errors } } = useForm<SimulationForm>();
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -56,7 +58,7 @@ const WhatIfSimulator = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
     }).format(amount);
@@ -77,11 +79,12 @@ const WhatIfSimulator = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="simulator-form">
         <div className="form-group">
           <label>{t('dashboard.changeType')}</label>
-          <select {...register('changeType', { required: true })}>
-            <option value="add_expense">{t('dashboard.addExpense')}</option>
-            <option value="add_income">{t('dashboard.addIncome')}</option>
-            <option value="remove_expense">{t('dashboard.removeExpense')}</option>
-          </select>
+          <Select {...register('changeType', { required: true })} value={watch('changeType') || ''}
+            options={[
+              { value: 'add_expense', label: t('dashboard.addExpense') },
+              { value: 'add_income', label: t('dashboard.addIncome') },
+              { value: 'remove_expense', label: t('dashboard.removeExpense') },
+            ]} />
         </div>
 
         <div className="form-group">
@@ -117,15 +120,16 @@ const WhatIfSimulator = () => {
         {(changeType === 'add_expense' || changeType === 'remove_expense') && (
           <div className="form-group">
             <label>{t('dashboard.category')}</label>
-            <select {...register('category')}>
-              <option value="">{t('dashboard.selectCategory')}</option>
-              <option value="office_supplies">{t('transactions.categories.office_supplies')}</option>
-              <option value="equipment">{t('transactions.categories.equipment')}</option>
-              <option value="travel">{t('transactions.categories.travel')}</option>
-              <option value="marketing">{t('transactions.categories.marketing')}</option>
-              <option value="maintenance">{t('transactions.categories.maintenance')}</option>
-              <option value="insurance">{t('transactions.categories.insurance')}</option>
-            </select>
+            <Select {...register('category')} value={watch('category') || ''}
+              placeholder={t('dashboard.selectCategory')}
+              options={[
+                { value: 'office_supplies', label: t('transactions.categories.office_supplies') },
+                { value: 'equipment', label: t('transactions.categories.equipment') },
+                { value: 'travel', label: t('transactions.categories.travel') },
+                { value: 'marketing', label: t('transactions.categories.marketing') },
+                { value: 'maintenance', label: t('transactions.categories.maintenance') },
+                { value: 'insurance', label: t('transactions.categories.insurance') },
+              ]} />
           </div>
         )}
 

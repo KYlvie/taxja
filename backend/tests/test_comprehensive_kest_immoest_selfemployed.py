@@ -509,18 +509,16 @@ class TestCalculateGewinnfreibetrag:
         assert result.total_freibetrag == Decimal("13660.00")
         assert result.capped is False
 
-    def test_large_profit_full_tiers_capped(self):
+    def test_large_profit_full_tiers_at_max(self):
         """Profit EUR 600,000, investment EUR 100,000.
         Grundfreibetrag: 4,950
         Excess: 600,000 - 33,000 = 567,000
-        Tier 1: min(567,000, 175,000) = 175,000 * 13% = 22,750
-        Tier 2: min(392,000, 175,000) = 175,000 * 7% = 12,250
-        Tier 3: min(217,000, 230,000) = 217,000 * 4.5% = 9,765
-        Max investment FB: 22,750 + 12,250 + 9,765 = 44,765
-        Investment cap: min(44,765, 100,000) = 44,765
-        Total uncapped: 4,950 + 44,765 = 49,715
-        But max is 46,400 -> capped.
-        Investment FB becomes: 46,400 - 4,950 = 41,450
+        Tier 1: min(567,000, 145,000) = 145,000 * 13% = 18,850
+        Tier 2: min(422,000, 175,000) = 175,000 * 7% = 12,250
+        Tier 3: min(247,000, 230,000) = 230,000 * 4.5% = 10,350
+        Max investment FB: 18,850 + 12,250 + 10,350 = 41,450
+        Investment cap: min(41,450, 100,000) = 41,450
+        Total: 4,950 + 41,450 = 46,400 (exactly at max, not capped by cap logic)
         """
         result = calculate_gewinnfreibetrag(
             Decimal("600000"),
@@ -529,7 +527,7 @@ class TestCalculateGewinnfreibetrag:
         assert result.grundfreibetrag == Decimal("4950.00")
         assert result.total_freibetrag == Decimal("46400.00")
         assert result.investment_freibetrag == Decimal("41450.00")
-        assert result.capped is True
+        assert result.capped is False
 
     def test_zero_profit(self):
         """Zero profit -> no freibetrag."""
@@ -580,20 +578,20 @@ class TestCalculateGewinnfreibetrag:
 
     def test_tier2_reached(self):
         """Profit EUR 250,000, investment EUR 100,000.
-        Excess: 217,000
-        Tier 1: 175,000 * 13% = 22,750
-        Tier 2: 42,000 * 7% = 2,940
-        Max invest FB: 25,690
-        Investment cap: min(25,690, 100,000) = 25,690
-        Total: 4,950 + 25,690 = 30,640
+        Excess: 250,000 - 33,000 = 217,000
+        Tier 1: min(217,000, 145,000) = 145,000 * 13% = 18,850
+        Tier 2: min(72,000, 175,000) = 72,000 * 7% = 5,040
+        Max invest FB: 18,850 + 5,040 = 23,890
+        Investment cap: min(23,890, 100,000) = 23,890
+        Total: 4,950 + 23,890 = 28,840
         """
         result = calculate_gewinnfreibetrag(
             Decimal("250000"),
             qualifying_investment=Decimal("100000"),
         )
         assert result.grundfreibetrag == Decimal("4950.00")
-        assert result.investment_freibetrag == Decimal("25690.00")
-        assert result.total_freibetrag == Decimal("30640.00")
+        assert result.investment_freibetrag == Decimal("23890.00")
+        assert result.total_freibetrag == Decimal("28840.00")
         assert result.capped is False
 
 
@@ -607,10 +605,10 @@ class TestCalculateBasispauschalierung:
 
     def test_general_profession_100k(self):
         """General profession, turnover EUR 100,000, SVS EUR 5,000.
-        Flat-rate expenses: 100,000 * 13.5% = 13,500
-        Profit: 100,000 - 13,500 - 5,000 = 81,500
-        Grundfreibetrag: min(81,500 * 0.15, 4,950) = 4,950
-        Taxable: 81,500 - 4,950 = 76,550
+        Flat-rate expenses: 100,000 * 12% = 12,000
+        Profit: 100,000 - 12,000 - 5,000 = 83,000
+        Grundfreibetrag: min(83,000 * 0.15, 4,950) = 4,950
+        Taxable: 83,000 - 4,950 = 78,050
         """
         result = calculate_basispauschalierung(
             gross_turnover=Decimal("100000"),
@@ -618,11 +616,11 @@ class TestCalculateBasispauschalierung:
             svs_contributions=Decimal("5000"),
         )
         assert result.eligible is True
-        assert result.flat_rate_expenses == Decimal("13500.00")
-        assert result.flat_rate_pct == Decimal("0.135")
-        assert result.estimated_profit == Decimal("81500.00")
+        assert result.flat_rate_expenses == Decimal("12000.00")
+        assert result.flat_rate_pct == Decimal("0.12")
+        assert result.estimated_profit == Decimal("83000.00")
         assert result.grundfreibetrag == Decimal("4950.00")
-        assert result.taxable_profit == Decimal("76550.00")
+        assert result.taxable_profit == Decimal("78050.00")
 
     def test_consulting_profession_6_percent(self):
         """Consulting profession uses 6% flat rate."""
@@ -638,17 +636,17 @@ class TestCalculateBasispauschalierung:
         assert result.estimated_profit == Decimal("89000.00")
 
     def test_turnover_over_limit_not_eligible(self):
-        """Turnover > EUR 320,000 -> not eligible."""
+        """Turnover > EUR 220,000 -> not eligible."""
         result = calculate_basispauschalierung(
-            gross_turnover=Decimal("320001"),
+            gross_turnover=Decimal("220001"),
         )
         assert result.eligible is False
-        assert "320" in result.reason
+        assert "220" in result.reason
 
     def test_turnover_exactly_at_limit(self):
-        """Turnover exactly EUR 320,000 -> eligible."""
+        """Turnover exactly EUR 220,000 -> eligible."""
         result = calculate_basispauschalierung(
-            gross_turnover=Decimal("320000"),
+            gross_turnover=Decimal("220000"),
         )
         assert result.eligible is True
 
@@ -658,11 +656,11 @@ class TestCalculateBasispauschalierung:
             gross_turnover=Decimal("50000"),
             svs_contributions=Decimal("0"),
         )
-        # Expenses: 50,000 * 13.5% = 6,750
-        # Profit: 50,000 - 6,750 = 43,250
-        # Grundfreibetrag: min(43,250 * 0.15, 4,950) = 4,950
+        # Expenses: 50,000 * 12% = 6,000
+        # Profit: 50,000 - 6,000 = 44,000
+        # Grundfreibetrag: min(44,000 * 0.15, 4,950) = 4,950
         assert result.grundfreibetrag == Decimal("4950.00")
-        assert result.taxable_profit == Decimal("43250.00") - Decimal("4950.00")
+        assert result.taxable_profit == Decimal("44000.00") - Decimal("4950.00")
 
     def test_small_turnover_grundfreibetrag_not_capped(self):
         """Small turnover where Grundfreibetrag is less than max."""
@@ -670,11 +668,11 @@ class TestCalculateBasispauschalierung:
             gross_turnover=Decimal("20000"),
             svs_contributions=Decimal("0"),
         )
-        # Expenses: 20,000 * 13.5% = 2,700
-        # Profit: 17,300
-        # Grundfreibetrag: 17,300 * 15% = 2,595
-        assert result.estimated_profit == Decimal("17300.00")
-        assert result.grundfreibetrag == Decimal("2595.00")
+        # Expenses: 20,000 * 12% = 2,400
+        # Profit: 17,600
+        # Grundfreibetrag: 17,600 * 15% = 2,640
+        assert result.estimated_profit == Decimal("17600.00")
+        assert result.grundfreibetrag == Decimal("2640.00")
 
     def test_note_mentions_no_investment_freibetrag(self):
         """Note should mention that investment FB is not allowed with Pauschalierung."""
@@ -705,20 +703,20 @@ class TestDetermineKleinunternehmerStatus:
         assert status.tolerance_applies is False
 
     def test_tolerance_zone(self):
-        """Turnover EUR 55,001 to EUR 60,500 -> tolerance applies (still exempt this year)."""
+        """Turnover EUR 55,001 to EUR 63,250 -> tolerance applies (still exempt this year)."""
         status = determine_kleinunternehmer_status(Decimal("58000"))
         assert status.exempt is True
         assert status.tolerance_applies is True
 
     def test_tolerance_zone_upper_boundary(self):
-        """Turnover exactly EUR 60,500 -> tolerance still applies."""
-        status = determine_kleinunternehmer_status(Decimal("60500"))
+        """Turnover exactly EUR 63,250 -> tolerance still applies."""
+        status = determine_kleinunternehmer_status(Decimal("63250"))
         assert status.exempt is True
         assert status.tolerance_applies is True
 
     def test_above_tolerance_not_exempt(self):
-        """Turnover > EUR 60,500 -> not exempt."""
-        status = determine_kleinunternehmer_status(Decimal("60501"))
+        """Turnover > EUR 63,250 -> not exempt."""
+        status = determine_kleinunternehmer_status(Decimal("63251"))
         assert status.exempt is False
         assert status.ust_voranmeldung_required is True
 
@@ -775,7 +773,7 @@ class TestCompareExpenseMethods:
             actual_expenses=Decimal("5000"),  # low actual expenses
             svs_contributions=Decimal("5000"),
         )
-        # Flat-rate: 13,500 expenses -> profit 81,500, GFB 4,950, taxable 76,550
+        # Flat-rate: 12,000 expenses -> profit 83,000, GFB 4,950, taxable 78,050
         # Actual: 5,000 expenses -> profit 90,000, GFB 4,950 + invest FB 0 = 4,950, taxable 85,050
         assert result.recommended_method == ExpenseMethod.FLAT_RATE
         assert result.flat_rate_profit < result.actual_profit
@@ -787,12 +785,12 @@ class TestCompareExpenseMethods:
             actual_expenses=Decimal("40000"),  # high actual expenses
             svs_contributions=Decimal("5000"),
         )
-        # Flat-rate: expenses 13,500, profit 81,500, taxable ~76,550
+        # Flat-rate: expenses 12,000, profit 83,000, taxable ~78,050
         # Actual: expenses 40,000, profit 55,000, GFB 4,950 + invest, taxable ~50,050
         assert result.recommended_method == ExpenseMethod.ACTUAL
 
     def test_turnover_over_limit_forces_actual(self):
-        """Turnover > 320k -> flat rate not eligible, must use actual."""
+        """Turnover > 220k -> flat rate not eligible, must use actual."""
         result = compare_expense_methods(
             gross_turnover=Decimal("400000"),
             actual_expenses=Decimal("50000"),
@@ -813,9 +811,9 @@ class TestCompareExpenseMethods:
         # Actual profit: 200,000 - 27,000 - 10,000 = 163,000
         # GFB: 4,950 + invest FB on 130,000 excess at 13% = 16,900 -> total 21,850
         # Taxable: 163,000 - 21,850 = 141,150
-        # Flat: 200,000 - 27,000 - 10,000 = 163,000... no, flat expenses = 200,000*13.5%=27,000
-        # Flat profit: 200,000 - 27,000 - 10,000 = 163,000; GFB only 4,950; taxable 158,050
-        # So actual (141,150) < flat (158,050) -> actual recommended
+        # Flat: flat expenses = 200,000 * 12% = 24,000
+        # Flat profit: 200,000 - 24,000 - 10,000 = 166,000; GFB only 4,950; taxable 161,050
+        # So actual (141,150) < flat (161,050) -> actual recommended
         assert result.recommended_method == ExpenseMethod.ACTUAL
 
     def test_same_result_prefers_flat_rate(self):
@@ -851,11 +849,11 @@ class TestSelfEmployedConfig:
         assert config.grundfreibetrag_rate == Decimal("0.15")
         assert config.grundfreibetrag_max == Decimal("4950.00")
         assert config.max_total_freibetrag == Decimal("46400.00")
-        assert config.flat_rate_turnover_limit == Decimal("320000.00")
-        assert config.flat_rate_general == Decimal("0.135")
+        assert config.flat_rate_turnover_limit == Decimal("220000.00")
+        assert config.flat_rate_general == Decimal("0.12")
         assert config.flat_rate_consulting == Decimal("0.06")
         assert config.kleinunternehmer_threshold == Decimal("55000.00")
-        assert config.kleinunternehmer_tolerance == Decimal("60500.00")
+        assert config.kleinunternehmer_tolerance == Decimal("63250.00")
         assert len(config.investment_tiers) == 3
 
     def test_from_deduction_config_empty(self):

@@ -17,6 +17,7 @@ export type ActionKind =
   | 'confirm_recurring_expense'
   | 'confirm_tax_data'
   | 'confirm_loan'
+  | 'confirm_loan_repayment'
   | 'confirm_bank_transactions'
   | 'dismiss_suggestion';
 
@@ -80,6 +81,12 @@ export interface ProactiveMessage {
   read: boolean;
   /** Optional: navigate user to a page */
   link?: string;
+  /** Optional label override for the primary link button */
+  linkLabel?: string;
+  /** Optional secondary CTA (for example: open the created record, or open the source document) */
+  secondaryLink?: string;
+  /** Optional label override for the secondary link button */
+  secondaryLinkLabel?: string;
   /** Document ID for actionable messages (e.g. recurring confirmation) */
   documentId?: number;
   /** Extra data for actionable messages */
@@ -239,6 +246,18 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+/** Bug #12 fix: Cap messages by timestamp (newest kept), not array position */
+function capByTimestamp(messages: StructuredChatMessage[], max: number): StructuredChatMessage[] {
+  if (messages.length <= max) return messages;
+  return [...messages]
+    .sort((a, b) => {
+      const ta = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+      const tb = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+      return ta - tb;
+    })
+    .slice(-max);
+}
+
 // =============================================================================
 // Store Implementation
 // =============================================================================
@@ -338,7 +357,7 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
       // Defensive: skip dedup if idempotencyKey is missing (prevents all-undefined match)
       if (!msg.idempotencyKey) {
         console.warn('[aiAdvisorStore] pushStructuredMessage called without idempotencyKey');
-        return { structuredMessages: [...state.structuredMessages, msg].slice(-50) };
+        return { structuredMessages: capByTimestamp([...state.structuredMessages, msg], 50) };
       }
 
       const existingIdx = state.structuredMessages.findIndex(
@@ -353,7 +372,7 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
       }
 
       // New message — append and keep max 50
-      const structuredMessages = [...state.structuredMessages, msg].slice(-50);
+      const structuredMessages = capByTimestamp([...state.structuredMessages, msg], 50);
       return { structuredMessages };
     }),
 
@@ -375,7 +394,7 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         structuredMessages = [...state.structuredMessages];
         structuredMessages[existingIdx] = { ...fullMsg, id: structuredMessages[existingIdx].id };
       } else {
-        structuredMessages = [...state.structuredMessages, fullMsg].slice(-50);
+        structuredMessages = capByTimestamp([...state.structuredMessages, fullMsg], 50);
       }
 
       // Track processing doc
@@ -421,7 +440,7 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         structuredMessages = [...state.structuredMessages];
         structuredMessages[existingIdx] = { ...fullMsg, id: structuredMessages[existingIdx].id };
       } else {
-        structuredMessages = [...state.structuredMessages, fullMsg].slice(-50);
+        structuredMessages = capByTimestamp([...state.structuredMessages, fullMsg], 50);
       }
 
       // Track pending suggestion
@@ -429,7 +448,16 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         ? state.pendingSuggestionDocIds
         : [...state.pendingSuggestionDocIds, msg.documentId];
 
-      return { structuredMessages, pendingSuggestionDocIds };
+      // Bug #21 fix: Remove matching proactive messages for the same document
+      // to prevent dual-surface duplication (Chat shows structured card, not old proactive notification)
+      const PROACTIVE_SUGGESTION_TYPES = new Set(['asset_confirm', 'tax_form_review', 'recurring_confirm']);
+      const messages = state.messages.map((m) =>
+        PROACTIVE_SUGGESTION_TYPES.has(m.type) && m.documentId === msg.documentId
+          ? { ...m, dismissed: true, read: true }
+          : m
+      );
+
+      return { structuredMessages, pendingSuggestionDocIds, messages };
     }),
 
   updateSuggestionStatus: (documentId, status) =>
@@ -468,7 +496,7 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         structuredMessages = [...state.structuredMessages];
         structuredMessages[existingIdx] = { ...fullMsg, id: structuredMessages[existingIdx].id };
       } else {
-        structuredMessages = [...state.structuredMessages, fullMsg].slice(-50);
+        structuredMessages = capByTimestamp([...state.structuredMessages, fullMsg], 50);
       }
 
       return { structuredMessages };

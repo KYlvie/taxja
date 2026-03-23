@@ -15,16 +15,19 @@ class MockTransaction:
 
 class TestMLClassifier:
     """Test suite for MLClassifier"""
+
+    @pytest.fixture
+    def classifier(self, tmp_path):
+        """Create an isolated classifier that does not load repo-local model artifacts."""
+        return MLClassifier(model_path=str(tmp_path / "models"))
     
-    def test_classifier_initialization(self):
+    def test_classifier_initialization(self, classifier):
         """Test classifier can be initialized"""
-        classifier = MLClassifier()
         assert classifier is not None
         assert classifier.min_training_samples == 10
     
-    def test_classify_without_training_returns_low_confidence(self):
+    def test_classify_without_training_returns_low_confidence(self, classifier):
         """Test that untrained classifier returns low confidence"""
-        classifier = MLClassifier()
         transaction = MockTransaction("BILLA Supermarket", Decimal("45.50"), "expense")
         
         result = classifier.classify(transaction)
@@ -33,9 +36,8 @@ class TestMLClassifier:
         assert result.category is not None
         assert result.confidence <= Decimal("0.5")
     
-    def test_classify_income_without_training(self):
+    def test_classify_income_without_training(self, classifier):
         """Test income classification without training"""
-        classifier = MLClassifier()
         transaction = MockTransaction("Salary payment", Decimal("3000.00"), "income")
         
         result = classifier.classify(transaction)
@@ -45,9 +47,8 @@ class TestMLClassifier:
         assert result.confidence >= Decimal("0.3")
         assert result.category_type == "income"
     
-    def test_classify_expense_without_training(self):
+    def test_classify_expense_without_training(self, classifier):
         """Test expense classification without training"""
-        classifier = MLClassifier()
         transaction = MockTransaction("Office supplies", Decimal("50.00"), "expense")
         
         result = classifier.classify(transaction)
@@ -57,10 +58,9 @@ class TestMLClassifier:
         assert result.confidence >= Decimal("0.1")
         assert result.category_type == "expense"
     
-    def test_train_model_with_insufficient_data(self):
+    def test_train_model_with_insufficient_data(self, classifier):
         """Test that training fails with insufficient data"""
-        classifier = MLClassifier()
-        
+
         # Only 5 samples (less than min_training_samples)
         training_data = [
             ("Salary", 3000.0, "employment", "income"),
@@ -74,10 +74,9 @@ class TestMLClassifier:
         
         assert result is False
     
-    def test_train_model_with_sufficient_data(self):
+    def test_train_model_with_sufficient_data(self, classifier):
         """Test that training succeeds with sufficient data"""
-        classifier = MLClassifier()
-        
+
         # Create sufficient training data (10+ samples per type)
         training_data = [
             # Income samples
@@ -119,10 +118,9 @@ class TestMLClassifier:
         assert classifier.income_vectorizer is not None
         assert classifier.expense_vectorizer is not None
     
-    def test_classify_after_training_income(self):
+    def test_classify_after_training_income(self, classifier):
         """Test income classification after training"""
-        classifier = MLClassifier()
-        
+
         # Train with sample data
         training_data = [
             ("Monthly salary", 3000.0, "employment", "income"),
@@ -149,10 +147,9 @@ class TestMLClassifier:
         assert result.confidence > Decimal("0.5")
         assert result.category_type == "income"
     
-    def test_classify_after_training_expense(self):
+    def test_classify_after_training_expense(self, classifier):
         """Test expense classification after training"""
-        classifier = MLClassifier()
-        
+
         # Train with sample data
         training_data = [
             ("BILLA supermarket", 45.0, "groceries", "expense"),
@@ -179,9 +176,8 @@ class TestMLClassifier:
         assert result.confidence > Decimal("0.5")
         assert result.category_type == "expense"
     
-    def test_classify_with_empty_description(self):
+    def test_classify_with_empty_description(self, classifier):
         """Test classification with empty description"""
-        classifier = MLClassifier()
         transaction = MockTransaction("", Decimal("100.00"), "expense")
         
         result = classifier.classify(transaction)
@@ -189,9 +185,8 @@ class TestMLClassifier:
         assert result.category is None
         assert result.confidence == Decimal("0.0")
     
-    def test_get_confidence_score(self):
+    def test_get_confidence_score(self, classifier):
         """Test get_confidence_score method"""
-        classifier = MLClassifier()
         transaction = MockTransaction("Test transaction", Decimal("100.00"), "expense")
         
         confidence = classifier.get_confidence_score(transaction)
@@ -200,10 +195,9 @@ class TestMLClassifier:
         assert confidence >= Decimal("0.0")
         assert confidence <= Decimal("1.0")
     
-    def test_should_retrain_returns_true(self):
+    def test_should_retrain_returns_true(self, classifier):
         """Test should_retrain method"""
-        classifier = MLClassifier()
-        
+
         # Current implementation always returns True
         assert classifier.should_retrain() is True
     
@@ -216,10 +210,9 @@ class TestMLClassifier:
         assert "groceries" in repr_str
         assert "0.85" in repr_str
     
-    def test_train_with_mixed_case_descriptions(self):
+    def test_train_with_mixed_case_descriptions(self, classifier):
         """Test that training handles mixed case descriptions"""
-        classifier = MLClassifier()
-        
+
         training_data = [
             ("BILLA Supermarket", 45.0, "groceries", "expense"),
             ("billa shopping", 50.0, "groceries", "expense"),
@@ -245,10 +238,9 @@ class TestMLClassifier:
         
         assert classification.category == "groceries"
     
-    def test_feature_extraction_combines_text_and_amount(self):
+    def test_feature_extraction_combines_text_and_amount(self, classifier):
         """Test that features include both text and amount"""
-        classifier = MLClassifier()
-        
+
         # Train model first
         training_data = [
             ("Expensive item", 1000.0, "equipment", "expense"),

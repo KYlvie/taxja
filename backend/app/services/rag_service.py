@@ -458,7 +458,7 @@ class RAGService:
     ) -> Optional[str]:
         """Return a cached or freshly-generated summary for *messages*."""
         # Build a deterministic cache key from message IDs/content
-        content_hash = hashlib.md5(
+        content_hash = hashlib.sha256(
             "|".join(
                 f"{m.id}:{m.content[:60]}" for m in messages
             ).encode()
@@ -515,5 +515,11 @@ class RAGService:
             "de": f"Benutzertyp: {user_type}. Noch keine Transaktionen für dieses Steuerjahr erfasst.",
             "en": f"User type: {user_type}. No transactions recorded for this tax year yet.",
             "zh": f"用户类型：{user_type}。本税务年度尚无交易记录。",
+            "fr": f"Type d'utilisateur : {user_type}. Aucune transaction enregistrée pour cette année fiscale.",
+            "ru": f"Тип пользователя: {user_type}. Транзакции за этот налоговый год ещё не зарегистрированы.",
+            "hu": f"Felhasználó típusa: {user_type}. Ebben az adóévben még nincsenek rögzített tranzakciók.",
+            "pl": f"Typ użytkownika: {user_type}. Brak zarejestrowanych transakcji w tym roku podatkowym.",
+            "tr": f"Kullanıcı türü: {user_type}. Bu vergi yılı için henüz işlem kaydedilmedi.",
+            "bs": f"Tip korisnika: {user_type}. Za ovu poreznu godinu još nema evidentiranih transakcija.",
         }
         return msgs.get(language, msgs["de"])

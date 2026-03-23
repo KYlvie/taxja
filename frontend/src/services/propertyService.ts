@@ -7,6 +7,7 @@ import {
   PropertyDetailResponse,
   PropertyMetrics,
   RentalContract,
+  DisposalRequest,
 } from '../types/property';
 
 const toOptionalNumber = (value: any): number | undefined => (
@@ -62,6 +63,7 @@ function mapProperty(raw: any): Property {
     policy_confidence: toOptionalNumber(raw.policy_confidence),
     supplier: raw.supplier ?? undefined,
     accumulated_depreciation: toOptionalNumber(raw.accumulated_depreciation),
+    disposal_reason: raw.disposal_reason ?? undefined,
     status: raw.status,
     sale_date: raw.sale_date,
     kaufvertrag_document_id: raw.kaufvertrag_document_id,
@@ -208,6 +210,20 @@ export const propertyService = {
       return mapProperty(response.data);
     } catch (error: any) {
       console.error('Error archiving property:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Dispose of a property/asset with a specific reason
+   * POST /api/v1/properties/{id}/dispose
+   */
+  disposeProperty: async (id: string, data: DisposalRequest): Promise<Property> => {
+    try {
+      const response = await api.post(`/properties/${id}/dispose`, data);
+      return mapProperty(response.data);
+    } catch (error: any) {
+      console.error('Error disposing property:', error);
       throw error;
     }
   },

@@ -107,6 +107,15 @@ class DocumentMeteringService:
             "processing_time_ms": result.processing_time_ms,
             "phase_checkpoints": result.phase_checkpoints,
         }
+        if getattr(result, "provider_used", None):
+            metadata["last_provider_used"] = result.provider_used
+        if getattr(result, "reprocess_mode", None):
+            metadata["reprocess_mode"] = result.reprocess_mode
+            metadata["last_reprocess_mode"] = result.reprocess_mode
+        if getattr(result, "reprocess_requested_at", None):
+            metadata["reprocess_requested_at"] = result.reprocess_requested_at
+        if getattr(result, "ocr_provider_override", None):
+            metadata["ocr_provider_override"] = result.ocr_provider_override
         if result.processing_decision:
             metadata["processing_decision"] = result.processing_decision
         return metadata

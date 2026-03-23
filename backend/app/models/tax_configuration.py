@@ -113,8 +113,10 @@ def get_2026_tax_config() -> dict:
         "vat_rates": {
             "standard": 0.20,
             "residential": 0.10,
+            "reduced_5": 0.05,
+            "zero_rated": 0.00,
             "small_business_threshold": 55000.00,
-            "tolerance_threshold": 60500.00
+            "tolerance_threshold": 63250.00
         },
         # SVS rates – Beitragsjahr 2026 (Veranlagung 2026)
         # Percentage rates: GSVG §§ 27–27a, confirmed by WKO/SVS
@@ -123,16 +125,16 @@ def get_2026_tax_config() -> dict:
         "svs_rates": {
             "pension": 0.185,                  # 18.5% Pensionsversicherung
             "health": 0.068,                   # 6.8% Krankenversicherung
-            "accident_fixed": 12.95,           # €12.95/month Unfallversicherung (WKO 2026)
+            "accident_fixed": 12.25,           # €12.25/month Unfallversicherung (2026)
             "supplementary_pension": 0.0153,   # 1.53% Selbständigenvorsorge (BMSVG)
             "gsvg_min_base_monthly": 551.10,   # Mindestbeitragsgrundlage (= Geringfügigkeitsgrenze)
             "gsvg_min_income_yearly": 6613.20, # = 12 × 551.10
             "neue_min_monthly": 160.81,        # Neue Selbständige Mindestbeitrag
-            "max_base_monthly": 8085.00        # Höchstbeitragsgrundlage GSVG 2026 (WKO)
+            "max_base_monthly": 7720.50        # Höchstbeitragsgrundlage GSVG 2026
         },
         "deduction_config": {
             "home_office": 300.00,
-            "child_deduction_monthly": 70.90,
+            "child_deduction_monthly": 67.80,
             "single_parent_deduction": 612.00,
             "verkehrsabsetzbetrag": 496.00,
             "werbungskostenpauschale": 132.00,
@@ -162,11 +164,11 @@ def get_2026_tax_config() -> dict:
                 "grundfreibetrag_rate": 0.15,
                 "grundfreibetrag_max": 4950.00,
                 "max_total_freibetrag": 46400.00,
-                "flat_rate_turnover_limit": 420000.00,
-                "flat_rate_general": 0.15,
+                "flat_rate_turnover_limit": 220000.00,
+                "flat_rate_general": 0.12,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 55000.00,
-                "kleinunternehmer_tolerance": 60500.00,
+                "kleinunternehmer_tolerance": 63250.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
             "kindermehrbetrag": 700.00,
@@ -218,23 +220,23 @@ def get_2025_tax_config() -> dict:
             "standard": 0.20,
             "residential": 0.10,
             "small_business_threshold": 55000.00,
-            "tolerance_threshold": 60500.00
+            "tolerance_threshold": 63250.00
         },
         # SVS rates – Beitragsjahr 2025. Percentage rates stable (GSVG §§ 27–27a).
         # Fixed amounts adjusted via Aufwertungszahl 2025.
         "svs_rates": {
             "pension": 0.185,
             "health": 0.068,
-            "accident_fixed": 11.35,
+            "accident_fixed": 11.94,
             "supplementary_pension": 0.0153,
             "gsvg_min_base_monthly": 500.91,
             "gsvg_min_income_yearly": 6010.92,
             "neue_min_monthly": 146.18,
-            "max_base_monthly": 7525.00        # Höchstbeitragsgrundlage GSVG 2025 (WKO)
+            "max_base_monthly": 7525.00        # Höchstbeitragsgrundlage GSVG 2025
         },
         "deduction_config": {
             "home_office": 300.00,
-            "child_deduction_monthly": 70.90,
+            "child_deduction_monthly": 67.80,
             "single_parent_deduction": 601.00,
             "verkehrsabsetzbetrag": 487.00,
             "werbungskostenpauschale": 132.00,
@@ -264,11 +266,11 @@ def get_2025_tax_config() -> dict:
                 "grundfreibetrag_rate": 0.15,
                 "grundfreibetrag_max": 4950.00,
                 "max_total_freibetrag": 46400.00,
-                "flat_rate_turnover_limit": 320000.00,
-                "flat_rate_general": 0.135,
+                "flat_rate_turnover_limit": 220000.00,
+                "flat_rate_general": 0.12,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 55000.00,
-                "kleinunternehmer_tolerance": 60500.00,
+                "kleinunternehmer_tolerance": 63250.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
             "kindermehrbetrag": 700.00,
@@ -325,19 +327,19 @@ def get_2024_tax_config() -> dict:
             # Mid-2024 (July 20): raised to €42,000 for previous-year check,
             # but the main threshold remained €35,000 for the calendar year.
             "small_business_threshold": 35000.00,
-            "tolerance_threshold": 38500.00
+            "tolerance_threshold": 40250.00
         },
         # SVS rates – Beitragsjahr 2024. Percentage rates stable (GSVG §§ 27–27a).
         # Fixed amounts adjusted via Aufwertungszahl 2024.
         "svs_rates": {
             "pension": 0.185,
             "health": 0.068,
-            "accident_fixed": 10.97,
+            "accident_fixed": 11.35,
             "supplementary_pension": 0.0153,
             "gsvg_min_base_monthly": 500.91,
             "gsvg_min_income_yearly": 6010.92,
             "neue_min_monthly": 146.18,
-            "max_base_monthly": 6825.00
+            "max_base_monthly": 7070.00
         },
         "deduction_config": {
             "home_office": 300.00,
@@ -375,7 +377,7 @@ def get_2024_tax_config() -> dict:
                 "flat_rate_general": 0.12,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 35000.00,
-                "kleinunternehmer_tolerance": 38500.00,
+                "kleinunternehmer_tolerance": 40250.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
             "kindermehrbetrag": 700.00,
@@ -429,7 +431,7 @@ def get_2022_tax_config() -> dict:
             "standard": 0.20,
             "residential": 0.10,
             "small_business_threshold": 35000.00,
-            "tolerance_threshold": 38500.00
+            "tolerance_threshold": 40250.00
         },
         # SVS rates – Beitragsjahr 2022
         "svs_rates": {
@@ -480,7 +482,7 @@ def get_2022_tax_config() -> dict:
                 "flat_rate_general": 0.12,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 35000.00,
-                "kleinunternehmer_tolerance": 38500.00,
+                "kleinunternehmer_tolerance": 40250.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
             "kindermehrbetrag": 550.00,
@@ -533,7 +535,7 @@ def get_2023_tax_config() -> dict:
             "standard": 0.20,
             "residential": 0.10,
             "small_business_threshold": 35000.00,
-            "tolerance_threshold": 38500.00
+            "tolerance_threshold": 40250.00
         },
         # SVS rates – Beitragsjahr 2023. Percentage rates stable (GSVG §§ 27–27a).
         # Fixed amounts adjusted via Aufwertungszahl 2023.
@@ -585,7 +587,7 @@ def get_2023_tax_config() -> dict:
                 "flat_rate_general": 0.12,
                 "flat_rate_consulting": 0.06,
                 "kleinunternehmer_threshold": 35000.00,
-                "kleinunternehmer_tolerance": 38500.00,
+                "kleinunternehmer_tolerance": 40250.00,
                 "ust_voranmeldung_monthly_threshold": 100000.00
             },
             "kindermehrbetrag": 550.00,

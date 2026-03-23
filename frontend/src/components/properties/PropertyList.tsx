@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Archive, Building2, Car, Cpu, House, Package, Pencil, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react';
 import { useConfirm } from '../../hooks/useConfirm';
 import { propertyService } from '../../services/propertyService';
 import { Property, PropertyStatus, PropertyType } from '../../types/property';
+import FuturisticIcon, { type FuturisticIconTone } from '../common/FuturisticIcon';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PropertyList.css';
 
 interface PropertyListProps {
@@ -12,6 +15,8 @@ interface PropertyListProps {
   onDelete: (id: string) => void;
   onView: (property: Property) => void;
   isLoading?: boolean;
+  showArchived?: boolean;
+  onShowArchivedChange?: (showArchived: boolean) => void;
 }
 
 const PropertyList = ({
@@ -21,13 +26,25 @@ const PropertyList = ({
   onDelete,
   onView,
   isLoading = false,
+  showArchived: showArchivedProp,
+  onShowArchivedChange,
 }: PropertyListProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchivedLocal, setShowArchivedLocal] = useState(false);
+
+  // Use controlled props if provided, otherwise fall back to local state
+  const showArchived = showArchivedProp !== undefined ? showArchivedProp : showArchivedLocal;
+  const setShowArchived = (value: boolean) => {
+    if (onShowArchivedChange) {
+      onShowArchivedChange(value);
+    } else {
+      setShowArchivedLocal(value);
+    }
+  };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,
@@ -36,7 +53,7 @@ const PropertyList = ({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-AT', {
+    return new Date(dateString).toLocaleDateString(getLocaleForLanguage(i18n.language), {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -104,7 +121,13 @@ const PropertyList = ({
           impact: impactLines.join('\n'),
         });
         
-        const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete') });
+        const recurringLink = recurring_count > 0 ? React.createElement(
+          'a',
+          { href: '/recurring', style: { color: '#7c3aed', textDecoration: 'underline', fontSize: '0.85rem', display: 'inline-block', marginTop: '4px' } },
+          `→ ${t('recurring.title', 'Recurring Transactions')}`
+        ) : undefined;
+
+        const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete'), messageNode: recurringLink });
         if (ok) {
           onDelete(property.id);
         }
@@ -141,16 +164,23 @@ const PropertyList = ({
 
   const filteredProperties = showArchived
     ? properties
-    : properties.filter((p) => p.status !== PropertyStatus.ARCHIVED);
+    : properties.filter((p) => p.status === PropertyStatus.ACTIVE);
 
-  const getAssetIcon = (property: Property): string => {
+  const getAssetIcon = (property: Property): { icon: LucideIcon; tone: FuturisticIconTone } => {
     const at = (property as any).asset_type || 'real_estate';
-    const icons: Record<string, string> = {
-      real_estate: '🏠', vehicle: '🚗', electric_vehicle: '⚡🚗',
-      computer: '💻', phone: '📱', office_furniture: '🪑',
-      machinery: '⚙️', tools: '🔧', software: '💿', other_equipment: '📦',
+    const icons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+      real_estate: { icon: House, tone: 'cyan' },
+      vehicle: { icon: Car, tone: 'emerald' },
+      electric_vehicle: { icon: Car, tone: 'violet' },
+      computer: { icon: Cpu, tone: 'violet' },
+      phone: { icon: Smartphone, tone: 'amber' },
+      office_furniture: { icon: Package, tone: 'amber' },
+      machinery: { icon: Wrench, tone: 'rose' },
+      tools: { icon: Wrench, tone: 'rose' },
+      software: { icon: Cpu, tone: 'violet' },
+      other_equipment: { icon: Package, tone: 'slate' },
     };
-    return icons[at] || '🏠';
+    return icons[at] || { icon: Building2, tone: 'slate' };
   };
 
   const isRealEstate = (property: Property): boolean => {
@@ -170,7 +200,9 @@ const PropertyList = ({
   if (properties.length === 0) {
     return (
       <div className="property-list-empty">
-        <div className="empty-icon">🏠</div>
+        <div className="empty-icon">
+          <FuturisticIcon icon={House} tone="cyan" size="xl" />
+        </div>
         <h3>{t('properties.noProperties')}</h3>
         <p>{t('properties.noPropertiesDescription')}</p>
       </div>
@@ -193,7 +225,9 @@ const PropertyList = ({
           </div>
         </div>
         <div className="property-list-empty">
-          <div className="empty-icon">📦</div>
+          <div className="empty-icon">
+            <FuturisticIcon icon={Package} tone="slate" size="xl" />
+          </div>
           <h3>{t('properties.allPropertiesArchived')}</h3>
           <p>{t('properties.allPropertiesArchivedDescription')}</p>
         </div>
@@ -205,9 +239,22 @@ const PropertyList = ({
     <div className="property-list">
       <div className="list-header">
         <div className="list-stats">
-          <span className="stat-item">
-            <strong>{filteredProperties.length}</strong> {t('properties.propertiesCount')}
-          </span>
+          {(() => {
+            const reCount = filteredProperties.filter(p => isRealEstate(p)).length;
+            const otherCount = filteredProperties.length - reCount;
+            return (
+              <>
+                <span className="stat-item">
+                  <strong>{reCount}</strong> {t('properties.propertiesCount')}
+                </span>
+                {otherCount > 0 && (
+                  <span className="stat-item" style={{ marginLeft: '8px' }}>
+                    · <strong>{otherCount}</strong> {t('properties.otherAssetsCount', 'other asset(s)')}
+                  </span>
+                )}
+              </>
+            );
+          })()}
           {properties.length !== filteredProperties.length && (
             <span className="stat-item muted">
               ({properties.length - filteredProperties.length} {t('properties.archived')})
@@ -232,6 +279,7 @@ const PropertyList = ({
           const remaining = calculateRemainingValue(property);
           const isRental = property.property_type !== PropertyType.OWNER_OCCUPIED;
           const isRE = isRealEstate(property);
+          const assetIcon = getAssetIcon(property);
 
           return (
             <div
@@ -241,7 +289,10 @@ const PropertyList = ({
             >
               <div className="property-card-header">
                 <div className="property-address">
-                  <h3>{getAssetIcon(property)} {isRE ? property.address : ((property as any).name || property.address)}</h3>
+                  <h3>
+                    <FuturisticIcon icon={assetIcon.icon} tone={assetIcon.tone} size="sm" className="property-title-icon" />
+                    <span>{isRE ? property.address : ((property as any).name || property.address)}</span>
+                  </h3>
                   <div className="property-badges">
                     <span className={`status-badge ${property.status}`}>
                       {t(`properties.status.${property.status}`)}
@@ -257,6 +308,11 @@ const PropertyList = ({
                         )}
                       </span>
                     )}
+                    {property.purchase_price <= 0.01 && (
+                      <span className="type-badge placeholder" title={t('properties.placeholderWarning.title', 'Incomplete data')}>
+                        ⚠️ {t('properties.placeholderWarning.badge', 'Needs data')}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="property-actions">
@@ -268,15 +324,15 @@ const PropertyList = ({
                     }}
                     title={t('common.edit')}
                   >
-                    ✏️
+                    <Pencil size={15} />
                   </button>
                   {property.status === PropertyStatus.ACTIVE && (
                     <button
                       className="btn-icon"
                       onClick={(e) => handleArchiveClick(property, e)}
-                      title={t('properties.archive')}
+                      title={isRE ? t('properties.sellProperty') : t('properties.disposeAsset')}
                     >
-                      📦
+                      <Archive size={15} />
                     </button>
                   )}
                   <button
@@ -284,7 +340,7 @@ const PropertyList = ({
                     onClick={(e) => handleDeleteClick(property, e)}
                     title={t('common.delete')}
                   >
-                    🗑️
+                    <Trash2 size={15} />
                   </button>
                 </div>
               </div>
@@ -345,7 +401,7 @@ const PropertyList = ({
               {property.sale_date && (
                 <div className="property-card-footer">
                   <span className="sale-info">
-                    📅 {t('properties.soldOn', { date: formatDate(property.sale_date) })}
+                    {t('properties.soldOn', { date: formatDate(property.sale_date) })}
                   </span>
                 </div>
               )}
@@ -359,7 +415,7 @@ const PropertyList = ({
         <table className="property-table">
           <thead>
             <tr>
-              <th>{t('properties.assetName', '名称')}</th>
+              <th>{t('properties.assetName', 'Asset Name')}</th>
               <th>{t('properties.type')}</th>
               <th>{t('properties.purchaseDate')}</th>
               <th>{t('properties.purchasePrice')}</th>
@@ -376,6 +432,7 @@ const PropertyList = ({
               const remaining = calculateRemainingValue(property);
               const isRental = property.property_type !== PropertyType.OWNER_OCCUPIED;
               const isRE = isRealEstate(property);
+              const assetIcon = getAssetIcon(property);
 
               return (
                 <tr
@@ -385,7 +442,10 @@ const PropertyList = ({
                 >
                   <td className="address-cell">
                     <div className="address-content">
-                      <strong>{getAssetIcon(property)} {isRE ? property.address : ((property as any).name || property.address)}</strong>
+                      <strong className="property-table-title">
+                        <FuturisticIcon icon={assetIcon.icon} tone={assetIcon.tone} size="xs" />
+                        <span>{isRE ? property.address : ((property as any).name || property.address)}</span>
+                      </strong>
                       {property.sale_date && (
                         <span className="sale-date-small">
                           {t('properties.soldOn', { date: formatDate(property.sale_date) })}
@@ -429,15 +489,15 @@ const PropertyList = ({
                       }}
                       title={t('common.edit')}
                     >
-                      ✏️
+                      <Pencil size={15} />
                     </button>
                     {property.status === PropertyStatus.ACTIVE && (
                       <button
                         className="btn-icon"
                         onClick={(e) => handleArchiveClick(property, e)}
-                        title={t('properties.archive')}
+                        title={isRE ? t('properties.sellProperty') : t('properties.disposeAsset')}
                       >
-                        📦
+                        <Archive size={15} />
                       </button>
                     )}
                     <button
@@ -445,7 +505,7 @@ const PropertyList = ({
                       onClick={(e) => handleDeleteClick(property, e)}
                       title={t('common.delete')}
                     >
-                      🗑️
+                      <Trash2 size={15} />
                     </button>
                   </td>
                 </tr>

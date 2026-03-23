@@ -190,6 +190,24 @@ RATE_LIMITS = {
 }
 
 
+def rate_limit(max_requests: int = 10, window_seconds: int = 60):
+    """FastAPI dependency that enforces per-IP rate limiting on an endpoint."""
+    async def _dependency(request: Request):
+        client_ip = request.client.host if request.client else "unknown"
+        endpoint = request.url.path
+        key = f"{endpoint}:{client_ip}"
+        allowed, info = await rate_limiter.is_allowed(key, rate=max_requests, window=window_seconds)
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="rate_limit_exceeded",
+                headers={
+                    "Retry-After": str(info.get("window", window_seconds)),
+                },
+            )
+    return _dependency
+
+
 def get_rate_limit_key(request: Request) -> str:
     """
     Generate rate limit key from request.

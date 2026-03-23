@@ -28,7 +28,7 @@ export default function AIAvatar({
       className={`ai-avatar ai-avatar--${size} ai-avatar--${status} ${className}`.trim()}
       aria-hidden="true"
     >
-      <span className="ai-avatar__letter">T</span>
+      <span className="ai-avatar__letter">TJ</span>
       {status === 'thinking' && <div className="ai-avatar__pulse" />}
     </div>
   );

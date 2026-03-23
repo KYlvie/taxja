@@ -14,56 +14,33 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.property import Property, PropertyStatus
 from app.models.user import User
+from app.services.posting_line_utils import sum_postings
 
 
 def _sum_property_income(transactions: list, property_id) -> Decimal:
     """Sum rental income for a specific property."""
-    return sum(
-        (t.amount or Decimal("0"))
-        for t in transactions
-        if (t.type == TransactionType.INCOME
-            and t.income_category == IncomeCategory.RENTAL
-            and t.property_id == property_id)
+    return sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.INCOME},
+        categories={IncomeCategory.RENTAL.value},
+        property_id=property_id,
+        include_private_use=False,
     )
 
 
 def _sum_property_expense(transactions: list, property_id, categories: list) -> Decimal:
-    """Sum deductible expenses for a specific property, using line-item-level amounts."""
-    total = Decimal("0")
-    cat_values = {c.value if hasattr(c, "value") else str(c) for c in categories}
-    for t in transactions:
-        if t.type != TransactionType.EXPENSE:
-            continue
-        if t.property_id != property_id:
-            continue
-        has_line_items = bool(getattr(t, "has_line_items", False))
-        line_items = getattr(t, "line_items", None)
-        use_line_items = False
-
-        if has_line_items and line_items is not None:
-            try:
-                line_items = list(line_items)
-                use_line_items = True
-            except TypeError:
-                line_items = []
-
-        if use_line_items:
-            for li in line_items:
-                if not li.is_deductible:
-                    continue
-                li_cat = li.category or "other"
-                if li_cat not in cat_values:
-                    continue
-                total += li.amount * li.quantity
-        else:
-            if t.expense_category not in categories:
-                continue
-            if not t.is_deductible:
-                continue
-            total += t.amount or Decimal("0")
-    return total
+    """Sum deductible property expenses using canonical line items."""
+    return sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        categories={c.value if hasattr(c, "value") else str(c) for c in categories},
+        property_id=property_id,
+        deductible_only=True,
+        include_private_use=False,
+    )
 
 
 def generate_e1b_form_data(

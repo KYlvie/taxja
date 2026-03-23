@@ -7,9 +7,12 @@ and audit logging.
 Requirements: 17.6, 17.7, 17.8, 17.9, 32.1-32.6
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Dict
+
+logger = logging.getLogger(__name__)
 
 from app.api import deps
 from app.models.user import User
@@ -58,7 +61,8 @@ def get_audit_checklist(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate audit checklist: {str(e)}")
+        logger.exception("Failed to generate audit checklist")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 @router.post("/gdpr/export", response_model=GDPRExportResponse)
@@ -94,7 +98,8 @@ def export_user_data(
             'message': 'Data export initiated. You will receive a download link when ready.'
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to initiate data export: {str(e)}")
+        logger.exception("Failed to initiate data export")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 @router.get("/gdpr/export/{export_id}/status")
@@ -116,7 +121,8 @@ def get_export_status(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get export status: {str(e)}")
+        logger.exception("Failed to get export status")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 @router.delete("/gdpr/delete", response_model=GDPRDeleteResponse)
@@ -151,7 +157,8 @@ def delete_user_data(
         result = service.delete_user_data(current_user.id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete user data: {str(e)}")
+        logger.exception("Failed to delete user data")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 @router.get("/logs", response_model=AuditLogResponse)
@@ -185,7 +192,8 @@ def get_audit_logs(
         )
         return logs
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to query audit logs: {str(e)}")
+        logger.exception("Failed to query audit logs")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 
@@ -197,7 +205,7 @@ def get_disclaimer(
     """
     Get disclaimer text in specified language
     
-    Languages: de (German), en (English), zh (Chinese)
+    Languages: de (German), en (English), zh (Chinese), fr (French), ru (Russian)
     
     Requirements: 17.11
     """
@@ -254,7 +262,8 @@ def accept_disclaimer(
             'accepted_at': acceptance.accepted_at.isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to record acceptance: {str(e)}")
+        logger.exception("Failed to record disclaimer acceptance")
+        raise HTTPException(status_code=500, detail="audit_operation_failed")
 
 
 @router.get("/disclaimer/short")

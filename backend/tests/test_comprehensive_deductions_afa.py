@@ -176,13 +176,13 @@ class TestHomeOfficeDeduction:
 
 
 class TestChildDeduction:
-    """Kinderabsetzbetrag: EUR 70.90/month per child."""
+    """Kinderabsetzbetrag: EUR 67.80/month per child."""
 
     @pytest.mark.parametrize(
         "num_children, expected",
         [
-            (1, Decimal("850.80")),    # 70.90 * 12
-            (3, Decimal("2552.40")),   # 70.90 * 12 * 3
+            (1, Decimal("813.60")),    # 67.80 * 12
+            (3, Decimal("2440.80")),   # 67.80 * 12 * 3
         ],
         ids=["1-child", "3-children"],
     )

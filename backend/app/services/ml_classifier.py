@@ -1,5 +1,7 @@
 """Machine learning-based transaction classifier using scikit-learn"""
 import glob
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -8,6 +10,8 @@ import shutil
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
+
+from app.core.config import settings
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -432,6 +436,32 @@ class MLClassifier:
         return True
 
     # ------------------------------------------------------------------
+    # Model integrity (HMAC signing / verification)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _sign_model(filepath: str) -> None:
+        """Compute HMAC-SHA256 of a .pkl file and write the signature to <filepath>.sig."""
+        with open(filepath, "rb") as f:
+            data = f.read()
+        sig = hmac.new(settings.SECRET_KEY.encode(), data, hashlib.sha256).hexdigest()
+        with open(filepath + ".sig", "w") as f:
+            f.write(sig)
+
+    @staticmethod
+    def _verify_model(filepath: str) -> bool:
+        """Verify HMAC-SHA256 signature of a .pkl file. Returns False if unsigned or tampered."""
+        sig_path = filepath + ".sig"
+        if not os.path.exists(sig_path):
+            return False
+        with open(filepath, "rb") as f:
+            data = f.read()
+        with open(sig_path, "r") as f:
+            stored_sig = f.read().strip()
+        expected = hmac.new(settings.SECRET_KEY.encode(), data, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, stored_sig)
+
+    # ------------------------------------------------------------------
     # Save / load
     # ------------------------------------------------------------------
 
@@ -441,68 +471,83 @@ class MLClassifier:
         os.makedirs(self.model_path, exist_ok=True)
 
         if self.income_model is not None:
-            with open(os.path.join(self.model_path, 'income_model.pkl'), 'wb') as f:
+            path = os.path.join(self.model_path, 'income_model.pkl')
+            with open(path, 'wb') as f:
                 pickle.dump(self.income_model, f)
+            self._sign_model(path)
 
         if self.income_vectorizer is not None:
-            with open(os.path.join(self.model_path, 'income_vectorizer.pkl'), 'wb') as f:
+            path = os.path.join(self.model_path, 'income_vectorizer.pkl')
+            with open(path, 'wb') as f:
                 pickle.dump(self.income_vectorizer, f)
+            self._sign_model(path)
 
         if self.expense_model is not None:
-            with open(os.path.join(self.model_path, 'expense_model.pkl'), 'wb') as f:
+            path = os.path.join(self.model_path, 'expense_model.pkl')
+            with open(path, 'wb') as f:
                 pickle.dump(self.expense_model, f)
+            self._sign_model(path)
 
         if self.expense_vectorizer is not None:
-            with open(os.path.join(self.model_path, 'expense_vectorizer.pkl'), 'wb') as f:
+            path = os.path.join(self.model_path, 'expense_vectorizer.pkl')
+            with open(path, 'wb') as f:
                 pickle.dump(self.expense_vectorizer, f)
+            self._sign_model(path)
 
-        with open(os.path.join(self.model_path, 'amount_scaler.pkl'), 'wb') as f:
+        path = os.path.join(self.model_path, 'amount_scaler.pkl')
+        with open(path, 'wb') as f:
             pickle.dump(self.amount_scaler, f)
+        self._sign_model(path)
 
         # Save expense-specific scaler (separate from income scaler)
         expense_scaler = getattr(self, "expense_amount_scaler", None)
         if expense_scaler is not None:
-            with open(os.path.join(self.model_path, 'expense_amount_scaler.pkl'), 'wb') as f:
+            path = os.path.join(self.model_path, 'expense_amount_scaler.pkl')
+            with open(path, 'wb') as f:
                 pickle.dump(expense_scaler, f)
+            self._sign_model(path)
 
         logger.info("Models saved to %s", self.model_path)
     
-    def _load_models(self):
-        """Load trained models from disk"""
-        try:
-            income_model_path = os.path.join(self.model_path, 'income_model.pkl')
-            if os.path.exists(income_model_path):
-                with open(income_model_path, 'rb') as f:
-                    self.income_model = pickle.load(f)
-            
-            income_vectorizer_path = os.path.join(self.model_path, 'income_vectorizer.pkl')
-            if os.path.exists(income_vectorizer_path):
-                with open(income_vectorizer_path, 'rb') as f:
-                    self.income_vectorizer = pickle.load(f)
-            
-            expense_model_path = os.path.join(self.model_path, 'expense_model.pkl')
-            if os.path.exists(expense_model_path):
-                with open(expense_model_path, 'rb') as f:
-                    self.expense_model = pickle.load(f)
-            
-            expense_vectorizer_path = os.path.join(self.model_path, 'expense_vectorizer.pkl')
-            if os.path.exists(expense_vectorizer_path):
-                with open(expense_vectorizer_path, 'rb') as f:
-                    self.expense_vectorizer = pickle.load(f)
-            
-            scaler_path = os.path.join(self.model_path, 'amount_scaler.pkl')
-            if os.path.exists(scaler_path):
-                with open(scaler_path, 'rb') as f:
-                    self.amount_scaler = pickle.load(f)
+    def _load_verified_pickle(self, filepath: str):
+        """Load a pickle file after HMAC verification. Returns None if invalid."""
+        if not os.path.exists(filepath):
+            return None
+        if not self._verify_model(filepath):
+            # Unsigned legacy model — sign it on first load (one-time migration)
+            sig_path = filepath + ".sig"
+            if not os.path.exists(sig_path):
+                logger.warning("Unsigned model %s — signing for first time", filepath)
+                self._sign_model(filepath)
+            else:
+                logger.warning("HMAC mismatch for %s — skipping load (possible tampering)", filepath)
+                return None
+        with open(filepath, 'rb') as f:
+            return pickle.load(f)
 
-            # Load expense-specific scaler; fall back to shared scaler for
-            # backward compatibility with models trained before the fix.
-            expense_scaler_path = os.path.join(self.model_path, 'expense_amount_scaler.pkl')
-            if os.path.exists(expense_scaler_path):
-                with open(expense_scaler_path, 'rb') as f:
-                    self.expense_amount_scaler = pickle.load(f)
-        except Exception as e:
-            # If loading fails, start with fresh models
+    def _load_models(self):
+        """Load trained models from disk with HMAC verification"""
+        try:
+            self.income_model = self._load_verified_pickle(
+                os.path.join(self.model_path, 'income_model.pkl'))
+            self.income_vectorizer = self._load_verified_pickle(
+                os.path.join(self.model_path, 'income_vectorizer.pkl'))
+            self.expense_model = self._load_verified_pickle(
+                os.path.join(self.model_path, 'expense_model.pkl'))
+            self.expense_vectorizer = self._load_verified_pickle(
+                os.path.join(self.model_path, 'expense_vectorizer.pkl'))
+
+            scaler = self._load_verified_pickle(
+                os.path.join(self.model_path, 'amount_scaler.pkl'))
+            if scaler is not None:
+                self.amount_scaler = scaler
+
+            expense_scaler = self._load_verified_pickle(
+                os.path.join(self.model_path, 'expense_amount_scaler.pkl'))
+            if expense_scaler is not None:
+                self.expense_amount_scaler = expense_scaler
+        except Exception:
+            logger.exception("Failed to load ML models — starting with fresh models")
             pass
     
     def get_confidence_score(self, transaction) -> Decimal:

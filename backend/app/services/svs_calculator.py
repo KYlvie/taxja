@@ -57,15 +57,15 @@ class SVSCalculator:
     Defaults match Steuerjahr 2025 (Veranlagung 2026) for backward compatibility.
     """
 
-    # Default rates (2025/2026 fallback)
+    # Default rates (2026 fallback — matches get_2026_tax_config() svs_rates)
     _DEFAULT_PENSION_RATE = Decimal('0.185')
     _DEFAULT_HEALTH_RATE = Decimal('0.068')
     _DEFAULT_SUPPLEMENTARY_PENSION_RATE = Decimal('0.0153')
-    _DEFAULT_ACCIDENT_FIXED = Decimal('12.17')
+    _DEFAULT_ACCIDENT_FIXED = Decimal('12.25')           # 2026: €12.25/month (BVAEB/SVS)
     _DEFAULT_GSVG_MIN_BASE_MONTHLY = Decimal('551.10')
     _DEFAULT_GSVG_MIN_INCOME_YEARLY = Decimal('6613.20')
     _DEFAULT_NEUE_MIN_MONTHLY = Decimal('160.81')
-    _DEFAULT_MAX_BASE_MONTHLY = Decimal('7585.00')
+    _DEFAULT_MAX_BASE_MONTHLY = Decimal('7720.50')       # 2026: €7,720.50/month (BVAEB/SVS)
 
     def __init__(self, svs_config: Optional[Dict] = None):
         """

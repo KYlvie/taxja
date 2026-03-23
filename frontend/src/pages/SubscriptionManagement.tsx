@@ -16,6 +16,7 @@ const SubscriptionManagement: React.FC = () => {
     fetchSubscription,
     cancelSubscription,
     reactivateSubscription,
+    openCustomerPortal,
     loading,
     error,
   } = useSubscriptionStore();
@@ -55,6 +56,17 @@ const SubscriptionManagement: React.FC = () => {
       await showAlert(t('subscription.reactivate_success', 'Your subscription has been reactivated!'), { variant: 'success' });
     } catch {
       await showAlert(t('subscription.reactivate_error', 'Failed to reactivate subscription. Please try again.'), { variant: 'danger' });
+    }
+  };
+
+  const handleManagePaymentMethod = async () => {
+    try {
+      await openCustomerPortal(`${window.location.origin}/subscription`);
+    } catch {
+      await showAlert(
+        t('pricing.errors.portal_failed', 'Failed to open subscription management.'),
+        { variant: 'danger' },
+      );
     }
   };
 
@@ -168,7 +180,8 @@ const SubscriptionManagement: React.FC = () => {
             </p>
             <button
               className="btn-secondary"
-              onClick={() => window.open('https://billing.stripe.com/p/login/test_xxx', '_blank')}
+              onClick={() => void handleManagePaymentMethod()}
+              disabled={loading}
             >
               {t('subscription.manage_payment', 'Manage Payment Method')}
             </button>

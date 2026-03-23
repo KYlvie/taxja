@@ -60,37 +60,6 @@ import OCRReview from '../components/documents/OCRReview';
 
 ---
 
-### ReceiptItemChecker
-**File**: `ReceiptItemChecker.tsx`
-
-Allows users to review individual line items from receipts and mark which items are tax-deductible.
-
-**Features**:
-- Display all receipt line items
-- Toggle deductibility for each item
-- Add/edit deduction reasons
-- Calculate total, deductible, and non-deductible amounts
-- Visual indicators for deductibility status
-- User type-specific hints
-
-**Props**:
-- `items: LineItem[]` - Array of line items from the receipt
-- `onItemsChange: (items: LineItem[]) => void` - Callback when items are updated
-- `userType: string` - User type for context-specific hints
-
-**Usage**:
-```tsx
-import ReceiptItemChecker from '../components/documents/ReceiptItemChecker';
-
-<ReceiptItemChecker
-  items={extractedData.items}
-  onItemsChange={(updatedItems) => setItems(updatedItems)}
-  userType="self_employed"
-/>
-```
-
----
-
 ### DocumentList
 **File**: `DocumentList.tsx`
 
@@ -114,38 +83,6 @@ import DocumentList from '../components/documents/DocumentList';
 
 <DocumentList
   onDocumentSelect={(doc) => navigate(`/documents/${doc.id}`)}
-/>
-```
-
----
-
-### OCRErrorHandler
-**File**: `OCRErrorHandler.tsx`
-
-Displays helpful error messages and suggestions when OCR processing fails or produces low-confidence results.
-
-**Features**:
-- Context-specific error messages
-- Actionable suggestions based on error type
-- Best practices for document photography
-- Retry and manual entry options
-- Visual tips for improving OCR quality
-
-**Props**:
-- `error: string` - Error message to display
-- `confidenceScore?: number` - Optional confidence score
-- `onRetry?: () => void` - Optional callback to retry OCR
-- `onManualEntry?: () => void` - Optional callback for manual data entry
-
-**Usage**:
-```tsx
-import OCRErrorHandler from '../components/documents/OCRErrorHandler';
-
-<OCRErrorHandler
-  error="Unable to recognize document content"
-  confidenceScore={0.45}
-  onRetry={() => handleRetry()}
-  onManualEntry={() => navigate('/transactions/new')}
 />
 ```
 

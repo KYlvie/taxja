@@ -8,7 +8,9 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Sparkles, Zap } from 'lucide-react';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import FuturisticIcon from '../common/FuturisticIcon';
 import './SubscriptionStatus.css';
 
 const SubscriptionStatus: React.FC = () => {
@@ -84,7 +86,7 @@ const SubscriptionStatus: React.FC = () => {
     const estimates: { operation: string; count: number }[] = [];
 
     const operationLabels: Record<string, string> = {
-      ocr_scan: 'OCR Scans',
+      ocr_scan: 'Document Scans',
       ai_conversation: 'AI Conversations',
       transaction_entry: 'Transactions',
       bank_import: 'Bank Imports',
@@ -128,7 +130,9 @@ const SubscriptionStatus: React.FC = () => {
 
       {isTrialing && daysRemaining !== null && (
         <div className="trial-countdown">
-          <div className="trial-icon">🎉</div>
+          <div className="trial-icon">
+            <FuturisticIcon icon={Sparkles} tone="amber" size="lg" />
+          </div>
           <div className="trial-text">
             <strong>
               {t('subscription.trial_days_remaining', '{{days}} days remaining', {
@@ -174,7 +178,10 @@ const SubscriptionStatus: React.FC = () => {
 
         {subscription.cancel_at_period_end && (
           <div className="cancellation-notice">
-            ⚠️ {t('subscription.cancel_notice', 'Your subscription will be canceled at the end of the current period')}
+            <span className="subscription-inline-icon">
+              <AlertTriangle size={14} />
+            </span>
+            {t('subscription.cancel_notice', 'Your subscription will be canceled at the end of the current period')}
           </div>
         )}
       </div>
@@ -220,7 +227,10 @@ const SubscriptionStatus: React.FC = () => {
             <div className="overage-section">
               <div className="overage-toggle-row">
                 <div className="overage-info">
-                  <span className="overage-label">⚡ {t('subscription.overage_enabled', 'Overages')}</span>
+                  <span className="overage-label">
+                    <FuturisticIcon icon={Zap} tone="violet" size="xs" />
+                    {t('subscription.overage_enabled', 'Overages')}
+                  </span>
                   {creditBalance.overage_price_per_credit && (
                     <span className="overage-price">
                       €{creditBalance.overage_price_per_credit.toFixed(2)} {t('subscription.per_credit', 'per credit')}
@@ -246,7 +256,10 @@ const SubscriptionStatus: React.FC = () => {
 
               {creditBalance.has_unpaid_overage && (
                 <div className="overage-warning">
-                  ⚠️ {t('subscription.unpaid_overage', 'You have unpaid overage charges. Please settle to continue using overage.')}
+                  <span className="subscription-inline-icon">
+                    <AlertTriangle size={14} />
+                  </span>
+                  {t('subscription.unpaid_overage', 'You have unpaid overage charges. Please settle to continue using overage.')}
                 </div>
               )}
             </div>

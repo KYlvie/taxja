@@ -305,16 +305,6 @@
   align-items: center;
 }
 
-.page-size-select {
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border, #e0e0e0);
-  border-radius: 8px;
-  background: var(--color-bg, #fff);
-  color: var(--color-text, #333);
-  font-size: 0.85rem;
-  cursor: pointer;
-}
 
 .document-year-group {
   margin-bottom: 8px;
@@ -544,7 +534,9 @@
 }
 
 .download-btn,
-.delete-btn {
+.delete-btn,
+.retry-btn,
+.confirm-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -564,7 +556,9 @@
 }
 
 .download-btn:hover,
-.delete-btn:hover {
+.delete-btn:hover,
+.retry-btn:hover,
+.confirm-btn:hover {
   transform: translateY(-1px);
   border-color: var(--color-border-hover);
   box-shadow: var(--shadow-xs);
@@ -574,12 +568,42 @@
   color: var(--color-primary);
 }
 
+.retry-btn:hover {
+  color: var(--color-warning, #d97706);
+}
+
+.retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+@keyframes spin-retry {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.retry-btn:disabled .icon-svg {
+  animation: spin-retry 1s linear infinite;
+}
+
 .delete-btn:hover {
   background: var(--color-danger-light);
   color: var(--color-danger);
 }
 
 .delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.confirm-btn:hover {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.confirm-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;

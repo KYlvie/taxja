@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getLocaleForLanguage } from '../../utils/locale';
+import ConfirmDialog from '../common/ConfirmDialog';
 import './UserSubscriptionList.css';
 
 interface UserSubscription {
@@ -32,6 +33,7 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
   const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 20;
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
+  const [showGrantTrialConfirm, setShowGrantTrialConfirm] = useState<number | null>(null);
 
   useEffect(() => {
     fetchSubscriptions();
@@ -75,8 +77,14 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
     setCurrentPage(1);
   };
 
-  const handleGrantTrial = async (userId: number) => {
-    if (!confirm(t('admin.confirm.grant_trial'))) return;
+  const handleGrantTrialRequest = (userId: number) => {
+    setShowGrantTrialConfirm(userId);
+  };
+
+  const handleGrantTrialConfirm = async () => {
+    const userId = showGrantTrialConfirm;
+    setShowGrantTrialConfirm(null);
+    if (!userId) return;
 
     try {
       await fetch(`/api/v1/admin/subscriptions/${userId}/grant-trial`, {
@@ -181,7 +189,7 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
                   <div className="action-buttons">
                     <button
                       type="button"
-                      onClick={() => handleGrantTrial(sub.user_id)}
+                      onClick={() => handleGrantTrialRequest(sub.user_id)}
                       className="btn-small"
                       title={t('admin.actions.grant_trial')}
                     >
@@ -232,6 +240,15 @@ const UserSubscriptionList: React.FC<UserSubscriptionListProps> = ({
           </button>
         </div>
       )}
+      <ConfirmDialog
+        isOpen={showGrantTrialConfirm !== null}
+        message={t('admin.confirm.grant_trial', 'Grant trial to this user?')}
+        variant="warning"
+        confirmText={t('common.confirm', 'Confirm')}
+        cancelText={t('common.cancel', 'Cancel')}
+        onConfirm={handleGrantTrialConfirm}
+        onCancel={() => setShowGrantTrialConfirm(null)}
+      />
     </div>
   );
 };

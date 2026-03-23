@@ -2,6 +2,7 @@
 from celery import Task, group
 from celery.exceptions import Retry as CeleryRetry
 from typing import List, Dict, Any
+from types import SimpleNamespace
 from datetime import datetime, date
 from decimal import Decimal
 import logging
@@ -223,10 +224,10 @@ def _build_duplicate_asset_candidates(db, document) -> list:
 
 def _get_user_and_tax_profile_context(db, user_id: int):
     """Load the user together with persisted tax-profile source-of-truth."""
-    from app.models.user import User
+    from app.services.contract_role_service import load_sensitive_user_context
     from app.services.tax_profile_service import TaxProfileService
 
-    user = db.query(User).filter(User.id == user_id).first()
+    user = load_sensitive_user_context(db, user_id)
     if not user:
         return None, None
     return user, TaxProfileService().get_asset_tax_profile_context(user)
@@ -295,6 +296,353 @@ def _clear_asset_import_suggestion(ocr_result: dict) -> None:
     suggestion = ocr_result.get("import_suggestion")
     if isinstance(suggestion, dict) and suggestion.get("type") == "create_asset":
         ocr_result.pop("import_suggestion", None)
+
+
+def _clear_import_suggestion_types(ocr_result: dict, suggestion_types: set[str]) -> None:
+    suggestion = ocr_result.get("import_suggestion")
+    if isinstance(suggestion, dict) and suggestion.get("type") in suggestion_types:
+        ocr_result.pop("import_suggestion", None)
+
+
+PURCHASE_CONTRACT_EXTRACTED_FIELDS = {
+    "property_address",
+    "street",
+    "city",
+    "postal_code",
+    "purchase_price",
+    "purchase_date",
+    "building_value",
+    "land_value",
+    "grunderwerbsteuer",
+    "notary_fees",
+    "registry_fees",
+    "buyer_name",
+    "seller_name",
+    "notary_name",
+    "notary_location",
+    "construction_year",
+    "property_type",
+}
+
+
+def _apply_contract_role_resolution(updated_ocr: dict, resolution) -> None:
+    if resolution is None:
+        return
+    updated_ocr["user_contract_role"] = resolution.candidate
+    updated_ocr["user_contract_role_source"] = resolution.source
+    updated_ocr["user_contract_role_confidence"] = round(float(resolution.confidence), 4)
+    updated_ocr["contract_role_resolution"] = resolution.to_payload()
+
+
+def _annotate_contract_role_gate(target: dict | None, resolution) -> None:
+    if not isinstance(target, dict) or resolution is None:
+        return
+
+    target["user_contract_role"] = resolution.candidate
+    target["user_contract_role_source"] = resolution.source
+    target["user_contract_role_confidence"] = round(float(resolution.confidence), 4)
+    target["role_evidence"] = list(resolution.evidence)
+    target["role_gate_mode"] = resolution.mode
+    target["role_gate_would_block"] = resolution.strict_would_block
+    target["role_gate_reason"] = resolution.evidence[0] if resolution.evidence else None
+
+
+def _apply_transaction_direction_resolution(updated_ocr: dict, resolution) -> None:
+    if resolution is None:
+        return
+    updated_ocr["document_transaction_direction"] = resolution.candidate
+    updated_ocr["document_transaction_direction_source"] = resolution.source
+    updated_ocr["document_transaction_direction_confidence"] = round(
+        float(resolution.confidence),
+        4,
+    )
+    updated_ocr["transaction_direction_resolution"] = resolution.to_payload()
+    updated_ocr["commercial_document_semantics"] = resolution.semantics
+    updated_ocr["is_reversal"] = bool(resolution.is_reversal)
+
+
+def _annotate_transaction_direction_gate(target: dict | None, resolution) -> None:
+    if not isinstance(target, dict) or resolution is None:
+        return
+
+    target["document_transaction_direction"] = resolution.candidate
+    target["document_transaction_direction_source"] = resolution.source
+    target["document_transaction_direction_confidence"] = round(
+        float(resolution.confidence),
+        4,
+    )
+    target["direction_evidence"] = list(resolution.evidence)
+    target["commercial_document_semantics"] = resolution.semantics
+    target["is_reversal"] = bool(resolution.is_reversal)
+    target["direction_gate_mode"] = resolution.mode
+    target["direction_gate_would_block"] = resolution.strict_would_block
+    target["direction_gate_reason"] = resolution.evidence[0] if resolution.evidence else None
+
+
+def _resolve_contract_role_for_document(
+    db,
+    document,
+    ocr_data: dict | None = None,
+    *,
+    purchase_contract_kind: str | None = None,
+    raw_text: str | None = None,
+):
+    from app.models.document import DocumentType as DBDocumentType
+    from app.services.contract_role_service import ContractRoleService
+
+    user, _ = _get_user_and_tax_profile_context(db, document.user_id)
+    if not user:
+        return None
+
+    role_input = ocr_data if isinstance(ocr_data, dict) else (document.ocr_result or {})
+    service = ContractRoleService(language=getattr(user, "language", None))
+
+    if document.document_type == DBDocumentType.RENTAL_CONTRACT:
+        return service.resolve_rental_contract_role(user, role_input, raw_text=raw_text or document.raw_text)
+
+    if document.document_type == DBDocumentType.PURCHASE_CONTRACT:
+        return service.resolve_purchase_contract_role(
+            user,
+            role_input,
+            contract_kind=purchase_contract_kind or role_input.get("purchase_contract_kind"),
+            raw_text=raw_text or document.raw_text,
+        )
+
+    if document.document_type == DBDocumentType.LOAN_CONTRACT:
+        return service.resolve_loan_contract_role(user, role_input, raw_text=raw_text or document.raw_text)
+
+    if document.document_type == DBDocumentType.VERSICHERUNGSBESTAETIGUNG:
+        return service.resolve_insurance_role(user, role_input, raw_text=raw_text or document.raw_text)
+
+    return None
+
+
+def _resolve_transaction_direction_for_document(
+    db,
+    document,
+    ocr_data: dict | None = None,
+    *,
+    raw_text: str | None = None,
+):
+    from app.models.document import DocumentType as DBDocumentType
+    from app.services.contract_role_service import ContractRoleService
+
+    if getattr(document, "document_type", None) not in {
+        DBDocumentType.INVOICE,
+        DBDocumentType.RECEIPT,
+        DBDocumentType.BANK_STATEMENT,
+    }:
+        return None
+
+    user, _ = _get_user_and_tax_profile_context(db, document.user_id)
+    if not user:
+        return None
+
+    direction_input = ocr_data if isinstance(ocr_data, dict) else (document.ocr_result or {})
+    service = ContractRoleService(language=getattr(user, "language", None))
+    return service.resolve_transaction_direction(
+        user,
+        document.document_type,
+        direction_input,
+        raw_text=raw_text or document.raw_text,
+    )
+
+
+def _persist_transaction_suggestions_on_document(document, suggestions: list[dict]) -> None:
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    if suggestions:
+        updated_ocr["transaction_suggestion"] = suggestions[0]
+        updated_ocr["tax_analysis"] = {
+            "items": [
+                {
+                    "description": suggestion.get("description", ""),
+                    "amount": suggestion.get("amount"),
+                    "category": suggestion.get("category"),
+                    "is_deductible": suggestion.get("is_deductible", False),
+                    "deduction_reason": suggestion.get("deduction_reason", ""),
+                    "confidence": suggestion.get("confidence", 0),
+                    "transaction_type": suggestion.get("transaction_type", "expense"),
+                    "commercial_document_semantics": suggestion.get(
+                        "commercial_document_semantics",
+                        updated_ocr.get("commercial_document_semantics"),
+                    ),
+                    "is_reversal": suggestion.get("is_reversal", updated_ocr.get("is_reversal")),
+                }
+                for suggestion in suggestions
+            ],
+            "is_split": len(suggestions) > 1,
+            "commercial_document_semantics": suggestions[0].get(
+                "commercial_document_semantics",
+                updated_ocr.get("commercial_document_semantics"),
+            ),
+            "is_reversal": suggestions[0].get("is_reversal", updated_ocr.get("is_reversal")),
+        }
+    else:
+        updated_ocr.pop("transaction_suggestion", None)
+        updated_ocr.pop("tax_analysis", None)
+
+    document.ocr_result = _make_json_safe(updated_ocr)
+
+
+def _clear_transaction_artifact_keys(ocr_payload: dict) -> dict:
+    for key in (
+        "transaction_suggestion",
+        "tax_analysis",
+        "matched_existing",
+        "document_transaction_direction",
+        "document_transaction_direction_source",
+        "document_transaction_direction_confidence",
+        "transaction_direction_resolution",
+        "commercial_document_semantics",
+        "is_reversal",
+    ):
+        ocr_payload.pop(key, None)
+    return ocr_payload
+
+
+def _clear_transaction_artifacts_on_document(document) -> None:
+    """Remove transaction-oriented OCR artifacts when a document moves to another flow."""
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
+    document.ocr_result = _make_json_safe(updated_ocr)
+
+
+def _update_direction_metadata_only(db, document, result) -> dict:
+    from sqlalchemy.orm.attributes import flag_modified
+
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    resolution = _resolve_transaction_direction_for_document(
+        db,
+        document,
+        updated_ocr,
+        raw_text=getattr(result, "raw_text", None) or document.raw_text,
+    )
+    _apply_transaction_direction_resolution(updated_ocr, resolution)
+    document.ocr_result = _make_json_safe(updated_ocr)
+    flag_modified(document, "ocr_result")
+    db.flush()
+    return {
+        "transaction_direction_resolution": resolution.to_payload() if resolution else None,
+        "commercial_document_semantics": updated_ocr.get("commercial_document_semantics"),
+        "is_reversal": updated_ocr.get("is_reversal"),
+    }
+
+
+def _refresh_direction_sensitive_suggestions(db, document, result) -> dict:
+    from app.models.document import DocumentType as DBDocumentType
+    from app.services.ocr_transaction_service import OCRTransactionService
+    from sqlalchemy.orm.attributes import flag_modified
+
+    if document.document_type == DBDocumentType.BANK_STATEMENT:
+        return _update_direction_metadata_only(db, document, result)
+
+    suggestions = OCRTransactionService(db).create_split_suggestions(document.id, document.user_id)
+    _persist_transaction_suggestions_on_document(document, suggestions)
+    flag_modified(document, "ocr_result")
+    db.flush()
+    return {
+        "transaction_suggestions": suggestions,
+        "transaction_suggestion": suggestions[0] if suggestions else None,
+    }
+
+
+def _get_corrected_field_names(ocr_result: dict | None) -> set[str]:
+    if not isinstance(ocr_result, dict):
+        return set()
+
+    corrected_fields: set[str] = set()
+    history = ocr_result.get("correction_history")
+    if not isinstance(history, list):
+        return corrected_fields
+
+    for entry in history:
+        if not isinstance(entry, dict):
+            continue
+        fields = entry.get("corrected_fields")
+        if isinstance(fields, list):
+            corrected_fields.update(
+                str(field_name) for field_name in fields if isinstance(field_name, str)
+            )
+
+    return corrected_fields
+
+
+def _refresh_purchase_contract_extracted_data(
+    document,
+    result=None,
+) -> dict | None:
+    """Re-extract purchase-contract facts while preserving user-corrected fields."""
+    from app.services.kaufvertrag_extractor import KaufvertragExtractor
+
+    raw_text = document.raw_text or getattr(result, "raw_text", None) or ""
+    if not raw_text.strip():
+        return None
+
+    extractor = KaufvertragExtractor()
+    refreshed = extractor.to_dict(extractor.extract(raw_text))
+    if not isinstance(refreshed, dict):
+        return None
+
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    corrected_fields = _get_corrected_field_names(updated_ocr)
+
+    for field_name in PURCHASE_CONTRACT_EXTRACTED_FIELDS:
+        if field_name in corrected_fields:
+            continue
+        updated_ocr[field_name] = refreshed.get(field_name)
+
+    refreshed_field_confidence = refreshed.get("field_confidence")
+    existing_field_confidence = (
+        updated_ocr.get("field_confidence")
+        if isinstance(updated_ocr.get("field_confidence"), dict)
+        else {}
+    )
+    if isinstance(refreshed_field_confidence, dict):
+        merged_field_confidence = dict(existing_field_confidence)
+        for field_name, confidence in refreshed_field_confidence.items():
+            if field_name in corrected_fields:
+                continue
+            merged_field_confidence[field_name] = confidence
+        updated_ocr["field_confidence"] = merged_field_confidence
+
+    if "confidence" not in corrected_fields and refreshed.get("confidence") is not None:
+        updated_ocr["confidence"] = refreshed["confidence"]
+
+    return updated_ocr
+
+
+def _enforce_contract_role_gate(db, document, expected_role: str, flow_label: str) -> None:
+    from app.models.document import DocumentType as DBDocumentType
+    from app.services.contract_role_service import get_sensitive_document_mode
+
+    if get_sensitive_document_mode() != "strict":
+        return
+
+    if getattr(document, "document_type", None) not in {
+        DBDocumentType.RENTAL_CONTRACT,
+        DBDocumentType.PURCHASE_CONTRACT,
+        DBDocumentType.LOAN_CONTRACT,
+        DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+    }:
+        return
+
+    resolution = _resolve_contract_role_for_document(
+        db,
+        document,
+        purchase_contract_kind=(document.ocr_result or {}).get("purchase_contract_kind")
+        if getattr(document, "document_type", None) == DBDocumentType.PURCHASE_CONTRACT
+        else None,
+        raw_text=document.raw_text,
+    )
+    current_role = resolution.candidate if resolution else (document.ocr_result or {}).get(
+        "user_contract_role",
+        "unknown",
+    )
+    if current_role != expected_role:
+        raise ValueError(
+            f"{flow_label} is blocked because this contract currently resolves to "
+            f"'{current_role or 'unknown'}' instead of '{expected_role}'."
+        )
 
 
 def _build_asset_normalized_document(
@@ -429,8 +777,28 @@ def _build_asset_suggestion(db, document, result) -> dict:
 
     from app.schemas.asset_recognition import AssetRecognitionInput
 
+    from app.models.document import DocumentType as DBDocumentType
+
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    role_resolution = None
+    if document.document_type == DBDocumentType.PURCHASE_CONTRACT:
+        role_resolution = _resolve_contract_role_for_document(
+            db,
+            document,
+            updated_ocr,
+            purchase_contract_kind=updated_ocr.get("purchase_contract_kind") or "asset",
+        )
+        _apply_contract_role_resolution(updated_ocr, role_resolution)
+
     normalized_document, profile_context = _build_asset_normalized_document(db, document, result)
     if normalized_document is None or not profile_context:
+        updated_ocr.pop("asset_recognition", None)
+        updated_ocr.pop("asset_quality_gate", None)
+        updated_ocr.pop("asset_outcome", None)
+        _clear_asset_import_suggestion(updated_ocr)
+        document.ocr_result = _make_json_safe(updated_ocr)
+        flag_modified(document, "ocr_result")
+        db.flush()
         return {
             "asset_recognition": None,
             "asset_outcome": None,
@@ -455,7 +823,6 @@ def _build_asset_suggestion(db, document, result) -> dict:
         update={"decision_audit": decision_audit}
     )
     recognition_payload = _serialize_asset_recognition_result(recognition_result)
-    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
     updated_ocr["asset_recognition"] = recognition_payload
     updated_ocr["asset_quality_gate"] = _make_json_safe(quality_gate.model_dump(mode="json"))
 
@@ -560,7 +927,17 @@ def _build_asset_suggestion(db, document, result) -> dict:
             },
             "confidence": float(recognition_result.policy_confidence),
         }
-        if quality_gate.decision == QualityGateDecision.AUTO_CREATE:
+        _annotate_contract_role_gate(suggestion["data"], role_resolution)
+        role_gate_blocks = bool(role_resolution and role_resolution.strict_would_block)
+
+        if role_gate_blocks and role_resolution.mode == "strict":
+            _clear_asset_import_suggestion(updated_ocr)
+            updated_ocr.pop("asset_outcome", None)
+            suggestion = None
+            auto_create_payload = None
+        elif quality_gate.decision == QualityGateDecision.AUTO_CREATE and not (
+            role_gate_blocks and role_resolution and role_resolution.mode == "shadow"
+        ):
             _clear_asset_import_suggestion(updated_ocr)
             updated_ocr.pop("asset_outcome", None)
             auto_create_payload = suggestion
@@ -569,12 +946,22 @@ def _build_asset_suggestion(db, document, result) -> dict:
             not existing_import_suggestion
             or existing_import_suggestion.get("type") == "create_asset"
         ):
+            if role_gate_blocks and role_resolution and role_resolution.mode == "shadow":
+                suggestion["data"]["decision"] = AssetRecognitionDecision.CREATE_ASSET_SUGGESTION
+                suggestion["data"]["quality_gate_decision"] = QualityGateDecision.SUGGESTION_REQUIRED
+                suggestion["data"]["quality_gate_blocks_side_effects"] = True
+                suggestion["data"]["requires_user_confirmation"] = True
+                suggestion["data"]["role_gate_shadow_downgrade"] = True
             updated_ocr["import_suggestion"] = suggestion
             asset_outcome = _build_asset_outcome_payload(
                 status=AssetOutcomeStatus.PENDING_CONFIRMATION,
                 decision=AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
                 source=AssetOutcomeSource.QUALITY_GATE,
-                quality_gate_decision=quality_gate.decision,
+                quality_gate_decision=(
+                    QualityGateDecision.SUGGESTION_REQUIRED
+                    if role_gate_blocks and role_resolution and role_resolution.mode == "shadow"
+                    else quality_gate.decision
+                ),
             )
             updated_ocr["asset_outcome"] = asset_outcome
         else:
@@ -590,6 +977,47 @@ def _build_asset_suggestion(db, document, result) -> dict:
         "import_suggestion": suggestion,
         "auto_create_payload": auto_create_payload,
     }
+
+
+def refresh_contract_role_sensitive_suggestions(db, document) -> dict:
+    """Rebuild sensitive-document suggestions and metadata after OCR corrections."""
+    from app.models.document import DocumentType as DBDocumentType
+    from sqlalchemy.orm.attributes import flag_modified
+
+    result = SimpleNamespace(
+        raw_text=document.raw_text,
+        confidence_score=_to_decimal(getattr(document, "confidence_score", None)) or Decimal("0"),
+    )
+
+    if document.document_type == DBDocumentType.RENTAL_CONTRACT:
+        return _build_mietvertrag_suggestion(db, document, result)
+
+    if document.document_type == DBDocumentType.PURCHASE_CONTRACT:
+        refreshed_ocr = _refresh_purchase_contract_extracted_data(document, result)
+        if refreshed_ocr is not None:
+            document.ocr_result = _make_json_safe(refreshed_ocr)
+            flag_modified(document, "ocr_result")
+            db.flush()
+        purchase_result = _build_kaufvertrag_suggestion(db, document, result)
+        if purchase_result.get("purchase_contract_kind") == "asset":
+            asset_result = _build_asset_suggestion(db, document, result)
+            purchase_result.update(asset_result)
+        return purchase_result
+
+    if document.document_type == DBDocumentType.LOAN_CONTRACT:
+        return _build_kreditvertrag_suggestion(db, document, result)
+
+    if document.document_type == DBDocumentType.VERSICHERUNGSBESTAETIGUNG:
+        return _build_versicherung_suggestion(db, document, result)
+
+    if document.document_type in {
+        DBDocumentType.INVOICE,
+        DBDocumentType.RECEIPT,
+        DBDocumentType.BANK_STATEMENT,
+    }:
+        return _refresh_direction_sensitive_suggestions(db, document, result)
+
+    return {}
 
 
 def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
@@ -694,9 +1122,27 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
         image_bytes = storage.download_file(document.file_path)
 
         ocr_engine = OCREngine()
-        result = ocr_engine.process_document(image_bytes, mime_type=document.mime_type)
+        pipeline_state = {}
+        if isinstance(document.ocr_result, dict):
+            pipeline_state = document.ocr_result.get("_pipeline") or {}
+        vision_provider_preference = pipeline_state.get("ocr_provider_override")
+        reprocess_mode = pipeline_state.get("reprocess_mode")
+        result = ocr_engine.process_document(
+            image_bytes,
+            mime_type=document.mime_type,
+            vision_provider_preference=vision_provider_preference,
+            reprocess_mode=reprocess_mode,
+            document_type_hint=document.document_type,
+        )
 
         document.ocr_result = _make_json_safe(result.extracted_data)
+        updated_pipeline_state = dict(pipeline_state)
+        updated_pipeline_state["current_state"] = "completed"
+        if reprocess_mode:
+            updated_pipeline_state["last_reprocess_mode"] = reprocess_mode
+        if getattr(result, "provider_used", None):
+            updated_pipeline_state["last_provider_used"] = result.provider_used
+        document.ocr_result["_pipeline"] = updated_pipeline_state
         document.raw_text = result.raw_text
         document.confidence_score = result.confidence_score
 
@@ -776,9 +1222,10 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
 
         if document.document_type == DBDocumentType.PURCHASE_CONTRACT:
             try:
+                _clear_transaction_artifacts_on_document(document)
                 kaufvertrag_result = _build_kaufvertrag_suggestion(db, document, result)
                 result_dict.update(kaufvertrag_result)
-                if not kaufvertrag_result.get("import_suggestion"):
+                if kaufvertrag_result.get("purchase_contract_kind") == "asset":
                     result_dict.update(_build_asset_suggestion(db, document, result))
             except Exception as e:
                 logger.warning(f"Build Kaufvertrag suggestion failed for document {document_id}: {e}")
@@ -786,14 +1233,48 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
 
         elif document.document_type == DBDocumentType.RENTAL_CONTRACT:
             try:
+                _clear_transaction_artifacts_on_document(document)
                 result_dict.update(_build_mietvertrag_suggestion(db, document, result))
             except Exception as e:
                 logger.warning(f"Build Mietvertrag suggestion failed for document {document_id}: {e}")
                 result_dict["import_suggestion"] = None
 
+        elif document.document_type == DBDocumentType.LOAN_CONTRACT:
+            try:
+                _clear_transaction_artifacts_on_document(document)
+                result_dict.update(_build_kreditvertrag_suggestion(db, document, result))
+                result_dict["transaction_created"] = False
+                result_dict["transaction_id"] = None
+                result_dict.pop("transaction_suggestion", None)
+            except Exception as e:
+                logger.warning(f"Build Kreditvertrag suggestion failed for document {document_id}: {e}")
+                result_dict["import_suggestion"] = None
+
+        elif document.document_type == DBDocumentType.VERSICHERUNGSBESTAETIGUNG:
+            try:
+                _clear_transaction_artifacts_on_document(document)
+                result_dict.update(_build_versicherung_suggestion(db, document, result))
+                result_dict["transaction_created"] = False
+                result_dict["transaction_id"] = None
+                result_dict.pop("transaction_suggestion", None)
+            except Exception as e:
+                logger.warning(f"Build Versicherung suggestion failed for document {document_id}: {e}")
+                result_dict["import_suggestion"] = None
+
+        elif document.document_type == DBDocumentType.BANK_STATEMENT:
+            try:
+                _clear_transaction_artifacts_on_document(document)
+                result_dict.update(_update_direction_metadata_only(db, document, result))
+                result_dict["transaction_created"] = False
+                result_dict["transaction_id"] = None
+                result_dict.pop("transaction_suggestion", None)
+            except Exception as e:
+                logger.warning(f"Bank statement direction refresh failed for document {document_id}: {e}")
+
         elif document.document_type in (DBDocumentType.E1_FORM, DBDocumentType.EINKOMMENSTEUERBESCHEID):
             # Summary / tax declaration documents — extract historical data, no transactions
             try:
+                _clear_transaction_artifacts_on_document(document)
                 raw_text = document.raw_text or ""
                 historical_data = {}
                 if document.document_type == DBDocumentType.E1_FORM and raw_text:
@@ -969,7 +1450,7 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
     """
     ocr_data = document.ocr_result or {}
     if not isinstance(ocr_data, dict):
-        return {"import_suggestion": None}
+        return {"purchase_contract_kind": None, "import_suggestion": None}
 
     from app.services.purchase_contract_intelligence import (
         PurchaseContractKind,
@@ -980,16 +1461,25 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
         document.raw_text or getattr(result, "raw_text", None) or "",
         extracted_data=ocr_data,
     )
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr["purchase_contract_kind"] = contract_kind.value
     if contract_kind != PurchaseContractKind.PROPERTY:
         logger.info(
             f"Kaufvertrag doc {document.id}: detected asset-oriented contract, "
             "skipping property suggestion"
         )
-        updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
-        updated_ocr["purchase_contract_kind"] = contract_kind.value
+        _clear_import_suggestion_types(updated_ocr, {"create_property", "associate_property"})
         document.ocr_result = updated_ocr
-        db.commit()
-        return {"import_suggestion": None}
+        db.flush()
+        return {"purchase_contract_kind": contract_kind.value, "import_suggestion": None}
+
+    role_resolution = _resolve_contract_role_for_document(
+        db,
+        document,
+        updated_ocr,
+        purchase_contract_kind=contract_kind.value,
+    )
+    _apply_contract_role_resolution(updated_ocr, role_resolution)
 
     purchase_price = ocr_data.get("purchase_price")
     property_address = ocr_data.get("property_address")
@@ -999,7 +1489,10 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
             f"Kaufvertrag doc {document.id}: missing purchase_price or address, "
             f"skipping suggestion"
         )
-        return {"import_suggestion": None}
+        _clear_import_suggestion_types(updated_ocr, {"create_property", "associate_property"})
+        document.ocr_result = updated_ocr
+        db.flush()
+        return {"purchase_contract_kind": contract_kind.value, "import_suggestion": None}
 
     from decimal import Decimal
     from datetime import datetime as dt
@@ -1110,6 +1603,17 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
             "address_mismatch_warning": address_mismatch_warning,
         },
     }
+    _annotate_contract_role_gate(suggestion["data"], role_resolution)
+
+    if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
+        logger.info(
+            f"Kaufvertrag doc {document.id}: role '{role_resolution.candidate}' blocks "
+            "property suggestion in strict mode"
+        )
+        _clear_import_suggestion_types(updated_ocr, {"create_property", "associate_property"})
+        document.ocr_result = updated_ocr
+        db.flush()
+        return {"purchase_contract_kind": contract_kind.value, "import_suggestion": None}
 
     logger.info(
         f"Built property suggestion for Kaufvertrag doc {document.id}: "
@@ -1117,13 +1621,11 @@ def _build_kaufvertrag_suggestion(db, document, result) -> dict:
     )
 
     # Save suggestion into document's ocr_result
-    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
-    updated_ocr["purchase_contract_kind"] = PurchaseContractKind.PROPERTY.value
     updated_ocr["import_suggestion"] = suggestion
     document.ocr_result = updated_ocr
-    db.commit()
+    db.flush()
 
-    return {"import_suggestion": suggestion}
+    return {"purchase_contract_kind": PurchaseContractKind.PROPERTY.value, "import_suggestion": suggestion}
 
 
 def create_property_from_suggestion(db, document, suggestion_data: dict) -> dict:
@@ -1137,6 +1639,8 @@ def create_property_from_suggestion(db, document, suggestion_data: dict) -> dict
     from app.models.property import PropertyType
     from decimal import Decimal
     from datetime import datetime as dt
+
+    _enforce_contract_role_gate(db, document, expected_role="buyer", flow_label="Property creation")
 
     data = suggestion_data
     user_id = int(document.user_id)
@@ -1398,8 +1902,15 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
+    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+    role_resolution = _resolve_contract_role_for_document(db, document, updated_ocr)
+    _apply_contract_role_resolution(updated_ocr, role_resolution)
+
     monthly_rent = ocr_data.get("monthly_rent")
     if not monthly_rent:
+        _clear_import_suggestion_types(updated_ocr, {"create_recurring_income"})
+        document.ocr_result = updated_ocr
+        db.flush()
         return {"import_suggestion": None}
 
     monthly_rent = Decimal(str(monthly_rent))
@@ -1532,6 +2043,17 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
             "address_mismatch_warning": address_mismatch_warning,
         },
     }
+    _annotate_contract_role_gate(suggestion["data"], role_resolution)
+
+    if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
+        logger.info(
+            f"Mietvertrag doc {document.id}: role '{role_resolution.candidate}' blocks "
+            "recurring income suggestion in strict mode"
+        )
+        _clear_import_suggestion_types(updated_ocr, {"create_recurring_income"})
+        document.ocr_result = updated_ocr
+        db.flush()
+        return {"import_suggestion": None}
 
     logger.info(
         f"Built recurring income suggestion for Mietvertrag doc {document.id}: "
@@ -1539,10 +2061,9 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
     )
 
     # Save suggestion into document's ocr_result
-    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
     updated_ocr["import_suggestion"] = suggestion
     document.ocr_result = updated_ocr
-    db.commit()
+    db.flush()
 
     return {"import_suggestion": suggestion}
 
@@ -1554,9 +2075,19 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     """
     from decimal import Decimal
     from datetime import datetime as dt
+    from app.models.liability import LiabilitySourceType
     from app.models.property_loan import PropertyLoan
 
-    # Check if a PropertyLoan already exists for this document (avoid duplicate suggestions)
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
+    role_resolution = _resolve_contract_role_for_document(
+        db,
+        document,
+        updated_ocr,
+        raw_text=getattr(result, "raw_text", None) or document.raw_text,
+    )
+    _apply_contract_role_resolution(updated_ocr, role_resolution)
+
     existing_loan = (
         db.query(PropertyLoan)
         .filter(PropertyLoan.loan_contract_document_id == document.id)
@@ -1581,14 +2112,13 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
             },
             "loan_id": existing_loan.id,
         }
-        # Update document's ocr_result with the confirmed suggestion
-        updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
+        _annotate_contract_role_gate(suggestion["data"], role_resolution)
         updated_ocr["import_suggestion"] = suggestion
         document.ocr_result = updated_ocr
         db.commit()
         return {"import_suggestion": suggestion}
 
-    ocr_data = document.ocr_result or {}
+    ocr_data = updated_ocr
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
@@ -1597,14 +2127,12 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     monthly_payment = ocr_data.get("monthly_payment")
     lender_name = ocr_data.get("lender_name")
 
-    # Track missing critical fields
     missing_fields = []
     if not loan_amount:
         missing_fields.append("loan_amount")
     if not interest_rate:
         missing_fields.append("interest_rate")
 
-    # Parse start_date
     sd_raw = ocr_data.get("start_date")
     start_date = None
     if sd_raw:
@@ -1620,7 +2148,6 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     if not start_date:
         start_date = document.uploaded_at.date()
 
-    # Parse end_date
     ed_raw = ocr_data.get("end_date")
     end_date = None
     if ed_raw:
@@ -1632,12 +2159,124 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
                 except ValueError:
                     continue
 
-    # Check for upload context with property_id
+    property_address = ocr_data.get("property_address")
     upload_context = ocr_data.get("_upload_context", {}) or {}
     context_property_id = upload_context.get("property_id")
 
-    # Resolve property association if property_id provided
+    matched_property_id, matched_property_address, address_mismatch_warning = _match_property_for_loan_contract(
+        db,
+        document,
+        context_property_id=context_property_id,
+        property_address=property_address,
+    )
+
+    if matched_property_id:
+        updated_ocr["matched_property_id"] = matched_property_id
+        updated_ocr["matched_property_address"] = matched_property_address
+
+    # Missing critical fields should keep the suggestion visible, but make the
+    # follow-up explicit so callers can render the correct "needs input" state.
+    status = "needs_input" if missing_fields else "pending"
+    suggestion_type = "create_loan" if matched_property_id else "create_loan_repayment"
+    suggestion_data = {
+        "loan_amount": float(Decimal(str(loan_amount))) if loan_amount else None,
+        "interest_rate": float(Decimal(str(interest_rate))) if interest_rate else None,
+        "monthly_payment": float(Decimal(str(monthly_payment))) if monthly_payment else None,
+        "annual_interest_amount": (
+            float(Decimal(str(ocr_data.get("annual_interest_amount"))))
+            if ocr_data.get("annual_interest_amount")
+            else None
+        ),
+        "certificate_year": ocr_data.get("certificate_year"),
+        "lender_name": lender_name,
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat() if end_date else None,
+        "matched_property_id": matched_property_id,
+        "matched_property_address": matched_property_address,
+        "property_address": property_address,
+        "no_property_match": matched_property_id is None,
+        "address_mismatch_warning": address_mismatch_warning,
+    }
+    if missing_fields:
+        suggestion_data["missing_fields"] = missing_fields
+
+    suggestion = {
+        "type": suggestion_type,
+        "status": status,
+        "data": suggestion_data,
+    }
+    _annotate_contract_role_gate(suggestion["data"], role_resolution)
+
+    if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
+        updated_ocr.pop("import_suggestion", None)
+        document.ocr_result = updated_ocr
+        db.commit()
+        return {"import_suggestion": None}
+
+    document_confidence = _to_decimal(getattr(result, "confidence_score", None)) or _to_decimal(
+        getattr(document, "confidence_score", None)
+    ) or Decimal("0")
+    can_auto_create = (
+        suggestion_type == "create_loan"
+        and not missing_fields
+        and bool(matched_property_id)
+        and not address_mismatch_warning
+        and document_confidence >= Decimal("0.90")
+    )
+
+    if can_auto_create:
+        create_result = create_loan_from_suggestion(
+            db,
+            document,
+            suggestion_data,
+            liability_source_type=LiabilitySourceType.DOCUMENT_AUTO_CREATED,
+        )
+        refreshed_ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        auto_created_suggestion = refreshed_ocr.get("import_suggestion")
+        if isinstance(auto_created_suggestion, dict):
+            auto_created_suggestion["status"] = "confirmed"
+            auto_created_suggestion["auto_created"] = True
+            if isinstance(auto_created_suggestion.get("data"), dict):
+                auto_created_suggestion["data"]["auto_created"] = True
+                auto_created_suggestion["data"]["quality_gate_decision"] = "auto_create"
+            document.ocr_result = refreshed_ocr
+            db.commit()
+
+        logger.info(
+            f"Auto-created property-linked loan from Kreditvertrag doc {document.id} "
+            f"(confidence={document_confidence}, property={matched_property_id})"
+        )
+        return {
+            "import_suggestion": auto_created_suggestion,
+            "loan_auto_created": True,
+            **create_result,
+        }
+
+    logger.info(
+        f"Built loan suggestion for Kreditvertrag doc {document.id}: "
+        f"amount={loan_amount}, rate={interest_rate}, status={status}"
+    )
+
+    updated_ocr["import_suggestion"] = suggestion
+    document.ocr_result = updated_ocr
+    db.commit()
+
+    return {"import_suggestion": suggestion}
+
+
+def _match_property_for_loan_contract(
+    db,
+    document,
+    *,
+    context_property_id=None,
+    property_address=None,
+):
+    """Resolve a property for a loan contract via upload context or OCR address."""
     matched_property_id = None
+    matched_property_address = None
+    address_mismatch_warning = False
+    address = str(property_address or "").strip()
+
     if context_property_id:
         try:
             from app.models.property import Property as PropertyModel, PropertyStatus
@@ -1653,56 +2292,70 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
             )
             if context_prop:
                 matched_property_id = str(context_prop.id)
+                matched_property_address = context_prop.address
+                if address and matched_property_address:
+                    ocr_addr_norm = address.lower()
+                    prop_addr_norm = matched_property_address.strip().lower()
+                    if (
+                        ocr_addr_norm
+                        and prop_addr_norm
+                        and ocr_addr_norm not in prop_addr_norm
+                        and prop_addr_norm not in ocr_addr_norm
+                    ):
+                        address_mismatch_warning = True
+                        logger.warning(
+                            f"Kreditvertrag doc {document.id}: OCR address '{address}' "
+                            f"does not match target property address '{matched_property_address}'"
+                        )
             else:
                 logger.warning(
                     f"Kreditvertrag doc {document.id}: context property_id "
-                    f"{context_property_id} not found or not active"
+                    f"{context_property_id} not found or not active, falling back to address matching"
                 )
         except Exception as e:
             logger.warning(
                 f"Context property lookup failed for Kreditvertrag doc {document.id}: {e}"
             )
 
-    # Determine status based on missing fields
-    status = "needs_input" if missing_fields else "pending"
+    if not matched_property_id and address:
+        try:
+            from app.models.property import Property as PropertyModel, PropertyStatus
+            from app.services.address_matcher import AddressMatcher
 
-    suggestion_data = {
-        "loan_amount": float(Decimal(str(loan_amount))) if loan_amount else None,
-        "interest_rate": float(Decimal(str(interest_rate))) if interest_rate else None,
-        "monthly_payment": float(Decimal(str(monthly_payment))) if monthly_payment else None,
-        "lender_name": lender_name,
-        "start_date": start_date.isoformat() if start_date else None,
-        "end_date": end_date.isoformat() if end_date else None,
-        "matched_property_id": matched_property_id,
-    }
+            matcher = AddressMatcher(db)
+            matches = matcher.match_address(address, document.user_id)
+            if matches and matches[0].confidence > 0.3:
+                matched_property_id = str(matches[0].property.id)
+                matched_property_address = matches[0].property.address
+            else:
+                user_props = (
+                    db.query(PropertyModel)
+                    .filter(
+                        PropertyModel.user_id == document.user_id,
+                        PropertyModel.status == PropertyStatus.ACTIVE,
+                    )
+                    .all()
+                )
+                addr_lower = address.lower()
+                for prop in user_props:
+                    street = (prop.street or "").lower()
+                    if street and street in addr_lower:
+                        matched_property_id = str(prop.id)
+                        matched_property_address = prop.address
+                        break
+        except Exception as e:
+            logger.warning(f"Address matching failed for Kreditvertrag doc {document.id}: {e}")
 
-    if missing_fields:
-        suggestion_data["missing_fields"] = missing_fields
+    return matched_property_id, matched_property_address, address_mismatch_warning
 
-    # Use different suggestion type based on whether property is matched
-    if matched_property_id:
-        suggestion_type = "create_loan"
-    else:
-        suggestion_type = "create_loan_repayment"
 
-    suggestion = {
-        "type": suggestion_type,
-        "status": status,
-        "data": suggestion_data,
-    }
+def _resolve_standalone_liability_type(document):
+    from app.models.user import UserType
 
-    logger.info(
-        f"Built loan suggestion for Kreditvertrag doc {document.id}: "
-        f"amount={loan_amount}, rate={interest_rate}, status={status}"
-    )
-
-    # Save suggestion into document's ocr_result
-    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
-    updated_ocr["import_suggestion"] = suggestion
-    document.ocr_result = updated_ocr
-    db.commit()
-
-    return {"import_suggestion": suggestion}
+    user_type = getattr(getattr(document, "user", None), "user_type", None)
+    if user_type in {UserType.SELF_EMPLOYED, UserType.LANDLORD, UserType.MIXED, UserType.GMBH}:
+        return "business_loan"
+    return "other_liability"
 
 
 def _merge_asset_confirmation_overrides(suggestion_data: dict, confirmation_overrides: dict | None) -> dict:
@@ -1793,11 +2446,131 @@ def _build_asset_acquisition_reason(asset) -> str:
     return "Capitalized asset acquisition; tax deduction is handled via depreciation (AfA), not as an immediate expense."
 
 
+def _resolve_asset_vat_recoverable_ratio(
+    asset,
+    suggestion_data: dict,
+    policy_evaluation=None,
+) -> Decimal:
+    """Resolve recoverable VAT ratio for canonical asset acquisition postings."""
+    ratio = _to_decimal((suggestion_data or {}).get("vat_recoverable_ratio"))
+    if ratio is None and policy_evaluation is not None:
+        ratio = _to_decimal(
+            getattr(getattr(policy_evaluation, "tax_flags", None), "vat_recoverable_ratio", None)
+        )
+
+    if ratio is None:
+        status = getattr(asset, "vat_recoverable_status", None)
+        status = getattr(status, "value", status)
+        if status == "likely_yes":
+            ratio = Decimal("1.0000")
+        else:
+            ratio = Decimal("0.0000")
+
+    if ratio < Decimal("0"):
+        ratio = Decimal("0.0000")
+    if ratio > Decimal("1"):
+        ratio = Decimal("1.0000")
+    return ratio.quantize(Decimal("0.0001"))
+
+
+def _build_asset_acquisition_line_items(
+    asset,
+    category,
+    description: str,
+    suggestion_data: dict,
+    *,
+    vat_amount: Decimal | None,
+    vat_rate: Decimal | None,
+    policy_evaluation=None,
+) -> list[dict]:
+    """Materialize canonical business/private/VAT posting lines for assets."""
+    from app.models.transaction_line_item import (
+        LineItemAllocationSource,
+        LineItemPostingType,
+    )
+    from app.services.posting_line_utils import quantize_money
+
+    gross_amount = quantize_money(getattr(asset, "purchase_price", None))
+    business_pct = (
+        _to_decimal(getattr(asset, "business_use_percentage", None))
+        or _to_decimal((suggestion_data or {}).get("business_use_percentage"))
+        or Decimal("100.00")
+    )
+    business_pct = min(max(business_pct, Decimal("0.00")), Decimal("100.00"))
+    business_ratio = (business_pct / Decimal("100")).quantize(Decimal("0.0001"))
+
+    business_cash = (gross_amount * business_ratio).quantize(Decimal("0.01"))
+    private_cash = (gross_amount - business_cash).quantize(Decimal("0.01"))
+
+    total_vat = quantize_money(vat_amount)
+    business_vat = (total_vat * business_ratio).quantize(Decimal("0.01"))
+    private_vat = (total_vat - business_vat).quantize(Decimal("0.01"))
+
+    recoverable_ratio = _resolve_asset_vat_recoverable_ratio(
+        asset,
+        suggestion_data,
+        policy_evaluation=policy_evaluation,
+    )
+    recoverable_vat = (business_vat * recoverable_ratio).quantize(Decimal("0.01"))
+    if recoverable_vat > business_cash:
+        recoverable_vat = business_cash
+
+    business_amount = (business_cash - recoverable_vat).quantize(Decimal("0.01"))
+    category_token = getattr(category, "value", category)
+
+    line_items = []
+    if business_cash > Decimal("0.00"):
+        line_items.append(
+            {
+                "description": description,
+                "amount": business_amount,
+                "quantity": 1,
+                "posting_type": LineItemPostingType.ASSET_ACQUISITION,
+                "allocation_source": (
+                    LineItemAllocationSource.VAT_POLICY
+                    if recoverable_vat > Decimal("0.00")
+                    else (
+                        LineItemAllocationSource.MIXED_USE_RULE
+                        if private_cash > Decimal("0.00")
+                        else LineItemAllocationSource.MANUAL
+                    )
+                ),
+                "category": category_token,
+                "is_deductible": False,
+                "vat_rate": vat_rate,
+                "vat_amount": business_vat if total_vat > Decimal("0.00") else None,
+                "vat_recoverable_amount": recoverable_vat,
+                "sort_order": 0,
+            }
+        )
+
+    if private_cash > Decimal("0.00"):
+        line_items.append(
+            {
+                "description": f"{description} (private use)",
+                "amount": private_cash,
+                "quantity": 1,
+                "posting_type": LineItemPostingType.PRIVATE_USE,
+                "allocation_source": LineItemAllocationSource.MIXED_USE_RULE,
+                "category": category_token,
+                "is_deductible": False,
+                "vat_rate": vat_rate,
+                "vat_amount": private_vat if total_vat > Decimal("0.00") else None,
+                "vat_recoverable_amount": Decimal("0.00"),
+                "sort_order": 1,
+            }
+        )
+
+    return line_items
+
+
 def _ensure_asset_acquisition_transaction(
     db,
     document,
     asset,
     suggestion_data: dict,
+    *,
+    policy_evaluation=None,
 ):
     """
     Ensure the confirmed asset has exactly one linked acquisition transaction.
@@ -1806,6 +2579,10 @@ def _ensure_asset_acquisition_transaction(
     effect is handled by GWG/AfA logic on the asset lifecycle.
     """
     from app.models.transaction import Transaction, TransactionType
+    from app.services.posting_line_utils import (
+        normalize_line_item_payloads,
+        replace_transaction_line_items,
+    )
 
     ocr_data = document.ocr_result if isinstance(document.ocr_result, dict) else {}
     supplier = (
@@ -1850,17 +2627,36 @@ def _ensure_asset_acquisition_transaction(
             .filter(
                 Transaction.document_id == document.id,
                 Transaction.user_id == document.user_id,
-                Transaction.type == TransactionType.EXPENSE,
             )
             .order_by(Transaction.created_at.asc())
             .first()
         )
 
+    normalized_line_items = normalize_line_item_payloads(
+        transaction_type=TransactionType.ASSET_ACQUISITION,
+        transaction_amount=asset.purchase_price,
+        description=description,
+        expense_category=category,
+        is_deductible=False,
+        deduction_reason=deduction_reason,
+        vat_rate=vat_rate,
+        vat_amount=vat_amount,
+        line_items=_build_asset_acquisition_line_items(
+            asset,
+            category,
+            description,
+            suggestion_data,
+            vat_amount=vat_amount,
+            vat_rate=vat_rate,
+            policy_evaluation=policy_evaluation,
+        ),
+    )
+
     if existing_transaction:
         existing_transaction.property_id = asset.id
-        existing_transaction.type = TransactionType.EXPENSE
+        existing_transaction.type = TransactionType.ASSET_ACQUISITION
         existing_transaction.income_category = None
-        existing_transaction.expense_category = category
+        existing_transaction.expense_category = None
         existing_transaction.amount = asset.purchase_price
         existing_transaction.transaction_date = asset.purchase_date
         existing_transaction.description = description
@@ -1874,20 +2670,20 @@ def _ensure_asset_acquisition_transaction(
         existing_transaction.classification_confidence = confidence
         existing_transaction.classification_method = "rule"
         existing_transaction.needs_review = False
-        for line_item in existing_transaction.line_items:
-            line_item.is_deductible = False
-            line_item.category = category.value
+        replace_transaction_line_items(db, existing_transaction, normalized_line_items)
+        existing_transaction.is_deductible = False
+        existing_transaction.deduction_reason = deduction_reason
         document.transaction_id = existing_transaction.id
         return existing_transaction, False
 
     transaction = Transaction(
         user_id=document.user_id,
         property_id=asset.id,
-        type=TransactionType.EXPENSE,
+        type=TransactionType.ASSET_ACQUISITION,
         amount=asset.purchase_price,
         transaction_date=asset.purchase_date,
         description=description,
-        expense_category=category,
+        expense_category=None,
         is_deductible=False,
         deduction_reason=deduction_reason,
         vat_amount=vat_amount,
@@ -1901,6 +2697,9 @@ def _ensure_asset_acquisition_transaction(
     )
     db.add(transaction)
     db.flush()
+    replace_transaction_line_items(db, transaction, normalized_line_items)
+    transaction.is_deductible = False
+    transaction.deduction_reason = deduction_reason
     document.transaction_id = transaction.id
     return transaction, True
 
@@ -1938,6 +2737,8 @@ def create_asset_from_suggestion(
     from app.services.asset_tax_policy_service import AssetTaxPolicyService
     from app.services.property_service import PropertyService
     from app.services.tax_profile_service import TaxProfileService
+
+    _enforce_contract_role_gate(db, document, expected_role="buyer", flow_label="Asset creation")
 
     data = _merge_asset_confirmation_overrides(suggestion_data or {}, confirmation_overrides)
     user, _ = _get_user_and_tax_profile_context(db, document.user_id)
@@ -2159,6 +2960,7 @@ def create_asset_from_suggestion(
         document,
         asset,
         data,
+        policy_evaluation=policy_evaluation,
     )
 
     import json as _json
@@ -2211,7 +3013,13 @@ def create_asset_from_suggestion(
     }
 
 
-def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
+def create_loan_from_suggestion(
+    db,
+    document,
+    suggestion_data: dict,
+    *,
+    liability_source_type=None,
+) -> dict:
     """
     Create PropertyLoan + RecurringTransaction(loan_interest) from a confirmed Kreditvertrag suggestion.
     Called by the confirm-loan API endpoint after user approves.
@@ -2230,10 +3038,19 @@ def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
     Returns:
         Dict with created record IDs and summary info
     """
+    from app.models.liability import LiabilitySourceType
     from app.models.property_loan import PropertyLoan
+    from app.services.loan_service import LoanService
     from app.services.recurring_transaction_service import RecurringTransactionService
     from decimal import Decimal
     from datetime import datetime as dt, date as date_cls
+
+    _enforce_contract_role_gate(
+        db,
+        document,
+        expected_role="borrower",
+        flow_label="Loan creation",
+    )
 
     data = suggestion_data
 
@@ -2281,10 +3098,27 @@ def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
             except ValueError:
                 continue
 
-    # Resolve property_id — delegate to standalone handler if no property
+    # Resolve property_id — retry OCR-address/property-context matching before
+    # falling back to the standalone repayment path.
     property_id = data.get("matched_property_id")
     if not property_id:
-        return create_standalone_loan_repayment(db, document, data)
+        ocr_result = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        upload_context = (ocr_result.get("_upload_context") or {}) if isinstance(ocr_result, dict) else {}
+        property_id, matched_property_address, address_mismatch_warning = _match_property_for_loan_contract(
+            db,
+            document,
+            context_property_id=upload_context.get("property_id"),
+            property_address=data.get("property_address") or ocr_result.get("property_address"),
+        )
+        if property_id:
+            data = {
+                **data,
+                "matched_property_id": property_id,
+                "matched_property_address": matched_property_address,
+                "address_mismatch_warning": address_mismatch_warning,
+            }
+        else:
+            return confirm_unlinked_loan_contract(db, document, data)
 
     # Verify property exists and belongs to user
     from app.models.property import Property as PropertyModel, PropertyStatus
@@ -2326,12 +3160,27 @@ def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
     )
     db.add(loan)
     db.flush()  # Get loan.id without committing
+    from app.services.liability_service import LiabilityService
+    liability = LiabilityService(db).ensure_property_loan_liability(
+        loan,
+        source_document_id=document.id,
+        source_type=liability_source_type or LiabilitySourceType.DOCUMENT_CONFIRMED,
+    )
+
+    loan_service = LoanService(db)
+    installments = loan_service.generate_installment_plan(
+        loan.id,
+        document.user_id,
+        replace_existing_estimates=True,
+        commit_changes=False,
+    )
 
     # --- Create RecurringTransaction (loan_interest) ---
     service = RecurringTransactionService(db)
     recurring = service.create_loan_interest_recurring(
         user_id=document.user_id,
         loan_id=loan.id,
+        liability_id=liability.id,
         monthly_interest=monthly_interest,
         start_date=start_date,
         end_date=end_date,
@@ -2381,6 +3230,7 @@ def create_loan_from_suggestion(db, document, suggestion_data: dict) -> dict:
         "interest_rate": float(interest_rate_pct),
         "monthly_interest": float(monthly_interest),
         "monthly_payment": float(monthly_payment),
+        "installment_count": len(installments),
         "generated_count": len(generated),
     }
 
@@ -2394,20 +3244,39 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     from decimal import Decimal
     from datetime import datetime as dt
 
-    ocr_data = document.ocr_result or {}
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
+    role_resolution = _resolve_contract_role_for_document(
+        db,
+        document,
+        updated_ocr,
+        raw_text=getattr(result, "raw_text", None) or document.raw_text,
+    )
+    _apply_contract_role_resolution(updated_ocr, role_resolution)
+
+    ocr_data = updated_ocr
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
     # Extract premium amount - the key OCR field
     praemie = ocr_data.get("praemie") or ocr_data.get("premium") or ocr_data.get("amount")
     if not praemie:
+        updated_ocr.pop("import_suggestion", None)
+        document.ocr_result = updated_ocr
+        db.commit()
         return {"import_suggestion": None}
 
     try:
         praemie_decimal = Decimal(str(praemie))
         if praemie_decimal <= 0:
+            updated_ocr.pop("import_suggestion", None)
+            document.ocr_result = updated_ocr
+            db.commit()
             return {"import_suggestion": None}
     except Exception:
+        updated_ocr.pop("import_suggestion", None)
+        document.ocr_result = updated_ocr
+        db.commit()
         return {"import_suggestion": None}
 
     # Extract frequency (default: annually for insurance)
@@ -2438,6 +3307,13 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         or ocr_data.get("insurer_name")
         or ocr_data.get("company_name")
     )
+    upload_context = ocr_data.get("_upload_context", {}) or {}
+    linked_property_id = (
+        upload_context.get("property_id")
+        or ocr_data.get("linked_property_id")
+        or ocr_data.get("matched_property_id")
+    )
+    linked_asset_id = upload_context.get("asset_id") or ocr_data.get("linked_asset_id")
 
     # Parse start_date
     sd_raw = ocr_data.get("start_date") or ocr_data.get("vertragsbeginn")
@@ -2475,10 +3351,19 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             "frequency": frequency,
             "insurance_type": insurance_type,
             "insurer_name": insurer_name,
+            "linked_property_id": linked_property_id,
+            "linked_asset_id": linked_asset_id,
             "start_date": start_date.isoformat() if start_date else None,
             "end_date": end_date.isoformat() if end_date else None,
         },
     }
+    _annotate_contract_role_gate(suggestion["data"], role_resolution)
+
+    if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
+        updated_ocr.pop("import_suggestion", None)
+        document.ocr_result = updated_ocr
+        db.commit()
+        return {"import_suggestion": None}
 
     logger.info(
         f"Built insurance recurring suggestion for Versicherung doc {document.id}: "
@@ -2486,7 +3371,6 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     )
 
     # Save suggestion into document's ocr_result
-    updated_ocr = document.ocr_result.copy() if document.ocr_result else {}
     updated_ocr["import_suggestion"] = suggestion
     document.ocr_result = updated_ocr
     db.commit()
@@ -2504,9 +3388,18 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
         RecurringTransactionType,
         RecurrenceFrequency,
     )
+    from sqlalchemy import cast, String
     from decimal import Decimal
     from datetime import datetime as dt, date as date_cls
     import json as _json
+    import re
+
+    _enforce_contract_role_gate(
+        db,
+        document,
+        expected_role="policy_holder",
+        flow_label="Insurance recurring creation",
+    )
 
     data = suggestion_data
 
@@ -2529,6 +3422,8 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
 
     insurance_type = data.get("insurance_type", "unknown")
     insurer_name = data.get("insurer_name", "Unknown Insurer")
+    linked_property_id = data.get("linked_property_id")
+    linked_asset_id = data.get("linked_asset_id")
 
     # Parse start_date
     sd_raw = data.get("start_date")
@@ -2558,6 +3453,52 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
     if insurance_type and insurance_type != "unknown":
         description = f"Insurance premium ({insurance_type}) - {insurer_name}"
 
+    def _normalize_token(value: str | None) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+    duplicate_query = db.query(RecurringTransaction).filter(
+        RecurringTransaction.user_id == document.user_id,
+        RecurringTransaction.recurring_type == RecurringTransactionType.INSURANCE_PREMIUM,
+        RecurringTransaction.is_active == True,
+        RecurringTransaction.amount == praemie,
+        RecurringTransaction.frequency == frequency,
+    )
+    if linked_property_id:
+        duplicate_query = duplicate_query.filter(
+            cast(RecurringTransaction.property_id, String) == str(linked_property_id)
+        )
+
+    insurer_norm = _normalize_token(insurer_name)
+    insurance_norm = _normalize_token(insurance_type)
+    duplicate_recurring = None
+    for candidate in duplicate_query.all():
+        if candidate.start_date and abs((candidate.start_date - start_date).days) > 45:
+            continue
+        haystack = _normalize_token(" ".join(filter(None, [candidate.description, candidate.notes])))
+        if insurer_norm and insurer_norm not in haystack:
+            continue
+        if insurance_norm and insurance_norm != "unknown" and insurance_norm not in haystack:
+            continue
+        duplicate_recurring = candidate
+        break
+
+    if duplicate_recurring:
+        ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+        if ocr_result.get("import_suggestion"):
+            ocr_result["import_suggestion"]["status"] = "confirmed"
+            ocr_result["import_suggestion"]["recurring_id"] = duplicate_recurring.id
+            ocr_result["import_suggestion"]["duplicate_of_recurring_id"] = duplicate_recurring.id
+            document.ocr_result = ocr_result
+        db.commit()
+        return {
+            "recurring_id": duplicate_recurring.id,
+            "praemie": float(praemie),
+            "frequency": freq_str,
+            "insurance_type": insurance_type,
+            "generated_count": 0,
+            "duplicate_reused": True,
+        }
+
     recurring = RecurringTransaction(
         user_id=document.user_id,
         recurring_type=RecurringTransactionType.INSURANCE_PREMIUM,
@@ -2572,6 +3513,17 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
         is_active=True,
         next_generation_date=start_date,
         source_document_id=document.id,
+        property_id=linked_property_id,
+        notes="; ".join(
+            filter(
+                None,
+                [
+                    f"insurance_type={insurance_type}" if insurance_type else None,
+                    f"insurer_name={insurer_name}" if insurer_name else None,
+                    f"linked_asset_id={linked_asset_id}" if linked_asset_id else None,
+                ],
+            )
+        ) or None,
     )
     db.add(recurring)
     db.flush()
@@ -2612,34 +3564,67 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
     }
 
 
-def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dict:
+def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
     """
-    Create RecurringTransaction(loan_repayment) from a confirmed standalone loan suggestion.
-    Called by the confirm-loan-repayment API endpoint after user approves.
-    For loans NOT associated with a property (car loans, personal loans, etc.).
+    Confirm a loan contract that is not linked to a taxable property yet.
+
+    If a property can now be matched, promote into the property-loan flow.
+    Otherwise create a standalone liability and, when the monthly payment is
+    available, a recurring liability repayment plan.
     """
-    from app.models.recurring_transaction import (
-        RecurringTransaction,
-        RecurringTransactionType,
-        RecurrenceFrequency,
-    )
-    from decimal import Decimal
-    from datetime import datetime as dt, date as date_cls
     import json as _json
+    from datetime import datetime as dt
+    from decimal import Decimal
+
+    from app.models.liability import LiabilitySourceType, LiabilityType
+    from app.services.liability_service import LiabilityService
+
+    _enforce_contract_role_gate(
+        db,
+        document,
+        expected_role="borrower",
+        flow_label="Loan contract confirmation",
+    )
 
     data = suggestion_data
+    property_id = data.get("matched_property_id")
 
+    if not property_id:
+        ocr_result = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        upload_context = (ocr_result.get("_upload_context") or {}) if isinstance(ocr_result, dict) else {}
+        property_id, matched_property_address, address_mismatch_warning = _match_property_for_loan_contract(
+            db,
+            document,
+            context_property_id=upload_context.get("property_id"),
+            property_address=data.get("property_address") or ocr_result.get("property_address"),
+        )
+        if property_id:
+            data = {
+                **data,
+                "matched_property_id": property_id,
+                "matched_property_address": matched_property_address,
+                "address_mismatch_warning": address_mismatch_warning,
+            }
+
+    if property_id:
+        logger.info(
+            f"Kreditvertrag doc {document.id}: promoting unlinked loan confirmation "
+            f"to property-linked loan via property {property_id}"
+        )
+        return create_loan_from_suggestion(db, document, data)
+
+    loan_amount_raw = data.get("loan_amount")
+    interest_rate_raw = data.get("interest_rate")
     monthly_payment_raw = data.get("monthly_payment")
-    if not monthly_payment_raw:
-        raise ValueError("Missing required field: monthly_payment")
+    lender_name = data.get("lender_name") or "Unknown Lender"
 
-    monthly_payment = Decimal(str(monthly_payment_raw))
-    if monthly_payment <= 0:
-        raise ValueError("Monthly payment must be positive")
+    if not loan_amount_raw or not interest_rate_raw:
+        raise ValueError("Missing required fields: loan_amount and interest_rate are required")
 
-    lender_name = data.get("lender_name", "Unknown Lender")
+    loan_amount = Decimal(str(loan_amount_raw))
+    interest_rate_pct = Decimal(str(interest_rate_raw))
+    monthly_payment = Decimal(str(monthly_payment_raw)) if monthly_payment_raw else None
 
-    # Parse start_date
     sd_raw = data.get("start_date")
     start_date = None
     if sd_raw and isinstance(sd_raw, str):
@@ -2652,7 +3637,6 @@ def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dic
     if not start_date:
         start_date = document.uploaded_at.date()
 
-    # Parse end_date
     ed_raw = data.get("end_date")
     end_date = None
     if ed_raw and isinstance(ed_raw, str):
@@ -2663,59 +3647,79 @@ def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dic
             except ValueError:
                 continue
 
-    description = f"Loan repayment - {lender_name}"
-
-    recurring = RecurringTransaction(
-        user_id=document.user_id,
-        recurring_type=RecurringTransactionType.LOAN_REPAYMENT,
-        description=description,
-        amount=monthly_payment,
-        transaction_type="expense",
-        category="loan_repayment",
-        frequency=RecurrenceFrequency.MONTHLY,
+    liability_type_value = _resolve_standalone_liability_type(document)
+    liability_type = LiabilityType(liability_type_value)
+    liability_service = LiabilityService(db)
+    liability = liability_service.create_liability(
+        document.user_id,
+        liability_type=liability_type,
+        source_type=LiabilitySourceType.DOCUMENT_CONFIRMED,
+        display_name=f"{lender_name} loan",
+        currency="EUR",
+        lender_name=lender_name,
+        principal_amount=loan_amount,
+        outstanding_balance=loan_amount,
+        interest_rate=interest_rate_pct,
         start_date=start_date,
         end_date=end_date,
-        day_of_month=start_date.day,
-        is_active=True,
-        next_generation_date=start_date,
+        monthly_payment=monthly_payment,
+        tax_relevant=False,
+        tax_relevance_reason=None,
+        report_category=None,
+        linked_property_id=None,
+        linked_loan_id=None,
         source_document_id=document.id,
+        notes="Created from confirmed standalone loan contract",
+        create_recurring_plan=bool(monthly_payment and monthly_payment > 0),
+        recurring_day_of_month=start_date.day,
     )
-    db.add(recurring)
-    db.flush()
 
-    # Generate historical due transactions
-    from app.services.recurring_transaction_service import RecurringTransactionService
-
-    service = RecurringTransactionService(db)
-    generated = []
-    try:
-        generated = service.generate_due_transactions(
-            target_date=date_cls.today(), user_id=document.user_id
-        )
-    except Exception as e:
-        logger.warning(
-            f"Failed to generate due transactions for loan repayment recurring {recurring.id}: {e}"
-        )
-
-    # Mark suggestion as confirmed
     ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
-    if ocr_result.get("import_suggestion"):
-        ocr_result["import_suggestion"]["status"] = "confirmed"
-        ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+    suggestion = ocr_result.get("import_suggestion")
+    recurring_id = None
+    if liability.recurring_transactions:
+        recurring_id = liability.recurring_transactions[0].id
+
+    if suggestion:
+        suggestion["status"] = "confirmed"
+        suggestion["liability_id"] = liability.id
+        suggestion["created_recurring"] = bool(recurring_id)
+        suggestion["created_transaction"] = True
+        suggestion.pop("acknowledged_only", None)
+        suggestion_data_payload = suggestion.get("data")
+        if isinstance(suggestion_data_payload, dict):
+            suggestion_data_payload["created_liability_id"] = liability.id
+            suggestion_data_payload["no_property_match"] = True
+            suggestion_data_payload["source_type"] = "document_confirmed"
+        if recurring_id:
+            suggestion["recurring_id"] = recurring_id
         document.ocr_result = ocr_result
-    db.commit()
+        db.commit()
 
     logger.info(
-        f"Created standalone loan repayment recurring {recurring.id} from "
-        f"Kreditvertrag doc {document.id} (monthly=€{monthly_payment})"
+        f"Confirmed standalone loan contract for doc {document.id} and created liability {liability.id}"
     )
 
     return {
-        "recurring_id": recurring.id,
-        "monthly_payment": float(monthly_payment),
-        "lender_name": lender_name,
-        "generated_count": len(generated),
+        "liability_id": liability.id,
+        "recurring_id": recurring_id,
+        "property_id": None,
+        "generated_count": 0,
+        "acknowledged_only": False,
+        "created_recurring": bool(recurring_id),
+        "created_transaction": True,
     }
+
+
+def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dict:
+    """
+    Legacy compatibility wrapper for the former standalone loan repayment flow.
+
+    The product now confirms unlinked loan contracts without creating an
+    expense-style recurring. If a property match becomes available, the helper
+    still promotes the contract into the property-loan interest flow.
+    """
+    return confirm_unlinked_loan_contract(db, document, suggestion_data)
 
 
 def _detect_recurring_expense(db, document, suggestion: dict) -> dict | None:
@@ -2852,6 +3856,13 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     from app.services.recurring_transaction_service import RecurringTransactionService
     from decimal import Decimal
     from datetime import datetime as dt
+
+    _enforce_contract_role_gate(
+        db,
+        document,
+        expected_role="landlord",
+        flow_label="Recurring income creation",
+    )
 
     data = suggestion_data
     monthly_rent = Decimal(str(data["monthly_rent"]))

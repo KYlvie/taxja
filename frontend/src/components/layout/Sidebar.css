@@ -349,7 +349,7 @@
     top: 82px;
     left: 0;
     width: 280px;
-    height: calc(100vh - 104px - var(--ai-dock-height, 0px));
+    height: max(120px, calc(100vh - 104px - var(--ai-dock-height, 0px)));
     margin: 0 0 22px 16px;
     transform: none;
     opacity: 1;

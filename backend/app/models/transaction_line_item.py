@@ -1,20 +1,63 @@
-"""Transaction line item model for per-item classification within a transaction.
+"""Transaction line item model for canonical posting lines within a transaction.
 
-A single transaction (e.g. one supermarket receipt) can contain multiple items
-with different tax categories and deductibility. Line items allow:
+A single transaction (e.g. one supermarket receipt or one loan installment)
+can contain multiple posting lines with different tax and bookkeeping semantics.
+Line items allow:
 - Per-item classification (office_supplies vs groceries on one Billa receipt)
-- Per-item deductibility (printer paper = deductible, milk = not)
-- Accurate tax reporting by category instead of whole-transaction amounts
-- User editing of individual item classifications
+- Deductible vs private-use allocation on the same cash event
+- Liability and asset movements that must not be treated as expenses
+- Accurate report aggregation independent of the parent transaction type
 """
 from datetime import datetime
 from decimal import Decimal
+from enum import Enum
 from sqlalchemy import (
     Column, Integer, String, Numeric, Boolean, DateTime,
     ForeignKey, Enum as SQLEnum,
 )
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+
+
+class LineItemPostingType(str, Enum):
+    """Canonical posting semantic for a line item."""
+
+    INCOME = "income"
+    EXPENSE = "expense"
+    PRIVATE_USE = "private_use"
+    ASSET_ACQUISITION = "asset_acquisition"
+    LIABILITY_DRAWDOWN = "liability_drawdown"
+    LIABILITY_REPAYMENT = "liability_repayment"
+    TAX_PAYMENT = "tax_payment"
+    TRANSFER = "transfer"
+
+
+class LineItemAllocationSource(str, Enum):
+    """How a line item's allocation was produced."""
+
+    MANUAL = "manual"
+    OCR_SPLIT = "ocr_split"
+    PERCENTAGE_RULE = "percentage_rule"
+    CAP_RULE = "cap_rule"
+    LOAN_INSTALLMENT = "loan_installment"
+    MIXED_USE_RULE = "mixed_use_rule"
+    VAT_POLICY = "vat_policy"
+    LEGACY_BACKFILL = "legacy_backfill"
+
+
+LINE_ITEM_POSTING_TYPE_ENUM = SQLEnum(
+    LineItemPostingType,
+    name="lineitempostingtype",
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
+
+LINE_ITEM_ALLOCATION_SOURCE_ENUM = SQLEnum(
+    LineItemAllocationSource,
+    name="lineitemallocationsource",
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+    validate_strings=True,
+)
 
 
 class TransactionLineItem(Base):
@@ -37,6 +80,18 @@ class TransactionLineItem(Base):
     # Quantity (default 1)
     quantity = Column(Integer, default=1, nullable=False)
 
+    # Canonical posting semantics for this line
+    posting_type = Column(
+        LINE_ITEM_POSTING_TYPE_ENUM,
+        nullable=False,
+        default=LineItemPostingType.EXPENSE,
+    )
+    allocation_source = Column(
+        LINE_ITEM_ALLOCATION_SOURCE_ENUM,
+        nullable=False,
+        default=LineItemAllocationSource.MANUAL,
+    )
+
     # Category for this specific item
     category = Column(String(100), nullable=True)
 
@@ -47,6 +102,14 @@ class TransactionLineItem(Base):
     # VAT for this item (can differ per item, e.g. 10% vs 20%)
     vat_rate = Column(Numeric(5, 4), nullable=True)
     vat_amount = Column(Numeric(12, 2), nullable=True)
+    vat_recoverable_amount = Column(
+        Numeric(12, 2),
+        nullable=False,
+        default=Decimal("0.00"),
+    )
+
+    # Recalculation bucket for yearly caps / shared allocation rules
+    rule_bucket = Column(String(100), nullable=True)
 
     # Classification method and confidence at item level
     classification_method = Column(String(20), nullable=True)
@@ -68,6 +131,7 @@ class TransactionLineItem(Base):
         return (
             f"<TransactionLineItem(id={self.id}, "
             f"desc={self.description!r}, "
+            f"posting_type={self.posting_type}, "
             f"amount={self.amount}, "
             f"deductible={self.is_deductible})>"
         )

@@ -1,3 +1,4 @@
+import React from 'react';
 import { create } from 'zustand';
 import { useCallback } from 'react';
 
@@ -5,6 +6,7 @@ interface ConfirmState {
   isOpen: boolean;
   title?: string;
   message: string;
+  messageNode?: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   variant: 'info' | 'warning' | 'danger' | 'success';
@@ -30,6 +32,7 @@ export const useConfirmStore = create<ConfirmStore>((set, get) => ({
         isOpen: true,
         title: opts.title,
         message: opts.message || '',
+        messageNode: opts.messageNode,
         confirmText: opts.confirmText,
         cancelText: opts.cancelText,
         variant: opts.variant || 'info',
@@ -46,6 +49,7 @@ export const useConfirmStore = create<ConfirmStore>((set, get) => ({
       isOpen: false,
       title: undefined,
       message: '',
+      messageNode: undefined,
       confirmText: undefined,
       cancelText: undefined,
       variant: 'info',
@@ -65,6 +69,7 @@ export function useConfirm() {
       variant?: 'info' | 'warning' | 'danger' | 'success';
       confirmText?: string;
       cancelText?: string;
+      messageNode?: React.ReactNode;
     }) => show({ message, showCancel: true, ...opts }),
     [show]
   );

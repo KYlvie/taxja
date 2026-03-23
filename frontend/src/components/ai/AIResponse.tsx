@@ -2,40 +2,54 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import './AIResponse.css';
 
 interface AIResponseProps {
   content: string;
+  intent?: string;
+  showDisclaimer?: boolean;
+  sourceTier?: string;
 }
 
-// Keywords that indicate tax-related content (multi-language)
+// Keywords that indicate tax-related content — used as fallback when showDisclaimer is undefined
+// (e.g. for messages loaded from history that predate the show_disclaimer field)
 const TAX_KEYWORDS = /steuer|tax|abset|deduct|finanz|einkommen|income|umsatz|vat|mwst|vorsteuer|svs|sozialversicher|pendlerpauschale|werbungskosten|sonderausgaben|absetzbetr|freibetr|steuererklär|lohnzettel|arbeitnehmerveranlagung|einkommensteuer|körperschaftsteuer|grundsteuer|immobilien.*steuer|kapitalertrag|kest|est |e1 |l1 |u1 |u30|afa|abschreibung|betriebsausgab|gewinn|verlust|verlustvortr|税|扣除|退税|报税|所得税|增值税|社保|抵扣/i;
 
-const AIResponse: React.FC<AIResponseProps> = ({ content }) => {
+const NO_DISCLAIMER_INTENTS = new Set(['unknown', 'system_help']);
+
+const AIResponse: React.FC<AIResponseProps> = ({ content, intent, showDisclaimer, sourceTier }) => {
   const { t } = useTranslation();
 
-  // Split content and disclaimer
-  const disclaimerMarker = '⚠️';
-  const hasDisclaimer = content.includes(disclaimerMarker);
-  
   // Strip HTML tags (e.g. <br>, <br/>) that LLMs sometimes generate
-  const cleanedContent = content.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, '');
+  let cleanedContent = content.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, '');
 
-  let mainContent = cleanedContent;
-  let disclaimerContent = '';
-
-  if (hasDisclaimer) {
-    const parts = cleanedContent.split(disclaimerMarker);
-    mainContent = parts[0].trim();
-    disclaimerContent = parts.slice(1).join(disclaimerMarker).trim();
+  // Always strip backend-appended disclaimer text (⚠️ marker) from content
+  // The disclaimer is now controlled by the showDisclaimer flag, not embedded text
+  if (cleanedContent.includes('⚠️')) {
+    cleanedContent = cleanedContent.split('⚠️')[0].trim();
   }
 
-  // Check if the actual response (without disclaimer) is tax-related
-  const isTaxRelated = TAX_KEYWORDS.test(mainContent);
+  // Determine whether to show disclaimer:
+  // 1. If showDisclaimer is explicitly set by backend, use that
+  // 2. Otherwise fall back to keyword detection (for old messages from history)
+  const shouldShowDisclaimer = showDisclaimer !== undefined
+    ? showDisclaimer
+    : (intent && NO_DISCLAIMER_INTENTS.has(intent) ? false : TAX_KEYWORDS.test(cleanedContent));
+
+  // Determine source tier hint
+  const showSourceHint = sourceTier === 'lightweight' || sourceTier === 'rule_based';
 
   return (
     <div className="ai-response">
+      {/* Source tier hint for degraded responses */}
+      {showSourceHint && (
+        <div className="ai-source-tier-hint">
+          <Info size={14} />
+          <span>{t(sourceTier === 'lightweight' ? 'ai.sourceTierLightweight' : 'ai.sourceTierRuleBased')}</span>
+        </div>
+      )}
+
       {/* Main content with markdown rendering */}
       <div className="ai-response-content">
         <ReactMarkdown
@@ -84,24 +98,12 @@ const AIResponse: React.FC<AIResponseProps> = ({ content }) => {
             td: ({ children }) => <td className="ai-td">{children}</td>,
           }}
         >
-          {mainContent}
+          {cleanedContent}
         </ReactMarkdown>
       </div>
 
-      {/* Disclaimer - prominently displayed only for tax-related content */}
-      {hasDisclaimer && disclaimerContent && isTaxRelated && (
-        <div className="ai-disclaimer">
-          <div className="ai-disclaimer-icon">
-            <AlertTriangle size={18} />
-          </div>
-          <div className="ai-disclaimer-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{disclaimerContent}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-
-      {/* Show disclaimer only for tax-related responses without existing disclaimer */}
-      {!hasDisclaimer && isTaxRelated && (
+      {/* Single disclaimer — controlled by backend flag with keyword fallback */}
+      {shouldShowDisclaimer && (
         <div className="ai-disclaimer">
           <div className="ai-disclaimer-icon">
             <AlertTriangle size={18} />

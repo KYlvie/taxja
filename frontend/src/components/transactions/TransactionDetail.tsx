@@ -3,7 +3,14 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { translateDeductionReason } from '../../utils/translateDeductionReason';
-import { Transaction, TransactionType } from '../../types/transaction';
+import { getLocaleForLanguage } from '../../utils/locale';
+import { formatTransactionCategoryLabel } from '../../utils/formatTransactionCategoryLabel';
+import {
+  getTransactionAmountPrefix,
+  getTransactionAmountTone,
+  isExpenseTransactionType,
+  Transaction,
+} from '../../types/transaction';
 import './TransactionDetail.css';
 
 interface TransactionDetailProps {
@@ -24,17 +31,19 @@ const TransactionDetail = ({
   const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
   const navigate = useNavigate();
+  const amountTone = getTransactionAmountTone(transaction.type);
+  const isExpenseType = isExpenseTransactionType(transaction.type);
 
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
     }).format(amount);
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-AT', {
+    return new Date(dateString).toLocaleDateString(getLocaleForLanguage(i18n.language), {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -42,7 +51,7 @@ const TransactionDetail = ({
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('de-AT', {
+    return new Date(dateString).toLocaleString(getLocaleForLanguage(i18n.language), {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -72,8 +81,8 @@ const TransactionDetail = ({
 
             <div className="detail-row">
               <span className="detail-label">{t('transactions.amount')}:</span>
-              <span className={`amount ${transaction.type}`}>
-                {transaction.type === TransactionType.INCOME ? '+' : '-'}
+              <span className={`amount ${amountTone}`}>
+                {getTransactionAmountPrefix(transaction.type)}
                 {formatAmount(transaction.amount)}
               </span>
             </div>
@@ -83,12 +92,14 @@ const TransactionDetail = ({
               <span>{formatDate(transaction.date)}</span>
             </div>
 
-            <div className="detail-row">
-              <span className="detail-label">{t('transactions.category')}:</span>
-              <span className="category-badge">
-                {t(`transactions.categories.${transaction.category}`)}
-              </span>
-            </div>
+            {transaction.category ? (
+              <div className="detail-row">
+                <span className="detail-label">{t('transactions.category')}:</span>
+                <span className="category-badge">
+                  {formatTransactionCategoryLabel(transaction.category, t)}
+                </span>
+              </div>
+            ) : null}
 
             <div className="detail-row">
               <span className="detail-label">{t('transactions.description')}:</span>
@@ -96,7 +107,7 @@ const TransactionDetail = ({
             </div>
           </div>
 
-          {transaction.type !== TransactionType.INCOME && (
+          {isExpenseType && (
           <div className="detail-section">
             <h3>{t('transactions.taxInformation')}</h3>
 
@@ -244,7 +255,7 @@ const TransactionDetail = ({
                       )}
                       {item.category && (
                         <span className="category-badge">
-                          {t(`transactions.categories.${item.category}`)}
+                          {formatTransactionCategoryLabel(item.category, t)}
                         </span>
                       )}
                       {item.is_deductible ? (

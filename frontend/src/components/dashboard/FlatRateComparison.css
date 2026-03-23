@@ -132,6 +132,10 @@
 
 .calc-row.deduction { color: var(--color-danger); }
 
+.calc-row.deduction.secondary {
+  color: var(--color-text-secondary);
+}
+
 .calc-row.total {
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
@@ -153,6 +157,13 @@
 .calc-row .amount.highlight {
   color: var(--color-primary);
   font-size: 1.2rem;
+}
+
+.calculation-note {
+  margin: 0.85rem 0 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 .savings-summary {

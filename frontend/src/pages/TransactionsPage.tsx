@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Download, Plus, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import Select from '../components/common/Select';
+import { Download, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useTransactionStore } from '../stores/transactionStore';
 import { transactionService } from '../services/transactionService';
 import { saveBlobWithNativeShare } from '../mobile/files';
@@ -173,7 +174,7 @@ const TransactionsPage = () => {
       if (check.warning_type === 'document_only') {
         const goToDoc = await aiConfirm(
           t('transactions.deleteCheck.documentOnly', { name: check.document_name }),
-          { variant: 'info', confirmText: t('transactions.deleteCheck.goToDocument', '查看文档'), cancelText: t('common.close', '关闭') }
+          { variant: 'info', confirmText: t('transactions.deleteCheck.goToDocument', 'View Document'), cancelText: t('common.close', 'Close') }
         );
         if (goToDoc && check.document_id) {
           navigate(`/documents/${check.document_id}`);
@@ -362,8 +363,24 @@ const TransactionsPage = () => {
   return (
     <div className="transactions-page">
       <div className="page-header">
-        <h1>{t('transactions.title')}</h1>
+        <div className="transactions-header-copy">
+          <h1>{t('transactions.title')}</h1>
+          <p className="transactions-header-subtitle">
+            {t(
+              'classificationRules.transactionsSubtitle',
+              'View transactions, recurring bookings, and the classification memory your corrections teach the system.'
+            )}
+          </p>
+        </div>
         <div className="header-actions">
+          <Link to="/recurring" className="btn btn-secondary">
+            <RefreshCw size={16} />
+            <span>{t('recurring.title', 'Recurring Transactions')}</span>
+          </Link>
+          <Link to="/classification-rules" className="btn btn-secondary">
+            <Sparkles size={16} />
+            <span>{t('classificationRules.navLabel', 'Classification Memory')}</span>
+          </Link>
           <button type="button" className="btn btn-secondary" onClick={handleExportCSV}>
             <Download size={16} />
             <span>{t('common.export')}</span>
@@ -423,7 +440,7 @@ const TransactionsPage = () => {
               <span>
                 {t('transactions.selectedCount', { count: selectedIds.size })}
                 {selectedIds.size > sortedTransactions.filter((t) => selectedIds.has(t.id)).length && (
-                  <> ({t('transactions.acrossPages', '跨页')})</>
+                  <> ({t('transactions.acrossPages', 'across pages')})</>
                 )}
               </span>
               <button
@@ -450,17 +467,15 @@ const TransactionsPage = () => {
           {pagination.total > 0 && (
             <div className="pagination">
               <div className="pagination-page-size">
-                <label htmlFor="page-size-select">{t('transactions.perPage', '每页')}</label>
-                <select
-                  id="page-size-select"
-                  value={pagination.pageSize}
-                  onChange={(e) => setPagination({ pageSize: Number(e.target.value), page: 1 })}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+                <label htmlFor="page-size-select">{t('transactions.perPage', 'Per page')}</label>
+                <Select id="page-size-select" value={String(pagination.pageSize)}
+                  onChange={v => setPagination({ pageSize: Number(v), page: 1 })} size="sm"
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                    { value: '100', label: '100' },
+                  ]} />
               </div>
               {pagination.total > pagination.pageSize && (
                 <>

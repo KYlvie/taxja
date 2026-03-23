@@ -58,8 +58,7 @@
   color: var(--color-text-secondary);
 }
 
-.filter-group input,
-.filter-group select {
+.filter-group input {
   padding: 10px 14px;
   border: 1.5px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -70,8 +69,7 @@
   transition: all var(--transition-fast);
 }
 
-.filter-group input:focus,
-.filter-group select:focus {
+.filter-group input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-100);

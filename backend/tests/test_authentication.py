@@ -106,15 +106,17 @@ class TestJWTTokens:
         with pytest.raises(JWTError):
             jwt.decode(token, settings.SECRET_KEY, algorithms=["HS512"])
     
-    def test_token_contains_only_required_claims(self):
-        """Test that token contains only exp and sub claims"""
+    def test_token_contains_required_claims(self):
+        """Test that token contains all required claims"""
         subject = "test_user@example.com"
         token = create_access_token({"sub": subject})
-        
+
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        
-        # Should only contain exp and sub
-        assert set(payload.keys()) == {"exp", "sub"}
+
+        # Must contain sub, exp, iat, jti, type
+        assert set(payload.keys()) == {"exp", "sub", "iat", "jti", "type"}
+        assert payload["type"] == "access"
+        assert payload["sub"] == subject
 
 
 class TestPasswordHashing:

@@ -219,6 +219,43 @@ class TestKaufvertragFormatVariations:
         
         assert "Peter Schmidt" in result.buyer_name
         assert "Anna Huber" in result.seller_name
+
+    def test_vehicle_contract_dual_company_header_extracts_parties(self, extractor):
+        """Compact vehicle-contract headers should still extract seller and buyer companies."""
+        text = """
+        KAUFVERTRAG KFZ - ELEKTROFAHRZEUG
+        Osterreichische Vertragsstruktur - rekonstruiert fur Testzwecke
+        Verkaufer kaufer
+
+        AUTOHAUS DONAUCITY GMBH, Wien ZH TECH SOLUTIONS E.U.
+
+        Kaufpreis brutto
+
+        EUR 38.000,00
+        """
+
+        result = extractor.extract(text)
+
+        assert result.seller_name == "AUTOHAUS DONAUCITY GMBH"
+        assert result.buyer_name == "ZH TECH SOLUTIONS E.U."
+        assert result.purchase_price == Decimal("38000.00")
+
+    def test_vehicle_contract_price_after_standalone_brutto_line(self, extractor):
+        """Vehicle contracts sometimes split the 'brutto' header from the price line."""
+        text = """
+        KAUFVERTRAG KFZ - PKW
+        Osterreichische Vertragsstruktur - rekonstruiert fur Testzwecke
+        Verkaufer kaufer
+        AUTOHAUS DONAUCITY GMBH, Wien ZH TECH SOLUTIONS E.U.
+        brutto
+        EUR 35.000,00
+        """
+
+        result = extractor.extract(text)
+
+        assert result.purchase_price == Decimal("35000.00")
+        assert result.seller_name == "AUTOHAUS DONAUCITY GMBH"
+        assert result.buyer_name == "ZH TECH SOLUTIONS E.U."
     
     # --- Regional Notary Variations ---
     

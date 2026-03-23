@@ -4,12 +4,58 @@ from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.transaction import TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import (
+    LineItemAllocationSource,
+    LineItemPostingType,
+)
+
+
+def _validate_transaction_categories(
+    transaction_type: TransactionType,
+    income_category: Optional[IncomeCategory],
+    expense_category: Optional[ExpenseCategory],
+) -> None:
+    """Validate category fields against the selected transaction type."""
+    if transaction_type == TransactionType.INCOME:
+        if not income_category:
+            raise ValueError(
+                'income_category is required for income transactions. '
+                f'Valid categories: {", ".join([c.value for c in IncomeCategory])}'
+            )
+        if expense_category:
+            raise ValueError(
+                'expense_category should not be set for income transactions. '
+                'Please remove expense_category or change type to expense.'
+            )
+        return
+
+    if transaction_type == TransactionType.EXPENSE:
+        if not expense_category:
+            raise ValueError(
+                'expense_category is required for expense transactions. '
+                f'Valid categories: {", ".join([c.value for c in ExpenseCategory])}'
+            )
+        if income_category:
+            raise ValueError(
+                'income_category should not be set for expense transactions. '
+                'Please remove income_category or change type to income.'
+            )
+        return
+
+    if income_category:
+        raise ValueError(
+            f'income_category should not be set for {transaction_type.value} transactions.'
+        )
+    if expense_category:
+        raise ValueError(
+            f'expense_category should not be set for {transaction_type.value} transactions.'
+        )
 
 
 class TransactionBase(BaseModel):
     """Base transaction schema"""
     type: TransactionType
-    amount: Decimal = Field(..., gt=0, description="Transaction amount (must be positive)")
+    amount: Decimal = Field(..., description="Transaction amount (must be positive)")
     transaction_date: date = Field(..., description="Transaction date")
     description: Optional[str] = Field(None, max_length=500, description="Transaction description")
     income_category: Optional[IncomeCategory] = Field(None, description="Income category (required if type is income)")
@@ -99,6 +145,8 @@ class TransactionCreate(TransactionBase):
     recurring_end_date: Optional[date] = Field(None, description="End date for recurring (optional)")
     recurring_day_of_month: Optional[int] = Field(None, ge=1, le=31, description="Day of month for generation")
     property_id: Optional[str] = Field(None, description="Associated property/asset ID")
+    liability_id: Optional[int] = Field(None, description="Associated liability ID")
+    line_items: Optional[list["LineItemUpdate"]] = None
     
     @field_validator('amount')
     @classmethod
@@ -115,28 +163,11 @@ class TransactionCreate(TransactionBase):
     @model_validator(mode='after')
     def validate_category_consistency(self):
         """Validate category based on type after model initialization"""
-        if self.type == TransactionType.INCOME:
-            if not self.income_category:
-                raise ValueError(
-                    'income_category is required for income transactions. '
-                    f'Valid categories: {", ".join([c.value for c in IncomeCategory])}'
-                )
-            if self.expense_category:
-                raise ValueError(
-                    'expense_category should not be set for income transactions. '
-                    'Please remove expense_category or change type to expense.'
-                )
-        elif self.type == TransactionType.EXPENSE:
-            if not self.expense_category:
-                raise ValueError(
-                    'expense_category is required for expense transactions. '
-                    f'Valid categories: {", ".join([c.value for c in ExpenseCategory])}'
-                )
-            if self.income_category:
-                raise ValueError(
-                    'income_category should not be set for expense transactions. '
-                    'Please remove income_category or change type to income.'
-                )
+        _validate_transaction_categories(
+            self.type,
+            self.income_category,
+            self.expense_category,
+        )
         
         # Validate recurring fields
         if self.is_recurring:
@@ -156,18 +187,22 @@ class LineItemUpdate(BaseModel):
     description: str = Field(..., min_length=1, max_length=500)
     amount: Decimal = Field(..., gt=0)
     quantity: int = Field(1, ge=1)
+    posting_type: Optional[LineItemPostingType] = None
+    allocation_source: Optional[LineItemAllocationSource] = None
     category: Optional[str] = None
     is_deductible: bool = False
     deduction_reason: Optional[str] = Field(None, max_length=500)
     vat_rate: Optional[Decimal] = Field(None, ge=0, le=1)
     vat_amount: Optional[Decimal] = Field(None, ge=0)
+    vat_recoverable_amount: Optional[Decimal] = Field(None, ge=0)
+    rule_bucket: Optional[str] = Field(None, max_length=100)
     sort_order: int = 0
 
 
 class TransactionUpdate(BaseModel):
     """Transaction update schema (all fields optional)"""
     type: Optional[TransactionType] = None
-    amount: Optional[Decimal] = Field(None, gt=0)
+    amount: Optional[Decimal] = Field(None)
     transaction_date: Optional[date] = None
     description: Optional[str] = Field(None, min_length=1, max_length=500)
     income_category: Optional[IncomeCategory] = None
@@ -177,8 +212,10 @@ class TransactionUpdate(BaseModel):
     vat_rate: Optional[Decimal] = Field(None, ge=0, le=1)
     vat_amount: Optional[Decimal] = Field(None, ge=0)
     document_id: Optional[int] = None
+    liability_id: Optional[int] = None
     reviewed: Optional[bool] = None
     locked: Optional[bool] = None
+    suppress_rule_learning: Optional[bool] = None
     # Line items (full replacement when provided)
     line_items: Optional[list[LineItemUpdate]] = None
     # Recurring fields
@@ -255,6 +292,33 @@ class TransactionUpdate(BaseModel):
                 raise ValueError("Description cannot be empty. Either provide a description or omit the field.")
         return v
 
+    @model_validator(mode="after")
+    def validate_category_consistency(self):
+        """Reject impossible category combinations when type is explicitly provided."""
+        if self.type is None:
+            return self
+
+        if self.type == TransactionType.INCOME and self.expense_category:
+            raise ValueError(
+                'expense_category should not be set for income transactions. '
+                'Please remove expense_category or change type to expense.'
+            )
+        if self.type == TransactionType.EXPENSE and self.income_category:
+            raise ValueError(
+                'income_category should not be set for expense transactions. '
+                'Please remove income_category or change type to income.'
+            )
+        if self.type not in (TransactionType.INCOME, TransactionType.EXPENSE):
+            if self.income_category:
+                raise ValueError(
+                    f'income_category should not be set for {self.type.value} transactions.'
+                )
+            if self.expense_category:
+                raise ValueError(
+                    f'expense_category should not be set for {self.type.value} transactions.'
+                )
+        return self
+
 
 class TransactionLineItemResponse(BaseModel):
     """Line item within a transaction."""
@@ -262,11 +326,15 @@ class TransactionLineItemResponse(BaseModel):
     description: str
     amount: Decimal
     quantity: int = 1
+    posting_type: Optional[LineItemPostingType] = None
+    allocation_source: Optional[LineItemAllocationSource] = None
     category: Optional[str] = None
     is_deductible: bool = False
     deduction_reason: Optional[str] = None
     vat_rate: Optional[Decimal] = None
     vat_amount: Optional[Decimal] = None
+    vat_recoverable_amount: Decimal = Decimal("0.00")
+    rule_bucket: Optional[str] = None
     classification_method: Optional[str] = None
     classification_confidence: Optional[Decimal] = None
     sort_order: int = 0
@@ -280,9 +348,15 @@ class TransactionLineItemUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     amount: Optional[Decimal] = Field(None, gt=0)
     quantity: Optional[int] = Field(None, ge=1)
+    posting_type: Optional[LineItemPostingType] = None
+    allocation_source: Optional[LineItemAllocationSource] = None
     category: Optional[str] = Field(None, max_length=100)
     is_deductible: Optional[bool] = None
     deduction_reason: Optional[str] = Field(None, max_length=500)
+    vat_rate: Optional[Decimal] = Field(None, ge=0, le=1)
+    vat_amount: Optional[Decimal] = Field(None, ge=0)
+    vat_recoverable_amount: Optional[Decimal] = Field(None, ge=0)
+    rule_bucket: Optional[str] = Field(None, max_length=100)
 
 
 class TransactionResponse(TransactionBase):
@@ -290,6 +364,7 @@ class TransactionResponse(TransactionBase):
     id: int
     user_id: int
     property_id: Optional[str] = None
+    liability_id: Optional[int] = None
     classification_confidence: Optional[Decimal] = None
     classification_method: Optional[str] = None
     needs_review: bool = False
@@ -313,6 +388,10 @@ class TransactionResponse(TransactionBase):
     deductible_amount: Optional[Decimal] = None
     non_deductible_amount: Optional[Decimal] = None
 
+    # Override base fields to remove input-only constraints for response serialization
+    amount: Decimal = Field(..., description="Transaction amount")
+    description: Optional[str] = Field(None, max_length=500, description="Transaction description")
+
     @field_validator("property_id", mode="before")
     @classmethod
     def coerce_uuid_to_str(cls, v):
@@ -329,6 +408,25 @@ class TransactionResponse(TransactionBase):
     def coerce_none_to_false(cls, v):
         """Coerce None to False for boolean fields that may be NULL in DB"""
         return v if v is not None else False
+
+    # Override input-only validators from TransactionBase so they don't reject DB data
+    @field_validator('transaction_date', mode='before')
+    @classmethod
+    def validate_transaction_date(cls, v):
+        """Allow any date from DB (no future-date restriction on responses)"""
+        return v
+
+    @field_validator('amount', mode='before')
+    @classmethod
+    def validate_amount_positive(cls, v):
+        """Allow any amount from DB (no gt=0 restriction on responses)"""
+        return v
+
+    @field_validator('description', mode='before')
+    @classmethod
+    def validate_description(cls, v):
+        """Allow any description from DB (no empty-string restriction on responses)"""
+        return v
 
     @model_validator(mode="after")
     def extract_source_recurring_id(self):
@@ -379,3 +477,7 @@ class TransactionFilterParams(BaseModel):
             if date_from and v < date_from:
                 raise ValueError('date_to must be after date_from')
         return v
+
+
+TransactionCreate.model_rebuild()
+TransactionUpdate.model_rebuild()

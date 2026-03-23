@@ -3,8 +3,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
+import { authService } from '../../services/authService';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import ThemeToggle from '../common/ThemeToggle';
 import { getLayoutCopy } from './layoutCopy';
+import { useCyberTilt } from '../../hooks/useCyberTilt';
 import './Header.css';
 
 interface HeaderProps {
@@ -18,6 +21,7 @@ const Header = ({ onMenuClick, sidebarCollapsed }: HeaderProps) => {
   const { currentPlan, fetchSubscription } = useSubscriptionStore();
   const location = useLocation();
   const copy = getLayoutCopy(i18n.resolvedLanguage || i18n.language);
+  const tilt = useCyberTilt<HTMLElement>(6);
 
   useEffect(() => {
     if (user && !currentPlan) {
@@ -44,13 +48,17 @@ const Header = ({ onMenuClick, sidebarCollapsed }: HeaderProps) => {
 
   const userInitial = (user?.name || 'T').trim().charAt(0).toUpperCase() || 'T';
 
-  const handleLogout = () => {
-    logout();
-    window.location.href = '/login';
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } finally {
+      logout();
+      window.location.href = '/login';
+    }
   };
 
   return (
-    <header className="header">
+    <header ref={tilt.ref} className="header" onMouseMove={tilt.onMove} onMouseLeave={tilt.onLeave}>
       <div className="header-left">
         <button type="button" className={`menu-button ${sidebarCollapsed ? 'sidebar-is-collapsed' : ''}`} onClick={onMenuClick} aria-label={copy.openNavigation}>
           <span />
@@ -58,7 +66,7 @@ const Header = ({ onMenuClick, sidebarCollapsed }: HeaderProps) => {
           <span />
         </button>
 
-        <Link to="/dashboard" className="brand-lockup">
+        <Link to="/" className="brand-lockup">
           <span className="brand-mark">
             <span className="brand-mark-core" />
           </span>
@@ -81,6 +89,7 @@ const Header = ({ onMenuClick, sidebarCollapsed }: HeaderProps) => {
         </Link>
 
         <LanguageSwitcher />
+        <ThemeToggle />
 
         <div className="user-menu">
           <Link to="/profile" className="user-badge" aria-label={t('nav.profile')}>

@@ -101,6 +101,7 @@ class OCRResult:
     needs_review: bool
     processing_time_ms: float
     suggestions: List[str]
+    provider_used: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -144,107 +145,55 @@ class OCREngine:
         self.extractor = FieldExtractor()
         self.merchant_db = MerchantDatabase()
         self.llm_extractor = get_llm_extractor()
+        self._vision_provider_preference: Optional[str] = None
 
         # Set Tesseract command path
         pytesseract.pytesseract.tesseract_cmd = self.config.get_tesseract_cmd()
 
-    def process_document(self, image_bytes: bytes, mime_type: str = None) -> OCRResult:
+    def process_document(
+        self,
+        image_bytes: bytes,
+        mime_type: str = None,
+        vision_provider_preference: Optional[str] = None,
+        reprocess_mode: Optional[str] = None,
+        document_type_hint: Optional[Any] = None,
+    ) -> OCRResult:
         """
         Process a single document image or PDF
 
         Args:
             image_bytes: Image/PDF file as bytes
             mime_type: Optional MIME type hint (e.g. image/jpeg, image/png)
+            vision_provider_preference: Optional OCR vision provider override
 
         Returns:
             OCRResult with extracted data
         """
         start_time = datetime.now()
+        previous_preference = self._vision_provider_preference
+        self._vision_provider_preference = vision_provider_preference
 
         try:
+            normalized_hint = self._normalize_document_type_hint(document_type_hint)
+
+            if reprocess_mode == "claude_direct":
+                return self._process_document_via_claude_direct(
+                    image_bytes,
+                    mime_type=mime_type,
+                    start_time=start_time,
+                    document_type_hint=normalized_hint,
+                )
+
             # Check if PDF and try direct text extraction first (much faster)
             if image_bytes[:5] == b"%PDF-":
                 pdf_text = self._extract_text_from_pdf(image_bytes)
                 if pdf_text and len(pdf_text.strip()) > 20:
                     # PDF has a text layer — skip Tesseract entirely
-                    raw_text = pdf_text.strip()
-
-                    # Classify document type
-                    doc_type, classification_confidence = self.classifier.classify(
-                        None, raw_text
-                    )
-
-                    # For specialized document types, use regex extractors FIRST
-                    # (much faster and more reliable than LLM on CPU)
-                    if doc_type in (DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG, DocumentType.RENTAL_CONTRACT):
-                        extraction_type = DocumentType.MIETVERTRAG if doc_type == DocumentType.RENTAL_CONTRACT else doc_type
-                        return self._route_to_contract_extractor(
-                            extraction_type, raw_text, image_bytes, start_time
-                        )
-                    elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID:
-                        return self._route_to_bescheid_extractor(
-                            raw_text, start_time
-                        )
-                    elif doc_type == DocumentType.E1_FORM:
-                        return self._route_to_e1_extractor(
-                            raw_text, start_time
-                        )
-                    elif doc_type in self.TAX_FORM_EXTRACTOR_TYPES:
-                        return self._route_to_tax_form_extractor(
-                            doc_type, raw_text, start_time
-                        )
-
-                    # For generic documents (invoices, receipts, etc.), try LLM
-                    llm_result = self._try_llm_extraction(
-                        raw_text, doc_type, start_time
-                    )
-                    if llm_result is not None:
-                        return llm_result
-
-                    # Try multi-receipt extraction for receipts/invoices
-                    multi_results = self.extractor.extract_multi_receipt_fields(
-                        raw_text, doc_type
-                    )
-
-                    if len(multi_results) > 1:
-                        # Multiple receipts detected — use first for primary data,
-                        # store all in additional_receipts
-                        extracted_data = self._build_multi_receipt_payload(multi_results)
-                        logger.info(
-                            "Detected %d receipts in single document",
-                            len(multi_results),
-                        )
-                    else:
-                        extracted_data = self._normalize_receipt_payload(multi_results[0])
-
-                    # Calculate confidence
-                    overall_confidence = self._calculate_confidence(
-                        extracted_data, classification_confidence
-                    )
-
-                    # If regex gave low confidence, retry with LLM as fallback
-                    if overall_confidence < 0.9 and self.llm_extractor.is_available:
-                        logger.info(
-                            "Regex confidence %.2f is low, retrying with LLM",
-                            overall_confidence,
-                        )
-                        llm_retry = self._try_llm_extraction(
-                            raw_text, doc_type, start_time
-                        )
-                        if llm_retry is not None:
-                            return llm_retry
-
-                    needs_review = overall_confidence < self.config.CONFIDENCE_THRESHOLD
-                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
-
-                    return OCRResult(
-                        document_type=doc_type,
-                        extracted_data=extracted_data,
-                        raw_text=raw_text,
-                        confidence_score=overall_confidence,
-                        needs_review=needs_review,
-                        processing_time_ms=processing_time,
-                        suggestions=[],
+                    return self._process_from_raw_text(
+                        pdf_text.strip(),
+                        image_bytes,
+                        start_time,
+                        document_type_hint=normalized_hint,
                     )
 
             # 1. Load and preprocess image (falls back to Tesseract OCR)
@@ -252,6 +201,19 @@ class OCREngine:
             if image_bytes[:5] == b"%PDF-":
                 # Quick OCR: first 2 pages only for classification (~8s vs ~23s)
                 raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=2)
+
+                # VLM fallback: if Tesseract returned nothing (not installed,
+                # crashed, or image-only PDF it cannot read), render the first
+                # page to PNG and try the VLM vision path instead.
+                if not raw_text.strip():
+                    logger.warning(
+                        "Tesseract returned empty text for PDF, attempting VLM fallback"
+                    )
+                    vlm_result = self._try_vlm_ocr_for_pdf(
+                        image_bytes, start_time
+                    )
+                    if vlm_result is not None:
+                        return vlm_result
 
                 # Classify from partial text
                 doc_type, classification_confidence = self.classifier.classify(
@@ -271,9 +233,14 @@ class OCREngine:
                     return self._route_to_contract_extractor(
                         extraction_type, raw_text, image_bytes, start_time
                     )
+                if doc_type == DocumentType.LOAN_CONTRACT:
+                    return self._route_to_kreditvertrag_extractor(
+                        raw_text, start_time
+                    )
 
                 # Non-contract: OCR all pages for full text extraction
-                raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=5)
+                if raw_text.strip():
+                    raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=5)
             else:
                 # For images: try VLM (AI vision) first, then Tesseract as fallback
                 vlm_result = self._try_vlm_ocr(
@@ -287,87 +254,11 @@ class OCREngine:
                 processed_image = self.preprocessor.preprocess(image)
                 raw_text = self._extract_text(processed_image)
 
-            # 3. Classify document type
-            doc_type, classification_confidence = self.classifier.classify(
-                None, raw_text
-            )
-
-            # Route to specialized regex extractors FIRST for known types
-            # (much faster and more reliable than LLM on CPU)
-            if doc_type in (DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG, DocumentType.RENTAL_CONTRACT):
-                extraction_type = DocumentType.MIETVERTRAG if doc_type == DocumentType.RENTAL_CONTRACT else doc_type
-                return self._route_to_contract_extractor(
-                    extraction_type, raw_text, image_bytes, start_time
-                )
-            elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID:
-                return self._route_to_bescheid_extractor(
-                    raw_text, start_time
-                )
-            elif doc_type == DocumentType.E1_FORM:
-                return self._route_to_e1_extractor(
-                    raw_text, start_time
-                )
-            elif doc_type in self.TAX_FORM_EXTRACTOR_TYPES:
-                return self._route_to_tax_form_extractor(
-                    doc_type, raw_text, start_time
-                )
-
-            # For generic documents, try LLM extraction
-            llm_result = self._try_llm_extraction(
-                raw_text, doc_type, start_time
-            )
-            if llm_result is not None:
-                return llm_result
-
-            # 4. Extract fields — try multi-receipt extraction for receipts/invoices
-            multi_results = self.extractor.extract_multi_receipt_fields(
-                raw_text, doc_type
-            )
-            if len(multi_results) > 1:
-                extracted_data = self._build_multi_receipt_payload(multi_results)
-                logger.info(
-                    "Detected %d receipts in scanned PDF",
-                    len(multi_results),
-                )
-            else:
-                extracted_data = self._normalize_receipt_payload(multi_results[0])
-
-            # 5. Calculate overall confidence score
-            overall_confidence = self._calculate_confidence(
-                extracted_data, classification_confidence
-            )
-
-            # If regex gave low confidence, retry with LLM as fallback
-            if overall_confidence < 0.9 and self.llm_extractor.is_available:
-                logger.info(
-                    "Regex confidence %.2f is low, retrying with LLM",
-                    overall_confidence,
-                )
-                llm_retry = self._try_llm_extraction(
-                    raw_text, doc_type, start_time
-                )
-                if llm_retry is not None:
-                    return llm_retry
-
-            # 6. Generate suggestions
-            suggestions = self._generate_suggestions(
-                None, extracted_data, overall_confidence
-            )
-
-            # 7. Determine if review is needed
-            needs_review = overall_confidence < self.config.CONFIDENCE_THRESHOLD
-
-            # Calculate processing time
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000
-
-            return OCRResult(
-                document_type=doc_type,
-                extracted_data=extracted_data,
-                raw_text=raw_text,
-                confidence_score=overall_confidence,
-                needs_review=needs_review,
-                processing_time_ms=processing_time,
-                suggestions=suggestions,
+            return self._process_from_raw_text(
+                raw_text,
+                image_bytes,
+                start_time,
+                document_type_hint=normalized_hint,
             )
 
         except Exception as e:
@@ -382,6 +273,181 @@ class OCREngine:
                 processing_time_ms=processing_time,
                 suggestions=[f"OCR processing failed: {str(e)}"],
             )
+        finally:
+            self._vision_provider_preference = previous_preference
+
+    def _normalize_document_type_hint(
+        self,
+        document_type_hint: Optional[Any],
+    ) -> Optional[DocumentType]:
+        if document_type_hint is None:
+            return None
+
+        if isinstance(document_type_hint, DocumentType):
+            return document_type_hint
+
+        raw_value = getattr(document_type_hint, "value", document_type_hint)
+        raw_name = getattr(document_type_hint, "name", None)
+
+        candidates = []
+        if raw_value is not None:
+            candidates.append(str(raw_value))
+        if raw_name:
+            candidates.append(str(raw_name))
+
+        for candidate in candidates:
+            try:
+                return DocumentType(candidate)
+            except Exception:
+                pass
+            try:
+                return DocumentType[candidate]
+            except Exception:
+                pass
+
+        fallback_map = {
+            "purchase_contract": DocumentType.KAUFVERTRAG,
+            "rental_contract": DocumentType.RENTAL_CONTRACT,
+            "loan_contract": DocumentType.LOAN_CONTRACT,
+            "receipt": DocumentType.RECEIPT,
+            "invoice": DocumentType.INVOICE,
+            "other": None,
+        }
+        for candidate in candidates:
+            normalized = candidate.strip().lower()
+            if normalized in fallback_map:
+                return fallback_map[normalized]
+
+        return None
+
+    def _process_document_via_claude_direct(
+        self,
+        image_bytes: bytes,
+        *,
+        mime_type: Optional[str],
+        start_time: datetime,
+        document_type_hint: Optional[DocumentType],
+    ) -> OCRResult:
+        raw_text = self._extract_text_with_claude_direct(
+            image_bytes,
+            mime_type=mime_type,
+            document_type_hint=document_type_hint,
+        )
+
+        if not raw_text.strip():
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            return OCRResult(
+                document_type=document_type_hint or DocumentType.UNKNOWN,
+                extracted_data={},
+                raw_text="",
+                confidence_score=0.0,
+                needs_review=True,
+                processing_time_ms=processing_time,
+                suggestions=["Claude direct reprocessing returned no readable text."],
+                provider_used="anthropic",
+            )
+
+        return self._process_from_raw_text(
+            raw_text,
+            image_bytes,
+            start_time,
+            document_type_hint=document_type_hint,
+            classification_confidence_hint=0.99 if document_type_hint else None,
+            provider_used="anthropic",
+        )
+
+    def _process_from_raw_text(
+        self,
+        raw_text: str,
+        image_bytes: bytes,
+        start_time: datetime,
+        *,
+        document_type_hint: Optional[DocumentType] = None,
+        classification_confidence_hint: Optional[float] = None,
+        provider_used: Optional[str] = None,
+    ) -> OCRResult:
+        raw_text = raw_text.strip()
+        if document_type_hint is not None:
+            doc_type = document_type_hint
+            classification_confidence = classification_confidence_hint or 0.99
+        else:
+            doc_type, classification_confidence = self.classifier.classify(None, raw_text)
+
+        if doc_type in (DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG, DocumentType.RENTAL_CONTRACT):
+            extraction_type = DocumentType.MIETVERTRAG if doc_type == DocumentType.RENTAL_CONTRACT else doc_type
+            result = self._route_to_contract_extractor(extraction_type, raw_text, image_bytes, start_time)
+            if provider_used and not result.provider_used:
+                result.provider_used = provider_used
+            return result
+        if doc_type == DocumentType.LOAN_CONTRACT:
+            result = self._route_to_kreditvertrag_extractor(raw_text, start_time)
+            if provider_used and not result.provider_used:
+                result.provider_used = provider_used
+            return result
+        if doc_type == DocumentType.EINKOMMENSTEUERBESCHEID:
+            result = self._route_to_bescheid_extractor(raw_text, start_time)
+            if provider_used and not result.provider_used:
+                result.provider_used = provider_used
+            return result
+        if doc_type == DocumentType.E1_FORM:
+            result = self._route_to_e1_extractor(raw_text, start_time)
+            if provider_used and not result.provider_used:
+                result.provider_used = provider_used
+            return result
+        if doc_type in self.TAX_FORM_EXTRACTOR_TYPES:
+            result = self._route_to_tax_form_extractor(doc_type, raw_text, start_time)
+            if provider_used and not result.provider_used:
+                result.provider_used = provider_used
+            return result
+
+        if image_bytes[:5] == b"%PDF-" and self._should_try_vlm_multi_receipt_pdf(raw_text, doc_type):
+            vlm_multi_result = self._try_vlm_pdf_multi_receipt_ocr(
+                image_bytes, doc_type, start_time
+            )
+            if vlm_multi_result is not None:
+                if provider_used and not vlm_multi_result.provider_used:
+                    vlm_multi_result.provider_used = provider_used
+                return vlm_multi_result
+
+        llm_result = self._try_llm_extraction(raw_text, doc_type, start_time)
+        if llm_result is not None:
+            if provider_used and not llm_result.provider_used:
+                llm_result.provider_used = provider_used
+            return llm_result
+
+        multi_results = self.extractor.extract_multi_receipt_fields(raw_text, doc_type)
+        if len(multi_results) > 1:
+            extracted_data = self._build_multi_receipt_payload(multi_results)
+            logger.info("Detected %d receipts in document", len(multi_results))
+        else:
+            extracted_data = self._normalize_receipt_payload(multi_results[0])
+
+        overall_confidence = self._calculate_confidence(
+            extracted_data, classification_confidence
+        )
+
+        if overall_confidence < 0.9 and self.llm_extractor.is_available:
+            logger.info(
+                "Regex confidence %.2f is low, retrying with LLM",
+                overall_confidence,
+            )
+            llm_retry = self._try_llm_extraction(raw_text, doc_type, start_time)
+            if llm_retry is not None:
+                if provider_used and not llm_retry.provider_used:
+                    llm_retry.provider_used = provider_used
+                return llm_retry
+
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+        return OCRResult(
+            document_type=doc_type,
+            extracted_data=extracted_data,
+            raw_text=raw_text,
+            confidence_score=overall_confidence,
+            needs_review=overall_confidence < self.config.CONFIDENCE_THRESHOLD,
+            processing_time_ms=processing_time,
+            suggestions=self._generate_suggestions(None, extracted_data, overall_confidence),
+            provider_used=provider_used,
+        )
 
     @staticmethod
     def _compare_extracted_fields(
@@ -525,7 +591,53 @@ class OCREngine:
         cleaned.pop("document_type", None)
         if "line_items" not in cleaned and isinstance(cleaned.get("items"), list):
             cleaned["line_items"] = cleaned["items"]
+        OCREngine._ensure_vat_amounts(cleaned)
         return cleaned
+
+    @staticmethod
+    def _ensure_vat_amounts(data: Dict[str, Any]) -> None:
+        """Ensure ``vat_amounts`` dict exists when VAT info is available.
+
+        Converts ``vat_summary`` (VLM format) or single ``vat_rate``/``vat_amount``
+        (LLM format) into the ``vat_amounts`` dict that the frontend expects.
+        """
+        if data.get("vat_amounts"):
+            return
+
+        vat_amounts: Dict[str, float] = {}
+
+        # Path 1: VLM returns vat_summary [{rate, net_amount, vat_amount, ...}]
+        vat_summary = data.get("vat_summary")
+        if isinstance(vat_summary, list):
+            for entry in vat_summary:
+                if not isinstance(entry, dict):
+                    continue
+                rate = entry.get("rate")
+                amount = entry.get("vat_amount")
+                if rate is not None and amount is not None:
+                    try:
+                        rate_key = str(rate).rstrip("%") + "%"
+                        vat_amounts[rate_key] = float(amount)
+                    except (ValueError, TypeError):
+                        continue
+
+        # Path 2: LLM returns single vat_rate + vat_amount
+        if not vat_amounts:
+            vat_rate = data.get("vat_rate")
+            vat_amount = data.get("vat_amount")
+            if vat_rate is not None and vat_amount is not None:
+                try:
+                    rate_val = float(vat_rate)
+                    # Normalize: 0.20 → "20%", 20 → "20%"
+                    if rate_val < 1:
+                        rate_val = rate_val * 100
+                    rate_key = f"{rate_val:g}%"
+                    vat_amounts[rate_key] = float(vat_amount)
+                except (ValueError, TypeError):
+                    pass
+
+        if vat_amounts:
+            data["vat_amounts"] = vat_amounts
 
     def _build_multi_receipt_payload(self, receipts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Pack multi-receipt OCR into a backward-compatible structure."""
@@ -562,6 +674,203 @@ class OCREngine:
             payload["line_items"] = primary["items"]
 
         return payload
+
+    def _should_try_vlm_multi_receipt_pdf(
+        self,
+        raw_text: str,
+        doc_type: DocumentType,
+    ) -> bool:
+        """Decide whether a PDF should try multi-image VLM receipt extraction."""
+        if doc_type not in (DocumentType.RECEIPT, DocumentType.INVOICE):
+            return False
+
+        page_markers = len(re.findall(r"--- PAGE \d+ ---", raw_text))
+        header_hits = len(re.findall(
+            r"(?:Rechnung|Invoice|Receipt|Beleg|Quittung|Kassenbon|Kassabon|BON\s*NR)\s*(?:\||:|\b|#|\d)",
+            raw_text,
+            re.IGNORECASE,
+        ))
+        total_hits = len(re.findall(
+            r"^.*(?:SUMME|TOTAL|GESAMT|ZAHLBETRAG|RECHNUNGSBETRAG|ENDBETRAG|ZU ZAHLEN)[:\s]*[\d.,]+\s*(?:EUR|€)?",
+            raw_text,
+            re.IGNORECASE | re.MULTILINE,
+        ))
+
+        return page_markers >= 1 or header_hits >= 2 or total_hits >= 2
+
+    def _try_vlm_ocr_for_pdf(
+        self, pdf_bytes: bytes, start_time: datetime
+    ) -> Optional[OCRResult]:
+        """Render first PDF page to image and try VLM OCR as fallback when Tesseract fails."""
+        try:
+            import fitz
+
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            if len(doc) == 0:
+                doc.close()
+                return None
+
+            page = doc[0]
+            mat = fitz.Matrix(200 / 72, 200 / 72)  # 200 DPI for good VLM quality
+            pix = page.get_pixmap(matrix=mat)
+            png_bytes = pix.tobytes("png")
+            doc.close()
+
+            return self._try_vlm_ocr(png_bytes, "image/png", start_time)
+        except Exception as e:
+            logger.warning("VLM PDF fallback failed: %s", e)
+            return None
+
+    def _try_vlm_pdf_multi_receipt_ocr(
+        self,
+        pdf_bytes: bytes,
+        doc_type: DocumentType,
+        start_time: datetime,
+    ) -> Optional[OCRResult]:
+        """Use multi-image vision OCR for PDF receipts/invoices that likely contain many receipts."""
+        if doc_type not in (DocumentType.RECEIPT, DocumentType.INVOICE):
+            return None
+
+        from app.services.llm_service import get_llm_service
+        import fitz
+
+        llm = get_llm_service()
+        if not llm.is_available:
+            return None
+
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            num_pages = min(len(doc), 5)
+            images: list[tuple[bytes, str]] = []
+
+            for i in range(num_pages):
+                page = doc[i]
+                mat = fitz.Matrix(150 / 72, 150 / 72)
+                pix = page.get_pixmap(matrix=mat)
+                images.append((pix.tobytes("png"), "image/png"))
+            doc.close()
+
+            if not images:
+                return None
+
+            response = llm.generate_vision_multi(
+                system_prompt=(
+                    "OCR expert. You are reading pages from a PDF that may contain many separate "
+                    "receipts, invoices, fuel slips, parking tickets, or payment slips on each page. "
+                    "Extract EVERY distinct receipt visible across ALL pages. "
+                    "Return a JSON array with one object per receipt. "
+                    "Each object must contain: raw_text (first 120 chars), document_type "
+                    "(receipt/invoice/unknown), date (YYYY-MM-DD if possible), amount (receipt total), "
+                    "merchant, description, vat_amount, vat_rate, invoice_number, payment_method, tax_id, "
+                    "line_items [{name,quantity,unit_price,total_price,vat_rate,vat_indicator}], "
+                    "vat_summary [{rate,net_amount,vat_amount,indicator}]. "
+                    "Do not stop after the most prominent receipt. JSON only."
+                ),
+                user_prompt=(
+                    f"This PDF has {len(images)} page(s). "
+                    "Some pages may contain multiple small receipts arranged side-by-side or overlapping. "
+                    "Extract all receipts you can see across all pages and return them as a JSON array."
+                ),
+                images=images,
+                temperature=0.0,
+                max_tokens=4000,
+                provider_preference=self._vision_provider_preference,
+            )
+
+            data = self._parse_vlm_json(response)
+            if not isinstance(data, list):
+                return None
+
+            normalized = [
+                self._normalize_receipt_payload(receipt)
+                for receipt in data
+                if isinstance(receipt, dict) and (
+                    receipt.get("amount") is not None
+                    or receipt.get("merchant")
+                    or receipt.get("description")
+                )
+            ]
+            if len(normalized) <= 1:
+                return None
+
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            logger.info(
+                "PDF multi-receipt VLM extraction detected %d receipts across %d page(s)",
+                len(normalized),
+                len(images),
+            )
+            return OCRResult(
+                document_type=doc_type,
+                extracted_data=self._build_multi_receipt_payload(normalized),
+                raw_text=response,
+                confidence_score=0.86,
+                needs_review=True,
+                processing_time_ms=processing_time,
+                suggestions=[
+                    f"Detected {len(normalized)} receipts across {len(images)} PDF page(s)."
+                ],
+            )
+        except Exception as e:
+            logger.warning("PDF multi-receipt VLM extraction failed: %s", e)
+            return None
+
+    def _extract_text_with_claude_direct(
+        self,
+        image_bytes: bytes,
+        *,
+        mime_type: Optional[str],
+        document_type_hint: Optional[DocumentType],
+        max_pdf_pages: int = 8,
+    ) -> str:
+        """Use Claude vision as a strict OCR transcription pass for manual retry."""
+        from app.services.llm_service import get_llm_service
+
+        llm = get_llm_service()
+        if not getattr(llm, "anthropic_client", None):
+            raise RuntimeError("Anthropic Claude is not configured for direct retry")
+
+        hint_text = ""
+        if document_type_hint is not None:
+            hint_text = (
+                f"The expected document type is '{document_type_hint.value}'. "
+                "Use that as a strong hint while transcribing labels and form fields."
+            )
+
+        system_prompt = (
+            "You are a meticulous OCR transcription system for tax and business documents. "
+            "Read every visible word, number, code, KZ field, table cell, tax ID, date, and amount. "
+            "Do not summarize. Do not explain. Return plain text only."
+        )
+
+        if image_bytes[:5] == b"%PDF-":
+            images = self._render_pdf_pages_for_vision(image_bytes, max_pages=max_pdf_pages)
+            if not images:
+                return ""
+            return llm.generate_vision_multi_strict_provider(
+                provider_name="anthropic",
+                system_prompt=system_prompt,
+                user_prompt=(
+                    f"{hint_text} Transcribe the attached PDF exactly. "
+                    "Prefix each page with '--- PAGE N ---'. "
+                    "Preserve the reading order as much as possible. Plain text only."
+                ).strip(),
+                images=images,
+                temperature=0.0,
+                max_tokens=4000,
+            ).strip()
+
+        return llm.generate_vision_strict_provider(
+            provider_name="anthropic",
+            system_prompt=system_prompt,
+            user_prompt=(
+                f"{hint_text} Transcribe this document image exactly as plain text. "
+                "Preserve labels, amounts, names, and form field values. Plain text only."
+            ).strip(),
+            image_bytes=image_bytes,
+            mime_type=mime_type or "image/jpeg",
+            temperature=0.0,
+            max_tokens=3000,
+        ).strip()
 
     def _try_vlm_ocr(
         self, image_bytes: bytes, mime_type: str, start_time: datetime
@@ -616,6 +925,7 @@ class OCREngine:
                 mime_type=mime_type,
                 temperature=0.1,
                 max_tokens=4000,
+                provider_preference=self._vision_provider_preference,
             )
 
             # Parse JSON response
@@ -724,6 +1034,7 @@ class OCREngine:
                 mime_type=mime_type,
                 temperature=0.1,
                 max_tokens=300,
+                provider_preference=self._vision_provider_preference,
             )
             count_data = self._parse_vlm_json(count_response)
             additional_count = 0
@@ -805,6 +1116,7 @@ class OCREngine:
             mime_type=mime_type,
             temperature=0.1,
             max_tokens=2000,
+            provider_preference=self._vision_provider_preference,
         )
         data = self._parse_vlm_json(response)
         if isinstance(data, dict):
@@ -831,6 +1143,7 @@ class OCREngine:
             mime_type=mime_type,
             temperature=0.1,
             max_tokens=4000,
+            provider_preference=self._vision_provider_preference,
         )
         data = self._parse_vlm_json(response)
         if isinstance(data, list) and len(data) > 1:
@@ -936,7 +1249,11 @@ class OCREngine:
 
         try:
             logger.info("Attempting LLM extraction for %s", doc_type.value)
-            llm_data = self.llm_extractor.extract(raw_text, doc_type)
+            llm_data = self.llm_extractor.extract(
+                raw_text,
+                doc_type,
+                provider_preference=self._vision_provider_preference,
+            )
             if not llm_data:
                 return None
 
@@ -945,6 +1262,9 @@ class OCREngine:
 
             if not extracted_data:
                 return None
+
+            # Ensure vat_amounts is populated from vat_rate/vat_amount
+            self._ensure_vat_amounts(extracted_data)
 
             # Estimate confidence based on how many fields were extracted
             field_count = len(extracted_data)
@@ -1085,6 +1405,7 @@ class OCREngine:
                     images=images,
                     temperature=0.0,
                     max_tokens=2000,
+                    provider_preference=self._vision_provider_preference,
                 )
                 vlm_data = self._parse_llm_contract_response(response) or {}
 
@@ -1100,6 +1421,7 @@ class OCREngine:
                     mime_type="image/jpeg",
                     temperature=0.0,
                     max_tokens=2000,
+                    provider_preference=self._vision_provider_preference,
                 )
                 vlm_data = self._parse_llm_contract_response(response) or {}
 
@@ -1314,6 +1636,42 @@ class OCREngine:
                 suggestions=[f"Contract extraction failed: {str(e)}"],
             )
 
+    def _route_to_kreditvertrag_extractor(
+        self,
+        raw_text: str,
+        start_time: datetime,
+    ) -> OCRResult:
+        """Route loan contracts to the dedicated Kreditvertrag extractor."""
+        try:
+            from app.services.kreditvertrag_extractor import KreditvertragExtractor
+
+            extractor = KreditvertragExtractor()
+            data = extractor.extract(raw_text)
+            extracted_data = extractor.to_dict(data)
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+            return OCRResult(
+                document_type=DocumentType.LOAN_CONTRACT,
+                extracted_data=extracted_data,
+                raw_text=raw_text,
+                confidence_score=data.confidence,
+                needs_review=data.confidence < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
+                processing_time_ms=processing_time,
+                suggestions=self._generate_loan_document_suggestions(data.confidence),
+            )
+        except Exception as e:
+            logger.error("Kreditvertrag extraction failed: %s", e)
+            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            return OCRResult(
+                document_type=DocumentType.LOAN_CONTRACT,
+                extracted_data={},
+                raw_text=raw_text,
+                confidence_score=0.0,
+                needs_review=True,
+                processing_time_ms=processing_time,
+                suggestions=[f"Kreditvertrag extraction failed: {str(e)}"],
+            )
+
     # Tax form types that use the generic _route_to_tax_form_extractor
     TAX_FORM_EXTRACTOR_TYPES = {
         DocumentType.LOHNZETTEL,
@@ -1454,7 +1812,11 @@ class OCREngine:
             )
 
             # Build a targeted prompt for the specific tax form type
-            llm_data = self.llm_extractor.extract(raw_text, doc_type)
+            llm_data = self.llm_extractor.extract(
+                raw_text,
+                doc_type,
+                provider_preference=self._vision_provider_preference,
+            )
             if not llm_data or not isinstance(llm_data, dict):
                 return None
 
@@ -1719,6 +2081,7 @@ class OCREngine:
                 user_prompt=user_prompt,
                 temperature=0.1,
                 max_tokens=500,
+                provider_preference=self._vision_provider_preference,
             )
 
             data = self._parse_vlm_json(response)
@@ -1779,6 +2142,24 @@ class OCREngine:
 
         suggestions.append("Contract documents detected. Review extracted property details before saving.")
 
+        return suggestions
+
+    def _generate_loan_document_suggestions(self, confidence: float) -> List[str]:
+        """Generate suggestions for loan contract extraction."""
+        suggestions = []
+
+        if confidence < 0.5:
+            suggestions.append(
+                "Low confidence in loan contract extraction. Please review all financial terms carefully."
+            )
+        elif confidence < 0.7:
+            suggestions.append(
+                "Medium confidence. Please verify loan amount, interest rate, and repayment dates."
+            )
+
+        suggestions.append(
+            "Loan contract detected. Review lender, borrower, and repayment terms before confirming."
+        )
         return suggestions
 
     # ---- LLM supplement for contracts ----
@@ -1959,6 +2340,7 @@ OCR text:
                 user_prompt=user_prompt,
                 temperature=0.0,
                 max_tokens=2000,
+                provider_preference=self._vision_provider_preference,
             )
 
             # Parse LLM response
@@ -2224,6 +2606,29 @@ OCR text:
         except Exception as e:
             raise ValueError(f"Failed to process PDF: {str(e)}")
 
+    def _render_pdf_pages_for_vision(
+        self,
+        pdf_bytes: bytes,
+        *,
+        max_pages: int = 8,
+        dpi: int = 200,
+    ) -> list[tuple[bytes, str]]:
+        """Render PDF pages to PNG bytes for direct vision transcription."""
+        import fitz
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            num_pages = min(len(doc), max_pages)
+            images: list[tuple[bytes, str]] = []
+            matrix = fitz.Matrix(dpi / 72, dpi / 72)
+            for index in range(num_pages):
+                page = doc[index]
+                pix = page.get_pixmap(matrix=matrix)
+                images.append((pix.tobytes("png"), "image/png"))
+            return images
+        finally:
+            doc.close()
+
     def _ocr_all_pdf_pages(self, pdf_bytes: bytes, max_pages: int = 5) -> str:
         """
         OCR all pages of a scanned PDF for better text extraction.
@@ -2260,15 +2665,21 @@ OCR text:
                 if page_text and page_text.strip():
                     all_text.append(f"--- PAGE {i + 1} ---\n{page_text.strip()}")
             except Exception as e:
-                logger.warning("Tesseract failed on page %d: %s", i + 1, e)
+                logger.error("Tesseract failed on page %d: %s", i + 1, e)
 
         doc.close()
 
         combined = "\n\n".join(all_text)
-        logger.info(
-            "Multi-page OCR complete: %d pages, %d chars extracted",
-            num_pages, len(combined),
-        )
+        if not combined:
+            logger.error(
+                "Tesseract extracted no text from %d PDF pages — all pages failed",
+                num_pages,
+            )
+        else:
+            logger.info(
+                "Multi-page OCR complete: %d pages, %d chars extracted",
+                num_pages, len(combined),
+            )
         return combined
 
     def _extract_text(self, image: np.ndarray) -> str:
@@ -2484,4 +2895,3 @@ OCR text:
             "fields_extracted": len(result.extracted_data),
             "text_length": len(result.raw_text),
         }
-

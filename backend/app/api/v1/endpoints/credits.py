@@ -11,6 +11,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.error_messages import get_error_message
 from app.core.security import get_current_user
 from app.db.base import get_db
 from app.models.user import User
@@ -165,9 +166,10 @@ def create_topup(
     except Exception:
         db.rollback()
         logger.exception("Failed to persist top-up credits for user %s", current_user.id)
+        language = getattr(current_user, 'language', 'de') or 'de'
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to add top-up credits.",
+            detail=get_error_message("failed_add_topup_credits", language),
         )
 
     return TopupCheckoutResponse(
@@ -189,22 +191,25 @@ def update_overage(
         db.commit()
     except OverageNotAvailableError:
         db.rollback()
+        language = getattr(current_user, 'language', 'de') or 'de'
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Overage is not available for your plan.",
+            detail=get_error_message("overage_not_available", language),
         )
     except OverageSuspendedError:
         db.rollback()
+        language = getattr(current_user, 'language', 'de') or 'de'
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Overage is suspended due to unpaid overage balance.",
+            detail=get_error_message("overage_suspended", language),
         )
     except Exception:
         db.rollback()
         logger.exception("Failed to update overage for user %s", current_user.id)
+        language = getattr(current_user, 'language', 'de') or 'de'
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update overage setting.",
+            detail=get_error_message("failed_update_overage", language),
         )
     return CreditBalanceResponse(
         plan_balance=info.plan_balance,

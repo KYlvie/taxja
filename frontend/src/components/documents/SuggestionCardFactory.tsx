@@ -27,6 +27,7 @@ export interface SuggestionCardFactoryProps extends SuggestionCardProps {
   onConfirmRecurringExpense?: () => void;
   onConfirmAsset?: (payload?: any) => void;
   onConfirmLoan?: () => void;
+  onConfirmLoanRepayment?: () => void;
   onConfirmTaxData?: () => void;
   onConfirmBankTransactions?: (indices: number[]) => void;
 }
@@ -72,10 +73,10 @@ const SuggestionCardFactory: React.FC<SuggestionCardFactoryProps> = (props) => {
       onConfirm={props.onConfirmAsset || props.onConfirm}
       confirmActionKey="asset" />;
   }
-  if (type === 'create_loan') {
+  if (type === 'create_loan' || type === 'create_loan_repayment') {
     return <LoanSuggestionCard {...props}
-      onConfirm={props.onConfirmLoan || props.onConfirm}
-      confirmActionKey="loan" />;
+      onConfirm={(type === 'create_loan_repayment' ? props.onConfirmLoanRepayment : props.onConfirmLoan) || props.onConfirm}
+      confirmActionKey={type === 'create_loan_repayment' ? 'loan_repayment' : 'loan'} />;
   }
 
   // Bank statement — special card with transaction selection

@@ -12,6 +12,8 @@ interface E1FormImportProps {
   ocrText?: string;
   documentId?: number;
   initialParseResult?: E1FormParseResult;
+  onRetry?: () => Promise<void> | void;
+  retrying?: boolean;
   onImportComplete?: (result: E1FormImportResult) => void;
   onCancel?: () => void;
   onPrevDocument?: () => void;
@@ -66,6 +68,7 @@ const E1FormImport = ({
 }: E1FormImportProps) => {
   const { t, i18n } = useTranslation();
   const language = i18n?.language || 'en';
+  const [mode, setMode] = useState<'readonly' | 'edit'>('edit');
   const [parseResult, setParseResult] = useState<E1FormParseResult | null>(initialParseResult ?? null);
   const [importResult, setImportResult] = useState<E1FormImportResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -107,7 +110,16 @@ const E1FormImport = ({
     setLoading(true);
     setError(null);
     try {
-      const result = await reportService.importE1Form(ocrText, documentId);
+      const editedData = {
+        tax_year: editableData.tax_year,
+        taxpayer_name: editableData.taxpayer_name,
+        steuernummer: editableData.steuernummer,
+        all_kz_values: Object.fromEntries(
+          Object.entries(editableData.all_kz_values).filter(([, value]) => value.trim() !== '')
+        ),
+      };
+
+      const result = await reportService.importE1Form(ocrText, documentId, editedData);
       setImportResult(result);
       setStep('imported');
       onImportComplete?.(result);
@@ -123,6 +135,7 @@ const E1FormImport = ({
     setImportResult(null);
     setError(null);
     setStep('preview');
+    setMode('edit');
   }, [initialParseResult, ocrText, documentId]);
 
   useEffect(() => {
@@ -134,7 +147,6 @@ const E1FormImport = ({
       return;
     }
     void handleParse();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialParseResult, ocrText, loading, error, parseResult]);
 
   const fmt = (val: number | string | null | undefined) => {
@@ -168,6 +180,16 @@ const E1FormImport = ({
     return `KZ ${key.replace(/^kz_/, '')}`;
   };
 
+  const handleReviewCancel = () => {
+    if (mode === 'edit' && parseResult) {
+      setEditableData(buildEditableData(parseResult));
+      setMode('readonly');
+      return;
+    }
+
+    onCancel?.();
+  };
+
   if (step === 'imported' && importResult) {
     return (
       <div className="bescheid-import">
@@ -181,8 +203,12 @@ const E1FormImport = ({
                 <span>{importResult.tax_year ?? '-'}</span>
               </div>
               <div className="bescheid-field">
+                <label>{t('documents.taxData.recordId')}</label>
+                <span>{importResult.tax_filing_data_id}</span>
+              </div>
+              <div className="bescheid-field">
                 <label>{t('documents.taxData.dataType')}</label>
-                <span>e1_form</span>
+                <span>{importResult.data_type}</span>
               </div>
             </div>
             {onCancel && (
@@ -228,6 +254,25 @@ const E1FormImport = ({
         {t('documents.e1.description')}
       </div>
 
+      <div className="review-mode-toolbar">
+        <button
+          type="button"
+          className={`btn ${mode === 'readonly' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setMode('readonly')}
+          disabled={loading}
+        >
+          {t('documents.review.readonlyMode')}
+        </button>
+        <button
+          type="button"
+          className={`btn ${mode === 'edit' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setMode('edit')}
+          disabled={loading}
+        >
+          {t('common.edit')}
+        </button>
+      </div>
+
       {error && <div className="bescheid-error">{error}</div>}
 
       {loading && <div className="bescheid-loading">{t('common.loading')}</div>}
@@ -253,6 +298,7 @@ const E1FormImport = ({
             <div className="extracted-data">
               <h3>{t('documents.review.extractedData')}</h3>
               <fieldset className="review-form-fieldset" disabled={loading}>
+              <fieldset className="review-form-fieldset" disabled={mode === 'readonly' || loading}>
                 <section className="bescheid-section">
                   <div className="bescheid-section-header">
                     <h5>{t('documents.e1.parsePreview')}</h5>
@@ -320,12 +366,18 @@ const E1FormImport = ({
 
       {parseResult && !loading && (
         <div className="review-actions">
-          <button className="btn btn-secondary" onClick={() => onCancel?.()} disabled={loading}>
+          <button className="btn btn-secondary" onClick={handleReviewCancel} disabled={loading}>
             {t('common.cancel')}
           </button>
-          <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
-            {loading ? t('common.saving') : t('common.save')}
-          </button>
+          {mode === 'edit' ? (
+            <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
+              {t('documents.taxData.confirmButton')}
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={() => setMode('edit')} disabled={loading}>
+              {t('common.edit')}
+            </button>
+          )}
         </div>
       )}
     </div>

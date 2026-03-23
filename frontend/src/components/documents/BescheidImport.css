@@ -7,10 +7,22 @@
   margin: 0 auto;
 }
 
+.bescheid-review-layout {
+  display: grid;
+  grid-template-columns: minmax(380px, 0.95fr) minmax(0, 1.15fr);
+  gap: 20px;
+  align-items: start;
+}
 .tax-import-review {
   max-width: 1400px;
 }
 
+.tax-import-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 .tax-import-review .review-content {
   grid-template-columns: minmax(380px, 0.95fr) minmax(0, 1.15fr);
 }
@@ -81,6 +93,81 @@
   border-radius: var(--radius-lg, 18px);
   padding: 24px;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.05);
+}
+
+.bescheid-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.bescheid-preview-header h4 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--color-text);
+}
+
+.bescheid-document-pane {
+  position: sticky;
+  top: 16px;
+}
+
+.bescheid-document-header {
+  margin-bottom: 16px;
+}
+
+.bescheid-document-header h4 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--color-text);
+}
+
+.bescheid-document-viewer {
+  min-height: 680px;
+  border: 1px solid var(--color-border-light, #eef2f7);
+  border-radius: var(--radius-md, 12px);
+  background: #0f172a;
+  overflow: hidden;
+}
+
+.bescheid-document-frame,
+.bescheid-document-image {
+  display: block;
+  width: 100%;
+  min-height: 680px;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.bescheid-document-image {
+  object-fit: contain;
+}
+
+.bescheid-document-fallback {
+  min-height: 680px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.bescheid-confidence {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border: 1px solid rgba(59, 130, 246, 0.18);
 }
 
 .bescheid-section {
@@ -195,6 +282,18 @@
   font-weight: 600;
 }
 
+.bescheid-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border-light, #eef2f7);
+}
+
+.bescheid-actions .btn {
+  flex: 1;
+}
+
 .bescheid-success {
   text-align: center;
 }
@@ -236,10 +335,32 @@
     padding: 16px;
   }
 
+  .bescheid-review-layout {
+    grid-template-columns: 1fr;
+  }
   .bescheid-surface {
     padding: 18px;
   }
 
+  .bescheid-preview-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bescheid-document-pane {
+    position: static;
+  }
+
+  .bescheid-document-viewer,
+  .bescheid-document-frame,
+  .bescheid-document-image,
+  .bescheid-document-fallback {
+    min-height: 420px;
+  }
+
+  .bescheid-actions {
+    flex-direction: column;
+  }
   .tax-import-review .review-content {
     grid-template-columns: 1fr;
   }

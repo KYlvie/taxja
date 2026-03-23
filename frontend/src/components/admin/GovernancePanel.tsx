@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Archive, BarChart3, ClipboardList, Loader2, Microscope, Settings2, Target, TrendingDown } from 'lucide-react';
 import api from '../../services/api';
+import FuturisticIcon from '../common/FuturisticIcon';
 import './GovernancePanel.css';
 
 interface RuleMetrics {
@@ -138,7 +140,7 @@ const GovernancePanel = () => {
       {/* Rule System KPIs */}
       <div className="gov-section">
         <h3 className="gov-section-title">
-          <span className="gov-icon">📏</span>
+          <span className="gov-icon"><FuturisticIcon icon={Settings2} tone="violet" size="xs" /></span>
           {t('admin.governance.ruleMetrics', 'Classification Rules')}
         </h3>
         <div className="gov-kpi-grid">
@@ -165,7 +167,7 @@ const GovernancePanel = () => {
       <div className="gov-grid-2">
         <div className="gov-section">
           <h3 className="gov-section-title">
-            <span className="gov-icon">🎯</span>
+            <span className="gov-icon"><FuturisticIcon icon={Target} tone="amber" size="xs" /></span>
             {t('admin.governance.hitRates', 'Hit Rates')}
           </h3>
           <div className="gov-metric-rows">
@@ -190,7 +192,7 @@ const GovernancePanel = () => {
 
         <div className="gov-section">
           <h3 className="gov-section-title">
-            <span className="gov-icon">📊</span>
+            <span className="gov-icon"><FuturisticIcon icon={BarChart3} tone="emerald" size="xs" /></span>
             {t('admin.governance.confidence', 'Avg Confidence')}
           </h3>
           <div className="gov-metric-rows">
@@ -209,7 +211,7 @@ const GovernancePanel = () => {
       {/* Training Data Audit */}
       <div className="gov-section">
         <h3 className="gov-section-title">
-          <span className="gov-icon">🧪</span>
+          <span className="gov-icon"><FuturisticIcon icon={Microscope} tone="cyan" size="xs" /></span>
           {t('admin.governance.trainingAudit', 'Training Data Audit')}
         </h3>
         {audit && (
@@ -273,7 +275,7 @@ const GovernancePanel = () => {
       {corrections && (
         <div className="gov-section">
           <h3 className="gov-section-title">
-            <span className="gov-icon">📋</span>
+            <span className="gov-icon"><FuturisticIcon icon={ClipboardList} tone="amber" size="xs" /></span>
             {t('admin.governance.correctionBreakdown', 'Correction Source Breakdown')}
           </h3>
           <div className="gov-metric-rows">
@@ -308,7 +310,7 @@ const GovernancePanel = () => {
       {/* Lifecycle Actions */}
       <div className="gov-section">
         <h3 className="gov-section-title">
-          <span className="gov-icon">⚙️</span>
+          <span className="gov-icon"><FuturisticIcon icon={Settings2} tone="slate" size="xs" /></span>
           {t('admin.governance.lifecycleActions', 'Rule Lifecycle Actions')}
         </h3>
         <div className="gov-actions">
@@ -318,7 +320,7 @@ const GovernancePanel = () => {
             onClick={handleDecay}
             disabled={decayLoading}
           >
-            {decayLoading ? '⏳' : '📉'} {t('admin.governance.decayStale', 'Decay Stale Soft Rules')}
+            {decayLoading ? <Loader2 size={14} className="spin" /> : <TrendingDown size={14} />} {t('admin.governance.decayStale', 'Decay Stale Soft Rules')}
           </button>
           <button
             type="button"
@@ -326,7 +328,7 @@ const GovernancePanel = () => {
             onClick={handleArchive}
             disabled={archiveLoading}
           >
-            {archiveLoading ? '⏳' : '🗑️'} {t('admin.governance.archiveLowHit', 'Archive Low-Hit Rules')}
+            {archiveLoading ? <Loader2 size={14} className="spin" /> : <Archive size={14} />} {t('admin.governance.archiveLowHit', 'Archive Low-Hit Rules')}
           </button>
         </div>
         {actionResult && <p className="gov-action-result">{actionResult}</p>}

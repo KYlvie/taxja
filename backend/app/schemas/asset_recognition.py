@@ -245,6 +245,7 @@ class AssetTaxFlags(BaseModel):
     useful_life_source: UsefulLifeSource | None = None
     income_tax_cost_cap: Decimal | None = None
     income_tax_depreciable_base: Decimal | None = None
+    vat_recoverable_ratio: Decimal | None = None  # E-Auto: 1.0 if ≤€40k, 40000/brutto_ak if €40k-€80k, 0.0 if >€80k
     vat_recoverable_reason_codes: list[AssetReasonCode] = Field(default_factory=list)
     ifb_rate_source: IfbRateSource | None = None
     ifb_exclusion_codes: list[AssetReasonCode] = Field(default_factory=list)

@@ -12,6 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './TrendCharts.css';
 
 interface MonthlyData {
@@ -46,10 +47,10 @@ const TrendCharts = ({
   expenseCategoryData,
   yearOverYearData,
 }: TrendChartsProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 0,

@@ -68,6 +68,11 @@ const DisclaimerModal = ({ isOpen, onAccept }: DisclaimerModalProps) => {
       label: t('disclaimer.section6Title'),
       text: t('disclaimer.section6Content'),
     },
+    {
+      num: 7,
+      label: t('disclaimer.section7Title'),
+      text: t('disclaimer.section7Content'),
+    },
   ];
 
   return (

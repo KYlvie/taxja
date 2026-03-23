@@ -162,15 +162,15 @@ class TaxCalculationEngine:
         return {
             'tax_year': 2026,
             'tax_brackets': [
-                {"min": 0, "max": 12816, "rate": 0},
-                {"min": 12816, "max": 20818, "rate": 20},
-                {"min": 20818, "max": 34513, "rate": 30},
-                {"min": 34513, "max": 66612, "rate": 40},
-                {"min": 66612, "max": 99266, "rate": 48},
-                {"min": 99266, "max": 1000000, "rate": 50},
+                {"min": 0, "max": 13539, "rate": 0},
+                {"min": 13539, "max": 21992, "rate": 20},
+                {"min": 21992, "max": 36458, "rate": 30},
+                {"min": 36458, "max": 70365, "rate": 40},
+                {"min": 70365, "max": 104859, "rate": 48},
+                {"min": 104859, "max": 1000000, "rate": 50},
                 {"min": 1000000, "max": None, "rate": 55},
             ],
-            'exemption_amount': 12816,
+            'exemption_amount': 13539,
             'vat_rates': None,
             'svs_rates': None,
             'deduction_config': None,
@@ -261,7 +261,7 @@ class TaxCalculationEngine:
         # Sort kwargs for consistent key generation
         sorted_items = sorted(kwargs.items())
         key_string = json.dumps(sorted_items, default=str)
-        return hashlib.md5(key_string.encode()).hexdigest()
+        return hashlib.sha256(key_string.encode()).hexdigest()
     
     def _get_from_cache(self, cache_key: str) -> Optional[TaxBreakdown]:
         """Get calculation from in-memory cache"""
@@ -300,6 +300,7 @@ class TaxCalculationEngine:
         expense_method: ExpenseMethod = ExpenseMethod.ACTUAL,
         profession_type: ProfessionType = ProfessionType.GENERAL,
         qualifying_investment: Decimal = Decimal('0.00'),
+        ifb_claimed_investment: Decimal = Decimal('0.00'),
         capital_income_items: Optional[List[Dict]] = None,
         property_sale: Optional[Dict] = None,
         use_cache: bool = True
@@ -383,7 +384,8 @@ class TaxCalculationEngine:
             public_transport_available=public_transport_available,
             home_office_eligible=home_office_eligible,
             family_info=family_info,
-            is_employee=is_employee
+            is_employee=is_employee,
+            annual_income=gross_income,
         )
         
         # 2. Calculate SVS contributions
@@ -448,6 +450,7 @@ class TaxCalculationEngine:
                     profit=taxable_income,
                     qualifying_investment=qualifying_investment,
                     config=se_config,
+                    ifb_claimed_investment=ifb_claimed_investment,
                 )
                 taxable_income = taxable_income - gewinnfreibetrag_result.total_freibetrag
                 taxable_income = max(taxable_income, Decimal('0.00'))
@@ -468,6 +471,18 @@ class TaxCalculationEngine:
         if is_employee and 'verkehrsabsetzbetrag' in deductions.breakdown:
             verkehrsabsetzbetrag = Decimal(str(deductions.breakdown['verkehrsabsetzbetrag']))
             tax_credits += verkehrsabsetzbetrag
+
+        # Pendlereuro (§33 Abs 5 EStG) — tax credit, NOT income deduction
+        pendlereuro = Decimal('0.00')
+        if 'pendlereuro' in deductions.breakdown:
+            pendlereuro = Decimal(str(deductions.breakdown['pendlereuro']))
+            tax_credits += pendlereuro
+
+        # Zuschlag zum Verkehrsabsetzbetrag for low-income employees
+        zuschlag_vab = Decimal('0.00')
+        if 'zuschlag_verkehrsabsetzbetrag' in deductions.breakdown:
+            zuschlag_vab = Decimal(str(deductions.breakdown['zuschlag_verkehrsabsetzbetrag']))
+            tax_credits += zuschlag_vab
 
         # Familienbonus Plus
         familienbonus = Decimal('0.00')

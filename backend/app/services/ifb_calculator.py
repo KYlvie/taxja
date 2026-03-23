@@ -18,7 +18,10 @@ Rules:
   - Used assets (gebrauchte Wirtschaftsgüter)
   - Assets with useful life < 4 years
   - Assets that are immediately expensed (GWG up to €1,000)
-- Can be combined with Gewinnfreibetrag (§10 EStG)
+- MUTUAL EXCLUSION with investitionsbedingter Gewinnfreibetrag (§10 EStG):
+  The same investment cannot be used for both IFB and the investment-based
+  portion of GFB.  The Grundfreibetrag (15% of profit up to €33,000) is
+  unaffected — only the investitionsbedingter GFB competes with IFB.
 - Only for income from business (§23) or self-employment (§22)
 - NOT available with Basispauschalierung
 
@@ -28,6 +31,7 @@ References:
 - WKO: https://www.wko.at/steuern/investitionsfreibetrag
 """
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 from typing import List, Optional
@@ -45,6 +49,12 @@ class IFBAssetType(str, Enum):
 # Rates
 IFB_STANDARD_RATE = Decimal("0.10")   # 10%
 IFB_ECO_RATE = Decimal("0.15")        # 15% ecological surcharge
+
+# Doubled rates (Konjunkturpaket: Nov 2025 – Dec 2026)
+IFB_STANDARD_RATE_DOUBLED = Decimal("0.20")  # 20%
+IFB_ECO_RATE_DOUBLED = Decimal("0.22")       # 22% (15% + 7% eco surcharge doubled proportionally? No — 15% × 2 would be 30%, but the actual legislation doubles standard to 20% and eco to 22%)
+IFB_DOUBLED_START = date(2025, 11, 1)
+IFB_DOUBLED_END = date(2026, 12, 31)
 
 # Maximum eligible investment per year
 IFB_MAX_ELIGIBLE_INVESTMENT = Decimal("1000000.00")  # €1,000,000
@@ -73,16 +83,28 @@ class IFBResult:
     note: str = ""
 
 
-def get_ifb_rate(asset_type: IFBAssetType) -> Decimal:
-    """Return the applicable IFB rate for an asset type."""
+def get_ifb_rate(
+    asset_type: IFBAssetType,
+    acquisition_date: Optional[date] = None,
+) -> Decimal:
+    """Return the applicable IFB rate for an asset type.
+
+    If acquisition_date falls within the doubled-rate window (Nov 2025 – Dec 2026),
+    the temporarily increased rates apply.
+    """
+    is_doubled = (
+        acquisition_date is not None
+        and IFB_DOUBLED_START <= acquisition_date <= IFB_DOUBLED_END
+    )
+
     if asset_type in (
         IFBAssetType.ECO_VEHICLE,
         IFBAssetType.ECO_HEATING,
         IFBAssetType.ECO_INSULATION,
         IFBAssetType.ECO_OTHER,
     ):
-        return IFB_ECO_RATE
-    return IFB_STANDARD_RATE
+        return IFB_ECO_RATE_DOUBLED if is_doubled else IFB_ECO_RATE
+    return IFB_STANDARD_RATE_DOUBLED if is_doubled else IFB_STANDARD_RATE
 
 
 def calculate_ifb(
@@ -118,6 +140,20 @@ def calculate_ifb(
     eco_ifb = Decimal("0.00")
     capped = False
 
+    # TODO(P2): Enforce §11 EStG exclusion rules before calculating IFB:
+    #   - Used assets (gebrauchte Wirtschaftsgüter) → not eligible
+    #   - GWG immediately expensed (≤ €1,000) → not eligible
+    #   - Intangible assets (immaterielle WG) → not eligible
+    #   - Assets with useful life < 4 years → not eligible
+    #   - Passenger vehicles with CO₂ > 0 g/km → not eligible (only BEV/FCEV qualify)
+    #   - Buildings and land (Gebäude, Grundstücke) → not eligible
+    #   - Not available with Basispauschalierung
+    #   - IFB+GFB mutual exclusion: investments used for IFB cannot also be
+    #     used for investitionsbedingter Gewinnfreibetrag (§10 EStG).
+    #     The GFB side is enforced via ifb_claimed_investment parameter in
+    #     calculate_gewinnfreibetrag(); the IFB side should mirror this.
+    # Currently the caller is responsible for pre-filtering; add validation here.
+
     for inv in investments:
         asset_type = inv.get("asset_type", "standard")
         if isinstance(asset_type, str):
@@ -145,7 +181,10 @@ def calculate_ifb(
         if eligible_cost < cost:
             capped = True
 
-        rate = get_ifb_rate(asset_type)
+        acq_date = inv.get("acquisition_date")
+        if isinstance(acq_date, str):
+            acq_date = date.fromisoformat(acq_date)
+        rate = get_ifb_rate(asset_type, acquisition_date=acq_date)
         ifb_amount = (eligible_cost * rate).quantize(Decimal("0.01"))
 
         total_eligible += eligible_cost

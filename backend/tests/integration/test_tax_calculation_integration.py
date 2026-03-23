@@ -326,6 +326,8 @@ class TestTaxScenarioAndComparisonEndpoints:
             Decimal(str(data["flatRate"]["flatRatePercentage"])) / Decimal("100")
         ) * Decimal("80000.00")
         assert Decimal(str(data["flatRate"]["flatRateDeduction"])) == expected_flat_rate
+        assert "basicExemption" in data["flatRate"]
+        assert Decimal(str(data["flatRate"]["basicExemption"])) >= Decimal("0.00")
         assert data["recommendation"] in {"actual", "flat_rate"}
 
     def test_koest_vs_est_returns_current_comparison_shape(

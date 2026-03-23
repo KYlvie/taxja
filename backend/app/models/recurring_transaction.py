@@ -6,6 +6,7 @@ from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Foreign
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
+from app.models.transaction import TransactionType
 
 
 class RecurrenceFrequency(str, Enum):
@@ -29,6 +30,14 @@ class RecurringTransactionType(str, Enum):
     LOAN_REPAYMENT = "loan_repayment"  # Standalone loan repayment
 
 
+VALID_TRANSACTION_TYPE_VALUES = tuple(transaction_type.value for transaction_type in TransactionType)
+VALID_TRANSACTION_TYPE_CHECK_SQL = (
+    "transaction_type IN ("
+    + ", ".join(f"'{value}'" for value in VALID_TRANSACTION_TYPE_VALUES)
+    + ")"
+)
+
+
 class RecurringTransaction(Base):
     """RecurringTransaction model for automated transaction generation"""
     __tablename__ = "recurring_transactions"
@@ -45,6 +54,7 @@ class RecurringTransaction(Base):
     # Optional foreign keys to source entities
     property_id = Column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="CASCADE"), nullable=True, index=True)
     loan_id = Column(Integer, ForeignKey("property_loans.id", ondelete="CASCADE"), nullable=True, index=True)
+    liability_id = Column(Integer, ForeignKey("liabilities.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Transaction details
     description = Column(String(500), nullable=False)
@@ -53,7 +63,7 @@ class RecurringTransaction(Base):
         nullable=False,
         info={"check": "amount > 0"}
     )
-    transaction_type = Column(String(20), nullable=False)  # 'income' or 'expense'
+    transaction_type = Column(String(20), nullable=False)
     category = Column(String(100), nullable=False)
     
     # Recurrence settings
@@ -96,7 +106,7 @@ class RecurringTransaction(Base):
             name="check_amount_positive"
         ),
         CheckConstraint(
-            "transaction_type IN ('income', 'expense')",
+            VALID_TRANSACTION_TYPE_CHECK_SQL,
             name="check_transaction_type_valid"
         ),
         CheckConstraint(
@@ -109,9 +119,13 @@ class RecurringTransaction(Base):
         ),
         CheckConstraint(
             "(recurring_type = 'rental_income' AND property_id IS NOT NULL) OR "
-            "(recurring_type = 'loan_interest' AND loan_id IS NOT NULL) OR "
+            "(recurring_type = 'loan_interest' AND (loan_id IS NOT NULL OR liability_id IS NOT NULL)) OR "
             "(recurring_type = 'depreciation' AND property_id IS NOT NULL) OR "
-            "(recurring_type IN ('other_income', 'other_expense', 'manual', 'insurance_premium', 'loan_repayment'))",
+            # Keep legacy loan repayment schedules valid even when they predate
+            # liability_id / loan_id linkage. API-layer validation still enforces
+            # liability binding for newly created non-property liabilities.
+            "(recurring_type = 'loan_repayment') OR "
+            "(recurring_type IN ('other_income', 'other_expense', 'manual', 'insurance_premium'))",
             name="check_source_entity_required"
         ),
     )
@@ -120,6 +134,7 @@ class RecurringTransaction(Base):
     user = relationship("User", back_populates="recurring_transactions")
     property = relationship("Property", foreign_keys=[property_id])
     loan = relationship("PropertyLoan", foreign_keys=[loan_id])
+    liability = relationship("Liability", back_populates="recurring_transactions", foreign_keys=[liability_id])
     
     def __repr__(self):
         return f"<RecurringTransaction(id={self.id}, type={self.recurring_type}, amount={self.amount}, frequency={self.frequency})>"

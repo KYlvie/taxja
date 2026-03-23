@@ -28,8 +28,16 @@ from app.core.exceptions import (
     TwoFactorRequiredError,
     ValidationError,
 )
+from app.core.error_messages import get_error_message
 
 logger = logging.getLogger(__name__)
+
+
+def _get_language_from_request(request: Request) -> str:
+    """Extract language from Accept-Language header, defaulting to 'de'."""
+    accept_lang = request.headers.get("Accept-Language", "de")
+    lang = accept_lang.split(",")[0].strip()[:2].lower()
+    return lang if lang in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs") else "de"
 
 
 def setup_error_handlers(app: FastAPI) -> None:
@@ -86,14 +94,15 @@ def setup_error_handlers(app: FastAPI) -> None:
             extra={"errors": errors, "method": request.method},
         )
 
+        lang = _get_language_from_request(request)
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "Input validation failed",
+                    "message": get_error_message("input_validation_failed", lang),
                     "details": {"errors": errors},
-                    "suggestion": "Please check your input and try again.",
+                    "suggestion": get_error_message("check_input_try_again", lang),
                 }
             },
         )
@@ -120,14 +129,15 @@ def setup_error_handlers(app: FastAPI) -> None:
         for err in errors:
             print(f"  Pydantic field={err['field']} type={err['type']} msg={err['message']}")
 
+        lang = _get_language_from_request(request)
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": "Data validation failed",
+                    "message": get_error_message("data_validation_failed", lang),
                     "details": {"errors": errors},
-                    "suggestion": "Please check your data format and try again.",
+                    "suggestion": get_error_message("check_data_format_try_again", lang),
                 }
             },
         )
@@ -144,14 +154,15 @@ def setup_error_handlers(app: FastAPI) -> None:
             },
         )
 
+        lang = _get_language_from_request(request)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "error": {
                     "code": "DATABASE_ERROR",
-                    "message": "A database error occurred",
+                    "message": get_error_message("database_error_occurred", lang),
                     "details": {},
-                    "suggestion": "Please try again later. If the problem persists, contact support.",
+                    "suggestion": get_error_message("try_again_later_contact_support", lang),
                 }
             },
         )

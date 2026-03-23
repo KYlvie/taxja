@@ -251,7 +251,7 @@ class TaxLawScraper:
         stats = {
             "total_source_docs": len(all_docs),
             "total_vector_entries": len(documents),
-            "languages": {"de": 0, "en": 0, "zh": 0},
+            "languages": {"de": 0, "en": 0, "zh": 0, "fr": 0, "ru": 0, "hu": 0, "pl": 0, "tr": 0, "bs": 0},
         }
         for m in metadatas:
             lang = m.get("language", "")

@@ -21,6 +21,11 @@ Austrian Tax Law Rules (current, since 1. StRefG 2015/2016):
 
 Note: The old pre-1915 vs post-1915 distinction was replaced by the 2016 reform.
 All residential rental buildings now uniformly use 1.5%.
+
+Note: Halbjahresregel (§7 Abs 2 EStG) for movable assets is implemented in
+  AssetLifecycleService._is_half_year_start() — H2 acquisitions get 50% Y1 AfA.
+  GWG immediate write-off (≤€800 pre-2023, ≤€1,000 2023+) is also handled there.
+  This file delegates non-real-estate assets to AssetLifecycleService at line ~274.
 """
 
 from decimal import Decimal

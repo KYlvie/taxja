@@ -53,6 +53,8 @@ class MietvertragData:
 
 class MietvertragExtractor:
     """Extract structured data from Mietvertrag OCR text"""
+    MIN_REASONABLE_MONTHLY_RENT = Decimal("100.00")
+    MAX_REASONABLE_MONTHLY_RENT = Decimal("10000.00")
     
     def extract(self, text: str) -> MietvertragData:
         """Main extraction method"""
@@ -286,7 +288,7 @@ class MietvertragExtractor:
                 # Handle "640 00" -> "640,00" (OCR space instead of comma)
                 raw = re.sub(r"(\d)\s(\d{2})$", r"\1,\2", raw)
                 amount = self._parse_amount(raw)
-                if amount and Decimal("50") <= amount <= Decimal("10000"):
+                if amount and self.MIN_REASONABLE_MONTHLY_RENT <= amount <= self.MAX_REASONABLE_MONTHLY_RENT:
                     data.monthly_rent = amount
                     data.field_confidence["monthly_rent"] = 0.9
                     break
@@ -397,6 +399,7 @@ class MietvertragExtractor:
             r"barkaution[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
             # Format with "in Höhe von"
             r"kaution\s+in\s+h.{1,2}he\s+von[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
+            r"sicherheitsleistung\s+in\s+h.{1,2}he\s+von[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})*,\d{2})",
             # Formats without decimal separator
             r"kaution[:\s]+(?:EUR|€)?\s*(\d{1,3}(?:\.\d{3})+)(?!\d)",
         ]
@@ -468,8 +471,7 @@ class MietvertragExtractor:
                     line, re.IGNORECASE,
                 )
                 if name_on_line:
-                    name = name_on_line.group(1).strip()
-                    name = re.sub(r"^\(.*?\)\s*", "", name)
+                    name = self._normalize_party_name(name_on_line.group(1))
                     if len(name) > 3:
                         data.landlord_name = name
                         data.field_confidence["landlord_name"] = 0.8
@@ -487,9 +489,7 @@ class MietvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE
                     )
                     if name_match:
-                        name = name_match.group(1).strip()
-                        # Clean OCR artifacts like "Di" prefix (should be "DI" = Dipl.-Ing.)
-                        name = re.sub(r"^(?:Di|DI|Mag|Dr)\.?\s+", "", name)
+                        name = self._normalize_party_name(name_match.group(1))
                         if len(name) > 3:
                             data.landlord_name = name
                             data.field_confidence["landlord_name"] = 0.8
@@ -508,7 +508,7 @@ class MietvertragExtractor:
                     line, re.IGNORECASE,
                 )
                 if name_on_line:
-                    name = name_on_line.group(1).strip()
+                    name = self._normalize_party_name(name_on_line.group(1))
                     if len(name) > 3:
                         data.tenant_name = name
                         data.field_confidence["tenant_name"] = 0.8
@@ -522,10 +522,7 @@ class MietvertragExtractor:
                         cleaned_lines[j], re.IGNORECASE
                     )
                     if name_match:
-                        name = name_match.group(1).strip()
-                        name = re.sub(r"^(?:Di|DI|Mag|Dr)\.?\s+", "", name)
-                        # Remove OCR noise prefix like "u Name:" already captured
-                        name = re.sub(r"^[:\s]+", "", name)
+                        name = self._normalize_party_name(name_match.group(1))
                         if len(name) > 3:
                             data.tenant_name = name
                             data.field_confidence["tenant_name"] = 0.8
@@ -541,8 +538,7 @@ class MietvertragExtractor:
             for pattern in tenant_patterns:
                 match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
                 if match:
-                    name = match.group(1).strip().rstrip(",")
-                    name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
+                    name = self._normalize_party_name(match.group(1))
                     if len(name) > 3:
                         data.tenant_name = name
                         data.field_confidence["tenant_name"] = 0.7
@@ -556,8 +552,7 @@ class MietvertragExtractor:
             for pattern in landlord_patterns:
                 match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
                 if match:
-                    name = match.group(1).strip().rstrip(",")
-                    name = re.sub(r"^(?:Herr|Frau|Dr\.|Mag\.)\s+", "", name, flags=re.IGNORECASE)
+                    name = self._normalize_party_name(match.group(1))
                     if len(name) > 3:
                         data.landlord_name = name
                         data.field_confidence["landlord_name"] = 0.7
@@ -633,6 +628,16 @@ class MietvertragExtractor:
             return val
         except (InvalidOperation, ValueError):
             return None
+
+    @staticmethod
+    def _normalize_party_name(raw_name: str) -> str:
+        """Remove titles and trailing residence/birth details from extracted names."""
+        name = raw_name.strip()
+        name = re.sub(r"^\(.*?\)\s*", "", name)
+        name = re.sub(r"^(?:Herr|Frau|Di|DI|Mag|Dr)\.?\s+", "", name, flags=re.IGNORECASE)
+        name = re.sub(r"^[:\s]+", "", name)
+        name = re.split(r",\s*(?:wohnhaft|geboren)\b", name, maxsplit=1, flags=re.IGNORECASE)[0]
+        return name.strip().rstrip(",")
     
     @staticmethod
     def _calculate_confidence(data: MietvertragData) -> float:

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../../hooks/useConfirm';
+import { getLocaleForLanguage } from '../../utils/locale';
 import taxConfigService, { TaxConfigSummary } from '../../services/taxConfigService';
+import SubpageBackLink from '../../components/common/SubpageBackLink';
 import './TaxConfigAdmin.css';
 
 const TaxConfigAdmin = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
   const [configs, setConfigs] = useState<TaxConfigSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,7 @@ const TaxConfigAdmin = () => {
   };
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat('de-AT', {
+    new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency', currency: 'EUR', minimumFractionDigits: 2,
     }).format(n);
 
@@ -83,14 +85,15 @@ const TaxConfigAdmin = () => {
   return (
     <div className="tax-config-admin">
       <div className="page-header">
-        <h1>🏛️ {t('taxConfig.title')}</h1>
+        <SubpageBackLink to="/admin" />
+        <h1>{t('taxConfig.title')}</h1>
         <p className="page-subtitle">{t('taxConfig.subtitle')}</p>
       </div>
 
       {error && (
         <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          ⚠️ {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: 8, cursor: 'pointer' }}>✕</button>
+          {error}
+          <button onClick={() => setError(null)} style={{ marginLeft: 8, cursor: 'pointer' }}>×</button>
         </div>
       )}
 
@@ -120,19 +123,19 @@ const TaxConfigAdmin = () => {
                   <td>{c.tax_brackets.length}</td>
                   <td>{fmt(c.vat_rates?.small_business_threshold || 0)}</td>
                   <td className="date-cell">
-                    {c.updated_at ? new Date(c.updated_at).toLocaleDateString('de-AT') : '—'}
+                    {c.updated_at ? new Date(c.updated_at).toLocaleDateString(getLocaleForLanguage(i18n.language)) : '—'}
                   </td>
                   <td className="actions-cell" onClick={e => e.stopPropagation()}>
                     <button
                       className="btn-sm btn-clone"
                       onClick={() => { setSelectedYear(c.tax_year); setShowCloneModal(true); }}
                       title={t('taxConfig.clone')}
-                    >📋</button>
+                    >+</button>
                     <button
                       className="btn-sm btn-delete"
                       onClick={() => handleDelete(c.tax_year)}
                       title={t('common.delete')}
-                    >🗑️</button>
+                    >×</button>
                   </td>
                 </tr>
               ))}

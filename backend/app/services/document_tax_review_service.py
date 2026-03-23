@@ -43,7 +43,7 @@ def backfill_document_tax_review(
     primary_analysis: Optional[Dict[str, Any]] = None
 
     for index, receipt in enumerate(receipt_targets):
-        updated = _backfill_receipt(receipt, user)
+        updated = _backfill_receipt(db, receipt, user)
         if updated is not None:
             changed = True
             if index == 0:
@@ -88,14 +88,18 @@ def _get_receipt_items(receipt: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [item for item in raw_items if isinstance(item, dict)]
 
 
-def _backfill_receipt(receipt: Dict[str, Any], user: User) -> Optional[Dict[str, Any]]:
+def _backfill_receipt(
+    db: Session,
+    receipt: Dict[str, Any],
+    user: User,
+) -> Optional[Dict[str, Any]]:
     items = _get_receipt_items(receipt)
     if not items:
         return None
 
     merchant = str(receipt.get("merchant") or receipt.get("supplier") or "").strip()
     classifier = RuleBasedClassifier()
-    checker = DeductibilityChecker()
+    checker = DeductibilityChecker(db=db)
     business_type = getattr(user, "business_type", None)
     business_industry = getattr(user, "business_industry", None)
     user_type = (
@@ -138,6 +142,7 @@ def _backfill_receipt(receipt: Dict[str, Any], user: User) -> Optional[Dict[str,
                 description=f"{merchant} {description}".strip(),
                 business_type=business_type,
                 business_industry=business_industry,
+                user_id=user.id,
             )
 
             if needs_decision:

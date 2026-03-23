@@ -1,13 +1,35 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { X, ChevronUp, ChevronDown, MessageSquare, Maximize2, Minimize2 } from 'lucide-react';
+import {
+  BarChart3,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  House,
+  Lightbulb,
+  Maximize2,
+  MessageSquare,
+  Minimize2,
+  Repeat2,
+  Sparkles,
+  TriangleAlert,
+  X,
+  XCircle,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import ChatInterface from './ChatInterface';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { dashboardService } from '../../services/dashboardService';
 import { employerService } from '../../services/employerService';
+import FuturisticIcon, { type FuturisticIconTone } from '../common/FuturisticIcon';
+import { useCyberTilt } from '../../hooks/useCyberTilt';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './FloatingAIChat.css';
 
 const PANEL_HEIGHT_KEY = 'taxja_ai_panel_height';
@@ -15,16 +37,16 @@ const PANEL_OPEN_KEY = 'taxja_ai_panel_open';
 const TOOLTIP_DISMISSED_KEY = 'taxja_ai_tooltip_dismissed';
 const TAX_TIP_KEYS = ['deadline', 'receipts', 'svs', 'homeOffice'] as const;
 const MIN_PANEL_H = 180;
-const MAX_PANEL_H = 900;
+const MAX_RESIZABLE_PANEL_H = 900;
 const DEFAULT_PANEL_H = 320;
 
-const formatEuroAmount = (value: number | string | null | undefined) => {
+const formatEuroAmount = (value: number | string | null | undefined, locale?: string) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return null;
   }
 
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
@@ -32,18 +54,25 @@ const formatEuroAmount = (value: number | string | null | undefined) => {
   }).format(numeric);
 };
 
-const getNotifIcon = (type: string) => {
-  const icons: Record<string, string> = {
-    login: '👋', tip: '💡', reminder: '📅', upload_success: '✅',
-    upload_review: '📋', upload_error: '❌', recurring_confirm: '🔄',
-    contract_expired: '🔴', health_check: '📊', tax_form_review: '📋',
-    asset_confirm: '🏠',
+const getNotifIcon = (type: string): { icon: LucideIcon; tone: FuturisticIconTone } => {
+  const icons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+    login: { icon: Sparkles, tone: 'violet' },
+    tip: { icon: Lightbulb, tone: 'amber' },
+    reminder: { icon: CalendarClock, tone: 'cyan' },
+    upload_success: { icon: CheckCircle2, tone: 'emerald' },
+    upload_review: { icon: ClipboardList, tone: 'amber' },
+    upload_error: { icon: XCircle, tone: 'rose' },
+    recurring_confirm: { icon: Repeat2, tone: 'violet' },
+    contract_expired: { icon: TriangleAlert, tone: 'rose' },
+    health_check: { icon: BarChart3, tone: 'emerald' },
+    tax_form_review: { icon: ClipboardList, tone: 'cyan' },
+    asset_confirm: { icon: House, tone: 'cyan' },
   };
-  return icons[type] || '💬';
+  return icons[type] || { icon: MessageSquare, tone: 'slate' };
 };
 
 const FloatingAIChat = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
 
   // Desktop docked panel state
@@ -52,7 +81,7 @@ const FloatingAIChat = () => {
   );
   const [panelHeight, setPanelHeight] = useState(() => {
     const saved = localStorage.getItem(PANEL_HEIGHT_KEY);
-    return saved ? Math.max(MIN_PANEL_H, Math.min(MAX_PANEL_H, Number(saved))) : DEFAULT_PANEL_H;
+    return saved ? Math.max(MIN_PANEL_H, Math.min(MAX_RESIZABLE_PANEL_H, Number(saved))) : DEFAULT_PANEL_H;
   });
   const [isMaximized, setIsMaximized] = useState(false);
   const dragging = useRef(false);
@@ -64,6 +93,7 @@ const FloatingAIChat = () => {
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
 
   const {
     messages: proactiveMessages,
@@ -86,13 +116,18 @@ const FloatingAIChat = () => {
   const fetchCreditBalance = useSubscriptionStore((s) => s.fetchCreditBalance);
   const toggleOverage = useSubscriptionStore((s) => s.toggleOverage);
   const openCustomerPortal = useSubscriptionStore((s) => s.openCustomerPortal);
+  const tilt = useCyberTilt<HTMLDivElement>();
   const [overageBusy, setOverageBusy] = useState(false);
   const [billingBusy, setBillingBusy] = useState(false);
   const [overageError, setOverageError] = useState<string | null>(null);
+  const maximizedPanelHeight = Math.max(560, viewportHeight - 16);
 
   // Track viewport size
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    const onResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+      setViewportHeight(window.innerHeight);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -122,15 +157,15 @@ const FloatingAIChat = () => {
     }
   }, [pendingConfirmation, isMobile]);
 
+  // Fetch credit balance once on mount and when panel opens
   useEffect(() => {
     if (!isAuthenticated) {
       return;
     }
 
-    if (panelOpen || mobileOpen || creditBalance === null) {
-      void fetchCreditBalance();
-    }
-  }, [isAuthenticated, panelOpen, mobileOpen, creditBalance, fetchCreditBalance]);
+    void fetchCreditBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, panelOpen, mobileOpen]);
 
   // Expose dock height as CSS variable so sidebar can shrink accordingly
   useEffect(() => {
@@ -138,9 +173,9 @@ const FloatingAIChat = () => {
       document.documentElement.style.setProperty('--ai-dock-height', '0px');
       return;
     }
-    const h = panelOpen ? (isMaximized ? MAX_PANEL_H : panelHeight) : 38;
+    const h = panelOpen ? (isMaximized ? maximizedPanelHeight : panelHeight) : 38;
     document.documentElement.style.setProperty('--ai-dock-height', `${h}px`);
-  }, [panelOpen, panelHeight, isMaximized, isMobile]);
+  }, [panelOpen, panelHeight, isMaximized, isMobile, maximizedPanelHeight]);
 
   const dockCreditDisplay = creditLoading && creditBalance === null
     ? '...'
@@ -152,8 +187,9 @@ const FloatingAIChat = () => {
     creditBalance?.overage_price_per_credit !== undefined;
   const overageEnabled = creditBalance?.overage_enabled ?? false;
   const overageSuspended = creditBalance?.has_unpaid_overage ?? false;
-  const overageRate = formatEuroAmount(creditBalance?.overage_price_per_credit);
-  const overageEstimate = formatEuroAmount(creditBalance?.estimated_overage_cost);
+  const appLocale = getLocaleForLanguage(i18n.language);
+  const overageRate = formatEuroAmount(creditBalance?.overage_price_per_credit, appLocale);
+  const overageEstimate = formatEuroAmount(creditBalance?.estimated_overage_cost, appLocale);
   const overageDisplay = creditLoading && creditBalance === null
     ? '...'
     : overageSuspended
@@ -242,7 +278,7 @@ const FloatingAIChat = () => {
     const onMove = (ev: MouseEvent) => {
       if (!dragging.current) return;
       const delta = startY.current - ev.clientY;
-      setPanelHeight(Math.max(MIN_PANEL_H, Math.min(MAX_PANEL_H, startH.current + delta)));
+      setPanelHeight(Math.max(MIN_PANEL_H, Math.min(MAX_RESIZABLE_PANEL_H, startH.current + delta)));
     };
     const onUp = () => {
       dragging.current = false;
@@ -318,7 +354,7 @@ const FloatingAIChat = () => {
             return amount ? `• ${text}（${t('ai.proactive.potentialSave')} €${Number(amount).toLocaleString()}）` : `• ${text}`;
           }).filter(Boolean);
           if (lines.length > 0) {
-            pushMessage({ type: 'tip', content: `💡 ${t('ai.proactive.personalizedTips')}\n${lines.join('\n')}` });
+            pushMessage({ type: 'tip', content: `${t('ai.proactive.personalizedTips')}\n${lines.join('\n')}` });
           }
         }
       } catch { /* skip */ }
@@ -328,8 +364,8 @@ const FloatingAIChat = () => {
         const deadlines = calResp?.deadlines || [];
         if (deadlines.length > 0) {
           const next = deadlines[0];
-          const dStr = new Date(next.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
-          pushMessage({ type: 'reminder', content: `📅 ${t('ai.proactive.nextDeadline', { title: next.title, date: dStr })}`, link: '/dashboard' });
+          const dStr = new Date(next.date).toLocaleDateString(getLocaleForLanguage(i18n.language), { month: 'long', day: 'numeric' });
+          pushMessage({ type: 'reminder', content: t('ai.proactive.nextDeadline', { title: next.title, date: dStr }), link: '/dashboard' });
         }
       } catch { /* skip */ }
 
@@ -342,16 +378,16 @@ const FloatingAIChat = () => {
           } else if (item.suggestion_type === 'create_recurring_expense') {
             pushMessage({ type: 'recurring_confirm', content: t('ai.proactive.pendingRecurringExpense', { description: item.description || item.file_name, amount: item.amount, frequency: t(`recurring.frequency.${item.frequency || 'monthly'}`) }), documentId: item.document_id, actionData: { ...item, suggestion_type: item.suggestion_type }, actionStatus: 'pending' });
           } else if (item.suggestion_type?.startsWith('import_')) {
-            pushMessage({ type: 'tax_form_review', content: t('ai.proactive.pendingTaxForm', { defaultValue: '📋 You have unconfirmed tax form data from "{{name}}". Review and confirm to include in your tax filing.', name: item.file_name || item.description }), documentId: item.document_id, link: `/documents/${item.document_id}`, actionData: { suggestion_type: item.suggestion_type, file_name: item.file_name }, actionStatus: 'pending' });
+            pushMessage({ type: 'tax_form_review', content: t('ai.proactive.pendingTaxForm', { defaultValue: 'You have unconfirmed tax form data from "{{name}}". Review and confirm to include in your tax filing.', name: item.file_name || item.description }), documentId: item.document_id, link: `/documents/${item.document_id}`, actionData: { suggestion_type: item.suggestion_type, file_name: item.file_name }, actionStatus: 'pending' });
           }
         }
         for (const item of (alerts?.expiring_contracts || []).slice(0, 3)) {
-          const endStr = new Date(item.end_date).toLocaleDateString('de-AT');
-          pushMessage({ type: 'reminder', content: `⚠️ ${t('ai.proactive.contractExpiring', { description: item.description, days: item.days_remaining, endDate: endStr })}`, link: item.property_id ? `/properties` : '/documents' });
+          const endStr = new Date(item.end_date).toLocaleDateString(getLocaleForLanguage(i18n.language));
+          pushMessage({ type: 'reminder', content: t('ai.proactive.contractExpiring', { description: item.description, days: item.days_remaining, endDate: endStr }), link: item.property_id ? `/properties` : '/documents' });
         }
         for (const item of (alerts?.expired_contracts || []).slice(0, 3)) {
-          const endStr = new Date(item.end_date).toLocaleDateString('de-AT');
-          pushMessage({ type: 'contract_expired', content: `🔴 ${t('ai.proactive.contractExpired', { description: item.description, endDate: endStr })}`, actionData: { property_id: item.property_id, description: item.description }, actionStatus: 'pending' });
+          const endStr = new Date(item.end_date).toLocaleDateString(getLocaleForLanguage(i18n.language));
+          pushMessage({ type: 'contract_expired', content: t('ai.proactive.contractExpired', { description: item.description, endDate: endStr }), actionData: { property_id: item.property_id, description: item.description }, actionStatus: 'pending' });
         }
       } catch { /* skip */ }
 
@@ -360,7 +396,7 @@ const FloatingAIChat = () => {
         if (canCheck) {
           const overview = await employerService.getOverview(new Date().getFullYear());
           if (overview.missing_confirmation_months > 0) {
-            const dl = overview.next_deadline ? new Date(overview.next_deadline).toLocaleDateString('de-AT') : null;
+            const dl = overview.next_deadline ? new Date(overview.next_deadline).toLocaleDateString(getLocaleForLanguage(i18n.language)) : null;
             pushMessage({ type: 'reminder', content: t('ai.proactive.employerMonthReminder', { defaultValue: dl ? 'You have {{count}} payroll month(s) waiting for confirmation. Next employer deadline: {{date}}.' : 'You have {{count}} payroll month(s) waiting for confirmation.', count: overview.missing_confirmation_months, date: dl || '' }), link: '/documents' });
           }
           const archives = await employerService.getAnnualArchives();
@@ -375,19 +411,18 @@ const FloatingAIChat = () => {
         const health = await dashboardService.getHealthCheck();
         const hItems = health?.items || [];
         if (hItems.length > 0) {
-          const sevIcon: Record<string, string> = { high: '🔴', medium: '🟡', low: '💡' };
           let hp = 0, mp = 0;
           for (const item of hItems) {
             const sev = item.severity || 'low';
             if (sev === 'high' && hp >= 3) continue;
             if (sev === 'medium' && mp >= 2) continue;
             if (sev === 'low') continue;
-            pushMessage({ type: 'health_check', content: `${sevIcon[sev] || '💡'} ${t(item.i18n_key, item.i18n_params || {})}`, link: item.action_url || undefined, severity: sev, actionData: { category: item.category, potential_savings: item.potential_savings, action_label: item.action_label_key ? t(item.action_label_key) : undefined } });
+            pushMessage({ type: 'health_check', content: String(t(item.i18n_key, item.i18n_params || {})), link: item.action_url || undefined, severity: sev, actionData: { category: item.category, potential_savings: item.potential_savings, action_label: item.action_label_key ? String(t(item.action_label_key)) : undefined } });
             if (sev === 'high') hp++;
             if (sev === 'medium') mp++;
           }
           if (health.score !== undefined && health.score < 80) {
-            pushMessage({ type: 'health_check', content: `📊 ${t('healthCheck.title')}: ${health.score}/100 — ${t('healthCheck.itemsFound', { count: hItems.length })}`, link: '/dashboard', severity: health.score < 50 ? 'high' : 'medium' });
+            pushMessage({ type: 'health_check', content: `${t('healthCheck.title')}: ${health.score}/100 — ${t('healthCheck.itemsFound', { count: hItems.length })}`, link: '/dashboard', severity: health.score < 50 ? 'high' : 'medium' });
           }
         }
       } catch { /* skip */ }
@@ -425,12 +460,15 @@ const FloatingAIChat = () => {
 
   // ═══ DESKTOP: Docked bottom panel (IDE terminal style) ═══
   if (!isMobile) {
-    const effectiveHeight = isMaximized ? MAX_PANEL_H : panelHeight;
+    const effectiveHeight = isMaximized ? maximizedPanelHeight : panelHeight;
     return (
       <>
         <div
+          ref={tilt.ref}
           className={`ai-dock${panelOpen ? ' ai-dock--open' : ' ai-dock--closed'}${isMaximized ? ' ai-dock--maximized' : ''}`}
           style={panelOpen ? { height: effectiveHeight } : undefined}
+          onMouseMove={tilt.onMove}
+          onMouseLeave={tilt.onLeave}
         >
         {/* Drag handle for resizing */}
         {panelOpen && !isMaximized && (
@@ -443,7 +481,7 @@ const FloatingAIChat = () => {
             {!panelOpen && visibleNotifs.length > 0 ? (
               <span className="ai-dock-avatar-indicator">
                 <span className="ai-dock-avatar-ring" />
-                T
+                TJ
               </span>
             ) : (
               <MessageSquare size={14} />
@@ -452,7 +490,7 @@ const FloatingAIChat = () => {
             <span className="ai-dock-status-dot" />
             <div className="ai-dock-header-meta">
               <span className="ai-dock-credit-pill" title={t('subscription.credits_available', 'Available credits')}>
-                <span className="ai-dock-credit-icon">⚡</span>
+                <span className="ai-dock-credit-icon"><Zap size={12} /></span>
                 <strong>{dockCreditDisplay}</strong>
               </span>
               <button
@@ -498,15 +536,19 @@ const FloatingAIChat = () => {
                   </button>
                 </div>
                 <div className="ai-dock-notifs-list">
-                  {visibleNotifs.map((msg) => (
+                  {visibleNotifs.map((msg) => {
+                    const notifVisual = getNotifIcon(msg.type);
+                    return (
                     <div key={msg.id} className={`ai-dock-notif ai-dock-notif--${msg.severity || 'default'}`}>
-                      <span className="ai-dock-notif-icon">{getNotifIcon(msg.type)}</span>
+                      <span className="ai-dock-notif-icon">
+                        <FuturisticIcon icon={notifVisual.icon} tone={notifVisual.tone} size="xs" />
+                      </span>
                       <span className="ai-dock-notif-text">{msg.content.split('\n')[0]}</span>
                       <button type="button" className="ai-dock-notif-x" onClick={() => dismissMessage(msg.id)} aria-label={t('common.close')}>
                         <X size={11} />
                       </button>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -530,7 +572,7 @@ const FloatingAIChat = () => {
         <div className="ai-fab-wrapper">
           {showTooltip && (
             <div className="ai-fab-tooltip" role="status">
-              <div className="ai-fab-tooltip-avatar">T</div>
+              <div className="ai-fab-tooltip-avatar">TJ</div>
               <div className="ai-fab-tooltip-body">
                 <span className="ai-fab-tooltip-name">Taxja</span>
                 <span>{t('ai.tooltip', "Need help with your taxes? I'm here.")}</span>
@@ -546,7 +588,7 @@ const FloatingAIChat = () => {
             onClick={handleMobileOpen}
             aria-label={t('ai.openChat', 'Open AI assistant')}
           >
-            <div className="ai-fab-avatar">T</div>
+            <div className="ai-fab-avatar">TJ</div>
             <span className="ai-fab-pulse" />
             {totalBadgeCount > 0 && (
               <span className="ai-fab-badge">{totalBadgeCount > 9 ? '9+' : totalBadgeCount}</span>
@@ -559,7 +601,7 @@ const FloatingAIChat = () => {
         <div className={`ai-chat-panel${mobileExpanded ? ' ai-chat-expanded' : ''}`}>
           <div className="ai-chat-panel-header">
             <div className="ai-chat-panel-identity">
-              <div className="ai-panel-avatar">T</div>
+              <div className="ai-panel-avatar">TJ</div>
               <div className="ai-panel-info">
                 <span className="ai-panel-name">{t('ai.advisorName', 'Taxja')}</span>
                 <span className="ai-panel-status">
@@ -568,7 +610,7 @@ const FloatingAIChat = () => {
                 </span>
                 <div className="ai-panel-meta">
                   <span className="ai-panel-credit-pill" title={t('subscription.credits_available', 'Available credits')}>
-                    <span className="ai-dock-credit-icon">⚡</span>
+                    <span className="ai-dock-credit-icon"><Zap size={12} /></span>
                     <strong>{dockCreditDisplay}</strong>
                   </span>
                   <button

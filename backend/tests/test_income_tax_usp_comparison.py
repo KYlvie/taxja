@@ -181,23 +181,30 @@ class TestUSPComparison:
     
     def test_exemption_application(self, calculator):
         """
-        Test that exemption amount is correctly applied.
-        
-        Validates Requirement 3.3: Exemption amount of €13,539 for 2026.
+        Test that the 0% bracket acts as the tax-free allowance.
+
+        With the 0% first bracket model, taxable_income equals gross_income
+        (the exemption is embedded in the bracket, not subtracted separately).
+        Tax should still be zero for income <= 13539.
         """
         gross_incomes = [
-            (Decimal("13539.00"), Decimal("0.00")),  # Exactly at exemption
-            (Decimal("20000.00"), Decimal("6461.00")),  # 20000 - 13539
-            (Decimal("30000.00"), Decimal("16461.00")),  # 30000 - 13539
-            (Decimal("50000.00"), Decimal("36461.00")),  # 50000 - 13539
+            (Decimal("13539.00"), Decimal("13539.00"), Decimal("0.00")),
+            (Decimal("20000.00"), Decimal("20000.00"), Decimal("1292.20")),
+            (Decimal("30000.00"), Decimal("30000.00"), Decimal("4093.00")),
+            (Decimal("50000.00"), Decimal("50000.00"), Decimal("11447.20")),
         ]
-        
-        for gross_income, expected_taxable in gross_incomes:
+
+        for gross_income, expected_taxable, expected_tax in gross_incomes:
             result = calculator.calculate_tax_with_exemption(gross_income, 2026)
             assert result.taxable_income == expected_taxable, (
                 f"Taxable income incorrect for gross €{gross_income:,.2f}\n"
                 f"Expected: €{expected_taxable:,.2f}\n"
                 f"Got: €{result.taxable_income:,.2f}"
+            )
+            assert result.total_tax == expected_tax, (
+                f"Tax incorrect for gross €{gross_income:,.2f}\n"
+                f"Expected: €{expected_tax:,.2f}\n"
+                f"Got: €{result.total_tax:,.2f}"
             )
     
     def test_effective_rate_calculation(self, calculator):
@@ -309,22 +316,28 @@ class TestUSPComparison:
     def test_typical_austrian_salaries(self, calculator):
         """
         Test typical Austrian salary scenarios.
-        
-        Tests common income levels in Austria to ensure realistic scenarios work.
+
+        Tests common income levels in Austria via calculate_tax_with_exemption,
+        which passes gross income through the 0% bracket (exemption embedded).
         """
         typical_salaries = [
-            # (gross_annual, expected_tax_after_exemption)
-            (Decimal("30000.00"), Decimal("584.40")),  # Entry level: (30000-13539)*0.20
-            (Decimal("45000.00"), Decimal("4531.30")),  # Mid-level
-            (Decimal("60000.00"), Decimal("10031.60")),  # Senior
-            (Decimal("80000.00"), Decimal("18031.60")),  # Management
-            (Decimal("120000.00"), Decimal("36951.32")),  # Executive
+            # (gross_annual, expected_tax)
+            # 30000: 0-13539@0%, 13539-21992@20%=1690.60, 21992-30000@30%=2402.40 → 4093.00
+            (Decimal("30000.00"), Decimal("4093.00")),
+            # 45000: +36458-45000@40%=3416.80 → 9447.20
+            (Decimal("45000.00"), Decimal("9447.20")),
+            # 60000: +36458-60000@40%=9416.80 → 15447.20
+            (Decimal("60000.00"), Decimal("15447.20")),
+            # 80000: +70365-80000@48%=4624.80 → 24218.00
+            (Decimal("80000.00"), Decimal("24218.00")),
+            # 120000: +104859-120000@50%=7570.50 → 43720.82
+            (Decimal("120000.00"), Decimal("43720.82")),
         ]
-        
+
         for gross_income, expected_tax in typical_salaries:
             result = calculator.calculate_tax_with_exemption(gross_income, 2026)
             error = abs(result.total_tax - expected_tax)
-            
+
             assert error < Decimal("0.01"), (
                 f"Salary calculation error for €{gross_income:,.2f}\n"
                 f"Expected: €{expected_tax:,.2f}\n"

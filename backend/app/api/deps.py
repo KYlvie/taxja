@@ -4,53 +4,17 @@ API Dependencies
 Common dependencies for API endpoints including authentication and database sessions.
 """
 
-from typing import Generator
+from typing import Optional
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
 from app.core.config import settings
 from app.models.user import User
 
-
-security = HTTPBearer()
-
-
-# Re-export get_db from app.db.base for backward compatibility
-# (ai_assistant.py and other modules import from here)
-
-
-def get_current_user(
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> User:
-    """Get current authenticated user"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        token = credentials.credentials
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-
-    return user
+# Unified get_current_user — re-exported from security for backward compat.
+# All 21 endpoint files that import from here or from security get the same function.
+from app.core.security import get_current_user  # noqa: F401
 
 
 def get_current_admin(
@@ -75,7 +39,6 @@ from app.services.usage_tracker_service import UsageTrackerService, QuotaExceede
 from app.models.usage_record import ResourceType
 from app.models.plan import PlanType
 import redis
-from typing import Optional
 
 
 def get_redis_client() -> Optional[redis.Redis]:
@@ -98,16 +61,16 @@ def get_redis_client() -> Optional[redis.Redis]:
 def require_feature(feature: Feature):
     """
     Dependency factory for feature-based access control.
-    
+
     Per Requirement 2.1: Enforce feature access based on subscription.
     Per Requirement 2.2: Return 403 with upgrade prompt if access denied.
-    
+
     Usage:
         @router.get("/endpoint", dependencies=[Depends(require_feature(Feature.AI_ASSISTANT))])
-    
+
     Args:
         feature: Feature required for access
-        
+
     Returns:
         Dependency function that checks feature access
     """
@@ -121,9 +84,9 @@ def require_feature(feature: Feature):
 
         redis_client = get_redis_client()
         feature_gate = FeatureGateService(db, redis_client)
-        
+
         has_access = feature_gate.check_feature_access(current_user.id, feature)
-        
+
         if not has_access:
             required_plan = feature_gate.get_required_plan_for_feature(feature)
             raise HTTPException(
@@ -136,24 +99,24 @@ def require_feature(feature: Feature):
                     "upgrade_url": "/pricing"
                 }
             )
-        
+
         return current_user
-    
+
     return check_feature_access
 
 
 def require_plan(min_plan: PlanType):
     """
     Dependency factory for plan-level access control.
-    
+
     Per Requirement 2.3: Enforce plan-level restrictions.
-    
+
     Usage:
         @router.get("/endpoint", dependencies=[Depends(require_plan(PlanType.PRO))])
-    
+
     Args:
         min_plan: Minimum plan type required
-        
+
     Returns:
         Dependency function that checks plan level
     """
@@ -167,9 +130,9 @@ def require_plan(min_plan: PlanType):
 
         redis_client = get_redis_client()
         feature_gate = FeatureGateService(db, redis_client)
-        
+
         user_plan = feature_gate.get_user_plan(current_user.id)
-        
+
         if not user_plan:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -180,17 +143,17 @@ def require_plan(min_plan: PlanType):
                     "upgrade_url": "/pricing"
                 }
             )
-        
+
         # Check plan hierarchy: FREE < PLUS < PRO
         plan_hierarchy = {
             PlanType.FREE: 0,
             PlanType.PLUS: 1,
             PlanType.PRO: 2
         }
-        
+
         user_level = plan_hierarchy.get(user_plan.plan_type, 0)
         required_level = plan_hierarchy.get(min_plan, 0)
-        
+
         if user_level < required_level:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -202,26 +165,26 @@ def require_plan(min_plan: PlanType):
                     "upgrade_url": "/pricing"
                 }
             )
-        
+
         return current_user
-    
+
     return check_plan_level
 
 
 def check_quota(resource_type: ResourceType, amount: int = 1):
     """
     Dependency factory for quota checking before resource usage.
-    
+
     Per Requirement 3.2: Check quota before allowing operation.
     Per Requirement 3.3: Return 429 with usage details if quota exceeded.
-    
+
     Usage:
         @router.post("/endpoint", dependencies=[Depends(check_quota(ResourceType.OCR_SCANS))])
-    
+
     Args:
         resource_type: Type of resource to check
         amount: Amount of resource to check (default: 1)
-        
+
     Returns:
         Dependency function that checks quota
     """
@@ -235,14 +198,14 @@ def check_quota(resource_type: ResourceType, amount: int = 1):
 
         redis_client = get_redis_client()
         usage_tracker = UsageTrackerService(db, redis_client)
-        
+
         # Check if user can use the resource
         can_use = usage_tracker.check_quota_limit(current_user.id, resource_type, amount)
-        
+
         if not can_use:
             # Get current usage details
             usage_data = usage_tracker.get_current_usage(current_user.id, resource_type)
-            
+
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail={
@@ -255,7 +218,7 @@ def check_quota(resource_type: ResourceType, amount: int = 1):
                     "upgrade_url": "/pricing"
                 }
             )
-        
+
         return current_user
-    
+
     return verify_quota

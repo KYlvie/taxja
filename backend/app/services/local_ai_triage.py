@@ -43,9 +43,9 @@ Do NOT answer the tax question. Instead return ONLY this JSON (nothing else):
 {"intent":"<intent>","params":{<extracted_params>}}
 
 Valid intents:
-- calculate_tax: income tax calculation. Extract: {"income":<number>}
+- calculate_tax: income tax calculation. Extract: {"amount":<number>} (the gross income)
 - calculate_vat: VAT calculation. Extract: {"amount":<number>,"rate":<number>}
-- calculate_svs: social insurance. Extract: {"income":<number>}
+- calculate_svs: social insurance. Extract: {"amount":<number>} (annual income)
 - calculate_kest: capital gains tax. Extract: {"amount":<number>}
 - calculate_immoest: real estate gains tax. Extract: {"amount":<number>}
 - check_deduct: check if expense is deductible. Extract: {"description":"<what>"}
@@ -56,9 +56,18 @@ Valid intents:
 - explain_doc: explain a document. Extract: {}
 - tax_qa: general tax question (default if unsure). Extract: {}
 
+IMPORTANT: Always use "amount" as the key name for numeric values. Never use "income" or other aliases.
+
+## If the user sends a CASUAL/OFF-TOPIC message (greetings, chat, jokes, non-tax topics, personal feelings, etc.):
+Reply naturally and friendly as a general AI assistant. Do NOT force tax topics into the response.
+Just have a normal, warm conversation. End with [INTENT:general_chat]
+Example for greeting: "你好！有什么我可以帮你的吗？😊 [INTENT:general_chat]"
+Example for "I'm feeling down": "希望你能好起来！如果有什么我能帮忙的，随时告诉我。😊 [INTENT:general_chat]"
+
 RULES:
 - Answer in user's language
 - For system help: be concise with emoji+lists, end with [INTENT:system_help]
+- For casual/general chat: respond naturally and warmly, end with [INTENT:general_chat]
 - For tax: return ONLY the JSON line, nothing else
 - If unsure whether system or tax, treat as system help
 - Extract numeric params when mentioned (e.g. "50000欧元" → income:50000)
@@ -68,12 +77,18 @@ RULES:
 class AITriage:
     """Single Groq call for triage + intent classification + system help answers."""
 
-    def process(self, message: str, language: str = "zh") -> Dict[str, Any]:
+    def process(
+        self,
+        message: str,
+        language: str = "zh",
+        conversation_history: Optional[list] = None,
+    ) -> Dict[str, Any]:
         """
         Process user message in a single LLM call.
 
         Returns dict with:
           - For system help: {"type": "system_help", "answer": "..."}
+          - For general chat: {"type": "general_chat", "answer": "..."}
           - For tax: {"type": "tax", "intent": "calculate_tax", "params": {...}}
           - On failure: {"type": "fallback"}
         """
@@ -83,15 +98,41 @@ class AITriage:
             if not llm.is_available:
                 return {"type": "fallback"}
 
+            # Build structured multi-turn messages for context
+            extra_messages = None
+            if conversation_history:
+                recent = conversation_history[-4:]  # last 2 exchanges
+                extra_messages = []
+                for msg in recent:
+                    role = msg.get("role", "user")
+                    content_text = msg.get("content", "")
+                    # Strip disclaimer markers from history
+                    if "⚠️" in content_text:
+                        content_text = content_text.split("⚠️")[0].strip()
+                    # Truncate long messages
+                    if len(content_text) > 200:
+                        content_text = content_text[:200] + "..."
+                    if content_text:
+                        extra_messages.append({"role": role, "content": content_text})
+
             content = llm.generate_simple(
                 system_prompt=_TRIAGE_PROMPT,
                 user_prompt=message,
                 temperature=0.2,
                 max_tokens=800,
+                extra_messages=extra_messages or None,
             )
 
-            if not content:
-                return {"type": "fallback"}
+            if not content or not content.strip():
+                # LLM returned empty — give a friendly fallback instead of silence
+                logger.info("AI triage: LLM returned empty, using friendly fallback")
+                fallback_msgs = {
+                    "zh": "你好！😊 有什么我可以帮你的吗？",
+                    "de": "Hallo! 😊 Wie kann ich dir helfen?",
+                    "en": "Hi there! 😊 How can I help you?",
+                }
+                msg = fallback_msgs.get(language, fallback_msgs["en"])
+                return {"type": "general_chat", "answer": msg}
 
             content = content.strip()
 
@@ -117,22 +158,35 @@ class AITriage:
             except (json.JSONDecodeError, AttributeError):
                 pass
 
+            # Check if it's a general chat answer (contains [INTENT:general_chat])
+            if "[INTENT:general_chat]" in content:
+                answer = content.replace("[INTENT:general_chat]", "").strip()
+                logger.info("AI triage: general_chat (%d chars)", len(answer))
+                return {"type": "general_chat", "answer": answer}
+
             # Check if it's a system help answer (contains [INTENT:system_help])
             if "[INTENT:system_help]" in content:
                 answer = content.replace("[INTENT:system_help]", "").strip()
                 logger.info("AI triage: system_help (%d chars)", len(answer))
                 return {"type": "system_help", "answer": answer}
 
-            # If we can't parse as JSON and it's a long response, treat as system help
-            if len(content) > 50:
-                logger.info("AI triage: treating as system_help (unparsed)")
-                return {"type": "system_help", "answer": content}
+            # If we can't parse as JSON, treat any non-empty text as general chat
+            # (covers casual chat, short answers, and long responses alike)
+            if content:
+                logger.info("AI triage: treating as general_chat (unparsed, %d chars)", len(content))
+                return {"type": "general_chat", "answer": content}
 
             return {"type": "fallback"}
 
         except Exception as e:
             logger.warning("AI triage failed: %s", e)
-            return {"type": "fallback"}
+            fallback_msgs = {
+                "zh": "你好！😊 有什么我可以帮你的吗？",
+                "de": "Hallo! 😊 Wie kann ich dir helfen?",
+                "en": "Hi there! 😊 How can I help you?",
+            }
+            msg = fallback_msgs.get(language, fallback_msgs["en"])
+            return {"type": "general_chat", "answer": msg}
 
 
 _instance: Optional[AITriage] = None

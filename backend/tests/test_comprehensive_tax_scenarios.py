@@ -122,16 +122,17 @@ from app.models.tax_configuration import (
 # Fixtures
 # =========================================================================
 
-# 2026 tax config: brackets are relative to exemption
-# Official: 0-13539 exempt, then progressive brackets on the excess
+# 2026 tax config: standard brackets with 0% zone (exemption embedded)
+# Official: 0-13539 at 0%, then progressive brackets
 TAX_CONFIG_2026 = {
     "tax_brackets": [
-        {"lower": 0, "upper": 8453, "rate": 20},
-        {"lower": 8453, "upper": 22919, "rate": 30},
-        {"lower": 22919, "upper": 56826, "rate": 40},
-        {"lower": 56826, "upper": 91320, "rate": 48},
-        {"lower": 91320, "upper": 986461, "rate": 50},
-        {"lower": 986461, "upper": None, "rate": 55},
+        {"lower": 0, "upper": 13539, "rate": 0},
+        {"lower": 13539, "upper": 21992, "rate": 20},
+        {"lower": 21992, "upper": 36458, "rate": 30},
+        {"lower": 36458, "upper": 70365, "rate": 40},
+        {"lower": 70365, "upper": 104859, "rate": 48},
+        {"lower": 104859, "upper": 1000000, "rate": 50},
+        {"lower": 1000000, "upper": None, "rate": 55},
     ],
     "exemption_amount": "13539.00",
 }
@@ -345,11 +346,11 @@ class TestSVSComprehensive:
         # Monthly income: 30000/12 = 2500, above min base 551.10
         # Pension: 2500 * 0.185 = 462.50
         # Health: 2500 * 0.068 = 170.00
-        # Accident: 12.17 (fixed)
+        # Accident: 12.25 (fixed, 2026)
         # Supplementary: 2500 * 0.0153 = 38.25
-        # Monthly total: 682.92
-        assert result.monthly_total == Decimal("682.92")
-        assert result.annual_total == Decimal("8195.04")
+        # Monthly total: 683.00
+        assert result.monthly_total == Decimal("683.00")
+        assert result.annual_total == Decimal("8196.00")
         assert result.deductible is True
 
     def test_gsvg_typical_self_employed_60k(self, svs_calc):
@@ -358,23 +359,24 @@ class TestSVSComprehensive:
         # Monthly income: 5000
         # Pension: 5000 * 0.185 = 925.00
         # Health: 5000 * 0.068 = 340.00
-        # Accident: 12.17
+        # Accident: 12.25 (2026)
         # Supplementary: 5000 * 0.0153 = 76.50
-        # Monthly total: 1353.67
-        assert result.monthly_total == Decimal("1353.67")
-        assert result.annual_total == Decimal("16244.04")
+        # Monthly total: 1353.75
+        assert result.monthly_total == Decimal("1353.75")
+        assert result.annual_total == Decimal("16245.00")
 
     def test_gsvg_high_income_capped(self, svs_calc):
         """GSVG with high income should be capped at max contribution base."""
         result = svs_calc.calculate_contributions(Decimal("200000"), UserType.GSVG)
-        # Monthly income: 16666.67, capped at max_base_monthly 7585.00
-        # Pension: 7585 * 0.185 = 1403.225 -> 1403.23
-        # Health: 7585 * 0.068 = 515.78
-        # Accident: 12.17
-        # Supplementary: 7585 * 0.0153 = 116.0505 -> 116.05
-        expected_monthly = Decimal("1403.23") + Decimal("515.78") + Decimal("12.17") + Decimal("116.05")
-        assert result.contribution_base == Decimal("7585.00")
-        assert result.monthly_total == expected_monthly.quantize(Decimal("0.01"))
+        # Monthly income: 16666.67, capped at max_base_monthly 7720.50 (2026)
+        # Pension: 7720.50 * 0.185 = 1428.2925 -> 1428.29
+        # Health: 7720.50 * 0.068 = 524.994 -> 524.99
+        # Accident: 12.25 (2026)
+        # Supplementary: 7720.50 * 0.0153 = 118.12365 -> 118.12
+        expected_monthly = Decimal("1428.29") + Decimal("524.99") + Decimal("12.25") + Decimal("118.12")
+        assert result.contribution_base == Decimal("7720.50")
+        # Calculator sums unquantized components then quantizes; allow ±1 cent
+        assert abs(result.monthly_total - expected_monthly.quantize(Decimal("0.01"))) <= Decimal("0.01")
 
     def test_neue_selbstaendige_low_income(self, svs_calc):
         """Neue Selbständige with low income should have minimum contribution."""
@@ -392,7 +394,7 @@ class TestSVSComprehensive:
         expected_pension = monthly * Decimal("0.185")
         expected_health = monthly * Decimal("0.068")
         expected_supp = monthly * Decimal("0.0153")
-        expected_total = (expected_pension + expected_health + Decimal("12.17") + expected_supp).quantize(Decimal("0.01"))
+        expected_total = (expected_pension + expected_health + Decimal("12.25") + expected_supp).quantize(Decimal("0.01"))
         assert result.monthly_total == expected_total
         assert result.deductible is True
 
@@ -429,7 +431,7 @@ class TestVATComprehensive:
         assert result.exempt is True
 
     def test_tolerance_rule_applies(self, vat_calc):
-        """Turnover between €55,000 and €60,500 triggers tolerance rule."""
+        """Turnover between €55,000 and €63,250 triggers tolerance rule."""
         result = vat_calc.calculate_vat_liability(
             gross_turnover=Decimal("58000"),
             transactions=[],
@@ -439,15 +441,15 @@ class TestVATComprehensive:
         assert result.warning is not None
 
     def test_tolerance_at_boundary(self, vat_calc):
-        """Turnover at €60,500 should still qualify for tolerance."""
+        """Turnover at €63,250 should still qualify for tolerance."""
         result = vat_calc.calculate_vat_liability(
-            gross_turnover=Decimal("60500"),
+            gross_turnover=Decimal("63250"),
             transactions=[],
         )
         assert result.exempt is True
 
     def test_above_tolerance_vat_liable(self, vat_calc):
-        """Turnover above €60,500 should be VAT-liable."""
+        """Turnover above €63,250 should be VAT-liable."""
         transactions = [
             Transaction(amount=Decimal("70000"), is_income=True, category="services"),
             Transaction(amount=Decimal("5000"), is_income=False, category="office"),
@@ -620,22 +622,22 @@ class TestDeductionComprehensive:
     # -- Family Deductions --
 
     def test_family_one_child(self, deduction_calc):
-        """One child: €70.90/month * 12 = €850.80."""
+        """One child: €67.80/month * 12 = €813.60."""
         family = FamilyInfo(num_children=1)
         result = deduction_calc.calculate_family_deductions(family)
-        assert result.amount == Decimal("850.80")
+        assert result.amount == Decimal("813.60")
 
     def test_family_three_children(self, deduction_calc):
-        """Three children: €70.90 * 12 * 3 = €2,552.40."""
+        """Three children: €67.80 * 12 * 3 = €2,440.80."""
         family = FamilyInfo(num_children=3)
         result = deduction_calc.calculate_family_deductions(family)
-        assert result.amount == Decimal("2552.40")
+        assert result.amount == Decimal("2440.80")
 
     def test_family_single_parent_one_child(self, deduction_calc):
         """Single parent with one child: child deduction + €612."""
         family = FamilyInfo(num_children=1, is_single_parent=True)
         result = deduction_calc.calculate_family_deductions(family)
-        assert result.amount == Decimal("1462.80")  # 850.80 + 612.00
+        assert result.amount == Decimal("1425.60")  # 813.60 + 612.00
 
     def test_family_no_children(self, deduction_calc):
         """No children: zero family deductions."""
@@ -714,9 +716,10 @@ class TestDeductionComprehensive:
         # Commuting: base_annual = 58*12 = 696 (Pendlereuro separate)
         # Home office: 300
         # Employee: 132 (Werbungskostenpauschale)
+        # Sonderausgabenpauschale: 60 (automatic for all taxpayers)
         # Family items NOT in amount (Kinderabsetzbetrag informational, AEAB is tax credit)
-        # Total: 696 + 300 + 132 = 1128.00
-        assert result.amount == Decimal("1128.00")
+        # Total: 696 + 300 + 132 + 60 = 1188.00
+        assert result.amount == Decimal("1188.00")
         # Verify tax credits are in breakdown (not in amount)
         assert "verkehrsabsetzbetrag" in result.breakdown
         assert "familienbonus_amount" in result.breakdown
@@ -961,20 +964,20 @@ class TestSelfEmployedComprehensive:
     # -- Basispauschalierung --
 
     def test_basispauschalierung_general_profession(self):
-        """General profession: 13.5% flat-rate expenses."""
+        """General profession: 12% flat-rate expenses."""
         result = calculate_basispauschalierung(
             gross_turnover=Decimal("80000"),
             profession_type=ProfessionType.GENERAL,
         )
         assert result.eligible is True
-        # Expenses: 80000 * 0.135 = 10800
-        assert result.flat_rate_expenses == Decimal("10800.00")
-        # Profit: 80000 - 10800 = 69200
-        assert result.estimated_profit == Decimal("69200.00")
-        # Grundfreibetrag: min(69200*0.15, 4950) = 4950
+        # Expenses: 80000 * 0.12 = 9600
+        assert result.flat_rate_expenses == Decimal("9600.00")
+        # Profit: 80000 - 9600 = 70400
+        assert result.estimated_profit == Decimal("70400.00")
+        # Grundfreibetrag: min(70400*0.15, 4950) = 4950
         assert result.grundfreibetrag == Decimal("4950.00")
-        # Taxable: 69200 - 4950 = 64250
-        assert result.taxable_profit == Decimal("64250.00")
+        # Taxable: 70400 - 4950 = 65450
+        assert result.taxable_profit == Decimal("65450.00")
 
     def test_basispauschalierung_consulting(self):
         """Consulting profession: 6% flat-rate expenses."""
@@ -986,7 +989,7 @@ class TestSelfEmployedComprehensive:
         assert result.flat_rate_expenses == Decimal("6000.00")
 
     def test_basispauschalierung_too_high_turnover(self):
-        """Turnover > €320,000: not eligible."""
+        """Turnover > €220,000: not eligible."""
         result = calculate_basispauschalierung(
             gross_turnover=Decimal("350000"),
         )
@@ -998,9 +1001,9 @@ class TestSelfEmployedComprehensive:
             gross_turnover=Decimal("60000"),
             svs_contributions=Decimal("8000"),
         )
-        # Expenses: 60000 * 0.135 = 8100
-        # Profit: 60000 - 8100 - 8000 = 43900
-        assert result.estimated_profit == Decimal("43900.00")
+        # Expenses: 60000 * 0.12 = 7200
+        # Profit: 60000 - 7200 - 8000 = 44800
+        assert result.estimated_profit == Decimal("44800.00")
 
     # -- Kleinunternehmer --
 
@@ -1011,13 +1014,13 @@ class TestSelfEmployedComprehensive:
         assert status.ust_voranmeldung_required is False
 
     def test_kleinunternehmer_tolerance_zone(self):
-        """Between €55,000 and €60,500: tolerance applies."""
+        """Between €55,000 and €63,250: tolerance applies."""
         status = determine_kleinunternehmer_status(Decimal("57000"))
         assert status.exempt is True
         assert status.tolerance_applies is True
 
     def test_kleinunternehmer_above_threshold(self):
-        """Above €60,500: VAT-liable with quarterly UVA."""
+        """Above €63,250: VAT-liable with quarterly UVA."""
         status = determine_kleinunternehmer_status(Decimal("80000"))
         assert status.exempt is False
         assert status.ust_voranmeldung_required is True
@@ -1044,7 +1047,7 @@ class TestSelfEmployedComprehensive:
             gross_turnover=Decimal("100000"),
             actual_expenses=Decimal("5000"),  # Very low actual expenses
         )
-        # Flat rate: 100000*0.135 = 13500 deemed expenses
+        # Flat rate: 100000*0.12 = 12000 deemed expenses
         # Actual: only 5000 expenses
         # Flat rate method gives lower taxable profit
         assert result.recommended_method == ExpenseMethod.FLAT_RATE
@@ -1279,7 +1282,7 @@ class TestEndToEndScenarios:
 
         # SVS: capped at max contribution base
         svs = svs_calc.calculate_contributions(gross, UserType.GSVG)
-        assert svs.contribution_base <= Decimal("7585.00")
+        assert svs.contribution_base <= Decimal("7720.50")
 
         # Basispauschalierung
         basis = calculate_basispauschalierung(
@@ -1387,8 +1390,9 @@ class TestEdgeCasesAndRobustness:
         assert result.taxable_profit == Decimal("0.00")
 
     def test_deduction_all_zeros(self, deduction_calc):
+        # Even with no explicit deductions, Sonderausgabenpauschale (€60) is automatic
         result = deduction_calc.calculate_total_deductions()
-        assert result.amount == Decimal("0.00")
+        assert result.amount == Decimal("60.00")
 
     def test_int_and_float_coercion_svs(self, svs_calc):
         """SVS calculator should handle int and float inputs."""
@@ -1456,7 +1460,7 @@ class TestTaxRateConstants:
         assert calc.PENSION_RATE == Decimal("0.185")
         assert calc.HEALTH_RATE == Decimal("0.068")
         assert calc.SUPPLEMENTARY_PENSION_RATE == Decimal("0.0153")
-        assert calc.ACCIDENT_FIXED == Decimal("12.17")
+        assert calc.ACCIDENT_FIXED == Decimal("12.25")
 
     def test_vat_defaults(self):
         calc = VATCalculator()
@@ -1464,12 +1468,12 @@ class TestTaxRateConstants:
         assert calc.REDUCED_RATE_10 == Decimal("0.10")
         assert calc.REDUCED_RATE_13 == Decimal("0.13")
         assert calc.SMALL_BUSINESS_THRESHOLD == Decimal("55000.00")
-        assert calc.TOLERANCE_THRESHOLD == Decimal("60500.00")
+        assert calc.TOLERANCE_THRESHOLD == Decimal("63250.00")
 
     def test_deduction_defaults_2026(self):
         calc = DeductionCalculator()
         assert calc.HOME_OFFICE_DEDUCTION == Decimal("300.00")
-        assert calc.CHILD_DEDUCTION_MONTHLY == Decimal("70.90")
+        assert calc.CHILD_DEDUCTION_MONTHLY == Decimal("67.80")
         assert calc.SINGLE_PARENT_DEDUCTION == Decimal("612.00")
         assert calc.VERKEHRSABSETZBETRAG == Decimal("496.00")
         assert calc.WERBUNGSKOSTENPAUSCHALE == Decimal("132.00")
@@ -1485,6 +1489,6 @@ class TestTaxRateConstants:
         assert config.grundfreibetrag_max == Decimal("4950.00")
         assert config.grundfreibetrag_profit_limit == Decimal("33000.00")
         assert config.max_total_freibetrag == Decimal("46400.00")
-        assert config.flat_rate_turnover_limit == Decimal("320000.00")
-        assert config.flat_rate_general == Decimal("0.135")
+        assert config.flat_rate_turnover_limit == Decimal("220000.00")
+        assert config.flat_rate_general == Decimal("0.12")
         assert config.flat_rate_consulting == Decimal("0.06")

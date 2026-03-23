@@ -10,20 +10,24 @@ import './i18n';
 import './App.css';
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       const accepted = sessionStorage.getItem('taxja_disclaimer_accepted');
-      if (!accepted) {
+      // Wait until onboarding finishes before showing disclaimer
+      const onboardingDone = !user || user.onboarding_completed;
+      if (!accepted && onboardingDone) {
         setShowDisclaimer(true);
+      } else {
+        setShowDisclaimer(false);
       }
     } else {
       sessionStorage.removeItem('taxja_disclaimer_accepted');
       setShowDisclaimer(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   const handleDisclaimerAccept = () => {
     sessionStorage.setItem('taxja_disclaimer_accepted', '1');

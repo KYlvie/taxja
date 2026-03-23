@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Transaction } from '../../types/transaction';
 import { recurringTransactionService } from '../../services/recurringTransactionService';
+import Select from '../common/Select';
 import './RecurringTransactionEditor.css';
 
 interface ConvertToRecurringModalProps {
@@ -28,7 +29,7 @@ const ConvertToRecurringModal = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { register, handleSubmit } = useForm<FormData>({
+  const { register, handleSubmit, watch } = useForm<FormData>({
     defaultValues: {
       frequency: 'monthly',
       start_date: transaction.date?.split('T')[0] || new Date().toISOString().split('T')[0],
@@ -83,12 +84,13 @@ const ConvertToRecurringModal = ({
           <div className="form-row">
             <div className="form-group">
               <label>{t('recurring.frequency.label')}</label>
-              <select {...register('frequency')}>
-                <option value="monthly">{t('recurring.frequency.monthly')}</option>
-                <option value="quarterly">{t('recurring.frequency.quarterly')}</option>
-                <option value="annually">{t('recurring.frequency.annually')}</option>
-                <option value="weekly">{t('recurring.frequency.weekly')}</option>
-              </select>
+              <Select {...register('frequency')} value={watch('frequency') || ''}
+                options={[
+                  { value: 'monthly', label: t('recurring.frequency.monthly') },
+                  { value: 'quarterly', label: t('recurring.frequency.quarterly') },
+                  { value: 'annually', label: t('recurring.frequency.annually') },
+                  { value: 'weekly', label: t('recurring.frequency.weekly') },
+                ]} />
             </div>
             <div className="form-group">
               <label>{t('recurring.form.dayOfMonth')}</label>

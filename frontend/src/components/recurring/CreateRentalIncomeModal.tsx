@@ -4,6 +4,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { recurringService } from '../../services/recurringService';
 import { propertyService } from '../../services/propertyService';
+import Select from '../common/Select';
 import '../transactions/RecurringTransactionEditor.css';
 
 interface Property {
@@ -31,7 +32,7 @@ export const CreateRentalIncomeModal: React.FC<CreateRentalIncomeModalProps> = (
 }) => {
   const { t } = useTranslation();
   const { alert: showAlert } = useConfirm();
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -80,12 +81,12 @@ export const CreateRentalIncomeModal: React.FC<CreateRentalIncomeModalProps> = (
         <form onSubmit={handleSubmit(onSubmit)} className="recurring-editor-form">
           <div className="form-group">
             <label>{t('recurring.form.property')}</label>
-            <select {...register('property_id', { required: true })}>
-              <option value="">{t('recurring.form.selectProperty')}</option>
-              {properties.map(p => (
-                <option key={p.id} value={p.id}>{p.address}</option>
-              ))}
-            </select>
+            <Select {...register('property_id', { required: true })} value={watch('property_id') || ''}
+              placeholder={t('recurring.form.selectProperty')}
+              options={properties.map(p => ({
+                value: p.id,
+                label: p.address,
+              }))} />
             {errors.property_id && (
               <span className="field-error">{t('recurring.errors.propertyRequired')}</span>
             )}

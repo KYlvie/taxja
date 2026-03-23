@@ -4,13 +4,14 @@ from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 from app.models.recurring_transaction import RecurrenceFrequency, RecurringTransactionType
+from app.models.transaction import TransactionType
 
 
 class RecurringTransactionBase(BaseModel):
     """Base schema for recurring transaction"""
     description: str = Field(..., min_length=1, max_length=500)
     amount: Decimal = Field(..., gt=0)
-    transaction_type: str = Field(..., pattern="^(income|expense)$")
+    transaction_type: str = Field(..., min_length=1, max_length=20)
     category: str = Field(..., min_length=1, max_length=100)
     frequency: RecurrenceFrequency
     start_date: date
@@ -26,12 +27,23 @@ class RecurringTransactionBase(BaseModel):
             raise ValueError('end_date must be after start_date')
         return v
 
+    @field_validator("transaction_type")
+    @classmethod
+    def validate_transaction_type(cls, v: str) -> str:
+        valid_types = {transaction_type.value for transaction_type in TransactionType}
+        if v not in valid_types:
+            raise ValueError(
+                f"transaction_type must be one of: {', '.join(sorted(valid_types))}"
+            )
+        return v
+
 
 class RecurringTransactionCreate(RecurringTransactionBase):
     """Schema for creating a recurring transaction"""
     recurring_type: RecurringTransactionType
     property_id: Optional[str] = None
     loan_id: Optional[int] = None
+    liability_id: Optional[int] = None
     unit_percentage: Optional[Decimal] = Field(
         None, ge=Decimal("0.01"), le=Decimal("100.00"),
         description="Percentage of the property this rental unit represents (e.g. 33% for one apartment in a building)"
@@ -104,6 +116,7 @@ class RecurringTransactionResponse(RecurringTransactionBase):
     recurring_type: RecurringTransactionType
     property_id: Optional[str] = None
     loan_id: Optional[int] = None
+    liability_id: Optional[int] = None
     template: Optional[str] = None
     is_active: bool
     paused_at: Optional[datetime] = None

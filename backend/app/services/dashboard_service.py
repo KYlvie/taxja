@@ -14,9 +14,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.document import Document, DocumentType
 from app.models.user import User, UserType
 from app.models.property import Property, PropertyStatus, PropertyType
+from app.services.posting_line_utils import iter_posting_records, sum_postings, sum_postings_by_category
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +55,7 @@ _SUGGESTION_TEXTS: Dict[str, Dict[str, str]] = {
             "Prüfen Sie diese Ausgaben und laden Sie fehlende Belege hoch."
         ),
         "review_action": "Ausgaben prüfen",
-        "ocr_title": "OCR-Ergebnisse prüfen",
+        "ocr_title": "Erkennungsergebnisse prüfen",
         "ocr_desc": (
             "{count} Dokument(e) wurden nicht korrekt erkannt. "
             "Bitte überprüfen und korrigieren Sie die erkannten Daten manuell."
@@ -96,7 +98,7 @@ _SUGGESTION_TEXTS: Dict[str, Dict[str, str]] = {
             "Review these expenses and upload missing receipts."
         ),
         "review_action": "Review expenses",
-        "ocr_title": "Review OCR Results",
+        "ocr_title": "Review Recognition Results",
         "ocr_desc": (
             "{count} document(s) were not recognized correctly. "
             "Please review and correct the extracted data manually."
@@ -144,6 +146,264 @@ _SUGGESTION_TEXTS: Dict[str, Dict[str, str]] = {
             "您也可以手动添加收入和支出。"
         ),
         "getting_started_action": "上传凭证",
+    },
+    "fr": {
+        "home_office_title": "Déduction bureau à domicile",
+        "home_office_desc": (
+            "Aucune dépense de bureau à domicile enregistrée. "
+            "Si vous travaillez depuis chez vous, vous pouvez déduire jusqu'à 300 €/an. "
+            "Téléchargez un justificatif (ex. facture internet, fournitures de bureau) "
+            "ou ajoutez la dépense manuellement."
+        ),
+        "home_office_action": "Ajouter une dépense",
+        "pendler_title": "Indemnité de trajet (Pendlerpauschale)",
+        "pendler_desc": (
+            "Aucun frais de trajet enregistré. Si votre trajet domicile-travail fait au moins 2 km, "
+            "vous pouvez bénéficier d'une indemnité de trajet. "
+            "Ajoutez vos frais de déplacement dans la catégorie « Trajet »."
+        ),
+        "pendler_action": "Ajouter frais de trajet",
+        "insurance_title": "Primes d'assurance",
+        "insurance_desc": (
+            "Aucune dépense d'assurance enregistrée. Si vous payez des assurances privées "
+            "(ex. accident, vie), elles peuvent être partiellement déductibles. "
+            "Téléchargez votre police d'assurance ou ajoutez la dépense."
+        ),
+        "insurance_action": "Ajouter une assurance",
+        "review_title": "Vérifier les dépenses non déductibles",
+        "review_desc": (
+            "Vous avez {amount} de dépenses non déductibles. "
+            "Certaines pourraient être déductibles avec les justificatifs appropriés. "
+            "Vérifiez ces dépenses et téléchargez les justificatifs manquants."
+        ),
+        "review_action": "Vérifier les dépenses",
+        "ocr_title": "Vérifier les résultats de reconnaissance",
+        "ocr_desc": (
+            "{count} document(s) n'ont pas été reconnus correctement. "
+            "Veuillez vérifier et corriger les données extraites manuellement."
+        ),
+        "ocr_action": "Vérifier les documents",
+        "getting_started_title": "Ajoutez votre première transaction",
+        "getting_started_desc": (
+            "Téléchargez des reçus, factures ou fiches de paie pour commencer. "
+            "Vous pouvez aussi ajouter manuellement des revenus et dépenses."
+        ),
+        "getting_started_action": "Télécharger un reçu",
+    },
+    "ru": {
+        "home_office_title": "Вычет за домашний офис",
+        "home_office_desc": (
+            "Расходы на домашний офис не записаны. "
+            "Если вы работаете из дома, можно вычесть до 300 €/год. "
+            "Загрузите чек (напр. счёт за интернет, канцтовары) "
+            "или добавьте расход вручную."
+        ),
+        "home_office_action": "Добавить расход",
+        "pendler_title": "Пособие на проезд (Pendlerpauschale)",
+        "pendler_desc": (
+            "Расходы на проезд не записаны. Если ваш путь на работу составляет не менее 2 км, "
+            "вы можете получить пособие на проезд. "
+            "Добавьте расходы на проезд в категории «Проезд»."
+        ),
+        "pendler_action": "Добавить расходы на проезд",
+        "insurance_title": "Страховые взносы",
+        "insurance_desc": (
+            "Расходы на страхование не записаны. Если вы платите частную страховку "
+            "(напр. от несчастных случаев, на жизнь), она может быть частично вычитаема. "
+            "Загрузите страховой полис или добавьте расход."
+        ),
+        "insurance_action": "Добавить страховку",
+        "review_title": "Проверьте невычитаемые расходы",
+        "review_desc": (
+            "У вас {amount} невычитаемых расходов. "
+            "Некоторые могут быть вычтены при наличии документов. "
+            "Проверьте эти расходы и загрузите недостающие чеки."
+        ),
+        "review_action": "Проверить расходы",
+        "ocr_title": "Проверьте результаты распознавания",
+        "ocr_desc": (
+            "{count} документ(ов) не были распознаны правильно. "
+            "Пожалуйста, проверьте и исправьте данные вручную."
+        ),
+        "ocr_action": "Проверить документы",
+        "getting_started_title": "Добавьте первую транзакцию",
+        "getting_started_desc": (
+            "Загрузите чеки, счета или зарплатные квитанции, чтобы начать. "
+            "Вы также можете добавить доходы и расходы вручную."
+        ),
+        "getting_started_action": "Загрузить чек",
+    },
+    "hu": {
+        "home_office_title": "Otthoni iroda levonás",
+        "home_office_desc": (
+            "Még nem rögzített otthoni irodai kiadást. "
+            "Ha otthonról dolgozik, évente akár €300-t is levonhat. "
+            "Töltsön fel egy bizonylatot (pl. internetszámla, irodaszer) "
+            "vagy adja hozzá a kiadást manuálisan."
+        ),
+        "home_office_action": "Kiadás rögzítése",
+        "pendler_title": "Ingázási támogatás (Pendlerpauschale)",
+        "pendler_desc": (
+            "Nincs rögzített ingázási költség. Ha az ingázási távolsága legalább 2 km, "
+            "ingázási támogatásra jogosult. "
+            "Adja hozzá ingázási költségeit az 'Ingázás' kategóriában."
+        ),
+        "pendler_action": "Ingázási költség rögzítése",
+        "insurance_title": "Biztosítási díjak",
+        "insurance_desc": (
+            "Nincs rögzített biztosítási kiadás. Ha magánbiztosítást fizet "
+            "(pl. baleset-, életbiztosítás), ezek részben adóból levonhatók. "
+            "Töltse fel biztosítási kötvényét vagy adja hozzá a kiadást."
+        ),
+        "insurance_action": "Biztosítás rögzítése",
+        "review_title": "Nem levonható kiadások ellenőrzése",
+        "review_desc": (
+            "Önnek {amount} nem levonható kiadása van. "
+            "Ezek egy része megfelelő dokumentációval levonható lehet. "
+            "Ellenőrizze ezeket a kiadásokat és töltse fel a hiányzó bizonylatokat."
+        ),
+        "review_action": "Kiadások ellenőrzése",
+        "ocr_title": "Felismerési eredmények ellenőrzése",
+        "ocr_desc": (
+            "{count} dokumentum nem lett megfelelően felismerve. "
+            "Kérjük, ellenőrizze és javítsa a kinyert adatokat manuálisan."
+        ),
+        "ocr_action": "Dokumentumok ellenőrzése",
+        "getting_started_title": "Első tranzakció hozzáadása",
+        "getting_started_desc": (
+            "Töltsön fel nyugtákat, számlákat vagy bérjegyeket a kezdéshez. "
+            "Manuálisan is hozzáadhat bevételeket és kiadásokat."
+        ),
+        "getting_started_action": "Bizonylat feltöltése",
+    },
+    "pl": {
+        "home_office_title": "Odliczenie za biuro domowe",
+        "home_office_desc": (
+            "Nie zarejestrowano jeszcze wydatków na biuro domowe. "
+            "Jeśli pracujesz z domu, możesz odliczyć do 300 €/rok. "
+            "Prześlij paragon (np. rachunek za internet, artykuły biurowe) "
+            "lub dodaj wydatek ręcznie."
+        ),
+        "home_office_action": "Dodaj wydatek",
+        "pendler_title": "Dodatek dojazdowy (Pendlerpauschale)",
+        "pendler_desc": (
+            "Nie zarejestrowano kosztów dojazdu. Jeśli Twój dojazd wynosi co najmniej 2 km, "
+            "możesz ubiegać się o dodatek dojazdowy. "
+            "Dodaj koszty dojazdu w kategorii 'Dojazdy'."
+        ),
+        "pendler_action": "Dodaj koszty dojazdu",
+        "insurance_title": "Składki ubezpieczeniowe",
+        "insurance_desc": (
+            "Nie zarejestrowano wydatków na ubezpieczenie. Jeśli opłacasz prywatne ubezpieczenie "
+            "(np. od wypadków, na życie), mogą one być częściowo odliczane od podatku. "
+            "Prześlij polisę ubezpieczeniową lub dodaj wydatek."
+        ),
+        "insurance_action": "Dodaj ubezpieczenie",
+        "review_title": "Sprawdź wydatki niepodlegające odliczeniu",
+        "review_desc": (
+            "Masz {amount} wydatków niepodlegających odliczeniu. "
+            "Niektóre mogą kwalifikować się do odliczenia przy odpowiedniej dokumentacji. "
+            "Sprawdź te wydatki i prześlij brakujące paragony."
+        ),
+        "review_action": "Sprawdź wydatki",
+        "ocr_title": "Sprawdź wyniki rozpoznawania",
+        "ocr_desc": (
+            "{count} dokument(ów) nie zostało prawidłowo rozpoznanych. "
+            "Proszę sprawdzić i poprawić wyodrębnione dane ręcznie."
+        ),
+        "ocr_action": "Sprawdź dokumenty",
+        "getting_started_title": "Dodaj pierwszą transakcję",
+        "getting_started_desc": (
+            "Prześlij paragony, faktury lub paski wynagrodzeń, aby rozpocząć. "
+            "Możesz również ręcznie dodać przychody i wydatki."
+        ),
+        "getting_started_action": "Prześlij paragon",
+    },
+    "tr": {
+        "home_office_title": "Ev ofisi indirimi",
+        "home_office_desc": (
+            "Henuz ev ofisi gideri kaydedilmedi. "
+            "Evden calisiyorsaniz yilda 300 EUR'ya kadar indirim yapabilirsiniz. "
+            "Bir makbuz yukleyin (ornegin internet faturasi, ofis malzemesi) "
+            "veya gideri manuel olarak ekleyin."
+        ),
+        "home_office_action": "Gider ekle",
+        "pendler_title": "Ise gidis-gelis odenegi (Pendlerpauschale)",
+        "pendler_desc": (
+            "Ise gidis-gelis gideri kaydedilmedi. Ise gidis mesafeniz en az 2 km ise "
+            "ise gidis-gelis odenegine hak kazanabilirsiniz. "
+            "Ulasim giderlerinizi 'Ise gidis-gelis' kategorisinde ekleyin."
+        ),
+        "pendler_action": "Ulasim gideri ekle",
+        "insurance_title": "Sigorta primleri",
+        "insurance_desc": (
+            "Sigorta gideri kaydedilmedi. Ozel sigorta oduyorsaniz "
+            "(ornegin kaza, hayat sigortasi), bunlar kismen vergi indirimi olabilir. "
+            "Sigorta policenizi yukleyin veya gideri ekleyin."
+        ),
+        "insurance_action": "Sigorta ekle",
+        "review_title": "Indirilemez giderleri inceleyin",
+        "review_desc": (
+            "{amount} tutarinda indirilemez gideriniz var. "
+            "Bunlarin bir kismi uygun belgelerle indirilebilir olabilir. "
+            "Bu giderleri inceleyin ve eksik makbuzlari yukleyin."
+        ),
+        "review_action": "Giderleri incele",
+        "ocr_title": "Tanima sonuclarini inceleyin",
+        "ocr_desc": (
+            "{count} belge dogru taninamadi. "
+            "Lutfen cikarilan verileri manuel olarak kontrol edin ve duzeltin."
+        ),
+        "ocr_action": "Belgeleri incele",
+        "getting_started_title": "Ilk isleminizi ekleyin",
+        "getting_started_desc": (
+            "Baslamak icin makbuzlari, faturalari veya maas bordrolari yukleyin. "
+            "Ayrica gelir ve giderleri manuel olarak da ekleyebilirsiniz."
+        ),
+        "getting_started_action": "Makbuz yukle",
+    },
+    "bs": {
+        "home_office_title": "Odbitak za kucni ured",
+        "home_office_desc": (
+            "Jos nema evidentiranih troskova kucnog ureda. "
+            "Ako radite od kuce, mozete odbiti do 300 EUR godisnje. "
+            "Ucitajte racun (npr. internet racun, kancelarijski materijal) "
+            "ili rucno dodajte trosak."
+        ),
+        "home_office_action": "Dodaj trosak",
+        "pendler_title": "Naknada za putovanje na posao (Pendlerpauschale)",
+        "pendler_desc": (
+            "Nema evidentiranih troskova putovanja na posao. Ako je vasa udaljenost do posla najmanje 2 km, "
+            "mozete ostvariti pravo na naknadu za putovanje. "
+            "Dodajte troskove putovanja u kategoriji 'Putovanje na posao'."
+        ),
+        "pendler_action": "Dodaj troskove putovanja",
+        "insurance_title": "Premije osiguranja",
+        "insurance_desc": (
+            "Nema evidentiranih troskova osiguranja. Ako placate privatno osiguranje "
+            "(npr. od nezgode, zivotno osiguranje), ono moze biti djelomicno porezno odbitno. "
+            "Ucitajte polisu osiguranja ili dodajte trosak."
+        ),
+        "insurance_action": "Dodaj osiguranje",
+        "review_title": "Pregledajte neodbitne troskove",
+        "review_desc": (
+            "Imate {amount} neodbitnih troskova. "
+            "Neki od njih mogu biti odbitni uz odgovarajucu dokumentaciju. "
+            "Pregledajte ove troskove i ucitajte nedostajuce racune."
+        ),
+        "review_action": "Pregledaj troskove",
+        "ocr_title": "Pregledajte rezultate prepoznavanja",
+        "ocr_desc": (
+            "{count} dokument(a) nije pravilno prepoznato. "
+            "Molimo pregledajte i ispravite izdvojene podatke rucno."
+        ),
+        "ocr_action": "Pregledaj dokumente",
+        "getting_started_title": "Dodajte prvu transakciju",
+        "getting_started_desc": (
+            "Ucitajte racune, fakture ili platne listic da biste poceli. "
+            "Takoder mozete rucno dodati prihode i rashode."
+        ),
+        "getting_started_action": "Ucitaj racun",
     },
 }
 
@@ -293,6 +553,234 @@ _DOC_COMPLETENESS_TEXTS: Dict[str, Dict[str, Dict[str, str]]] = {
             "请核实数据 — 以评估通知 (Bescheid) 为准。"
         ),
     },
+    "fr": {
+        "missing_lohnzettel": {
+            "title": "Fiche de paie manquante",
+            "desc": "Veuillez télécharger votre Lohnzettel (L16) pour que nous puissions calculer correctement vos revenus d'emploi.",
+            "action": "Télécharger le Lohnzettel",
+        },
+        "missing_bescheid": {
+            "title": "Avis d'imposition manquant",
+            "desc": "Téléchargez votre dernier Einkommensteuerbescheid pour capturer les reports de pertes et les données historiques.",
+            "action": "Télécharger l'avis",
+        },
+        "missing_e1": {
+            "title": "Déclaration E1 manquante",
+            "desc": "Veuillez télécharger votre dernière déclaration E1 pour que nous puissions saisir votre situation de revenus complète.",
+            "action": "Télécharger E1",
+        },
+        "missing_svs": {
+            "title": "Avis SVS manquant",
+            "desc": "Téléchargez votre avis de cotisation SVS pour tenir compte correctement des cotisations sociales.",
+            "action": "Télécharger SVS",
+        },
+        "missing_kaufvertrag": {
+            "title": "Contrat d'achat manquant",
+            "desc": "Veuillez télécharger le contrat d'achat de votre bien pour calculer l'amortissement et les coûts d'acquisition.",
+            "action": "Télécharger le contrat",
+        },
+        "missing_mietvertrag": {
+            "title": "Contrat de location manquant",
+            "desc": "Téléchargez votre contrat de location pour que nous puissions attribuer correctement les revenus locatifs et les charges déductibles.",
+            "action": "Télécharger le contrat",
+        },
+        "conflict_title": "Écart de données détecté",
+        "conflict_desc": (
+            "L'avis d'imposition indique {bescheid_amount}, "
+            "mais vos transactions enregistrées totalisent {txn_amount}. "
+            "Veuillez vérifier — l'avis d'imposition (Bescheid) fait foi."
+        ),
+    },
+    "ru": {
+        "missing_lohnzettel": {
+            "title": "Отсутствует зарплатная ведомость",
+            "desc": "Пожалуйста, загрузите ваш Lohnzettel (L16), чтобы мы могли точно рассчитать ваш доход от работы.",
+            "action": "Загрузить Lohnzettel",
+        },
+        "missing_bescheid": {
+            "title": "Отсутствует налоговое уведомление",
+            "desc": "Загрузите ваш последний Einkommensteuerbescheid для учёта переноса убытков и исторических данных.",
+            "action": "Загрузить уведомление",
+        },
+        "missing_e1": {
+            "title": "Отсутствует декларация E1",
+            "desc": "Пожалуйста, загрузите вашу последнюю декларацию E1 для полного учёта вашей доходной ситуации.",
+            "action": "Загрузить E1",
+        },
+        "missing_svs": {
+            "title": "Отсутствует уведомление SVS",
+            "desc": "Загрузите уведомление о взносах SVS для корректного учёта социальных взносов.",
+            "action": "Загрузить SVS",
+        },
+        "missing_kaufvertrag": {
+            "title": "Отсутствует договор купли-продажи",
+            "desc": "Пожалуйста, загрузите договор купли-продажи недвижимости для расчёта амортизации и стоимости приобретения.",
+            "action": "Загрузить договор",
+        },
+        "missing_mietvertrag": {
+            "title": "Отсутствует договор аренды",
+            "desc": "Загрузите ваш договор аренды, чтобы мы могли правильно распределить доход от аренды и вычитаемые расходы.",
+            "action": "Загрузить договор",
+        },
+        "conflict_title": "Обнаружено расхождение данных",
+        "conflict_desc": (
+            "Налоговое уведомление показывает {bescheid_amount}, "
+            "но ваши записанные транзакции составляют {txn_amount}. "
+            "Пожалуйста, проверьте — уведомление (Bescheid) имеет приоритет."
+        ),
+    },
+    "hu": {
+        "missing_lohnzettel": {
+            "title": "Bérjegy hiányzik",
+            "desc": "Kérjük, töltse fel a Lohnzettel (L16) dokumentumot, hogy pontosan kiszámíthassuk a munkaviszonyból származó jövedelmét.",
+            "action": "Lohnzettel feltöltése",
+        },
+        "missing_bescheid": {
+            "title": "Adómegállapítás hiányzik",
+            "desc": "Töltse fel a legutóbbi Einkommensteuerbescheid-et a veszteségelhatárolások és korábbi adatok rögzítéséhez.",
+            "action": "Határozat feltöltése",
+        },
+        "missing_e1": {
+            "title": "E1 adóbevallás hiányzik",
+            "desc": "Kérjük, töltse fel a legutóbbi E1 adóbevallását, hogy teljes képet kapjunk jövedelmi helyzetéről.",
+            "action": "E1 feltöltése",
+        },
+        "missing_svs": {
+            "title": "SVS értesítés hiányzik",
+            "desc": "Töltse fel az SVS járulékértesítőt a társadalombiztosítási járulékok pontos elszámolásához.",
+            "action": "SVS feltöltése",
+        },
+        "missing_kaufvertrag": {
+            "title": "Adásvételi szerződés hiányzik",
+            "desc": "Kérjük, töltse fel az ingatlan adásvételi szerződését az értékcsökkenés és a beszerzési költségek kiszámításához.",
+            "action": "Szerződés feltöltése",
+        },
+        "missing_mietvertrag": {
+            "title": "Bérleti szerződés hiányzik",
+            "desc": "Töltse fel bérleti szerződését, hogy a bérleti bevételeket és levonható kiadásokat helyesen rendelhessük hozzá.",
+            "action": "Szerződés feltöltése",
+        },
+        "conflict_title": "Adateltérés észlelve",
+        "conflict_desc": (
+            "Az adómegállapítás {bescheid_amount} összeget mutat, "
+            "de a rögzített tranzakciók összege {txn_amount}. "
+            "Kérjük, ellenőrizze — a határozat (Bescheid) az irányadó."
+        ),
+    },
+    "pl": {
+        "missing_lohnzettel": {
+            "title": "Brak zaświadczenia o wynagrodzeniu",
+            "desc": "Proszę przesłać Lohnzettel (L16), abyśmy mogli dokładnie obliczyć Twój dochód z zatrudnienia.",
+            "action": "Prześlij Lohnzettel",
+        },
+        "missing_bescheid": {
+            "title": "Brak decyzji podatkowej",
+            "desc": "Prześlij ostatnią decyzję podatkową (Einkommensteuerbescheid), aby uwzględnić przeniesienie strat i dane historyczne.",
+            "action": "Prześlij decyzję",
+        },
+        "missing_e1": {
+            "title": "Brak deklaracji E1",
+            "desc": "Proszę przesłać ostatnią deklarację podatkową E1, abyśmy mogli w pełni uchwycić Twoją sytuację dochodową.",
+            "action": "Prześlij E1",
+        },
+        "missing_svs": {
+            "title": "Brak zawiadomienia SVS",
+            "desc": "Prześlij zawiadomienie o składkach SVS, aby prawidłowo uwzględnić składki na ubezpieczenie społeczne.",
+            "action": "Prześlij SVS",
+        },
+        "missing_kaufvertrag": {
+            "title": "Brak umowy kupna",
+            "desc": "Proszę przesłać umowę kupna nieruchomości, aby obliczyć amortyzację i koszty nabycia.",
+            "action": "Prześlij umowę",
+        },
+        "missing_mietvertrag": {
+            "title": "Brak umowy najmu",
+            "desc": "Prześlij umowę najmu, abyśmy mogli prawidłowo przypisać dochód z najmu i koszty uzyskania przychodu.",
+            "action": "Prześlij umowę",
+        },
+        "conflict_title": "Wykryto rozbieżność danych",
+        "conflict_desc": (
+            "Decyzja podatkowa wykazuje {bescheid_amount}, "
+            "ale zarejestrowane transakcje wynoszą łącznie {txn_amount}. "
+            "Proszę sprawdzić — decyzja podatkowa (Bescheid) ma pierwszeństwo."
+        ),
+    },
+    "tr": {
+        "missing_lohnzettel": {
+            "title": "Maas bordrosu eksik",
+            "desc": "Lutfen Lohnzettel (L16) belgenizi yukleyin, boylece maas gelirinizi dogru hesaplayabilelim.",
+            "action": "Lohnzettel yukle",
+        },
+        "missing_bescheid": {
+            "title": "Vergi degerlendirmesi eksik",
+            "desc": "Zarar tasimasini ve gecmis verileri kaydetmek icin son Einkommensteuerbescheid belgenizi yukleyin.",
+            "action": "Degerlendirme yukle",
+        },
+        "missing_e1": {
+            "title": "E1 vergi beyannamesi eksik",
+            "desc": "Lutfen son E1 vergi beyannamenizi yukleyin, boylece gelir durumunuzu eksiksiz kavrayabilelim.",
+            "action": "E1 yukle",
+        },
+        "missing_svs": {
+            "title": "SVS bildirimi eksik",
+            "desc": "Sosyal sigorta katkilarini dogru hesaplamak icin SVS katki bildirimnizi yukleyin.",
+            "action": "SVS yukle",
+        },
+        "missing_kaufvertrag": {
+            "title": "Satin alma sozlesmesi eksik",
+            "desc": "Lutfen gayrimenkul satin alma sozlesmenizi yukleyin, boylece amortisman ve edinme maliyetlerini hesaplayabilelim.",
+            "action": "Sozlesme yukle",
+        },
+        "missing_mietvertrag": {
+            "title": "Kira sozlesmesi eksik",
+            "desc": "Kira gelirlerini ve indirilebilir giderleri dogru atayabilmemiz icin kira sozlesmenizi yukleyin.",
+            "action": "Sozlesme yukle",
+        },
+        "conflict_title": "Veri uyumsuzlugu tespit edildi",
+        "conflict_desc": (
+            "Vergi degerlendirmesi {bescheid_amount} gosteriyor, "
+            "ancak kayitli islemlerinizin toplami {txn_amount}. "
+            "Lutfen kontrol edin - vergi degerlendirmesi (Bescheid) onceliklidir."
+        ),
+    },
+    "bs": {
+        "missing_lohnzettel": {
+            "title": "Nedostaje platni listic",
+            "desc": "Molimo ucitajte vas Lohnzettel (L16) kako bismo mogli tacno izracunati vas dohodak od zaposlenja.",
+            "action": "Ucitaj Lohnzettel",
+        },
+        "missing_bescheid": {
+            "title": "Nedostaje porezno rjesenje",
+            "desc": "Ucitajte posljednji Einkommensteuerbescheid radi evidentiranja prenesenih gubitaka i historijskih podataka.",
+            "action": "Ucitaj rjesenje",
+        },
+        "missing_e1": {
+            "title": "Nedostaje E1 porezna prijava",
+            "desc": "Molimo ucitajte posljednju E1 poreznu prijavu kako bismo u potpunosti obuhvatili vasu prihodovnu situaciju.",
+            "action": "Ucitaj E1",
+        },
+        "missing_svs": {
+            "title": "Nedostaje SVS obavijest",
+            "desc": "Ucitajte SVS obavijest o doprinosima radi tacnog obracuna doprinosa za socijalno osiguranje.",
+            "action": "Ucitaj SVS",
+        },
+        "missing_kaufvertrag": {
+            "title": "Nedostaje kupoprodajni ugovor",
+            "desc": "Molimo ucitajte kupoprodajni ugovor za nekretninu radi izracuna amortizacije i troskova sticanja.",
+            "action": "Ucitaj ugovor",
+        },
+        "missing_mietvertrag": {
+            "title": "Nedostaje ugovor o najmu",
+            "desc": "Ucitajte ugovor o najmu kako bismo mogli pravilno rasporediti prihode od najma i odbitne troskove.",
+            "action": "Ucitaj ugovor",
+        },
+        "conflict_title": "Otkriveno odstupanje podataka",
+        "conflict_desc": (
+            "Porezno rjesenje pokazuje {bescheid_amount}, "
+            "ali vase evidentirane transakcije iznose ukupno {txn_amount}. "
+            "Molimo provjerite - porezno rjesenje (Bescheid) ima prednost."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -375,6 +863,162 @@ _CALENDAR_TEXTS: Dict[str, List[Dict[str, str]]] = {
         {
             "title": "雇员税务评估（延期）",
             "description": "雇员税务评估延期截止日期（需税务顾问）",
+        },
+    ],
+    "fr": [
+        {
+            "title": "Déclaration d'impôt sur le revenu (papier)",
+            "description": "Date limite de dépôt de la déclaration papier",
+        },
+        {
+            "title": "Déclaration d'impôt sur le revenu (FinanzOnline)",
+            "description": "Date limite de déclaration électronique via FinanzOnline",
+        },
+        {
+            "title": "Déclaration préalable de TVA (UVA) Janvier",
+            "description": "Déclaration mensuelle de TVA pour janvier",
+        },
+        {
+            "title": "Soumission des fiches de paie",
+            "description": "L'employeur doit soumettre les fiches de paie annuelles",
+        },
+        {
+            "title": "Base de cotisation SVS",
+            "description": "Date limite de déclaration de la base de cotisation SVS",
+        },
+        {
+            "title": "Évaluation fiscale des employés (prolongée)",
+            "description": "Date limite prolongée pour l'évaluation fiscale des employés (avec conseiller fiscal)",
+        },
+    ],
+    "ru": [
+        {
+            "title": "Декларация по подоходному налогу (бумажная)",
+            "description": "Срок подачи бумажной налоговой декларации",
+        },
+        {
+            "title": "Декларация по подоходному налогу (FinanzOnline)",
+            "description": "Срок электронной подачи через FinanzOnline",
+        },
+        {
+            "title": "Предварительная декларация НДС (UVA) Январь",
+            "description": "Ежемесячная предварительная декларация НДС за январь",
+        },
+        {
+            "title": "Подача зарплатных ведомостей",
+            "description": "Работодатель должен подать годовые зарплатные ведомости",
+        },
+        {
+            "title": "База взносов SVS",
+            "description": "Срок подачи декларации о базе взносов SVS",
+        },
+        {
+            "title": "Налоговая оценка сотрудников (продлённая)",
+            "description": "Продлённый срок налоговой оценки сотрудников (с налоговым консультантом)",
+        },
+    ],
+    "hu": [
+        {
+            "title": "Jövedelemadó bevallás (papír)",
+            "description": "Papíralapú adóbevallás benyújtási határideje",
+        },
+        {
+            "title": "Jövedelemadó bevallás (FinanzOnline)",
+            "description": "Elektronikus adóbevallás határideje a FinanzOnline-on keresztül",
+        },
+        {
+            "title": "ÁFA előzetes bevallás (UVA) január",
+            "description": "Januári havi ÁFA előzetes bevallás",
+        },
+        {
+            "title": "Bérjegy benyújtás",
+            "description": "A munkáltatónak be kell nyújtania az éves bérjegyeket",
+        },
+        {
+            "title": "SVS járulékalap",
+            "description": "SVS járulékalap-bejelentés határideje",
+        },
+        {
+            "title": "Munkavállalói adómegállapítás (meghosszabbított)",
+            "description": "Meghosszabbított határidő a munkavállalói adómegállapításhoz (adótanácsadóval)",
+        },
+    ],
+    "pl": [
+        {
+            "title": "Zeznanie podatkowe (papierowe)",
+            "description": "Termin składania papierowego zeznania podatkowego",
+        },
+        {
+            "title": "Zeznanie podatkowe (FinanzOnline)",
+            "description": "Termin elektronicznego zeznania podatkowego przez FinanzOnline",
+        },
+        {
+            "title": "Zaliczka na VAT (UVA) styczeń",
+            "description": "Miesięczna zaliczka na VAT za styczeń",
+        },
+        {
+            "title": "Przekazanie zaświadczeń o wynagrodzeniu",
+            "description": "Pracodawca musi przekazać roczne zaświadczenia podatkowe o wynagrodzeniu",
+        },
+        {
+            "title": "Podstawa składek SVS",
+            "description": "Termin zgłoszenia podstawy składek SVS",
+        },
+        {
+            "title": "Rozliczenie podatkowe pracowników (przedłużone)",
+            "description": "Przedłużony termin rozliczenia podatkowego pracowników (z doradcą podatkowym)",
+        },
+    ],
+    "tr": [
+        {
+            "title": "Gelir vergisi beyannamesi (kagit)",
+            "description": "Kagit vergi beyannamesi gonderim son tarihi",
+        },
+        {
+            "title": "Gelir vergisi beyannamesi (FinanzOnline)",
+            "description": "FinanzOnline uzerinden elektronik vergi beyannamesi son tarihi",
+        },
+        {
+            "title": "KDV on beyannamesi (UVA) Ocak",
+            "description": "Ocak ayi icin aylik KDV on beyannamesi",
+        },
+        {
+            "title": "Maas bordrosu gonderimi",
+            "description": "Isverenin yillik maas bordrolari gondermesi gerekir",
+        },
+        {
+            "title": "SVS katki matrah",
+            "description": "SVS katki matrahi bildirimi son tarihi",
+        },
+        {
+            "title": "Calisan vergi degerlendirmesi (uzatilmis)",
+            "description": "Calisan vergi degerlendirmesi icin uzatilmis son tarih (vergi danismanli)",
+        },
+    ],
+    "bs": [
+        {
+            "title": "Prijava poreza na dohodak (papirna)",
+            "description": "Rok za podnasanje papirne porezne prijave",
+        },
+        {
+            "title": "Prijava poreza na dohodak (FinanzOnline)",
+            "description": "Rok za elektronsku poreznu prijavu putem FinanzOnline",
+        },
+        {
+            "title": "Prethodna prijava PDV-a (UVA) januar",
+            "description": "Mjesecna prethodna prijava PDV-a za januar",
+        },
+        {
+            "title": "Dostava platnih listica",
+            "description": "Poslodavac mora dostaviti godisnje potvrde o porezu na platu",
+        },
+        {
+            "title": "SVS osnovica doprinosa",
+            "description": "Rok za prijavu osnovice doprinosa SVS",
+        },
+        {
+            "title": "Porezna procjena zaposlenika (produzena)",
+            "description": "Produzeni rok za poreznu procjenu zaposlenika (uz poreznog savjetnika)",
         },
     ],
 }
@@ -471,21 +1115,20 @@ class DashboardService:
             .all()
         )
 
-        total_income = sum(
-            (t.amount for t in transactions if t.type == TransactionType.INCOME),
-            Decimal("0"),
+        total_income = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.INCOME},
         )
-        total_expenses = sum(
-            (t.amount for t in transactions if t.type == TransactionType.EXPENSE),
-            Decimal("0"),
+        total_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            include_private_use=False,
         )
-        deductible_expenses = sum(
-            (
-                t.deductible_amount
-                for t in transactions
-                if t.type == TransactionType.EXPENSE
-            ),
-            Decimal("0"),
+        deductible_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            deductible_only=True,
+            include_private_use=False,
         )
 
         net_income = total_income - total_expenses
@@ -608,12 +1251,14 @@ class DashboardService:
         # Monthly trends
         monthly_income: Dict[int, float] = defaultdict(float)
         monthly_expenses: Dict[int, float] = defaultdict(float)
-        for t in transactions:
-            month = t.transaction_date.month
-            if t.type == TransactionType.INCOME:
-                monthly_income[month] += float(t.amount)
-            else:
-                monthly_expenses[month] += float(t.amount)
+        for record in iter_posting_records(transactions, include_private_use=False):
+            if not record.transaction_date:
+                continue
+            month = record.transaction_date.month
+            if record.posting_type == LineItemPostingType.INCOME:
+                monthly_income[month] += float(record.total_amount)
+            elif record.posting_type == LineItemPostingType.EXPENSE:
+                monthly_expenses[month] += float(record.total_amount)
 
         monthly_data = []
         for month in range(1, 13):
@@ -624,32 +1269,19 @@ class DashboardService:
             })
 
         # Category breakdowns for charts
-        income_by_cat: Dict[str, float] = defaultdict(float)
-        expense_by_cat: Dict[str, float] = defaultdict(float)
-        for t in transactions:
-            if t.type == TransactionType.INCOME and t.income_category:
-                cat = (
-                    t.income_category.value
-                    if hasattr(t.income_category, "value")
-                    else str(t.income_category)
-                )
-                income_by_cat[cat] += float(t.amount)
-            elif t.type == TransactionType.EXPENSE:
-                # Use line-item-aware aggregation for expenses
-                if t.has_line_items:
-                    for li in t.line_items:
-                        cat = li.category or "other"
-                        expense_by_cat[cat] += float(li.amount * li.quantity)
-                elif t.expense_category:
-                    cat = (
-                        t.expense_category.value
-                        if hasattr(t.expense_category, "value")
-                        else str(t.expense_category)
-                    )
-                    expense_by_cat[cat] += float(t.amount)
+        income_by_cat = sum_postings_by_category(
+            transactions,
+            posting_types={LineItemPostingType.INCOME},
+            include_private_use=False,
+        )
+        expense_by_cat = sum_postings_by_category(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            include_private_use=False,
+        )
 
-        income_category_data = [{"category": k, "amount": v} for k, v in income_by_cat.items()]
-        expense_category_data = [{"category": k, "amount": v} for k, v in expense_by_cat.items()]
+        income_category_data = [{"category": k, "amount": float(v)} for k, v in income_by_cat.items()]
+        expense_category_data = [{"category": k, "amount": float(v)} for k, v in expense_by_cat.items()]
 
         # Count transactions needing review
         pending_review_count = sum(
@@ -971,6 +1603,48 @@ class DashboardService:
                 "business": "\u6211\u4eec\u68c0\u6d4b\u5230\u60a8\u6709\u5de5\u5546\u8425\u4e1a\u6536\u5165\u3002\u5efa\u8bae\u5c06\u8eab\u4efd\u66f4\u65b0\u4e3a\u300c\u4e2a\u4f53\u6237\u300d\u6216\u300c\u6df7\u5408\u8eab\u4efd\u300d\u3002",
                 "employment": "\u6211\u4eec\u68c0\u6d4b\u5230\u60a8\u6709\u5de5\u8d44\u6536\u5165\u3002\u5efa\u8bae\u5c06\u8eab\u4efd\u66f4\u65b0\u4e3a\u300c\u804c\u5458\u300d\u6216\u300c\u6df7\u5408\u8eab\u4efd\u300d\u3002",
                 "rental": "\u6211\u4eec\u68c0\u6d4b\u5230\u60a8\u6709\u79df\u91d1\u6536\u5165\u3002\u5efa\u8bae\u5c06\u8eab\u4efd\u66f4\u65b0\u4e3a\u300c\u623f\u4e1c\u300d\u6216\u300c\u6df7\u5408\u8eab\u4efd\u300d\u3002",
+            },
+            "fr": {
+                "agriculture": "Nous avons detecte des revenus agricoles/forestiers. Envisagez de mettre a jour votre profil en 'Independant' ou 'Mixte'.",
+                "self_employment": "Nous avons detecte des revenus d'activite independante. Envisagez de mettre a jour votre profil en 'Independant' ou 'Mixte'.",
+                "business": "Nous avons detecte des revenus commerciaux. Envisagez de mettre a jour votre profil en 'Independant' ou 'Mixte'.",
+                "employment": "Nous avons detecte des revenus salaries. Envisagez de mettre a jour votre profil en 'Salarie' ou 'Mixte'.",
+                "rental": "Nous avons detecte des revenus locatifs. Envisagez de mettre a jour votre profil en 'Bailleur' ou 'Mixte'.",
+            },
+            "ru": {
+                "agriculture": "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0434\u043e\u0445\u043e\u0434\u044b \u043e\u0442 \u0441\u0435\u043b\u044c\u0441\u043a\u043e\u0433\u043e/\u043b\u0435\u0441\u043d\u043e\u0433\u043e \u0445\u043e\u0437\u044f\u0439\u0441\u0442\u0432\u0430. \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043d\u0430 '\u0421\u0430\u043c\u043e\u0437\u0430\u043d\u044f\u0442\u044b\u0439' \u0438\u043b\u0438 '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0439'.",
+                "self_employment": "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0434\u043e\u0445\u043e\u0434\u044b \u043e\u0442 \u0441\u0430\u043c\u043e\u0441\u0442\u043e\u044f\u0442\u0435\u043b\u044c\u043d\u043e\u0439 \u0434\u0435\u044f\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438. \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043d\u0430 '\u0421\u0430\u043c\u043e\u0437\u0430\u043d\u044f\u0442\u044b\u0439' \u0438\u043b\u0438 '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0439'.",
+                "business": "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0434\u043e\u0445\u043e\u0434\u044b \u043e\u0442 \u043f\u0440\u0435\u0434\u043f\u0440\u0438\u043d\u0438\u043c\u0430\u0442\u0435\u043b\u044c\u0441\u043a\u043e\u0439 \u0434\u0435\u044f\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438. \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043d\u0430 '\u0421\u0430\u043c\u043e\u0437\u0430\u043d\u044f\u0442\u044b\u0439' \u0438\u043b\u0438 '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0439'.",
+                "employment": "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0434\u043e\u0445\u043e\u0434\u044b \u043e\u0442 \u0442\u0440\u0443\u0434\u043e\u0432\u043e\u0439 \u0434\u0435\u044f\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438. \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043d\u0430 '\u0420\u0430\u0431\u043e\u0442\u043d\u0438\u043a' \u0438\u043b\u0438 '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0439'.",
+                "rental": "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0434\u043e\u0445\u043e\u0434\u044b \u043e\u0442 \u0430\u0440\u0435\u043d\u0434\u044b. \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u043d\u0430 '\u0410\u0440\u0435\u043d\u0434\u043e\u0434\u0430\u0442\u0435\u043b\u044c' \u0438\u043b\u0438 '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0439'.",
+            },
+            "hu": {
+                "agriculture": "Mezőgazdasági/erdészeti jövedelmet észleltünk. Fontolja meg profilja frissítését 'Egyéni vállalkozó' vagy 'Vegyes' típusra.",
+                "self_employment": "Önálló tevékenységből származó jövedelmet észleltünk. Fontolja meg profilja frissítését 'Egyéni vállalkozó' vagy 'Vegyes' típusra.",
+                "business": "Üzleti jövedelmet észleltünk. Fontolja meg profilja frissítését 'Egyéni vállalkozó' vagy 'Vegyes' típusra.",
+                "employment": "Munkaviszonyból származó jövedelmet észleltünk. Fontolja meg profilja frissítését 'Alkalmazott' vagy 'Vegyes' típusra.",
+                "rental": "Bérleti jövedelmet észleltünk. Fontolja meg profilja frissítését 'Bérbeadó' vagy 'Vegyes' típusra.",
+            },
+            "pl": {
+                "agriculture": "Wykryliśmy dochody z rolnictwa/leśnictwa. Rozważ aktualizację profilu na 'Samozatrudniony' lub 'Mieszany'.",
+                "self_employment": "Wykryliśmy dochody z działalności na własny rachunek. Rozważ aktualizację profilu na 'Samozatrudniony' lub 'Mieszany'.",
+                "business": "Wykryliśmy dochody z działalności gospodarczej. Rozważ aktualizację profilu na 'Samozatrudniony' lub 'Mieszany'.",
+                "employment": "Wykryliśmy dochody z zatrudnienia. Rozważ aktualizację profilu na 'Pracownik' lub 'Mieszany'.",
+                "rental": "Wykryliśmy dochody z najmu. Rozważ aktualizację profilu na 'Wynajmujący' lub 'Mieszany'.",
+            },
+            "tr": {
+                "agriculture": "Tarim/ormancilik geliri tespit ettik. Profilinizi 'Serbest calisan' veya 'Karisik' olarak guncellemeyi dusunun.",
+                "self_employment": "Serbest meslek geliri tespit ettik. Profilinizi 'Serbest calisan' veya 'Karisik' olarak guncellemeyi dusunun.",
+                "business": "Ticari gelir tespit ettik. Profilinizi 'Serbest calisan' veya 'Karisik' olarak guncellemeyi dusunun.",
+                "employment": "Maas geliri tespit ettik. Profilinizi 'Calisan' veya 'Karisik' olarak guncellemeyi dusunun.",
+                "rental": "Kira geliri tespit ettik. Profilinizi 'Ev sahibi' veya 'Karisik' olarak guncellemeyi dusunun.",
+            },
+            "bs": {
+                "agriculture": "Otkrili smo prihode od poljoprivrede/sumarstva. Razmislite o azuriranju profila na 'Samostalna djelatnost' ili 'Mjesovito'.",
+                "self_employment": "Otkrili smo prihode od samostalne djelatnosti. Razmislite o azuriranju profila na 'Samostalna djelatnost' ili 'Mjesovito'.",
+                "business": "Otkrili smo poslovne prihode. Razmislite o azuriranju profila na 'Samostalna djelatnost' ili 'Mjesovito'.",
+                "employment": "Otkrili smo prihode od zaposlenja. Razmislite o azuriranju profila na 'Zaposlenik' ili 'Mjesovito'.",
+                "rental": "Otkrili smo prihode od najma. Razmislite o azuriranju profila na 'Najmodavac' ili 'Mjesovito'.",
             },
         }
 

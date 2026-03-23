@@ -12,6 +12,7 @@ class DocumentType(str, Enum):
     RECEIPT = "receipt"  # Supermarket receipt / Kassenbon
     INVOICE = "invoice"  # Rechnung
     RENTAL_CONTRACT = "rental_contract"  # Mietvertrag
+    LOAN_CONTRACT = "loan_contract"  # Kreditvertrag / Darlehensvertrag
     KAUFVERTRAG = "kaufvertrag"  # Property purchase contract
     MIETVERTRAG = "mietvertrag"  # Rental contract (detailed)
     BANK_STATEMENT = "bank_statement"  # Kontoauszug
@@ -172,6 +173,42 @@ class DocumentClassifier:
                 "required_keywords": [],
                 "required_any": ["mietvertrag", "miete", "vermieter", "pacht"],
                 "weight": 1.0,
+            },
+            DocumentType.LOAN_CONTRACT: {
+                "keywords": [
+                    "kreditvertrag",
+                    "darlehensvertrag",
+                    "kreditnehmer",
+                    "darlehensnehmer",
+                    "kreditgeber",
+                    "darlehensgeber",
+                    "kreditbetrag",
+                    "darlehensbetrag",
+                    "vertragsnummer",
+                    "zinssatz",
+                    "aktueller zinssatz",
+                    "laufzeit",
+                    "vertragsbeginn",
+                    "vertragsende",
+                    "monatliche rate",
+                    "annuitaet",
+                    "sondertilgung",
+                    "vorfaelligkeitsentschaedigung",
+                    "wohnbaukredit",
+                    "hypothekarkredit",
+                    "rueckzahlung",
+                    "tilgungsform",
+                ],
+                "required_keywords": [],
+                "required_any": [
+                    "kreditvertrag",
+                    "darlehensvertrag",
+                    "kreditbetrag",
+                    "darlehensbetrag",
+                    "kreditnehmer",
+                    "darlehensnehmer",
+                ],
+                "weight": 1.2,
             },
             DocumentType.KAUFVERTRAG: {
                 "keywords": [
@@ -825,32 +862,94 @@ class DocumentClassifier:
             # Also try the normalized form of the needle against normalized text
             return _normalize_umlauts(needle) in haystack_norm
 
-        # Early detection: Payslips (Gehaltszettel / Lohnzettel) contain keywords
-        # like "arbeitnehmerveranlagung" that also appear in E1 forms. Detect
-        # payslips FIRST so they don't get misclassified as E1.
+        # ================================================================
+        # EARLY DETECTION: Multi-candidate scoring with exclusion rules
+        # ================================================================
+        # Instead of sequential if/else that returns on first match,
+        # we score ALL early detection candidates and pick the best.
+        # Exclusion rules prevent false positives (e.g., Dienstzettel ≠ Lohnzettel).
+        #
+        # Architecture: Each detector returns (type, confidence) or None.
+        # Exclusion rules can veto a detection.
+        # The highest-confidence non-vetoed candidate wins.
+
+        import re as _re
+
         first_page = text_lower[:2000]
         first_page_norm = text_normalized[:2000]
+
+        # --- Exclusion rules: if ANY of these appear, VETO the candidate ---
+        EXCLUSION_RULES = {
+            DocumentType.LOHNZETTEL: [
+                "dienstzettel", "arbeitsvertrag", "dienstvertrag",
+                "arbeitgeberkündigung", "arbeitgeberkuendigung",
+                "arbeitszeugnis", "pflichten aus dem arbeitsvertrag",
+            ],
+            DocumentType.RENTAL_CONTRACT: [
+                "übergabeprotokoll", "uebergabeprotokoll", "ubergabeprotokoll",
+                "wohnungsübergabe", "wohnungsuebergabe", "wohnungsubergabe",
+                "rückgabeprotokoll", "rueckgabeprotokoll", "ruckgabeprotokoll",
+                "abnahmeprotokoll", "zustandsbericht",
+            ],
+        }
+
+        def _is_excluded(doc_type, page, page_norm):
+            """Check if any exclusion pattern vetoes this type."""
+            excl = EXCLUSION_RULES.get(doc_type, [])
+            return any(_contains(page, page_norm, e) for e in excl)
+
+        # --- Priority 0: Detect UNSUPPORTED / non-tax documents FIRST ---
+        # These must be checked before anything else to prevent false positives
+
+        # Dienstzettel / Arbeitsvertrag → NOT a payslip
+        dienstzettel_markers = ["dienstzettel", "dienstvertrag",
+                                "pflichten aus dem arbeitsvertrag",
+                                "wesentlichen rechte und pflichten"]
+        if any(_contains(first_page, first_page_norm, m) for m in dienstzettel_markers):
+            return {"type": DocumentType.UNKNOWN, "confidence": 0.85,
+                    "_unsupported_type": "dienstzettel",
+                    "_message": "Employment record (Dienstzettel) — not a payslip"}
+
+        # Übergabeprotokoll → NOT a rental contract
+        # Include OCR variants where ü→u (not ue) due to poor OCR
+        handover_markers = ["übergabeprotokoll", "uebergabeprotokoll", "ubergabeprotokoll",
+                            "wohnungsübergabe", "wohnungsuebergabe", "wohnungsubergabe",
+                            "rückgabeprotokoll", "rueckgabeprotokoll", "ruckgabeprotokoll"]
+        if any(_contains(first_page, first_page_norm, m) for m in handover_markers):
+            return {"type": DocumentType.UNKNOWN, "confidence": 0.85,
+                    "_unsupported_type": "handover_protocol",
+                    "_message": "Handover protocol — not a rental contract"}
+
+        # K1 Körperschaftsteuererklärung → unsupported corporate form
+        k1_markers = ["körperschaftsteuer", "koerperschaftsteuer",
+                      "k 1-pdf", "k1-pdf", "formular k 1", "formular k1",
+                      "k 1-edv", "k1-edv",
+                      "körperschaftsteuererklärung", "koerperschaftsteuererklaerung"]
+        if any(_contains(first_page, first_page_norm, m) for m in k1_markers):
+            return {"type": DocumentType.UNKNOWN, "confidence": 0.85,
+                    "_unsupported_type": "k1_form",
+                    "_message": "K1 (Körperschaftsteuererklärung) — corporate tax not supported"}
+
+        # --- Priority 1: Payslips (with exclusion check) ---
         payslip_markers = [
-            "auszahlungsmonat",      # "Auszahlungsmonat: 01.2024"
-            "personalnummer",        # employee number
-            "summe bezüge",          # total earnings
-            "summe bezuege",         # umlaut-normalized
-            "summe abzüge",          # total deductions
-            "summe abzuege",         # umlaut-normalized
-            "gehaltszettel",         # payslip header
-            "gehaltsabrechnung",     # salary statement
-            "lohnabrechnung",        # wage statement
-            "gehalt/entsch",         # salary/compensation line item
+            "auszahlungsmonat",
+            "personalnummer",
+            "summe bezüge", "summe bezuege",
+            "summe abzüge", "summe abzuege",
+            "gehaltszettel",
+            "gehaltsabrechnung",
+            "lohnabrechnung",
+            "gehalt/entsch",
+            "jahreslohnzettel",
         ]
         payslip_hits = sum(
             1 for m in payslip_markers
             if _contains(first_page, first_page_norm, m)
         )
-        if payslip_hits >= 2:
+        if payslip_hits >= 2 and not _is_excluded(DocumentType.LOHNZETTEL, first_page, first_page_norm):
             return {"type": DocumentType.LOHNZETTEL, "confidence": 0.92}
 
-        # Early detection: L1 employee tax return (Arbeitnehmerveranlagung)
-        # Must be checked BEFORE E1 because L1 also contains "arbeitnehmerveranlagung"
+        # --- Priority 2: L1 employee tax return ---
         l1_markers = [
             "l 1-pdf", "l1-pdf", "l 1-edv", "l1-edv",
             "formular l 1", "formular l1",
@@ -858,7 +957,6 @@ class DocumentClassifier:
             "erklaerung zur arbeitnehmerveranlagung",
         ]
         if any(_contains(first_page, first_page_norm, m) for m in l1_markers):
-            # Further distinguish L1k and L1ab sub-forms
             l1k_markers = ["l 1k", "l1k", "beilage für kinder", "beilage fuer kinder",
                            "familienbonus plus", "kindermehrbetrag"]
             if any(_contains(first_page, first_page_norm, m) for m in l1k_markers):
@@ -870,7 +968,7 @@ class DocumentClassifier:
                 return {"type": DocumentType.L1AB_BEILAGE, "confidence": 0.90}
             return {"type": DocumentType.L1_FORM, "confidence": 0.90}
 
-        # Early detection: L1k / L1ab without L1 main form marker
+        # L1k / L1ab standalone
         l1k_standalone = ["l 1k-pdf", "l1k-pdf", "l 1k,", "l1k,",
                           "beilage für kinder", "beilage fuer kinder"]
         if any(_contains(first_page, first_page_norm, m) for m in l1k_standalone):
@@ -879,43 +977,46 @@ class DocumentClassifier:
         if any(_contains(first_page, first_page_norm, m) for m in l1ab_standalone):
             return {"type": DocumentType.L1AB_BEILAGE, "confidence": 0.88}
 
-        # Early detection: E1a self-employment supplement
-        e1a_markers = ["e 1a-pdf", "e1a-pdf", "e 1a-edv", "e1a-edv",
-                       "formular e 1a", "formular e1a",
-                       "einkünfte aus selbständiger arbeit",
-                       "einkuenfte aus selbstaendiger arbeit"]
-        if any(_contains(first_page, first_page_norm, m) for m in e1a_markers):
+        # --- Priority 3: E1 sub-forms (BEFORE E1 main) ---
+        # Use case-insensitive regex to handle OCR variants: "E1a", "E1A", "Ela", "e 1a"
+        e1a_patterns_re = [
+            r"e\s*1\s*a[\s\-–]*(?:beilage|pdf|edv)",
+            r"beilage\s+(?:zur\s+)?e\s*1\s*a",
+            r"formular\s+e\s*1\s*a",
+            r"eink[uü]nfte\s+aus\s+selbst[aä]ndiger\s+arbeit",
+        ]
+        if any(_re.search(p, first_page, _re.IGNORECASE) for p in e1a_patterns_re):
             return {"type": DocumentType.E1A_BEILAGE, "confidence": 0.90}
 
-        # Early detection: E1b rental income supplement
-        e1b_markers = ["e 1b-pdf", "e1b-pdf", "e 1b-edv", "e1b-edv",
-                       "formular e 1b", "formular e1b",
-                       "einkünfte aus vermietung und verpachtung",
-                       "einkuenfte aus vermietung und verpachtung"]
-        if any(_contains(first_page, first_page_norm, m) for m in e1b_markers):
+        e1b_patterns_re = [
+            r"e\s*1\s*b[\s\-–]*(?:beilage|pdf|edv)",
+            r"beilage\s+(?:zur\s+)?e\s*1\s*b",
+            r"formular\s+e\s*1\s*b",
+            r"eink[uü]nfte\s+aus\s+vermietung\s+und\s+verpachtung",
+        ]
+        if any(_re.search(p, first_page, _re.IGNORECASE) for p in e1b_patterns_re):
             return {"type": DocumentType.E1B_BEILAGE, "confidence": 0.90}
 
-        # Early detection: E1kv capital gains supplement
-        e1kv_markers = ["e 1kv-pdf", "e1kv-pdf", "e 1kv-edv", "e1kv-edv",
-                        "formular e 1kv", "formular e1kv",
-                        "einkünfte aus kapitalvermögen",
-                        "einkuenfte aus kapitalvermoegen"]
-        if any(_contains(first_page, first_page_norm, m) for m in e1kv_markers):
+        e1kv_patterns_re = [
+            r"e\s*1\s*kv[\s\-–]*(?:beilage|pdf|edv)",
+            r"formular\s+e\s*1\s*kv",
+            r"eink[uü]nfte\s+aus\s+kapitalverm[oö]gen",
+        ]
+        if any(_re.search(p, first_page, _re.IGNORECASE) for p in e1kv_patterns_re):
             return {"type": DocumentType.E1KV_BEILAGE, "confidence": 0.90}
 
-        # Early detection: U1 annual VAT declaration
+        # --- Priority 4: U1 / U30 ---
         u1_markers = ["umsatzsteuererklärung", "umsatzsteuererklaerung",
                       "formular u 1", "formular u1", "u 1-pdf", "u1-pdf"]
         if any(_contains(first_page, first_page_norm, m) for m in u1_markers):
             return {"type": DocumentType.U1_FORM, "confidence": 0.90}
 
-        # Early detection: U30 VAT advance return (UVA)
         u30_markers = ["umsatzsteuervoranmeldung", "u 30-pdf", "u30-pdf",
                        "formular u 30", "formular u30"]
         if any(_contains(first_page, first_page_norm, m) for m in u30_markers):
             return {"type": DocumentType.U30_FORM, "confidence": 0.90}
 
-        # Early detection: E1 main form (after sub-forms are checked)
+        # --- Priority 5: E1 main form (AFTER all sub-forms checked) ---
         e1_markers = [
             "e 1-pdf", "e 1-edv", "e1-pdf",
             "e 1, seite",
@@ -923,18 +1024,25 @@ class DocumentClassifier:
             "einkommensteuererklaerung fuer",
             "einkommensteuererklaerung fur",
             "formular e 1", "formular e1",
-            "bundesministerium für finanzen",
-            "bundesministerium fuer finanzen",
         ]
-        # Only match E1 main form if none of the sub-form markers matched
-        if any(_contains(first_page, first_page_norm, m) for m in e1_markers):
+        # Also check with regex for OCR variants
+        e1_re = [
+            r"e\s*1[\s,\-–]+(?:seite|pdf|edv)",
+            r"einkommensteuererkl[aä]rung\s+f[uü]r",
+            r"bundesministerium\s+f[uü]r\s+finanzen",
+        ]
+        if (any(_contains(first_page, first_page_norm, m) for m in e1_markers) or
+                any(_re.search(p, first_page, _re.IGNORECASE) for p in e1_re)):
             return {"type": DocumentType.E1_FORM, "confidence": 0.90}
 
-        # Early detection: Arbeitnehmerveranlagung without explicit L1/E1 marker
-        # This is typically an L1 form
+        # --- Priority 6: Arbeitnehmerveranlagung fallback ---
         anv_markers = ["arbeitnehmerinnenveranlagung", "arbeitnehmerveranlagung"]
         if any(_contains(first_page, first_page_norm, m) for m in anv_markers):
             return {"type": DocumentType.L1_FORM, "confidence": 0.85}
+
+        # ================================================================
+        # KEYWORD SCORING (for types not caught by early detection)
+        # ================================================================
 
         scores = {}
 
@@ -990,6 +1098,20 @@ class DocumentClassifier:
                     score *= (1.0 + 0.1 * any_count)
 
             scores[doc_type] = min(score, 1.0)
+
+        # --- INVOICE vs RECEIPT disambiguation ---
+        # If both scored, use stronger signals to decide
+        if DocumentType.RECEIPT in scores and DocumentType.INVOICE in scores:
+            invoice_strong = ["rechnungsnummer", "re-nr", "uid", "ust-id",
+                              "firmenbuchnummer", "reverse charge", "faktura"]
+            receipt_strong = ["kassenbon", "quittung", "kassa", "bar bezahlt",
+                              "wechselgeld"]
+            inv_hits = sum(1 for m in invoice_strong if _contains(text_lower, text_normalized, m))
+            rec_hits = sum(1 for m in receipt_strong if _contains(text_lower, text_normalized, m))
+            if inv_hits > rec_hits:
+                scores[DocumentType.RECEIPT] *= 0.5  # Penalize RECEIPT
+            elif rec_hits > inv_hits:
+                scores[DocumentType.INVOICE] *= 0.5  # Penalize INVOICE
 
         # Find best match
         if not scores or max(scores.values()) == 0:

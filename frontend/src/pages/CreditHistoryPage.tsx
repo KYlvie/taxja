@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import Select from '../components/common/Select';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
+import SubpageBackLink from '../components/common/SubpageBackLink';
 import './CreditHistoryPage.css';
 
 const CreditHistoryPage: React.FC = () => {
@@ -46,28 +46,22 @@ const CreditHistoryPage: React.FC = () => {
   return (
     <div className="credit-history-page">
       <div className="credit-history-header">
-        <Link to="/dashboard" className="back-link">
-          <ArrowLeft size={18} />
-          <span>{t('common.back', 'Back')}</span>
-        </Link>
+        <SubpageBackLink to="/dashboard" />
         <h1>{t('credits.history_title', 'Credit History')}</h1>
       </div>
 
       <div className="credit-history-filter">
         <label htmlFor="operation-filter">{t('credits.filter_by', 'Filter by')}:</label>
-        <select
-          id="operation-filter"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          <option value="all">{t('credits.filter_all', 'All')}</option>
-          <option value="deduction">{t('credits.filter_deduction', 'Deductions')}</option>
-          <option value="refund">{t('credits.filter_refund', 'Refunds')}</option>
-          <option value="monthly_reset">{t('credits.filter_reset', 'Monthly Resets')}</option>
-          <option value="topup">{t('credits.filter_topup', 'Top-ups')}</option>
-          <option value="topup_expiry">{t('credits.filter_expiry', 'Expired Top-ups')}</option>
-          <option value="overage_settlement">{t('credits.filter_overage', 'Overage Settlements')}</option>
-        </select>
+        <Select id="operation-filter" value={filter} onChange={setFilter} size="sm"
+          options={[
+            { value: 'all', label: t('credits.filter_all', 'All') },
+            { value: 'deduction', label: t('credits.filter_deduction', 'Deductions') },
+            { value: 'refund', label: t('credits.filter_refund', 'Refunds') },
+            { value: 'monthly_reset', label: t('credits.filter_reset', 'Monthly Resets') },
+            { value: 'topup', label: t('credits.filter_topup', 'Top-ups') },
+            { value: 'topup_expiry', label: t('credits.filter_expiry', 'Expired Top-ups') },
+            { value: 'overage_settlement', label: t('credits.filter_overage', 'Overage Settlements') },
+          ]} />
       </div>
 
       <div className="credit-history-list">

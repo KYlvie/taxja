@@ -257,6 +257,17 @@ def upgrade_subscription(
     """Upgrade subscription plan with proration."""
     subscription_service = SubscriptionService(db)
     feature_gate_service = FeatureGateService(db)
+    current_subscription = subscription_service.get_user_subscription(current_user.id)
+
+    if (
+        _is_stripe_configured()
+        and current_subscription
+        and current_subscription.stripe_subscription_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Manage paid plan changes through Stripe checkout or customer portal.",
+        )
     
     try:
         result = subscription_service.upgrade_subscription(
@@ -280,6 +291,17 @@ def downgrade_subscription(
 ):
     """Downgrade subscription plan (effective at period end)."""
     subscription_service = SubscriptionService(db)
+    current_subscription = subscription_service.get_user_subscription(current_user.id)
+
+    if (
+        _is_stripe_configured()
+        and current_subscription
+        and current_subscription.stripe_subscription_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Manage paid plan changes through Stripe customer portal.",
+        )
     
     try:
         result = subscription_service.downgrade_subscription(
@@ -301,6 +323,23 @@ def cancel_subscription(
 ):
     """Cancel subscription (effective at period end)."""
     subscription_service = SubscriptionService(db)
+    current_subscription = subscription_service.get_user_subscription(current_user.id)
+
+    if (
+        _is_stripe_configured()
+        and current_subscription
+        and current_subscription.stripe_subscription_id
+    ):
+        from app.services.stripe_payment_service import StripePaymentService
+
+        stripe_service = StripePaymentService(db)
+        try:
+            return stripe_service.schedule_subscription_cancellation(current_user.id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
     
     try:
         result = subscription_service.cancel_subscription(current_user.id)
@@ -319,6 +358,23 @@ def reactivate_subscription(
 ):
     """Reactivate a canceled subscription."""
     subscription_service = SubscriptionService(db)
+    current_subscription = subscription_service.get_user_subscription(current_user.id)
+
+    if (
+        _is_stripe_configured()
+        and current_subscription
+        and current_subscription.stripe_subscription_id
+    ):
+        from app.services.stripe_payment_service import StripePaymentService
+
+        stripe_service = StripePaymentService(db)
+        try:
+            return stripe_service.resume_scheduled_cancellation(current_user.id)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
     
     try:
         subscription = subscription_service.reactivate_subscription(current_user.id)

@@ -124,7 +124,7 @@ class OCRQualityService:
         
         # Check overall confidence
         if confidence < self.FAIR_THRESHOLD:
-            issues.append("Low overall OCR confidence")
+            issues.append("Low overall recognition confidence")
         
         # Check if text was detected
         if not raw_text or len(raw_text.strip()) < 10:
@@ -187,11 +187,11 @@ class OCRQualityService:
         
         # Quality-specific suggestions
         if quality_level == "excellent":
-            suggestions.append("✓ OCR results are highly accurate")
+            suggestions.append("✓ Recognition results are highly accurate")
             suggestions.append("You can proceed with confidence")
         
         elif quality_level == "good":
-            suggestions.append("✓ OCR results are reliable")
+            suggestions.append("✓ Recognition results are reliable")
             suggestions.append("Please verify key fields before proceeding")
         
         elif quality_level == "fair":
@@ -206,7 +206,7 @@ class OCRQualityService:
             suggestions.append("Alternatively, use manual input option")
         
         elif quality_level == "failed":
-            suggestions.append("❌ OCR processing failed")
+            suggestions.append("❌ Document processing failed")
             suggestions.append("Please retake photo following best practices")
             suggestions.append("Or use manual input to enter data")
         
@@ -242,7 +242,7 @@ class OCRQualityService:
         """
         if confidence >= self.FAIR_THRESHOLD:
             return {
-                "reason": "OCR quality is acceptable, but you can improve it",
+                "reason": "Recognition quality is acceptable, but you can improve it",
                 "tips": [
                     "Use natural daylight or bright indoor lighting",
                     "Place document on a flat, contrasting surface",
@@ -254,7 +254,7 @@ class OCRQualityService:
             }
         else:
             return {
-                "reason": "OCR quality is poor and retake is strongly recommended",
+                "reason": "Recognition quality is poor and retake is strongly recommended",
                 "tips": [
                     "✓ Use bright, even lighting (avoid shadows)",
                     "✓ Place document flat on a dark surface",
@@ -287,19 +287,19 @@ class OCRQualityService:
         """
         # Always suggest manual input if OCR completely failed
         if confidence == 0:
-            return True, "OCR processing failed completely"
+            return True, "Document processing failed completely"
         
         # Suggest after multiple retries with poor results
         if retry_count >= 2 and confidence < self.FAIR_THRESHOLD:
-            return True, "Multiple OCR attempts with poor results"
+            return True, "Multiple processing attempts with poor results"
         
         # Suggest for very poor confidence
         if confidence < 0.3:
-            return True, "OCR confidence is very low"
+            return True, "Recognition confidence is very low"
         
         # Don't suggest for acceptable results
         if confidence >= self.FAIR_THRESHOLD:
-            return False, "OCR quality is acceptable"
+            return False, "Recognition quality is acceptable"
         
         # For poor results on first try, suggest retake first
         return False, "Try retaking photo first"
@@ -350,7 +350,7 @@ class OCRQualityService:
                 "can_retry": True,
             },
             "processing_failed": {
-                "message": "OCR processing encountered an unexpected error.",
+                "message": "Document processing encountered an unexpected error.",
                 "suggestions": [
                     "Try uploading the document again",
                     "If the problem persists, use manual input",
@@ -361,7 +361,7 @@ class OCRQualityService:
         }
         
         error_info = error_messages.get(error_type, {
-            "message": "An unknown error occurred during OCR processing.",
+            "message": "An unknown error occurred during document processing.",
             "suggestions": ["Please try again or use manual input"],
             "can_retry": True,
         })

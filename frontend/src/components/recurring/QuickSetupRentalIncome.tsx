@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { recurringService } from '../../services/recurringService';
+import Select from '../common/Select';
 
 interface QuickSetupRentalIncomeProps {
   propertyId: string;
@@ -25,7 +26,7 @@ export const QuickSetupRentalIncome: React.FC<QuickSetupRentalIncomeProps> = ({
 }) => {
   const { t } = useTranslation();
   const { alert: showAlert } = useConfirm();
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       day_of_month: 1,
       start_date: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
@@ -88,16 +89,14 @@ export const QuickSetupRentalIncome: React.FC<QuickSetupRentalIncomeProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('recurring.quickSetup.dayOfMonth')}
                 </label>
-                <select
+                <Select
                   {...register('day_of_month', { required: true })}
+                  value={watch('day_of_month')?.toString() || ''}
                   className="w-full border rounded px-3 py-2"
-                >
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                    <option key={day} value={day}>
-                      {day}. {t('recurring.quickSetup.dayOfMonthSuffix')}
-                    </option>
-                  ))}
-                </select>
+                  options={Array.from({ length: 28 }, (_, i) => i + 1).map(day => ({
+                    value: String(day),
+                    label: `${day}. ${t('recurring.quickSetup.dayOfMonthSuffix')}`,
+                  }))} />
               </div>
             </div>
 

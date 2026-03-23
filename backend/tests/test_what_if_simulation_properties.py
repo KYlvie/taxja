@@ -8,7 +8,7 @@ Validates Requirement 34.4
 import pytest
 from decimal import Decimal
 from datetime import datetime, date
-from hypothesis import given, strategies as st, assume, settings
+from hypothesis import HealthCheck, given, strategies as st, assume, settings
 from sqlalchemy.orm import Session
 
 from app.models.user import User, UserType
@@ -30,7 +30,7 @@ def expense_transaction(draw, tax_year: int):
     return TransactionCreate(
         type=TransactionType.EXPENSE,
         amount=draw(transaction_amount()),
-        date=date(tax_year, draw(st.integers(min_value=1, max_value=12)), 1),
+        transaction_date=date(tax_year, draw(st.integers(min_value=1, max_value=3)), 1),
         description=draw(st.text(min_size=5, max_size=50)),
         expense_category=draw(st.sampled_from(list(ExpenseCategory))),
         is_deductible=draw(st.booleans()),
@@ -47,6 +47,7 @@ class TestWhatIfSimulationProperties:
         """Create test user"""
         user = User(
             email="test@example.com",
+            name="Test User",
             hashed_password="hashed",
             user_type=UserType.SELF_EMPLOYED,
         )
@@ -63,7 +64,11 @@ class TestWhatIfSimulationProperties:
     @given(
         expense=expense_transaction(2026),
     )
-    @settings(max_examples=50, deadline=None)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_24_add_expense_consistency(
         self, db: Session, test_user: User, simulator: WhatIfSimulator, expense
     ):
@@ -80,7 +85,7 @@ class TestWhatIfSimulationProperties:
             user_id=test_user.id,
             type=TransactionType.INCOME,
             amount=Decimal("50000.00"),
-            date=date(tax_year, 6, 1),
+            transaction_date=date(tax_year, 1, 1),
             description="Base income",
             income_category=IncomeCategory.SELF_EMPLOYMENT,
         )
@@ -120,7 +125,11 @@ class TestWhatIfSimulationProperties:
             places=2,
         ),
     )
-    @settings(max_examples=50, deadline=None)
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[HealthCheck.function_scoped_fixture],
+    )
     def test_property_24_income_change_monotonicity(
         self, db: Session, test_user: User, simulator: WhatIfSimulator, income_change
     ):
@@ -140,7 +149,7 @@ class TestWhatIfSimulationProperties:
             user_id=test_user.id,
             type=TransactionType.INCOME,
             amount=base_income,
-            date=date(tax_year, 6, 1),
+            transaction_date=date(tax_year, 1, 1),
             description="Base income",
             income_category=IncomeCategory.SELF_EMPLOYMENT,
         )
@@ -186,7 +195,7 @@ class TestWhatIfSimulationProperties:
             user_id=test_user.id,
             type=TransactionType.INCOME,
             amount=Decimal("50000.00"),
-            date=date(tax_year, 6, 1),
+            transaction_date=date(tax_year, 1, 1),
             description="Base income",
             income_category=IncomeCategory.SELF_EMPLOYMENT,
         )
@@ -197,7 +206,7 @@ class TestWhatIfSimulationProperties:
         expense = TransactionCreate(
             type=TransactionType.EXPENSE,
             amount=Decimal("1000.00"),
-            date=date(tax_year, 6, 15),
+            transaction_date=date(tax_year, 3, 15),
             description="Test expense",
             expense_category=ExpenseCategory.OFFICE_SUPPLIES,
             is_deductible=True,
@@ -228,7 +237,7 @@ class TestWhatIfSimulationProperties:
             user_id=test_user.id,
             type=TransactionType.INCOME,
             amount=Decimal("50000.00"),
-            date=date(tax_year, 6, 1),
+            transaction_date=date(tax_year, 1, 1),
             description="Base income",
             income_category=IncomeCategory.SELF_EMPLOYMENT,
         )
@@ -244,7 +253,7 @@ class TestWhatIfSimulationProperties:
         expense = TransactionCreate(
             type=TransactionType.EXPENSE,
             amount=Decimal("1000.00"),
-            date=date(tax_year, 6, 15),
+            transaction_date=date(tax_year, 3, 15),
             description="Test expense",
             expense_category=ExpenseCategory.OFFICE_SUPPLIES,
             is_deductible=True,

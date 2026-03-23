@@ -91,13 +91,13 @@ class TestVATSmallBusinessExemption:
 
 
 class TestVATToleranceRule:
-    """Tests for the 10% tolerance rule (EUR 55,001 - EUR 60,500)."""
+    """Tests for the 15% tolerance rule (EUR 55,001 - EUR 63,250)."""
 
     @pytest.mark.parametrize("turnover", [
         Decimal("55000.01"),
         Decimal("57000"),
         Decimal("60000"),
-        Decimal("60500"),
+        Decimal("63250"),
     ])
     def test_tolerance_applies(self, vat_calc: VATCalculator, turnover: Decimal):
         """Turnover between EUR 55,001 and EUR 60,500 triggers tolerance rule."""
@@ -112,8 +112,8 @@ class TestVATToleranceRule:
         assert warning is None
 
     def test_tolerance_does_not_apply_above(self, vat_calc: VATCalculator):
-        """Turnover above EUR 60,500 does not trigger tolerance rule."""
-        applies, warning = vat_calc.apply_tolerance_rule(Decimal("60500.01"))
+        """Turnover above EUR 63,250 does not trigger tolerance rule."""
+        applies, warning = vat_calc.apply_tolerance_rule(Decimal("63250.01"))
         assert applies is False
         assert warning is None
 
@@ -383,11 +383,11 @@ class TestVATEdgeCases:
         assert result.warning is not None
 
     def test_one_cent_above_tolerance(self, vat_calc: VATCalculator):
-        """EUR 60,500.01 is above tolerance - not exempt."""
+        """EUR 63,250.01 is above tolerance - not exempt."""
         txns = [
-            Transaction(amount=Decimal("60500.01"), is_income=True, description="Service"),
+            Transaction(amount=Decimal("63250.01"), is_income=True, description="Service"),
         ]
-        result = vat_calc.calculate_vat_liability(Decimal("60500.01"), txns)
+        result = vat_calc.calculate_vat_liability(Decimal("63250.01"), txns)
         assert result.exempt is False
 
     def test_exactly_at_small_business_threshold(self, vat_calc: VATCalculator):
@@ -467,7 +467,7 @@ class TestSVSGSVG:
         monthly_base = (annual / Decimal("12")).quantize(Decimal("0.01"))
         # 50000/12 = 4166.666... -> quantized to 4166.67
         # But the calculator uses unquantized monthly_income for the base
-        # contribution_base = max(monthly_income, 551.10) then min(..., 7585)
+        # contribution_base = max(monthly_income, 551.10) then min(..., 8085)
         # monthly_income = 50000/12 = 4166.666...
         # contribution_base will be 4166.666... (between min and max)
 
@@ -475,7 +475,7 @@ class TestSVSGSVG:
         expected_base_raw = Decimal("50000") / Decimal("12")
         expected_pension = (expected_base_raw * Decimal("0.185")).quantize(Decimal("0.01"))
         expected_health = (expected_base_raw * Decimal("0.068")).quantize(Decimal("0.01"))
-        expected_accident = Decimal("12.17")
+        expected_accident = Decimal("12.25")
         expected_supplementary = (expected_base_raw * Decimal("0.0153")).quantize(Decimal("0.01"))
 
         assert result.breakdown["pension"] == expected_pension
@@ -502,25 +502,26 @@ class TestSVSGSVG:
         assert result.deductible is True
 
     def test_gsvg_at_max_base(self, svs_calc: SVSCalculator):
-        """Income above max base (EUR 7,585/month = EUR 91,020/year) is capped."""
+        """Income above max base (EUR 8,085/month) is capped."""
         annual = Decimal("120000")
         result = svs_calc.calculate_contributions(annual, UserType.GSVG)
 
         # Contribution base should be capped at max
-        assert result.contribution_base == Decimal("7585.00")
+        assert result.contribution_base == Decimal("7720.50")
 
-        expected_pension = (Decimal("7585") * Decimal("0.185")).quantize(Decimal("0.01"))
-        expected_health = (Decimal("7585") * Decimal("0.068")).quantize(Decimal("0.01"))
-        expected_supplementary = (Decimal("7585") * Decimal("0.0153")).quantize(Decimal("0.01"))
+        expected_pension = (Decimal("7720.50") * Decimal("0.185")).quantize(Decimal("0.01"))
+        expected_health = (Decimal("7720.50") * Decimal("0.068")).quantize(Decimal("0.01"))
+        expected_supplementary = (Decimal("7720.50") * Decimal("0.0153")).quantize(Decimal("0.01"))
 
         assert result.breakdown["pension"] == expected_pension
         assert result.breakdown["health"] == expected_health
-        assert result.breakdown["accident"] == Decimal("12.17")
+        assert result.breakdown["accident"] == Decimal("12.25")
         assert result.breakdown["supplementary"] == expected_supplementary
 
     def test_gsvg_above_max_same_as_at_max(self, svs_calc: SVSCalculator):
         """Increasing income above max base does not increase contributions."""
-        result_at = svs_calc.calculate_contributions(Decimal("91020"), UserType.GSVG)
+        # Max base is 8085/month = 97020/year (2026)
+        result_at = svs_calc.calculate_contributions(Decimal("97020"), UserType.GSVG)
         result_above = svs_calc.calculate_contributions(Decimal("200000"), UserType.GSVG)
         assert result_at.monthly_total == result_above.monthly_total
         assert result_at.annual_total == result_above.annual_total
@@ -544,7 +545,7 @@ class TestSVSNeueSelbstaendige:
 
         assert result.breakdown["pension"] == expected_pension
         assert result.breakdown["health"] == expected_health
-        assert result.breakdown["accident"] == Decimal("12.17")
+        assert result.breakdown["accident"] == Decimal("12.25")
         assert result.breakdown["supplementary"] == expected_supplementary
         assert result.deductible is True
 
@@ -559,17 +560,17 @@ class TestSVSNeueSelbstaendige:
         assert "Minimum" in (result.note or "") or "minimum" in (result.note or "").lower()
 
     def test_neue_at_max_base(self, svs_calc: SVSCalculator):
-        """Income above max base is capped at EUR 7,585/month."""
-        annual = Decimal("120000")  # 10000/month > 7585
+        """Income above max base is capped at EUR 8,085/month (2026)."""
+        annual = Decimal("120000")  # 10000/month > 8085
         result = svs_calc.calculate_contributions(annual, UserType.NEUE_SELBSTAENDIGE)
 
-        assert result.contribution_base == Decimal("7585.00")
+        assert result.contribution_base == Decimal("7720.50")
 
     def test_neue_zero_income_minimum_applied(self, svs_calc: SVSCalculator):
         """Zero income for Neue Selbstaendige gets minimum contribution."""
         result = svs_calc.calculate_contributions(Decimal("0"), UserType.NEUE_SELBSTAENDIGE)
         # With zero income, all calculated contributions are zero + accident
-        # Total = 0 + 0 + 12.17 + 0 = 12.17 < 160.81, so minimum applies
+        # Total = 0 + 0 + 12.95 + 0 = 12.95 < 160.81, so minimum applies
         assert result.monthly_total == Decimal("160.81")
 
 
@@ -686,7 +687,7 @@ class TestSVSEdgeCases:
     def test_negative_income_neue(self, svs_calc: SVSCalculator):
         """Negative income for Neue Selbstaendige gets minimum contribution."""
         result = svs_calc.calculate_contributions(Decimal("-5000"), UserType.NEUE_SELBSTAENDIGE)
-        # Negative monthly_income -> contribution_base = min(negative, 7585) = negative
+        # Negative monthly_income -> contribution_base = min(negative, 8085) = negative
         # All percentage-based contributions negative, total < 160.81, minimum applies
         assert result.monthly_total == Decimal("160.81")
 

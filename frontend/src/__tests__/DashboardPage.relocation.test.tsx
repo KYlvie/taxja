@@ -1,8 +1,8 @@
 /* @vitest-environment jsdom */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import DashboardPage from '../pages/DashboardPage';
 import { useAuthStore } from '../stores/authStore';
 import { useDashboardStore } from '../stores/dashboardStore';
@@ -34,6 +34,17 @@ vi.mock('../components/dashboard/TrendCharts', () => ({
 
 vi.mock('../components/dashboard/IncomeTypeHint', () => ({
   default: () => <div data-testid="income-type-hint">Income type hint</div>,
+}));
+
+vi.mock('../components/documents/DocumentUpload', () => ({
+  default: ({ onDocumentsSubmitted }: { onDocumentsSubmitted?: (documents: Array<{ id: number }>) => void }) => (
+    <button
+      data-testid="dashboard-document-upload"
+      onClick={() => onDocumentsSubmitted?.([{ id: 42 }])}
+    >
+      Upload document
+    </button>
+  ),
 }));
 
 vi.mock('../components/dashboard/QuickActions', () => ({
@@ -99,5 +110,22 @@ describe('DashboardPage relocation', () => {
     expect(screen.queryByText('Asset overview')).not.toBeInTheDocument();
     expect(screen.queryByText('AI tax advisor')).not.toBeInTheDocument();
     expect(screen.queryByText('Employer workbench')).not.toBeInTheDocument();
+  });
+
+  it('navigates to the uploaded document when dashboard upload finishes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard']}>
+        <Routes>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/documents/:id" element={<div data-testid="document-route">Document route</div>} />
+          <Route path="/documents" element={<div data-testid="documents-route">Documents route</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('dashboard-document-upload')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('dashboard-document-upload'));
+
+    await waitFor(() => expect(screen.getByTestId('document-route')).toBeInTheDocument());
   });
 });

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import ChatInterface from '../components/ai/ChatInterface';
+import SubpageBackLink from '../components/common/SubpageBackLink';
 import './AIAssistantPage.css';
 
 const AIAssistantPage = () => {
@@ -7,6 +8,7 @@ const AIAssistantPage = () => {
 
   return (
     <div className="ai-assistant-page">
+      <SubpageBackLink to="/dashboard" />
       <div className="page-header">
         <h1>{t('ai.taxjaAssistant')}</h1>
         <p className="page-description">

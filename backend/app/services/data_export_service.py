@@ -45,7 +45,7 @@ DATA_DICTIONARY = {
         "tax_number": "Austrian tax number / Steuernummer (string, encrypted at rest)",
         "vat_number": "VAT identification number / UID (string, encrypted at rest)",
         "address": "User address (string, encrypted at rest)",
-        "language": "Preferred language: de, en, zh (string)",
+        "language": "Preferred language: de, en, zh, fr, ru, hu, pl, tr, bs (string)",
         "family_info": "Family information JSON (object)",
         "commuting_info": "Commuting information JSON (object)",
         "home_office_eligible": "Home office eligibility flag (boolean)",

@@ -12,10 +12,9 @@ the Austrian Federal Ministry of Finance (BMF) via USP (Unternehmensserviceporta
     - 104,859 to 1,000,000: 50%
     - over 1,000,000:   55%
 
-The calculator uses an exemption-based model where the first 13,539 of gross
-income is exempt (matching the code's documented default), and the remaining
-taxable income flows through brackets whose widths align with the official
-thresholds (e.g. 13539 + 8453 = 21992).
+The calculator uses a 0% first bracket to represent the tax-free allowance
+(Freibetrag). Gross income flows through all brackets starting from the 0%
+zone, so no separate exemption subtraction is needed.
 
 Source: https://www.bmf.gv.at / https://www.usp.gv.at
 """
@@ -36,24 +35,26 @@ from app.services.income_tax_calculator import (
 
 TAX_CONFIG_2026 = {
     "tax_brackets": [
-        {"lower": 0, "upper": 8453, "rate": 20},
-        {"lower": 8453, "upper": 22919, "rate": 30},
-        {"lower": 22919, "upper": 56826, "rate": 40},
-        {"lower": 56826, "upper": 91320, "rate": 48},
-        {"lower": 91320, "upper": 986461, "rate": 50},
-        {"lower": 986461, "upper": None, "rate": 55},
+        {"lower": 0, "upper": 13539, "rate": 0},
+        {"lower": 13539, "upper": 21992, "rate": 20},
+        {"lower": 21992, "upper": 36458, "rate": 30},
+        {"lower": 36458, "upper": 70365, "rate": 40},
+        {"lower": 70365, "upper": 104859, "rate": 48},
+        {"lower": 104859, "upper": 1000000, "rate": 50},
+        {"lower": 1000000, "upper": None, "rate": 55},
     ],
     "exemption_amount": "13539.00",
 }
 
 TAX_CONFIG_2026_MIN_MAX = {
     "tax_brackets": [
-        {"min": 0, "max": 8453, "rate": 20},
-        {"min": 8453, "max": 22919, "rate": 30},
-        {"min": 22919, "max": 56826, "rate": 40},
-        {"min": 56826, "max": 91320, "rate": 48},
-        {"min": 91320, "max": 986461, "rate": 50},
-        {"min": 986461, "max": None, "rate": 55},
+        {"min": 0, "max": 13539, "rate": 0},
+        {"min": 13539, "max": 21992, "rate": 20},
+        {"min": 21992, "max": 36458, "rate": 30},
+        {"min": 36458, "max": 70365, "rate": 40},
+        {"min": 70365, "max": 104859, "rate": 48},
+        {"min": 104859, "max": 1000000, "rate": 50},
+        {"min": 1000000, "max": None, "rate": 55},
     ],
     "exemption_amount": "13539.00",
 }
@@ -85,9 +86,8 @@ class TestBracketBoundaries:
     The gross-income boundaries are:
         0, 13539, 21992, 36458, 70365, 104859, 1000000, 1500000
 
-    At these boundaries the taxable income (gross - 13539) feeds into
-    calculate_progressive_tax.  We test via calculate_tax_with_exemption
-    so exemption is applied automatically.
+    Gross income flows directly through the 0% first bracket (which IS
+    the exemption), then through the progressive brackets.
     """
 
     @pytest.mark.parametrize(
@@ -348,7 +348,7 @@ class TestLossCarryforward:
     """
     Verify that loss carryforward reduces taxable income and tracks balances.
 
-    The method: gross -> apply exemption -> subtract loss_carryforward_applied -> tax.
+    The method: gross -> subtract loss_carryforward_applied -> progressive tax (0% bracket is exemption).
     """
 
     def test_loss_reduces_tax(self, calculator: IncomeTaxCalculator):
@@ -376,23 +376,25 @@ class TestLossCarryforward:
         assert result.remaining_loss_balance == Decimal("5000.00")
 
     def test_loss_exceeds_taxable_income(self, calculator: IncomeTaxCalculator):
-        """Loss greater than taxable income floors taxable income at zero."""
+        """Loss greater than income is capped at 75% (§18 Abs. 6 EStG)."""
         result = calculator.calculate_tax_with_loss_carryforward(
             gross_income=Decimal("20000"),
             tax_year=TAX_YEAR,
             loss_carryforward_applied=Decimal("999999"),
             remaining_loss_balance=Decimal("0"),
         )
+        # 75% cap: max offset = 20000 * 0.75 = 15000, taxable = 5000
+        # 5000 falls in 0% bracket so tax is still 0, but income is NOT zero
+        assert result.loss_carryforward_applied == Decimal("15000.00")
+        assert result.taxable_income == Decimal("5000.00")
         assert result.total_tax == Decimal("0.00")
-        assert result.taxable_income == Decimal("0")
 
     def test_loss_carryforward_exact_calculation(
         self, calculator: IncomeTaxCalculator
     ):
         """
-        50000 gross - 13539 exemption = 36461 taxable.
-        36461 - 10000 loss = 26461 taxable after loss.
-        26461: 8453*0.20=1690.60, 14466*0.30=4339.80, 3542*0.40=1416.80
+        50000 gross - 10000 loss = 40000.
+        40000: 13539*0.00=0, 8453*0.20=1690.60, 14466*0.30=4339.80, 3542*0.40=1416.80
         Total = 7447.20
         """
         result = calculator.calculate_tax_with_loss_carryforward(
@@ -426,14 +428,14 @@ class TestBreakdownVerification:
     """Verify each bracket in the breakdown has correct range, rate, and amounts."""
 
     def test_breakdown_count_for_25k(self, calculator: IncomeTaxCalculator):
-        """25000 gross (taxable=11461) spans 2 brackets."""
+        """25000 gross spans 3 brackets (0%, 20%, 30%)."""
         result = calculator.calculate_tax_with_exemption(Decimal("25000"), TAX_YEAR)
-        assert len(result.breakdown) == 2
+        assert len(result.breakdown) == 3
 
     def test_breakdown_count_for_120k(self, calculator: IncomeTaxCalculator):
-        """120000 gross (taxable=106461) spans 5 brackets."""
+        """120000 gross spans 6 brackets (0%, 20%, 30%, 40%, 48%, 50%)."""
         result = calculator.calculate_tax_with_exemption(Decimal("120000"), TAX_YEAR)
-        assert len(result.breakdown) == 5
+        assert len(result.breakdown) == 6
 
     def test_breakdown_amounts_sum_to_total(self, calculator: IncomeTaxCalculator):
         """Sum of bracket tax_amounts should equal total_tax."""
@@ -450,35 +452,35 @@ class TestBreakdownVerification:
         assert summed == result.taxable_income
 
     def test_breakdown_first_bracket_details(self, calculator: IncomeTaxCalculator):
-        """First bracket for 50k gross: taxable=8453, rate=20%, tax=1690.60."""
+        """First bracket for 50k gross: 0% zone, taxable=13539, tax=0."""
         result = calculator.calculate_tax_with_exemption(Decimal("50000"), TAX_YEAR)
         first = result.breakdown[0]
-        assert first.taxable_amount == Decimal("8453.00")
-        assert first.tax_amount == Decimal("1690.60")
-        assert first.rate == "20%"
+        assert first.taxable_amount == Decimal("13539.00")
+        assert first.tax_amount == Decimal("0.00")
+        assert first.rate == "0%"
 
     def test_breakdown_second_bracket_details(self, calculator: IncomeTaxCalculator):
-        """Second bracket for 50k gross: taxable=14466, rate=30%, tax=4339.80."""
+        """Second bracket for 50k gross: taxable=8453, rate=20%, tax=1690.60."""
         result = calculator.calculate_tax_with_exemption(Decimal("50000"), TAX_YEAR)
         second = result.breakdown[1]
-        assert second.taxable_amount == Decimal("14466.00")
-        assert second.tax_amount == Decimal("4339.80")
-        assert second.rate == "30%"
+        assert second.taxable_amount == Decimal("8453.00")
+        assert second.tax_amount == Decimal("1690.60")
+        assert second.rate == "20%"
 
     def test_breakdown_partial_bracket(self, calculator: IncomeTaxCalculator):
-        """Third bracket for 50k gross is partial: taxable=13542, rate=40%, tax=5416.80."""
+        """Fourth bracket for 50k gross is partial: taxable=13542, rate=40%, tax=5416.80."""
         result = calculator.calculate_tax_with_exemption(Decimal("50000"), TAX_YEAR)
-        third = result.breakdown[2]
-        assert third.taxable_amount == Decimal("13542.00")
-        assert third.tax_amount == Decimal("5416.80")
-        assert third.rate == "40%"
+        fourth = result.breakdown[3]
+        assert fourth.taxable_amount == Decimal("13542.00")
+        assert fourth.tax_amount == Decimal("5416.80")
+        assert fourth.rate == "40%"
 
     def test_breakdown_rates_are_formatted_strings(
         self, calculator: IncomeTaxCalculator
     ):
         """Rates in breakdown should be formatted as 'NN%' strings."""
         result = calculator.calculate_tax_with_exemption(Decimal("1200000"), TAX_YEAR)
-        expected_rates = ["20%", "30%", "40%", "48%", "50%", "55%"]
+        expected_rates = ["0%", "20%", "30%", "40%", "48%", "50%", "55%"]
         actual_rates = [b.rate for b in result.breakdown]
         assert actual_rates == expected_rates
 
@@ -528,11 +530,13 @@ class TestEdgeCases:
         assert result.total_tax == Decimal("5433720.82")
 
     def test_exact_exemption_amount(self, calculator: IncomeTaxCalculator):
-        """Income exactly at exemption (13539) produces zero tax."""
+        """Income exactly at exemption (13539) produces zero tax via 0% bracket."""
         result = calculator.calculate_tax_with_exemption(Decimal("13539"), TAX_YEAR)
         assert result.total_tax == Decimal("0.00")
-        assert result.taxable_income == Decimal("0")
-        assert result.breakdown == []
+        assert result.taxable_income == Decimal("13539")
+        assert len(result.breakdown) == 1
+        assert result.breakdown[0].rate == "0%"
+        assert result.breakdown[0].tax_amount == Decimal("0.00")
 
     def test_fractional_cent_income(self, calculator: IncomeTaxCalculator):
         """Test with a non-round taxable income to verify Decimal precision."""

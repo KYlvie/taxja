@@ -18,9 +18,24 @@ def generate_verification_token() -> str:
 
 def _get_verification_url(token: str) -> str:
     """Build the frontend verification URL."""
-    # In production, use a proper domain; in dev, use localhost:5173
-    base = "http://localhost:5173"
+    base = settings.FRONTEND_URL.rstrip("/")
     return f"{base}/verify-email?token={token}"
+
+
+def _get_email_tagline(language: str = "de") -> str:
+    """Get the localized email footer tagline."""
+    taglines = {
+        "de": "Taxja - Steuern einfach ja!",
+        "en": "Taxja - Taxes made simple!",
+        "zh": "Taxja - 轻松报税！",
+        "fr": "Taxja - Les impôts en toute simplicité !",
+        "ru": "Taxja - Налоги — это просто!",
+        "hu": "Taxja - Adózás egyszerűen!",
+        "pl": "Taxja - Podatki po prostu!",
+        "tr": "Taxja - Vergiler artik kolay!",
+        "bs": "Taxja - Porezi jednostavno!",
+    }
+    return taglines.get(language, taglines["de"])
 
 
 def _build_verification_html(name: str, token: str, language: str = "de") -> str:
@@ -31,26 +46,56 @@ def _build_verification_html(name: str, token: str, language: str = "de") -> str
         "de": "Bitte bestätigen Sie Ihre E-Mail-Adresse",
         "en": "Please verify your email address",
         "zh": "请验证您的邮箱地址",
+        "fr": "Vérifiez votre adresse e-mail — Taxja",
+        "ru": "Подтвердите ваш email — Taxja",
+        "hu": "Kérjük, erősítse meg e-mail címét — Taxja",
+        "pl": "Proszę zweryfikować swój adres e-mail — Taxja",
+        "tr": "Lutfen e-posta adresinizi dogrulayin — Taxja",
+        "bs": "Molimo potvrdite vasu e-mail adresu — Taxja",
     }
     headings = {
         "de": f"Hallo {name},",
         "en": f"Hello {name},",
         "zh": f"{name}，您好！",
+        "fr": f"Bonjour {name},",
+        "ru": f"Здравствуйте, {name},",
+        "hu": f"Kedves {name},",
+        "pl": f"Witaj {name},",
+        "tr": f"Merhaba {name},",
+        "bs": f"Zdravo {name},",
     }
     bodies = {
         "de": "Vielen Dank für Ihre Registrierung bei Taxja. Bitte klicken Sie auf den Button, um Ihre E-Mail-Adresse zu bestätigen.",
         "en": "Thank you for registering with Taxja. Please click the button below to verify your email address.",
         "zh": "感谢您注册 Taxja。请点击下方按钮验证您的邮箱地址。",
+        "fr": "Merci de vous être inscrit(e) sur Taxja. Veuillez cliquer sur le bouton ci-dessous pour vérifier votre adresse e-mail.",
+        "ru": "Благодарим Вас за регистрацию в Taxja. Пожалуйста, нажмите на кнопку ниже, чтобы подтвердить Ваш адрес электронной почты.",
+        "hu": "Köszönjük, hogy regisztrált a Taxja-ra. Kérjük, kattintson az alábbi gombra az e-mail cím megerősítéséhez.",
+        "pl": "Dziękujemy za rejestrację w Taxja. Proszę kliknąć poniższy przycisk, aby zweryfikować swój adres e-mail.",
+        "tr": "Taxja'ya kaydoldugunuz icin tesekkur ederiz. Lutfen e-posta adresinizi dogrulamak icin asagidaki dugmeye tiklayin.",
+        "bs": "Hvala vam sto ste se registrovali na Taxja. Molimo kliknite na dugme ispod kako biste potvrdili vasu e-mail adresu.",
     }
     buttons = {
         "de": "E-Mail bestätigen",
         "en": "Verify Email",
         "zh": "验证邮箱",
+        "fr": "Vérifier l'e-mail",
+        "ru": "Подтвердить email",
+        "hu": "E-mail megerősítése",
+        "pl": "Zweryfikuj e-mail",
+        "tr": "E-postayi dogrula",
+        "bs": "Potvrdi e-mail",
     }
     footers = {
         "de": "Wenn Sie sich nicht bei Taxja registriert haben, können Sie diese E-Mail ignorieren.",
         "en": "If you did not register for Taxja, you can ignore this email.",
         "zh": "如果您没有注册 Taxja，请忽略此邮件。",
+        "fr": "Si vous ne vous êtes pas inscrit(e) sur Taxja, vous pouvez ignorer cet e-mail.",
+        "ru": "Если Вы не регистрировались в Taxja, Вы можете проигнорировать это письмо.",
+        "hu": "Ha nem regisztrált a Taxja-ra, kérjük, hagyja figyelmen kívül ezt az e-mailt.",
+        "pl": "Jeśli nie rejestrowałeś/aś się w Taxja, możesz zignorować tę wiadomość.",
+        "tr": "Taxja'ya kaydolmadiysaniz bu e-postayi gormezden gelebilirsiniz.",
+        "bs": "Ako se niste registrovali na Taxja, mozete zanemariti ovu e-poruku.",
     }
 
     lang = language if language in subjects else "de"
@@ -68,7 +113,7 @@ def _build_verification_html(name: str, token: str, language: str = "de") -> str
   </div>
   <p style="font-size:0.85rem;color:#64748b">{footers[lang]}</p>
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
-  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">Taxja - Steuern einfach ja!</p>
+  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">{_get_email_tagline(lang)}</p>
 </body></html>"""
 
 
@@ -90,6 +135,12 @@ def send_verification_email(email: str, name: str, token: str, language: str = "
             "de": "Taxja: Bitte bestätigen Sie Ihre E-Mail-Adresse",
             "en": "Taxja: Please verify your email address",
             "zh": "Taxja: 请验证您的邮箱地址",
+            "fr": "Vérifiez votre adresse e-mail — Taxja",
+            "ru": "Подтвердите ваш email — Taxja",
+            "hu": "Taxja: Kérjük, erősítse meg e-mail címét",
+            "pl": "Taxja: Proszę zweryfikować swój adres e-mail",
+            "tr": "Taxja: Lutfen e-posta adresinizi dogrulayin",
+            "bs": "Taxja: Molimo potvrdite vasu e-mail adresu",
         }
         lang = language if language in subjects else "de"
 
@@ -117,7 +168,7 @@ def send_verification_email(email: str, name: str, token: str, language: str = "
 
 def _get_reset_password_url(token: str) -> str:
     """Build the frontend password reset URL."""
-    base = "http://localhost:5173"
+    base = settings.FRONTEND_URL.rstrip("/")
     return f"{base}/reset-password?token={token}"
 
 
@@ -129,21 +180,45 @@ def _build_reset_password_html(name: str, token: str, language: str = "de") -> s
         "de": f"Hallo {name},",
         "en": f"Hello {name},",
         "zh": f"{name}，您好！",
+        "fr": f"Bonjour {name},",
+        "ru": f"Здравствуйте, {name},",
+        "hu": f"Kedves {name},",
+        "pl": f"Witaj {name},",
+        "tr": f"Merhaba {name},",
+        "bs": f"Zdravo {name},",
     }
     bodies = {
         "de": "Sie haben eine Passwort-Zurücksetzung für Ihr Taxja-Konto angefordert. Klicken Sie auf den Button, um ein neues Passwort festzulegen. Der Link ist 1 Stunde gültig.",
         "en": "You requested a password reset for your Taxja account. Click the button below to set a new password. This link is valid for 1 hour.",
         "zh": "您请求重置 Taxja 账户密码。请点击下方按钮设置新密码。链接有效期为 1 小时。",
+        "fr": "Vous avez demandé la réinitialisation du mot de passe de votre compte Taxja. Cliquez sur le bouton ci-dessous pour définir un nouveau mot de passe. Ce lien est valable pendant 1 heure.",
+        "ru": "Вы запросили сброс пароля для Вашей учётной записи Taxja. Нажмите на кнопку ниже, чтобы установить новый пароль. Ссылка действительна в течение 1 часа.",
+        "hu": "Jelszó-visszaállítást kért a Taxja fiókjához. Kattintson az alábbi gombra az új jelszó beállításához. A link 1 órán keresztül érvényes.",
+        "pl": "Poprosiłeś/aś o zresetowanie hasła do konta Taxja. Kliknij poniższy przycisk, aby ustawić nowe hasło. Link jest ważny przez 1 godzinę.",
+        "tr": "Taxja hesabiniz icin sifre sifirlama talebinde bulundunuz. Yeni bir sifre belirlemek icin asagidaki dugmeye tiklayin. Bu baglanti 1 saat gecerlidir.",
+        "bs": "Zatrazili ste resetovanje lozinke za vas Taxja nalog. Kliknite na dugme ispod da postavite novu lozinku. Ovaj link vazi 1 sat.",
     }
     buttons = {
         "de": "Passwort zurücksetzen",
         "en": "Reset Password",
         "zh": "重置密码",
+        "fr": "Réinitialiser le mot de passe",
+        "ru": "Сбросить пароль",
+        "hu": "Jelszó visszaállítása",
+        "pl": "Zresetuj hasło",
+        "tr": "Sifreyi sifirla",
+        "bs": "Resetuj lozinku",
     }
     footers = {
         "de": "Wenn Sie diese Anfrage nicht gestellt haben, können Sie diese E-Mail ignorieren.",
         "en": "If you did not request this, you can safely ignore this email.",
         "zh": "如果您没有请求重置密码，请忽略此邮件。",
+        "fr": "Si vous n'avez pas fait cette demande, vous pouvez ignorer cet e-mail en toute sécurité.",
+        "ru": "Если Вы не запрашивали сброс пароля, Вы можете проигнорировать это письмо.",
+        "hu": "Ha nem Ön kérte ezt, nyugodtan hagyja figyelmen kívül ezt az e-mailt.",
+        "pl": "Jeśli nie prosiłeś/aś o to, możesz bezpiecznie zignorować tę wiadomość.",
+        "tr": "Bu istekte bulunmadiysaniz bu e-postayi gormezden gelebilirsiniz.",
+        "bs": "Ako niste zatrazili ovo, mozete sigurno zanemariti ovu e-poruku.",
     }
 
     lang = language if language in headings else "de"
@@ -161,7 +236,7 @@ def _build_reset_password_html(name: str, token: str, language: str = "de") -> s
   </div>
   <p style="font-size:0.85rem;color:#64748b">{footers[lang]}</p>
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
-  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">Taxja - Steuern einfach ja!</p>
+  <p style="font-size:0.75rem;color:#94a3b8;text-align:center">{_get_email_tagline(lang)}</p>
 </body></html>"""
 
 
@@ -182,6 +257,12 @@ def send_password_reset_email(email: str, name: str, token: str, language: str =
             "de": "Taxja: Passwort zurücksetzen",
             "en": "Taxja: Reset your password",
             "zh": "Taxja: 重置密码",
+            "fr": "Réinitialisation du mot de passe — Taxja",
+            "ru": "Сброс пароля — Taxja",
+            "hu": "Taxja: Jelszó visszaállítása",
+            "pl": "Taxja: Zresetuj swoje hasło",
+            "tr": "Taxja: Sifrenizi sifirlayin",
+            "bs": "Taxja: Resetujte vasu lozinku",
         }
         lang = language if language in subjects else "de"
 

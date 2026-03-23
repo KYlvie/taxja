@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './TaxCalendar.css';
 
 interface TaxDeadline {
@@ -14,11 +15,11 @@ interface TaxCalendarProps {
 }
 
 const TaxCalendar = ({ deadlines }: TaxCalendarProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat('de-AT', {
+    return new Intl.DateTimeFormat(getLocaleForLanguage(i18n.language), {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
@@ -93,7 +94,7 @@ const TaxCalendar = ({ deadlines }: TaxCalendarProps) => {
                 {new Date(deadline.date).getDate()}
               </div>
               <div className="date-month">
-                {new Intl.DateTimeFormat('de-AT', { month: 'short' }).format(
+                {new Intl.DateTimeFormat(getLocaleForLanguage(i18n.language), { month: 'short' }).format(
                   new Date(deadline.date)
                 )}
               </div>

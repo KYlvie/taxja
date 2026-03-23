@@ -75,6 +75,10 @@ class LossCarryforwardService:
             note=f"Loss of €{loss_amount:.2f} recorded for year {tax_year}"
         )
     
+    # §18 Abs. 6 EStG: Losses carried forward can only offset up to 75%
+    # of the Gesamtbetrag der Einkünfte (total income across all types).
+    VERRECHNUNGSGRENZE = Decimal('0.75')
+
     def apply_loss_carryforward(
         self,
         user_id: int,
@@ -83,26 +87,30 @@ class LossCarryforwardService:
     ) -> LossCarryforwardResult:
         """
         Apply previous year losses to current taxable income.
-        
+
         This method:
         1. Retrieves all available losses from previous years
-        2. Applies them in chronological order (oldest first)
-        3. Updates the used amounts in the database
-        4. Returns the adjusted taxable income
-        
+        2. Calculates the 75% Verrechnungsgrenze (§18 Abs. 6 EStG)
+        3. Applies losses in chronological order (oldest first) up to the cap
+        4. Updates the used amounts in the database
+        5. Returns the adjusted taxable income
+
+        Note: current_taxable_income should be the Gesamtbetrag der Einkünfte
+        (sum of all Einkunftsarten) so the 75% cap is correctly calculated.
+
         Args:
             user_id: The user ID
-            current_taxable_income: Current year's taxable income before loss application
+            current_taxable_income: Gesamtbetrag der Einkünfte before loss application
             current_tax_year: The current tax year
-            
+
         Returns:
             LossCarryforwardResult with applied losses and adjusted income
         """
         from app.models.loss_carryforward import LossCarryforward
-        
+
         if not isinstance(current_taxable_income, Decimal):
             current_taxable_income = Decimal(str(current_taxable_income))
-        
+
         # If current income is zero or negative, no loss can be applied
         if current_taxable_income <= 0:
             return LossCarryforwardResult(
@@ -111,37 +119,41 @@ class LossCarryforwardService:
                 taxable_income_after_loss=current_taxable_income,
                 loss_breakdown=[]
             )
-        
+
+        # §18 Abs. 6 EStG: Maximum loss offset is 75% of Gesamtbetrag der Einkünfte.
+        # The remaining 25% is always subject to taxation.
+        max_loss_offset = (current_taxable_income * self.VERRECHNUNGSGRENZE).quantize(Decimal('0.01'))
+
         # Get all available losses from previous years (ordered by year, oldest first)
         available_losses = self.db.query(LossCarryforward).filter(
             LossCarryforward.user_id == user_id,
             LossCarryforward.loss_year < current_tax_year,
             LossCarryforward.remaining_amount > 0
         ).order_by(LossCarryforward.loss_year).all()
-        
-        # Apply losses
+
+        # Apply losses up to 75% cap
         total_loss_applied = Decimal('0.00')
-        remaining_taxable_income = current_taxable_income
+        remaining_offset_budget = max_loss_offset
         loss_breakdown = []
-        
+
         for loss_record in available_losses:
-            if remaining_taxable_income <= 0:
+            if remaining_offset_budget <= 0:
                 break
-            
-            # Calculate how much of this loss can be applied
+
+            # Calculate how much of this loss can be applied (respecting 75% cap)
             loss_to_apply = min(
                 loss_record.remaining_amount,
-                remaining_taxable_income
+                remaining_offset_budget
             )
-            
+
             # Update the loss record
             loss_record.used_amount += loss_to_apply
             loss_record.remaining_amount -= loss_to_apply
-            
+
             # Track the application
             total_loss_applied += loss_to_apply
-            remaining_taxable_income -= loss_to_apply
-            
+            remaining_offset_budget -= loss_to_apply
+
             # Add to breakdown
             loss_breakdown.append({
                 'loss_year': loss_record.loss_year,
@@ -152,10 +164,13 @@ class LossCarryforwardService:
         
         # Commit changes to database
         self.db.commit()
-        
+
+        # Calculate remaining taxable income after loss application
+        remaining_taxable_income = current_taxable_income - total_loss_applied
+
         # Calculate total remaining loss across all years
         total_remaining_loss = self._get_total_remaining_loss(user_id)
-        
+
         return LossCarryforwardResult(
             loss_applied=total_loss_applied.quantize(Decimal('0.01')),
             remaining_loss=total_remaining_loss,

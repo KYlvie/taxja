@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { Lightbulb, X } from 'lucide-react';
 import { dashboardService } from '../../services/dashboardService';
+import FuturisticIcon from '../common/FuturisticIcon';
 import { normalizeLanguage } from '../../utils/locale';
 import './IncomeTypeHint.css';
 
@@ -44,14 +46,16 @@ const IncomeTypeHint = () => {
   return (
     <div className="income-type-hint" role="alert">
       <div className="income-type-hint-header">
-        <span className="income-type-hint-icon">💡</span>
+        <span className="income-type-hint-icon">
+          <FuturisticIcon icon={Lightbulb} tone="amber" size="sm" />
+        </span>
         <span className="income-type-hint-title">{t('dashboard.incomeHint.title')}</span>
         <button
           className="income-type-hint-dismiss"
           onClick={() => setDismissed(true)}
           aria-label={t('common.close')}
         >
-          ×
+          <X size={14} />
         </button>
       </div>
       <ul className="income-type-hint-list">

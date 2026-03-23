@@ -104,7 +104,7 @@ def test_get_error_dict():
     """Test get_error_dict function."""
     error_dict = get_error_dict("duplicate_transaction")
     assert error_dict is not None
-    assert len(error_dict) == 3
+    assert len(error_dict) >= 3
     assert all(lang in error_dict for lang in ["de", "en", "zh"])
     
     # Test invalid key
@@ -115,8 +115,8 @@ def test_get_error_dict():
 
 def test_fallback_behavior():
     """Test fallback behavior for invalid inputs."""
-    # Invalid language falls back to German
-    message = get_error_message("duplicate_transaction", "fr")
+    # Unsupported language falls back to German
+    message = get_error_message("duplicate_transaction", "ja")
     assert message == "Diese Transaktion wurde bereits importiert. Duplikat verhindert."
     
     # Invalid key returns unknown error

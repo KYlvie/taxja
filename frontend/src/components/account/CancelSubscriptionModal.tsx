@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { accountService } from '../../services/accountService';
+import Select from '../common/Select';
 
 interface CancelSubscriptionModalProps {
   onClose: () => void;
@@ -82,19 +83,9 @@ const CancelSubscriptionModal: React.FC<CancelSubscriptionModalProps> = ({ onClo
             <label htmlFor="cancel-reason">
               {t('account.cancelSubscription.reasonLabel', 'Reason for cancellation (optional)')}
             </label>
-            <select
-              id="cancel-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={loading}
-            >
-              <option value="">{t('account.cancelSubscription.selectReason', '-- Select a reason --')}</option>
-              {CANCEL_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {t(`account.cancelSubscription.reasons.${r}`, r)}
-                </option>
-              ))}
-            </select>
+            <Select id="cancel-reason" value={reason} onChange={setReason} disabled={loading}
+              placeholder={t('account.cancelSubscription.selectReason', '-- Select a reason --')}
+              options={CANCEL_REASONS.map(r => ({ value: r, label: t(`account.cancelSubscription.reasons.${r}`, r) }))} />
           </div>
 
           {error && <div className="error-message">{error}</div>}

@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
+import { aiToast } from '../../stores/aiToastStore';
 import { Document, DocumentType } from '../../types/document';
+import { canReprocessDocument } from '../../utils/documentReprocessing';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import { getLocaleForLanguage } from '../../utils/locale';
+import DateInput from '../common/DateInput';
 import DeleteDocumentDialog from './DeleteDocumentDialog';
 import './DocumentList.css';
 
@@ -130,6 +134,22 @@ const DeleteIcon = () => (
   </svg>
 );
 
+const ConfirmIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M9 12L11.5 14.5L15 9.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
+  </svg>
+);
+
+const RetryIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 12a8 8 0 0 1 14.93-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M20 12a8 8 0 0 1-14.93 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M18.5 4.5V8H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5.5 19.5V16H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const documentGroups: Array<{
   id: Exclude<DocumentGroupId, 'all'>;
   types: DocumentType[];
@@ -219,7 +239,8 @@ const sortDocumentsByDate = (items: Document[]) =>
 /**
  * Extract the document's own date(s) from OCR data for year grouping.
  * - Receipts/invoices: use ocr_result.date
- * - Contracts: use start_date..end_date range (may span years)
+ * - Contracts: use start_date only (NOT the full range — a 25-year loan
+ *   would otherwise appear duplicated in every year group)
  * - Fallback: created_at (upload date)
  * Returns an array of years this document belongs to.
  */
@@ -235,16 +256,11 @@ const getDocumentYears = (doc: Document): number[] => {
       if (!isNaN(parsed.getTime())) years.add(parsed.getFullYear());
     }
 
-    // For contracts: start_date / end_date may span years
+    // For contracts: only use start_date year (not the full span)
     const startStr = ocr.start_date || ocr.lease_start;
-    const endStr = ocr.end_date || ocr.lease_end;
     if (startStr && typeof startStr === 'string') {
       const s = new Date(startStr);
       if (!isNaN(s.getTime())) years.add(s.getFullYear());
-    }
-    if (endStr && typeof endStr === 'string') {
-      const e = new Date(endStr);
-      if (!isNaN(e.getTime())) years.add(e.getFullYear());
     }
 
     // For purchase contracts
@@ -252,17 +268,6 @@ const getDocumentYears = (doc: Document): number[] => {
     if (purchaseDate && typeof purchaseDate === 'string') {
       const p = new Date(purchaseDate);
       if (!isNaN(p.getTime())) years.add(p.getFullYear());
-    }
-
-    // Fill in-between years for contracts spanning multiple years
-    if (startStr && endStr) {
-      const s = new Date(startStr);
-      const e = new Date(endStr);
-      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
-        for (let y = s.getFullYear(); y <= e.getFullYear(); y++) {
-          years.add(y);
-        }
-      }
     }
   }
 
@@ -302,6 +307,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
@@ -376,6 +383,53 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     }
   };
 
+  const handleRetry = async (document: Document, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (retryingId) return;
+    setRetryingId(document.id);
+    try {
+      await documentService.retryOcr(document.id);
+      aiToast(t('documents.reprocessStarted'), 'success');
+      // Poll for completion, then refresh the list
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const updated = await documentService.getDocument(document.id);
+        const pipeline = (updated.ocr_result as any)?._pipeline;
+        const state = pipeline?.current_state;
+        if (!state || state === 'completed' || state === 'phase_2_failed') {
+          break;
+        }
+      }
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to retry OCR:', error);
+      aiToast(t('documents.reprocessFailed'), 'error');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const needsConfirmation = (doc: Document): boolean => {
+    const ocr = doc.ocr_result as Record<string, any> | undefined;
+    return Boolean(ocr && !ocr.confirmed && doc.confidence_score != null);
+  };
+
+  const handleConfirmOcr = async (document: Document, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (confirmingId) return;
+    setConfirmingId(document.id);
+    try {
+      await documentService.confirmOCR(document.id);
+      aiToast(t('documents.confirmSuccess', 'Document confirmed'), 'success');
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to confirm document:', error);
+      aiToast(t('common.saveFailed', 'Save failed'), 'error');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return '—';
     const d = new Date(dateString);
@@ -407,9 +461,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
 
   const getStatusLabel = (document: Document) => {
     if (document.transaction_id) {
-      return t('documents.statusTransactionCreated', {
-        defaultValue: '已生成交易',
-      });
+      return t('documents.statusTransactionCreated');
     }
     if (document.needs_review) return t('documents.needsReview');
     if (document.ocr_status === 'processing') return t('documents.processing');
@@ -503,6 +555,30 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
         >
           <DownloadIcon />
         </button>
+        {canReprocessDocument(document) && (
+          <button
+            type="button"
+            className="retry-btn"
+            onClick={(event) => handleRetry(document, event)}
+            disabled={retryingId === document.id}
+            title={t('documents.reprocess')}
+            aria-label={t('documents.reprocess')}
+          >
+            <RetryIcon />
+          </button>
+        )}
+        {needsConfirmation(document) && (
+          <button
+            type="button"
+            className="confirm-btn"
+            onClick={(event) => handleConfirmOcr(document, event)}
+            disabled={confirmingId === document.id}
+            title={t('documents.confirm', 'Confirm')}
+            aria-label={t('documents.confirm', 'Confirm')}
+          >
+            <ConfirmIcon />
+          </button>
+        )}
         <button
           type="button"
           className="delete-btn"
@@ -564,6 +640,30 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
         >
           <DownloadIcon />
         </button>
+        {canReprocessDocument(document) && (
+          <button
+            type="button"
+            className="retry-btn"
+            onClick={(event) => handleRetry(document, event)}
+            disabled={retryingId === document.id}
+            title={t('documents.reprocess')}
+            aria-label={t('documents.reprocess')}
+          >
+            <RetryIcon />
+          </button>
+        )}
+        {needsConfirmation(document) && (
+          <button
+            type="button"
+            className="confirm-btn"
+            onClick={(event) => handleConfirmOcr(document, event)}
+            disabled={confirmingId === document.id}
+            title={t('documents.confirm', 'Confirm')}
+            aria-label={t('documents.confirm', 'Confirm')}
+          >
+            <ConfirmIcon />
+          </button>
+        )}
         <button
           type="button"
           className="delete-btn"
@@ -668,18 +768,20 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
           </div>
 
           <div className="date-and-review-filters">
-            <input
-              type="date"
+            <DateInput
               value={filters.start_date || ''}
-              onChange={(event) => handleFilterChange('start_date', event.target.value)}
+              onChange={(val) => handleFilterChange('start_date', val)}
               placeholder={t('documents.filters.startDate')}
+              locale={getLocaleForLanguage(i18n.language)}
+              todayLabel={String(t('common.today', 'Today'))}
             />
 
-            <input
-              type="date"
+            <DateInput
               value={filters.end_date || ''}
-              onChange={(event) => handleFilterChange('end_date', event.target.value)}
+              onChange={(val) => handleFilterChange('end_date', val)}
               placeholder={t('documents.filters.endDate')}
+              locale={getLocaleForLanguage(i18n.language)}
+              todayLabel={String(t('common.today', 'Today'))}
             />
 
             <label className="checkbox-label">
@@ -737,21 +839,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                     {t('documents.filters.needsReview')}: {reviewCount}
                   </span>
                 )}
-                <select
-                  className="page-size-select"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  aria-label={t('documents.pageSize')}
-                >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size} {t('documents.perPage')}
-                    </option>
-                  ))}
-                </select>
+                <Select value={String(pageSize)} onChange={v => { setPageSize(Number(v)); setPage(1); }}
+                  aria-label={t('documents.pageSize')} size="sm"
+                  options={PAGE_SIZE_OPTIONS.map(s => ({ value: String(s), label: `${s} ${t('documents.perPage')}` }))} />
               </div>
             </div>
 

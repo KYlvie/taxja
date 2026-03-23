@@ -254,13 +254,21 @@
   text-shadow: 0 0 6px rgba(102, 224, 212, 0.15);
 }
 .ok-nav-r { display: flex; align-items: center; gap: 10px; }
-.ok-nav-back {
-  font-size: 0.78rem; font-weight: 600;
-  color: rgba(255,255,255,0.4);
-  text-decoration: none;
-  transition: color 0.2s, text-shadow 0.2s;
+.ok-nav-back.subpage-back-link {
+  margin-bottom: 0;
+  padding: 0.34rem 0.82rem 0.34rem 0.42rem;
+  font-size: 0.78rem;
+  color: rgba(17, 24, 39, 0.86);
+  background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(244,247,255,0.88));
+  border-color: rgba(167, 139, 250, 0.18);
+  box-shadow:
+    0 8px 24px rgba(79, 70, 229, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.55) inset;
 }
-.ok-nav-back:hover { color: var(--neon); text-shadow: 0 0 6px rgba(102, 224, 212, 0.2); }
+.ok-nav-back.subpage-back-link:hover {
+  color: #0f172a;
+  border-color: rgba(99, 102, 241, 0.28);
+}
 
 /* ═══ Hero ═══ */
 .ok-hero {
@@ -356,54 +364,101 @@
 }
 
 /* Buttons — neon style */
-.ok-btn-primary {
+.ok-btn-primary,
+.ok-btn-outline {
   position: relative;
-  padding: 14px 34px;
-  border-radius: 4px;
-  font-size: 0.92rem; font-weight: 700;
-  color: #000;
-  background: var(--neon);
-  border: none;
-  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 28px;
+  border-radius: 14px;
+  font-size: 0.96rem;
+  font-weight: 650;
+  letter-spacing: 0.015em;
   text-decoration: none;
+  transition:
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.28s ease,
+    background 0.28s ease,
+    color 0.28s ease;
   overflow: hidden;
-  transition: transform 0.3s, box-shadow 0.3s;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  backdrop-filter: blur(14px);
+}
+
+.ok-btn-primary::before,
+.ok-btn-outline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ok-btn-primary {
+  color: var(--text);
+  background:
+    linear-gradient(180deg, rgba(12, 19, 31, 0.96), rgba(7, 12, 21, 0.98));
+  border: 1px solid rgba(160, 196, 208, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 38px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(34, 211, 238, 0.04);
+}
+
+.ok-btn-primary::before {
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.14), transparent 42%),
+    linear-gradient(315deg, rgba(168, 85, 247, 0.14), transparent 58%);
+  opacity: 0.95;
 }
 .ok-btn-shine {
   position: absolute;
-  top: 0; left: -100%;
-  width: 50%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-  animation: btnShine 3s ease-in-out infinite;
-}
-@keyframes btnShine {
-  0%   { left: -100%; }
-  50%  { left: 150%; }
-  100% { left: 150%; }
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(224, 244, 255, 0.42),
+    rgba(34, 211, 238, 0.35),
+    transparent
+  );
+  opacity: 0.85;
 }
 .ok-btn-primary:hover {
-  transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 0 12px rgba(102, 224, 212, 0.12), 0 0 30px rgba(102, 224, 212, 0.04);
+  transform: translateY(-2px);
+  border-color: rgba(34, 211, 238, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 48px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(34, 211, 238, 0.08),
+    0 0 28px rgba(34, 211, 238, 0.08);
 }
 .ok-btn-outline {
-  padding: 14px 34px;
-  border-radius: 4px;
-  font-size: 0.92rem; font-weight: 700;
-  color: var(--neon);
-  background: transparent;
-  border: 1px solid rgba(102, 224, 212, 0.15);
-  text-decoration: none;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  transition: all 0.3s;
+  color: rgba(231, 240, 248, 0.92);
+  background: rgba(8, 12, 19, 0.38);
+  border: 1px solid rgba(160, 196, 208, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.ok-btn-outline::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 36%);
+  opacity: 1;
 }
 .ok-btn-outline:hover {
   color: #fff;
-  border-color: var(--neon);
-  background: rgba(102, 224, 212, 0.04);
-  box-shadow: 0 0 12px rgba(102, 224, 212, 0.08);
+  border-color: rgba(34, 211, 238, 0.24);
+  background: rgba(10, 17, 28, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 34px rgba(0, 0, 0, 0.24),
+    0 0 24px rgba(34, 211, 238, 0.05);
   transform: translateY(-2px);
 }
 
@@ -559,7 +614,7 @@
 .ok-solar-core {
   position: absolute;
   top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--disc-rz, 0deg)));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -569,7 +624,7 @@
   transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .ok-solar-core-hidden {
-  transform: translate(-50%, -50%) scale(1.3);
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--disc-rz, 0deg))) scale(1.3);
 }
 .ok-solar-core-ring {
   position: absolute;
@@ -616,7 +671,7 @@
   top: 50%; left: 50%;
   width: 200px; height: 200px;
   margin-left: -100px; margin-top: -100px;
-  transform: rotate(var(--node-angle)) translateX(min(460px, 35vw)) rotate(calc(-1 * var(--node-angle)));
+  transform: rotate(var(--node-angle)) translateX(min(460px, 35vw)) rotate(calc(-1 * var(--node-angle) - var(--disc-rz, 0deg)));
   z-index: 4;
   cursor: pointer;
   transition: z-index 0s;
@@ -687,7 +742,7 @@
   position: absolute;
   top: 2%;
   left: 1%;
-  transform: translateY(10px) scale(0.95);
+  transform: translateY(10px) scale(0.95) rotate(calc(-1 * var(--disc-rz, 0deg)));
   width: 380px;
   max-width: 40vw;
   padding: 32px 28px;
@@ -713,7 +768,7 @@
 }
 .ok-solar-detail-visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0) scale(1) rotate(calc(-1 * var(--disc-rz, 0deg)));
   pointer-events: auto;
 }
 
@@ -1718,7 +1773,7 @@ body:has(.ok-page)::after { display: none !important; }
   }
   .ok-solar-scene { width: min(800px, 92vw); height: min(800px, 92vw); }
   .ok-solar-node {
-    transform: rotate(var(--node-angle)) translateX(min(310px, 36vw)) rotate(calc(-1 * var(--node-angle)));
+    transform: rotate(var(--node-angle)) translateX(min(310px, 36vw)) rotate(calc(-1 * var(--node-angle) - var(--disc-rz, 0deg)));
   }
   .ok-solar-detail {
     width: min(420px, 90vw);
@@ -1731,7 +1786,7 @@ body:has(.ok-page)::after { display: none !important; }
   .ok-solar-node {
     width: 150px; height: 150px;
     margin-left: -75px; margin-top: -75px;
-    transform: rotate(var(--node-angle)) translateX(min(250px, 34vw)) rotate(calc(-1 * var(--node-angle)));
+    transform: rotate(var(--node-angle)) translateX(min(250px, 34vw)) rotate(calc(-1 * var(--node-angle) - var(--disc-rz, 0deg)));
   }
   .ok-solar-node-icon .ok-hud-icon { width: 36px; height: 36px; }
   .ok-solar-node-title { font-size: 0.55rem; max-width: 110px; }
@@ -1755,7 +1810,7 @@ body:has(.ok-page)::after { display: none !important; }
   .ok-solar-node {
     width: 110px; height: 110px;
     margin-left: -55px; margin-top: -55px;
-    transform: rotate(var(--node-angle)) translateX(min(155px, 36vw)) rotate(calc(-1 * var(--node-angle)));
+    transform: rotate(var(--node-angle)) translateX(min(155px, 36vw)) rotate(calc(-1 * var(--node-angle) - var(--disc-rz, 0deg)));
   }
   .ok-solar-node-icon .ok-hud-icon { width: 28px; height: 28px; }
   .ok-solar-node-title { font-size: 0.45rem; max-width: 75px; }

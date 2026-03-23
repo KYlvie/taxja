@@ -126,7 +126,7 @@ class RedisCache:
         key_string = ":".join(key_parts)
         
         # Hash for consistent length
-        return hashlib.md5(key_string.encode()).hexdigest()
+        return hashlib.sha256(key_string.encode()).hexdigest()
 
 
 # Global cache instance

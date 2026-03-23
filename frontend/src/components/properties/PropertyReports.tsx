@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Property } from '../../types/property';
 import api from '../../services/api';
+import Select from '../common/Select';
+import DateInput from '../common/DateInput';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PropertyReports.css';
 
 interface PropertyReportsProps {
@@ -52,7 +55,7 @@ interface DepreciationScheduleData {
 }
 
 const PropertyReports = ({ property }: PropertyReportsProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeReport, setActiveReport] = useState<'income' | 'depreciation' | null>(null);
   const [incomeStatementData, setIncomeStatementData] = useState<IncomeStatementData | null>(null);
   const [depreciationScheduleData, setDepreciationScheduleData] = useState<DepreciationScheduleData | null>(null);
@@ -66,7 +69,7 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,
@@ -75,7 +78,7 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-AT', {
+    return new Date(dateString).toLocaleDateString(getLocaleForLanguage(i18n.language), {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -149,21 +152,21 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
 
   const downloadIncomeStatementCSV = (data: IncomeStatementData) => {
     const rows = [
-      ['Income Statement', data.property.address],
-      ['Period', `${formatDate(data.period.start_date)} - ${formatDate(data.period.end_date)}`],
+      [t('properties.reports.incomeStatement'), data.property.address],
+      [t('properties.reports.period'), `${formatDate(data.period.start_date)} - ${formatDate(data.period.end_date)}`],
       [],
-      ['Income'],
-      ['Rental Income', data.income.rental_income.toFixed(2)],
-      ['Total Income', data.income.total_income.toFixed(2)],
+      [t('properties.reports.income')],
+      [t('properties.rentalIncome'), data.income.rental_income.toFixed(2)],
+      [t('properties.reports.totalIncome', 'Total Income'), data.income.total_income.toFixed(2)],
       [],
-      ['Expenses by Category'],
+      [t('properties.reports.expensesByCategory', 'Expenses by Category')],
       ...Object.entries(data.expenses.by_category).map(([category, amount]) => [
-        category,
+        t(`transactions.categories.${category}`, category),
         amount.toFixed(2),
       ]),
-      ['Total Expenses', data.expenses.total_expenses.toFixed(2)],
+      [t('properties.reports.totalExpenses'), data.expenses.total_expenses.toFixed(2)],
       [],
-      ['Net Income', data.net_income.toFixed(2)],
+      [t('properties.netIncome'), data.net_income.toFixed(2)],
     ];
 
     const csvContent = rows.map((row) => row.join(',')).join('\n');
@@ -176,11 +179,11 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
 
   const downloadDepreciationScheduleCSV = (data: DepreciationScheduleData) => {
     const rows = [
-      ['Depreciation Schedule', data.property.address],
-      ['Building Value', data.property.building_value.toFixed(2)],
-      ['Depreciation Rate', (data.property.depreciation_rate * 100).toFixed(2) + '%'],
+      [t('properties.reports.depreciationSchedule'), data.property.address],
+      [t('properties.buildingValue'), data.property.building_value.toFixed(2)],
+      [t('properties.depreciationRate'), (data.property.depreciation_rate * 100).toFixed(2) + '%'],
       [],
-      ['Year', 'Annual Depreciation', 'Accumulated Depreciation', 'Remaining Value'],
+      [t('properties.reports.year'), t('properties.reports.annualDepreciation'), t('properties.accumulatedDepreciation'), t('properties.remainingValue')],
       ...data.schedule.map((item) => [
         item.year.toString(),
         item.annual_depreciation.toFixed(2),
@@ -188,10 +191,10 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         item.remaining_value.toFixed(2),
       ]),
       [],
-      ['Summary'],
-      ['Total Years', data.summary.total_years.toString()],
-      ['Total Depreciation', data.summary.total_depreciation.toFixed(2)],
-      ['Remaining Value', data.summary.remaining_value.toFixed(2)],
+      [t('properties.reports.summary')],
+      [t('properties.reports.totalYears'), data.summary.total_years.toString()],
+      [t('properties.reports.totalDepreciation'), data.summary.total_depreciation.toFixed(2)],
+      [t('properties.remainingValue'), data.summary.remaining_value.toFixed(2)],
     ];
 
     const csvContent = rows.map((row) => row.join(',')).join('\n');
@@ -209,7 +212,7 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Income Statement - ${data.property.address}</title>
+        <title>${t('properties.reports.incomeStatement')} - ${data.property.address}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; }
           h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
@@ -226,42 +229,42 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         </style>
       </head>
       <body>
-        <h1>Income Statement</h1>
+        <h1>${t('properties.reports.incomeStatement')}</h1>
         <div class="info">
-          <div class="info-row"><strong>Property:</strong> ${data.property.address}</div>
-          <div class="info-row"><strong>Period:</strong> ${formatDate(data.period.start_date)} - ${formatDate(data.period.end_date)}</div>
+          <div class="info-row"><strong>${t('properties.address')}:</strong> ${data.property.address}</div>
+          <div class="info-row"><strong>${t('properties.reports.period')}:</strong> ${formatDate(data.period.start_date)} - ${formatDate(data.period.end_date)}</div>
         </div>
-        
-        <h2>Income</h2>
+
+        <h2>${t('properties.reports.income')}</h2>
         <table>
           <tr>
-            <td>Rental Income</td>
+            <td>${t('properties.rentalIncome')}</td>
             <td class="amount positive">${formatCurrency(data.income.rental_income)}</td>
           </tr>
           <tr class="total">
-            <td>Total Income</td>
+            <td>${t('properties.reports.totalIncome', 'Total Income')}</td>
             <td class="amount">${formatCurrency(data.income.total_income)}</td>
           </tr>
         </table>
-        
-        <h2>Expenses</h2>
+
+        <h2>${t('properties.reports.expenses')}</h2>
         <table>
           ${Object.entries(data.expenses.by_category).map(([category, amount]) => `
             <tr>
-              <td>${category}</td>
+              <td>${t(`transactions.categories.${category}`, category)}</td>
               <td class="amount">${formatCurrency(amount)}</td>
             </tr>
           `).join('')}
           <tr class="total">
-            <td>Total Expenses</td>
+            <td>${t('properties.reports.totalExpenses')}</td>
             <td class="amount negative">${formatCurrency(data.expenses.total_expenses)}</td>
           </tr>
         </table>
-        
-        <h2>Summary</h2>
+
+        <h2>${t('properties.reports.summary')}</h2>
         <table>
           <tr class="total">
-            <td><strong>Net Income</strong></td>
+            <td><strong>${t('properties.netIncome')}</strong></td>
             <td class="amount ${data.net_income >= 0 ? 'positive' : 'negative'}">
               <strong>${formatCurrency(data.net_income)}</strong>
             </td>
@@ -290,7 +293,7 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Depreciation Schedule - ${data.property.address}</title>
+        <title>${t('properties.reports.depreciationSchedule')} - ${data.property.address}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; }
           h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
@@ -305,21 +308,21 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         </style>
       </head>
       <body>
-        <h1>Depreciation Schedule</h1>
+        <h1>${t('properties.reports.depreciationSchedule')}</h1>
         <div class="info">
-          <div class="info-row"><strong>Property:</strong> ${data.property.address}</div>
-          <div class="info-row"><strong>Building Value:</strong> ${formatCurrency(data.property.building_value)}</div>
-          <div class="info-row"><strong>Depreciation Rate:</strong> ${formatPercentage(data.property.depreciation_rate)}</div>
+          <div class="info-row"><strong>${t('properties.address')}:</strong> ${data.property.address}</div>
+          <div class="info-row"><strong>${t('properties.buildingValue')}:</strong> ${formatCurrency(data.property.building_value)}</div>
+          <div class="info-row"><strong>${t('properties.depreciationRate')}:</strong> ${formatPercentage(data.property.depreciation_rate)}</div>
         </div>
-        
-        <h2>Annual Schedule</h2>
+
+        <h2>${t('properties.reports.annualSchedule', 'Annual Schedule')}</h2>
         <table>
           <thead>
             <tr>
-              <th>Year</th>
-              <th class="amount">Annual Depreciation</th>
-              <th class="amount">Accumulated Depreciation</th>
-              <th class="amount">Remaining Value</th>
+              <th>${t('properties.reports.year')}</th>
+              <th class="amount">${t('properties.reports.annualDepreciation')}</th>
+              <th class="amount">${t('properties.accumulatedDepreciation')}</th>
+              <th class="amount">${t('properties.remainingValue')}</th>
             </tr>
           </thead>
           <tbody>
@@ -333,19 +336,19 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
             `).join('')}
           </tbody>
         </table>
-        
-        <h2>Summary</h2>
+
+        <h2>${t('properties.reports.summary')}</h2>
         <table>
           <tr>
-            <td>Total Years</td>
+            <td>${t('properties.reports.totalYears')}</td>
             <td class="amount">${data.summary.total_years}</td>
           </tr>
           <tr>
-            <td>Total Depreciation</td>
+            <td>${t('properties.reports.totalDepreciation')}</td>
             <td class="amount">${formatCurrency(data.summary.total_depreciation)}</td>
           </tr>
           <tr class="total">
-            <td><strong>Remaining Value</strong></td>
+            <td><strong>${t('properties.remainingValue')}</strong></td>
             <td class="amount"><strong>${formatCurrency(data.summary.remaining_value)}</strong></td>
           </tr>
         </table>
@@ -365,16 +368,22 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
     }
   };
 
+  const isRealEstate = !property.asset_type || property.asset_type === 'real_estate';
+
   return (
     <div className="property-reports">
       <div className="reports-header">
-        <h2>{t('properties.reports.title')}</h2>
-        <p className="reports-description">{t('properties.reports.description')}</p>
+        <h2>{isRealEstate ? t('properties.reports.title') : t('properties.reports.assetTitle', 'Asset Report')}</h2>
+        <p className="reports-description">
+          {isRealEstate
+            ? t('properties.reports.description')
+            : t('properties.reports.assetDescription', 'Generate depreciation schedule and asset value reports.')}
+        </p>
       </div>
 
       {/* Report Generation Buttons */}
       <div className="report-controls">
-        <div className="report-option">
+        {isRealEstate && <div className="report-option">
           <div className="report-option-header">
             <h3>{t('properties.reports.incomeStatement')}</h3>
             <p>{t('properties.reports.incomeStatementDescription')}</p>
@@ -383,23 +392,25 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
           <div className="date-range-selector">
             <div className="date-input-group">
               <label htmlFor="start-date">{t('properties.reports.startDate')}</label>
-              <input
+              <DateInput
                 id="start-date"
-                type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(val) => setStartDate(val)}
                 max={endDate}
+                locale={getLocaleForLanguage(i18n.language)}
+                todayLabel={String(t('common.today', 'Today'))}
               />
             </div>
             <div className="date-input-group">
               <label htmlFor="end-date">{t('properties.reports.endDate')}</label>
-              <input
+              <DateInput
                 id="end-date"
-                type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(val) => setEndDate(val)}
                 min={startDate}
                 max={new Date().toISOString().split('T')[0]}
+                locale={getLocaleForLanguage(i18n.language)}
+                todayLabel={String(t('common.today', 'Today'))}
               />
             </div>
           </div>
@@ -418,7 +429,7 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
               <>📊 {t('properties.reports.generateIncomeStatement')}</>
             )}
           </button>
-        </div>
+        </div>}
 
         <div className="report-option">
           <div className="report-option-header">
@@ -451,23 +462,17 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         </div>
       )}
 
-      {/* Income Statement Preview */}
-      {incomeStatementData && activeReport === 'income' && (
+      {/* Income Statement Preview (real estate only) */}
+      {isRealEstate && incomeStatementData && activeReport === 'income' && (
         <div className="report-preview">
           <div className="report-preview-header">
             <h3>{t('properties.reports.incomeStatement')}</h3>
             <div className="download-controls">
               <div className="format-selector">
                 <label htmlFor="export-format">{t('properties.reports.format')}</label>
-                <select
-                  id="export-format"
-                  value={exportFormat}
-                  onChange={(e) => setExportFormat(e.target.value as 'csv' | 'pdf')}
-                  className="format-select"
-                >
-                  <option value="csv">CSV</option>
-                  <option value="pdf">PDF</option>
-                </select>
+                <Select id="export-format" value={exportFormat}
+                  onChange={v => setExportFormat(v as 'csv' | 'pdf')} size="sm"
+                  options={[{ value: 'csv', label: 'CSV' }, { value: 'pdf', label: 'PDF' }]} />
               </div>
               <button className="btn btn-secondary" onClick={handleDownload}>
                 💾 {t('properties.reports.download')} {exportFormat.toUpperCase()}
@@ -543,15 +548,9 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
             <div className="download-controls">
               <div className="format-selector">
                 <label htmlFor="export-format-dep">{t('properties.reports.format')}</label>
-                <select
-                  id="export-format-dep"
-                  value={exportFormat}
-                  onChange={(e) => setExportFormat(e.target.value as 'csv' | 'pdf')}
-                  className="format-select"
-                >
-                  <option value="csv">CSV</option>
-                  <option value="pdf">PDF</option>
-                </select>
+                <Select id="export-format-dep" value={exportFormat}
+                  onChange={v => setExportFormat(v as 'csv' | 'pdf')} size="sm"
+                  options={[{ value: 'csv', label: 'CSV' }, { value: 'pdf', label: 'PDF' }]} />
               </div>
               <button className="btn btn-secondary" onClick={handleDownload}>
                 💾 {t('properties.reports.download')} {exportFormat.toUpperCase()}
@@ -561,13 +560,13 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
 
           <div className="report-content">
             <div className="report-section">
-              <h4>{t('properties.reports.propertyInfo')}</h4>
+              <h4>{isRealEstate ? t('properties.reports.propertyInfo') : t('properties.reports.assetInfo', 'Asset Information')}</h4>
               <div className="info-row">
-                <span className="label">{t('properties.address')}</span>
+                <span className="label">{isRealEstate ? t('properties.address') : t('common.name', 'Name')}</span>
                 <span className="value">{depreciationScheduleData.property.address}</span>
               </div>
               <div className="info-row">
-                <span className="label">{t('properties.buildingValue')}</span>
+                <span className="label">{isRealEstate ? t('properties.buildingValue') : t('properties.purchasePrice', 'Purchase price')}</span>
                 <span className="value">
                   {formatCurrency(depreciationScheduleData.property.building_value)}
                 </span>

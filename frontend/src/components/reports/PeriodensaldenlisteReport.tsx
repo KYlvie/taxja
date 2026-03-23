@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
 import reportService, { PeriodensaldenlisteReport as PeriodensaldenlisteData } from '../../services/reportService';
 import YearWarning from './YearWarning';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './PeriodensaldenlisteReport.css';
 
 const MONTH_KEYS = Array.from({ length: 12 }, (_, i) => `reports.periodensaldenliste.month${i + 1}`);
@@ -32,7 +34,7 @@ const PeriodensaldenlisteReport = () => {
   };
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat('de-AT', {
+    new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency', currency: 'EUR', minimumFractionDigits: 2,
     }).format(n);
 
@@ -52,11 +54,8 @@ const PeriodensaldenlisteReport = () => {
       <div className="periodensaldenliste-controls">
         <div className="form-group">
           <label htmlFor="periodensaldenliste-year">{t('reports.taxYear')}</label>
-          <select id="periodensaldenliste-year" value={taxYear} onChange={e => setTaxYear(+e.target.value)}>
-            {Array.from({ length: 5 }, (_, i) => currentYear - i).map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <Select id="periodensaldenliste-year" value={String(taxYear)} onChange={v => setTaxYear(Number(v))}
+            options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))} size="sm" />
         </div>
         <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
           {loading ? t('common.loading') : t('reports.periodensaldenliste.generate')}

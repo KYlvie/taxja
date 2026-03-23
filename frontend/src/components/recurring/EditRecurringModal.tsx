@@ -162,7 +162,7 @@ export const EditRecurringModal: React.FC<EditRecurringModalProps> = ({
           /* Active: editable form */
           <form onSubmit={handleSubmit(onSubmit)} className="recurring-editor-form">
             <div className="form-group">
-              <label>{t('recurring.form.amount')} (€)</label>
+              <label>{t('recurring.form.amount')} (€) <span className="required">*</span></label>
               <input
                 type="number"
                 step="0.01"

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { Bot, CheckCircle2, CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { useAIToastStore, type AIToast as AIToastType } from '../../stores/aiToastStore';
+import FuturisticIcon, { type FuturisticIconTone } from './FuturisticIcon';
 import './AIToast.css';
 
-const variantEmoji: Record<string, string> = {
-  success: '✅',
-  error: '😅',
-  warning: '⚠️',
-  info: '💡',
+const variantIcons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+  success: { icon: CheckCircle2, tone: 'emerald' },
+  error: { icon: CircleAlert, tone: 'rose' },
+  warning: { icon: TriangleAlert, tone: 'amber' },
+  info: { icon: Info, tone: 'violet' },
 };
 
 /** Single toast item */
@@ -34,9 +36,11 @@ const ToastItem = ({ toast, onDismiss }: { toast: AIToastType; onDismiss: () => 
       aria-live="polite"
       style={{ position: 'relative', overflow: 'hidden' }}
     >
-      <div className="ai-toast-avatar">🤖</div>
+      <div className="ai-toast-avatar">
+        <FuturisticIcon icon={Bot} tone="violet" size="sm" />
+      </div>
       <div className="ai-toast-message">
-        {variantEmoji[toast.variant]} {toast.message}
+        <FuturisticIcon icon={variantIcons[toast.variant].icon} tone={variantIcons[toast.variant].tone} size="xs" /> {toast.message}
       </div>
       <div className="ai-toast-close">✕</div>
       <div

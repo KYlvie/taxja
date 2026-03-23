@@ -6,12 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 import TaxToolsPage from '../pages/TaxToolsPage';
 import { useAuthStore } from '../stores/authStore';
 
-const getProperties = vi.fn();
-const getAssets = vi.fn();
-const getProperty = vi.fn();
 const getAvailableYears = vi.fn();
 const getSummary = vi.fn();
-const getPropertyMetrics = vi.fn();
 const getDashboardData = vi.fn();
 
 vi.mock('react-i18next', () => ({
@@ -19,14 +15,6 @@ vi.mock('react-i18next', () => ({
     t: (key: string, fallback?: string) => (typeof fallback === 'string' ? fallback : key),
     i18n: { language: 'en', resolvedLanguage: 'en' },
   }),
-}));
-
-vi.mock('../services/propertyService', () => ({
-  propertyService: {
-    getProperties: (...args: any[]) => getProperties(...args),
-    getAssets: (...args: any[]) => getAssets(...args),
-    getProperty: (...args: any[]) => getProperty(...args),
-  },
 }));
 
 vi.mock('../services/taxFilingService', () => ({
@@ -38,7 +26,6 @@ vi.mock('../services/taxFilingService', () => ({
 
 vi.mock('../services/dashboardService', () => ({
   dashboardService: {
-    getPropertyMetrics: (...args: any[]) => getPropertyMetrics(...args),
     getDashboardData: (...args: any[]) => getDashboardData(...args),
   },
 }));
@@ -63,10 +50,6 @@ vi.mock('../components/dashboard/FlatRateComparison', () => ({
   default: () => <div data-testid="flat-rate-comparison">Flat rate comparison</div>,
 }));
 
-vi.mock('../components/properties/PropertyReports', () => ({
-  default: () => <div data-testid="property-reports">Property reports</div>,
-}));
-
 describe('TaxToolsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,16 +68,6 @@ describe('TaxToolsPage', () => {
       isAuthenticated: true,
     });
 
-    getProperties.mockResolvedValue({
-      total: 1,
-      properties: [{ id: 'property-1', address: 'Main Street 1' }],
-      include_archived: true,
-    });
-    getAssets.mockResolvedValue({
-      total: 1,
-      assets: [{ id: 'asset-1', asset_type: 'computer', name: 'MacBook' }],
-    });
-    getProperty.mockResolvedValue({ id: 'property-1', address: 'Main Street 1' });
     getAvailableYears.mockResolvedValue([2026]);
     getSummary.mockResolvedValue({
       year: 2026,
@@ -114,13 +87,6 @@ describe('TaxToolsPage', () => {
       conflicts: [],
       record_count: 0,
     });
-    getPropertyMetrics.mockResolvedValue({
-      has_properties: true,
-      active_properties_count: 1,
-      total_rental_income: 0,
-      total_property_expenses: 0,
-      net_rental_income: 0,
-    });
     getDashboardData.mockResolvedValue({
       yearToDateIncome: 1000,
       yearToDateExpenses: 300,
@@ -131,7 +97,7 @@ describe('TaxToolsPage', () => {
     });
   });
 
-  it('surfaces tax position, AI guidance, payroll workbench, and asset overview on the tax tools page', async () => {
+  it('keeps tax tools focused on tax modules without duplicating asset insights', async () => {
     render(
       <MemoryRouter>
         <TaxToolsPage />
@@ -143,11 +109,10 @@ describe('TaxToolsPage', () => {
     expect(screen.getByTestId('refund-estimate')).toBeInTheDocument();
     expect(screen.getByTestId('ai-tax-advisor')).toBeInTheDocument();
     expect(screen.getByTestId('employer-workbench')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Asset overview/i })).toBeInTheDocument();
-    expect(screen.getByText('Tracked assets')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByTestId('what-if-simulator')).toBeInTheDocument();
     expect(screen.getByTestId('flat-rate-comparison')).toBeInTheDocument();
-    expect(screen.getByTestId('property-reports')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: /Asset overview & comparison/i }),
+    ).not.toBeInTheDocument();
   });
 });

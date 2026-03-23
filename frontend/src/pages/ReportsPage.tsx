@@ -1,31 +1,34 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BarChart3, ClipboardList, FileStack, Landmark, Scale, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
-import AuditChecklist from '../components/reports/AuditChecklist';
+import FuturisticIcon, { type FuturisticIconTone } from '../components/common/FuturisticIcon';
 import EAReport from '../components/reports/EAReport';
 import BilanzReport from '../components/reports/BilanzReport';
 import SaldenlisteReport from '../components/reports/SaldenlisteReport';
 import PeriodensaldenlisteReport from '../components/reports/PeriodensaldenlisteReport';
 import TaxFormPreview from '../components/reports/TaxFormPreview';
-import YearWarning from '../components/reports/YearWarning';
 import './ReportsPage.css';
 
-type TabType = 'ea' | 'bilanz' | 'taxform' | 'saldenliste' | 'periodensaldenliste' | 'audit';
+type TabType = 'ea' | 'bilanz' | 'taxform' | 'saldenliste' | 'periodensaldenliste';
+
+const tabMeta: Record<TabType, { icon: LucideIcon; tone: FuturisticIconTone }> = {
+  ea: { icon: BarChart3, tone: 'violet' },
+  bilanz: { icon: Scale, tone: 'amber' },
+  taxform: { icon: Landmark, tone: 'slate' },
+  saldenliste: { icon: ClipboardList, tone: 'amber' },
+  periodensaldenliste: { icon: FileStack, tone: 'cyan' },
+};
 
 const ReportsPage = () => {
   const { t } = useTranslation();
-  const currentYear = new Date().getFullYear();
   const { user } = useAuthStore();
   const userType = user?.user_type || '';
   const isGmbH = userType === 'gmbh';
-  // Bilanz tab visible for: GmbH (mandatory), self-employed, mixed (may need it if >€700k)
-  // Hidden for: pure employee, pure landlord
   const showBilanz = isGmbH || userType === 'selfEmployed' || userType === 'self_employed'
     || userType === 'mixed';
 
-  // GmbH users default to Bilanz tab (they must use Bilanzierung)
   const [activeTab, setActiveTab] = useState<TabType>(isGmbH ? 'bilanz' : 'ea');
-  const [auditYear, setAuditYear] = useState(currentYear);
 
   return (
     <div className="reports-page">
@@ -40,7 +43,8 @@ const ReportsPage = () => {
             className={`tab ${activeTab === 'ea' ? 'active' : ''}`}
             onClick={() => setActiveTab('ea')}
           >
-            📊 {t('reports.tabs.ea')}
+            <FuturisticIcon icon={tabMeta.ea.icon} tone={tabMeta.ea.tone} size="xs" />
+            <span>{t('reports.tabs.ea')}</span>
           </button>
         )}
         {showBilanz && (
@@ -48,32 +52,30 @@ const ReportsPage = () => {
             className={`tab ${activeTab === 'bilanz' ? 'active' : ''}`}
             onClick={() => setActiveTab('bilanz')}
           >
-            📒 {t('reports.tabs.bilanz')}
+            <FuturisticIcon icon={tabMeta.bilanz.icon} tone={tabMeta.bilanz.tone} size="xs" />
+            <span>{t('reports.tabs.bilanz')}</span>
           </button>
         )}
         <button
           className={`tab ${activeTab === 'taxform' ? 'active' : ''}`}
           onClick={() => setActiveTab('taxform')}
         >
-          🏛️ {isGmbH ? 'K1' : t('reports.tabs.taxForm')}
+          <FuturisticIcon icon={tabMeta.taxform.icon} tone={tabMeta.taxform.tone} size="xs" />
+          <span>{isGmbH ? 'K1' : t('reports.tabs.taxForm')}</span>
         </button>
         <button
           className={`tab ${activeTab === 'saldenliste' ? 'active' : ''}`}
           onClick={() => setActiveTab('saldenliste')}
         >
-          📋 {t('reports.tabs.saldenliste')}
+          <FuturisticIcon icon={tabMeta.saldenliste.icon} tone={tabMeta.saldenliste.tone} size="xs" />
+          <span>{t('reports.tabs.saldenliste')}</span>
         </button>
         <button
           className={`tab ${activeTab === 'periodensaldenliste' ? 'active' : ''}`}
           onClick={() => setActiveTab('periodensaldenliste')}
         >
-          📅 {t('reports.tabs.periodensaldenliste')}
-        </button>
-        <button
-          className={`tab ${activeTab === 'audit' ? 'active' : ''}`}
-          onClick={() => setActiveTab('audit')}
-        >
-          {t('reports.tabs.audit')}
+          <FuturisticIcon icon={tabMeta.periodensaldenliste.icon} tone={tabMeta.periodensaldenliste.tone} size="xs" />
+          <span>{t('reports.tabs.periodensaldenliste')}</span>
         </button>
       </div>
 
@@ -107,32 +109,9 @@ const ReportsPage = () => {
             <PeriodensaldenlisteReport />
           </div>
         )}
-
-        {activeTab === 'audit' && (
-          <div className="audit-tab">
-            <div className="year-selector">
-              <label htmlFor="audit-year">{t('reports.selectYear')}</label>
-              <select
-                id="audit-year"
-                value={auditYear}
-                onChange={(e) => setAuditYear(parseInt(e.target.value))}
-              >
-                {Array.from({ length: 5 }, (_, i) => currentYear - i).map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <YearWarning taxYear={auditYear} />
-            <AuditChecklist taxYear={auditYear} />
-          </div>
-        )}
-
       </div>
     </div>
   );
 };
-
 
 export default ReportsPage;

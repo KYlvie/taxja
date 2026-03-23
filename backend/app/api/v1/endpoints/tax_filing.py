@@ -4,9 +4,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from sqlalchemy import extract, func
+
 from app.db.base import get_db
 from app.models.user import User
 from app.models.tax_filing_data import TaxFilingData
+from app.models.transaction import Transaction
 from app.core.security import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -24,8 +27,9 @@ def get_available_years(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return list of tax years that have confirmed TaxFilingData."""
-    rows = (
+    """Return list of tax years from confirmed TaxFilingData AND transactions."""
+    # Years from confirmed tax filing data (SVS, Lohnzettel, etc.)
+    filing_rows = (
         db.query(TaxFilingData.tax_year)
         .filter(
             TaxFilingData.user_id == current_user.id,
@@ -34,8 +38,21 @@ def get_available_years(
         .distinct()
         .all()
     )
-    years = sorted([r[0] for r in rows if r[0]], reverse=True)
-    return {"years": years}
+    filing_years = {r[0] for r in filing_rows if r[0]}
+
+    # Years from transactions (income, expenses, rent, etc.)
+    txn_rows = (
+        db.query(func.distinct(extract("year", Transaction.transaction_date)))
+        .filter(
+            Transaction.user_id == current_user.id,
+            Transaction.transaction_date.isnot(None),
+        )
+        .all()
+    )
+    txn_years = {int(r[0]) for r in txn_rows if r[0]}
+
+    all_years = sorted(filing_years | txn_years, reverse=True)
+    return {"years": all_years}
 
 
 @router.get("/tax-filing/{year}/summary")

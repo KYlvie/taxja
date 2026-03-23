@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 import logging
 
 from app.core.transaction_enum_coercion import (
@@ -13,6 +14,22 @@ from app.core.transaction_enum_coercion import (
 )
 from app.models.document import Document, DocumentType
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.transaction_line_item import (
+    LineItemAllocationSource,
+    TransactionLineItem,
+)
+from app.services.posting_line_utils import (
+    build_mirror_line_item_payload,
+    default_posting_type_for_transaction_type,
+    normalize_line_item_payloads,
+    replace_transaction_line_items,
+)
+from app.services.contract_role_service import (
+    ContractRoleService,
+    TransactionDirectionResolution,
+    get_sensitive_document_mode,
+    load_sensitive_user_context,
+)
 from app.services.duplicate_detector import DuplicateDetector
 from app.services.transaction_classifier import TransactionClassifier
 from app.services.deductibility_checker import DeductibilityChecker
@@ -36,8 +53,100 @@ class OCRTransactionService:
     def __init__(self, db: Session):
         self.db = db
         self.classifier = TransactionClassifier(db=db)
-        self.deductibility_checker = DeductibilityChecker()
+        self.deductibility_checker = DeductibilityChecker(db=db)
         self.duplicate_detector = DuplicateDetector(db)
+
+    @staticmethod
+    def _direction_metadata_payload(
+        resolution: Optional[TransactionDirectionResolution],
+    ) -> Dict[str, Any]:
+        if not resolution:
+            return {}
+        return {
+            "document_transaction_direction": resolution.candidate,
+            "document_transaction_direction_source": resolution.source,
+            "document_transaction_direction_confidence": resolution.confidence,
+            "transaction_direction_resolution": resolution.to_payload(),
+            "commercial_document_semantics": resolution.semantics,
+            "is_reversal": resolution.is_reversal,
+        }
+
+    def _persist_direction_metadata(
+        self,
+        document: Document,
+        resolution: Optional[TransactionDirectionResolution],
+    ) -> None:
+        if not resolution or not isinstance(document.ocr_result, dict):
+            return
+        metadata = self._direction_metadata_payload(resolution)
+        updated = dict(document.ocr_result)
+        changed = False
+        for key, value in metadata.items():
+            if updated.get(key) != value:
+                updated[key] = value
+                changed = True
+        if not changed:
+            return
+        document.ocr_result = updated
+        flag_modified(document, "ocr_result")
+        self.db.flush()
+
+    def _resolve_direction(
+        self,
+        document: Document,
+        user_id: int,
+    ) -> Optional[TransactionDirectionResolution]:
+        if not isinstance(document.ocr_result, dict):
+            return None
+        user = load_sensitive_user_context(self.db, user_id)
+        if not user:
+            return None
+        service = ContractRoleService(language=getattr(user, "language", None))
+        resolution = service.resolve_transaction_direction(
+            user,
+            document.document_type,
+            document.ocr_result,
+            raw_text=document.raw_text,
+        )
+        self._persist_direction_metadata(document, resolution)
+        return resolution
+
+    def _enforce_direction_gate(
+        self,
+        suggestion: Dict[str, Any],
+        user_id: int,
+    ) -> Optional[TransactionDirectionResolution]:
+        document_id = suggestion.get("document_id")
+        if not document_id:
+            return None
+        document = (
+            self.db.query(Document)
+            .filter(Document.id == document_id, Document.user_id == user_id)
+            .first()
+        )
+        if not document:
+            return None
+        resolution = self._resolve_direction(document, user_id)
+        if (
+            resolution
+            and get_sensitive_document_mode() == "strict"
+            and resolution.gate_enabled
+            and resolution.strict_would_block
+        ):
+            raise ValueError(
+                "Automatic transaction creation is blocked until you confirm the document direction."
+            )
+        return resolution
+
+    def _annotate_suggestion_with_direction(
+        self,
+        suggestion: Dict[str, Any],
+        resolution: Optional[TransactionDirectionResolution],
+    ) -> Dict[str, Any]:
+        if not resolution:
+            return suggestion
+        suggestion.update(self._direction_metadata_payload(resolution))
+        return suggestion
 
     def create_transaction_suggestion(
         self, document_id: int, user_id: int
@@ -75,13 +184,30 @@ class OCRTransactionService:
             return []
 
         ocr_data = document.ocr_result
+        direction_resolution = self._resolve_direction(document, user_id)
+        if (
+            direction_resolution
+            and get_sensitive_document_mode() == "strict"
+            and direction_resolution.gate_enabled
+            and direction_resolution.strict_would_block
+        ):
+            logger.info(
+                "Sensitive direction gate blocked automatic suggestion creation for document %s",
+                document_id,
+            )
+            return []
         transaction_data = self._extract_transaction_data(document, ocr_data)
 
         if not transaction_data:
             logger.warning(f"Could not extract transaction data from document {document_id}")
             return []
 
-        classification = self._classify_from_ocr(document, transaction_data, user_id)
+        classification = self._classify_from_ocr(
+            document,
+            transaction_data,
+            user_id,
+            direction_resolution=direction_resolution,
+        )
 
         # Check if this is a NEEDS_AI category that might benefit from split analysis
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
@@ -89,11 +215,11 @@ class OCRTransactionService:
 
         if (
             doc_type in [DocumentType.RECEIPT.value, DocumentType.INVOICE.value]
+            and classification["transaction_type"] == TransactionType.EXPENSE.value
             and line_items
             and len(line_items) >= 2
         ):
-            from app.models.user import User
-            user = self.db.query(User).filter(User.id == user_id).first()
+            user = load_sensitive_user_context(self.db, user_id)
             if user:
                 user_type_val = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type or "employee")
                 # Only attempt split for business user types
@@ -103,20 +229,35 @@ class OCRTransactionService:
                     )
                     if split and split.get("has_split"):
                         return self._build_split_suggestions(
-                            document, transaction_data, classification, split, ocr_data
+                            document,
+                            transaction_data,
+                            classification,
+                            split,
+                            ocr_data,
+                            direction_resolution=direction_resolution,
                         )
 
         # No split needed — return single suggestion
         suggestion = self._build_single_suggestion(
-            document, transaction_data, classification, ocr_data
+            document,
+            transaction_data,
+            classification,
+            ocr_data,
+            direction_resolution=direction_resolution,
         )
         return [suggestion]
 
     def _build_single_suggestion(
-        self, document, transaction_data, classification, ocr_data
+        self,
+        document,
+        transaction_data,
+        classification,
+        ocr_data,
+        *,
+        direction_resolution: Optional[TransactionDirectionResolution] = None,
     ) -> Dict[str, Any]:
         """Build a single transaction suggestion dict."""
-        return {
+        suggestion = {
             "document_id": document.id,
             "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
             "transaction_type": classification["transaction_type"],
@@ -131,11 +272,202 @@ class OCRTransactionService:
             "classification_method": classification.get("classification_method"),
             "extracted_fields": {k: (float(v) if isinstance(v, Decimal) else v.isoformat() if isinstance(v, (datetime,)) else v) for k, v in ocr_data.items()} if ocr_data else {},
         }
+        return self._annotate_suggestion_with_direction(suggestion, direction_resolution)
+
+    def _build_line_items_from_split(
+        self,
+        ocr_items: List[Dict[str, Any]],
+        split: Dict[str, Any],
+        deductible_category: str,
+        deductible_reason: str,
+        non_deductible_reason: str,
+    ) -> List[Dict[str, Any]]:
+        """Map OCR receipt items into canonical deductible/private-use line items."""
+        if not ocr_items:
+            return []
+
+        deductible_tokens = {
+            token.strip().lower()
+            for token in str(split.get("deductible_items") or "").split(",")
+            if token and token.strip()
+        }
+        non_deductible_tokens = {
+            token.strip().lower()
+            for token in str(split.get("non_deductible_items") or "").split(",")
+            if token and token.strip()
+        }
+
+        line_items: List[Dict[str, Any]] = []
+        for idx, item in enumerate(ocr_items):
+            description = (item.get("description") or item.get("name") or "").strip()
+            if not description:
+                continue
+
+            raw_amount = (
+                item.get("amount")
+                or item.get("total_price")
+                or item.get("total")
+                or item.get("price")
+            )
+            if raw_amount in (None, ""):
+                continue
+
+            desc_lower = description.lower()
+            is_deductible = any(token in desc_lower for token in deductible_tokens)
+            is_non_deductible = any(token in desc_lower for token in non_deductible_tokens)
+
+            if is_deductible and not is_non_deductible:
+                posting_type = "expense"
+                category = deductible_category
+                deduction_reason = deductible_reason
+                deductible_flag = True
+            else:
+                posting_type = "private_use"
+                category = "groceries"
+                deduction_reason = non_deductible_reason
+                deductible_flag = False
+
+            line_items.append(
+                {
+                    "description": description[:500],
+                    "amount": str(raw_amount),
+                    "quantity": item.get("quantity", 1) or 1,
+                    "posting_type": posting_type,
+                    "allocation_source": "ocr_split",
+                    "category": category,
+                    "is_deductible": deductible_flag,
+                    "deduction_reason": deduction_reason[:500] if deduction_reason else None,
+                    "vat_rate": item.get("vat_rate"),
+                    "vat_amount": item.get("vat_amount"),
+                    "vat_recoverable_amount": "0.00",
+                    "sort_order": idx,
+                }
+            )
+
+        return line_items
 
     def _build_split_suggestions(
-        self, document, transaction_data, classification, split, ocr_data
+        self,
+        document,
+        transaction_data,
+        classification,
+        split,
+        ocr_data,
+        *,
+        direction_resolution: Optional[TransactionDirectionResolution] = None,
     ) -> List[Dict[str, Any]]:
         """Build two suggestions from AI split analysis."""
+        merchant = ocr_data.get("merchant", "")
+        base_date = transaction_data["date"]
+        date_str = (
+            base_date.isoformat()
+            if base_date and hasattr(base_date, "isoformat")
+            else str(base_date) if base_date else None
+        )
+        total = transaction_data["amount"]
+        deduct_amt = Decimal(str(split["deductible_amount"]))
+        non_deduct_amt = Decimal(str(split["non_deductible_amount"]))
+        split_total = deduct_amt + non_deduct_amt
+        diff = abs(split_total - total)
+
+        if diff > Decimal("2.0"):
+            logger.warning(
+                "Split amounts (%.2f + %.2f = %.2f) don't match total %.2f (diff=%.2f), skipping split",
+                deduct_amt, non_deduct_amt, split_total, total, diff,
+            )
+            return [
+                self._build_single_suggestion(
+                    document,
+                    transaction_data,
+                    classification,
+                    ocr_data,
+                    direction_resolution=direction_resolution,
+                )
+            ]
+
+        if diff > Decimal("0.01"):
+            if deduct_amt >= non_deduct_amt:
+                deduct_amt = total - non_deduct_amt
+            else:
+                non_deduct_amt = total - deduct_amt
+
+        deduct_reason = split.get("deductible_reason", "Betriebsausgabe")
+        non_deduct_reason = split.get("non_deductible_reason", "Private Lebensfuehrung")
+        tax_tip = split.get("tax_tip", "")
+        merged_deduct_reason = (
+            f"{deduct_reason} | {tax_tip}".strip(" |") if tax_tip else deduct_reason
+        )[:500]
+
+        line_items = self._build_line_items_from_split(
+            ocr_data.get("line_items") or ocr_data.get("items") or [],
+            split,
+            classification.get("category", "other"),
+            merged_deduct_reason,
+            non_deduct_reason[:500],
+        )
+        if not line_items:
+            if deduct_amt > 0:
+                deduct_items = split.get("deductible_items", "")
+                line_items.append(
+                    {
+                        "description": (
+                            f"{merchant}: {deduct_items}"
+                            if deduct_items
+                            else f"{merchant} (Betriebsausgabe)"
+                        )[:500],
+                        "amount": str(deduct_amt),
+                        "quantity": 1,
+                        "posting_type": "expense",
+                        "allocation_source": "ocr_split",
+                        "category": classification.get("category", "other"),
+                        "is_deductible": True,
+                        "deduction_reason": merged_deduct_reason,
+                        "sort_order": len(line_items),
+                    }
+                )
+            if non_deduct_amt > 0:
+                non_deduct_items = split.get("non_deductible_items", "")
+                line_items.append(
+                    {
+                        "description": (
+                            f"{merchant}: {non_deduct_items}"
+                            if non_deduct_items
+                            else f"{merchant} (Privat)"
+                        )[:500],
+                        "amount": str(non_deduct_amt),
+                        "quantity": 1,
+                        "posting_type": "private_use",
+                        "allocation_source": "ocr_split",
+                        "category": "groceries",
+                        "is_deductible": False,
+                        "deduction_reason": non_deduct_reason[:500],
+                        "sort_order": len(line_items),
+                    }
+                )
+
+        if line_items:
+            suggestion = {
+                "document_id": document.id,
+                "document_type": str(document.document_type.value) if hasattr(document.document_type, "value") else str(document.document_type),
+                "transaction_type": TransactionType.EXPENSE.value,
+                "amount": str(total),
+                "date": date_str,
+                "description": transaction_data["description"],
+                "category": classification.get("category", "other"),
+                "is_deductible": True,
+                "deduction_reason": merged_deduct_reason,
+                "confidence": 0.85,
+                "needs_review": False,
+                "line_items": line_items,
+                "extracted_fields": {},
+            }
+            return [
+                self._annotate_suggestion_with_direction(
+                    suggestion,
+                    direction_resolution,
+                )
+            ]
+
         suggestions = []
         merchant = ocr_data.get("merchant", "")
         base_date = transaction_data["date"]
@@ -154,7 +486,15 @@ class OCRTransactionService:
                 "Split amounts (%.2f + %.2f = %.2f) don't match total %.2f (diff=%.2f), skipping split",
                 deduct_amt, non_deduct_amt, split_total, total, diff,
             )
-            return [self._build_single_suggestion(document, transaction_data, classification, ocr_data)]
+            return [
+                self._build_single_suggestion(
+                    document,
+                    transaction_data,
+                    classification,
+                    ocr_data,
+                    direction_resolution=direction_resolution,
+                )
+            ]
 
         # Auto-correct small rounding differences by adjusting the larger portion
         if diff > Decimal("0.01"):
@@ -210,7 +550,20 @@ class OCRTransactionService:
             })
 
         if not suggestions:
-            return [self._build_single_suggestion(document, transaction_data, classification, ocr_data)]
+            return [
+                self._build_single_suggestion(
+                    document,
+                    transaction_data,
+                    classification,
+                    ocr_data,
+                    direction_resolution=direction_resolution,
+                )
+            ]
+
+        suggestions = [
+            self._annotate_suggestion_with_direction(suggestion, direction_resolution)
+            for suggestion in suggestions
+        ]
 
         logger.info(
             "Split receipt %d into %d transactions: deductible=€%.2f, non-deductible=€%.2f",
@@ -237,6 +590,11 @@ class OCRTransactionService:
         Returns:
             Transaction creation result, including duplicate detection outcome
         """
+        direction_resolution = self._enforce_direction_gate(suggestion, user_id)
+        suggestion = self._annotate_suggestion_with_direction(
+            dict(suggestion),
+            direction_resolution,
+        )
         transaction_type, category, txn_date = self._parse_transaction_fields(suggestion)
         amount = Decimal(suggestion["amount"])
         description = suggestion["description"]
@@ -370,6 +728,25 @@ class OCRTransactionService:
         )
         
         self.db.add(transaction)
+        self.db.flush()
+
+        explicit_line_items = suggestion.get("line_items")
+        if explicit_line_items:
+            normalized_line_items = normalize_line_item_payloads(
+                transaction_type=transaction.type,
+                transaction_amount=transaction.amount,
+                description=transaction.description,
+                income_category=transaction.income_category,
+                expense_category=transaction.expense_category,
+                is_deductible=transaction.is_deductible,
+                deduction_reason=transaction.deduction_reason,
+                vat_rate=transaction.vat_rate,
+                vat_amount=transaction.vat_amount,
+                line_items=explicit_line_items,
+                default_allocation_source=LineItemAllocationSource.OCR_SPLIT,
+            )
+            replace_transaction_line_items(self.db, transaction, normalized_line_items)
+
         self.db.commit()
         self.db.refresh(transaction)
         
@@ -380,7 +757,42 @@ class OCRTransactionService:
             self.db.commit()
 
         # Sync line items from document OCR data to transaction_line_items
-        self._sync_line_items_from_document(transaction, suggestion)
+        if not explicit_line_items:
+            self._sync_line_items_from_document(transaction, suggestion)
+        if not transaction.line_items:
+            mirror = build_mirror_line_item_payload(
+                transaction_type=transaction.type,
+                amount=transaction.amount,
+                description=transaction.description,
+                income_category=transaction.income_category,
+                expense_category=transaction.expense_category,
+                is_deductible=transaction.is_deductible,
+                deduction_reason=transaction.deduction_reason,
+                vat_rate=transaction.vat_rate,
+                vat_amount=transaction.vat_amount,
+                allocation_source=LineItemAllocationSource.OCR_SPLIT,
+            )
+            self.db.add(
+                TransactionLineItem(
+                    transaction_id=transaction.id,
+                    description=mirror["description"],
+                    amount=mirror["amount"],
+                    quantity=mirror["quantity"],
+                    posting_type=mirror["posting_type"],
+                    allocation_source=mirror["allocation_source"],
+                    category=mirror.get("category"),
+                    is_deductible=mirror["is_deductible"],
+                    deduction_reason=mirror.get("deduction_reason"),
+                    vat_rate=mirror.get("vat_rate"),
+                    vat_amount=mirror.get("vat_amount"),
+                    vat_recoverable_amount=mirror["vat_recoverable_amount"],
+                    rule_bucket=mirror.get("rule_bucket"),
+                    classification_method=transaction.classification_method,
+                    sort_order=0,
+                )
+            )
+            self.db.commit()
+            self.db.refresh(transaction)
         
         logger.info(f"Created transaction {transaction.id} from OCR document {suggestion['document_id']}")
         
@@ -390,8 +802,6 @@ class OCRTransactionService:
         self, transaction: Transaction, suggestion: Dict[str, Any]
     ) -> None:
         """Copy line items from OCR data into transaction_line_items table."""
-        from app.models.transaction_line_item import TransactionLineItem
-
         # Try multiple sources for line items
         doc_line_items = suggestion.get("extracted_fields", {}).get("line_items") or []
         if not doc_line_items:
@@ -412,6 +822,16 @@ class OCRTransactionService:
             return
 
         try:
+            posting_type = default_posting_type_for_transaction_type(transaction.type)
+            fallback_category = (
+                transaction.expense_category.value
+                if transaction.expense_category and hasattr(transaction.expense_category, "value")
+                else (
+                    transaction.income_category.value
+                    if transaction.income_category and hasattr(transaction.income_category, "value")
+                    else None
+                )
+            )
             for idx, li in enumerate(doc_line_items):
                 desc = li.get("description") or li.get("name") or f"Item {idx + 1}"
                 amt = (
@@ -430,11 +850,18 @@ class OCRTransactionService:
                     description=desc,
                     amount=Decimal(str(amt)),
                     quantity=li.get("quantity", 1),
-                    category=li.get("category"),
-                    is_deductible=li.get("is_deductible", transaction.is_deductible),
+                    posting_type=posting_type,
+                    allocation_source=LineItemAllocationSource.OCR_SPLIT,
+                    category=li.get("category") or fallback_category,
+                    is_deductible=(
+                        li.get("is_deductible", transaction.is_deductible)
+                        if posting_type.value == "expense"
+                        else False
+                    ),
                     deduction_reason=li.get("deduction_reason"),
                     vat_rate=vat_rate,
                     vat_amount=Decimal(str(li["vat_amount"])) if li.get("vat_amount") else None,
+                    vat_recoverable_amount=Decimal("0.00"),
                     classification_method=transaction.classification_method,
                     sort_order=idx,
                 )
@@ -631,7 +1058,12 @@ class OCRTransactionService:
         }
 
     def _classify_from_ocr(
-        self, document: Document, transaction_data: Dict[str, Any], user_id: int
+        self,
+        document: Document,
+        transaction_data: Dict[str, Any],
+        user_id: int,
+        *,
+        direction_resolution: Optional[TransactionDirectionResolution] = None,
     ) -> Dict[str, Any]:
         """Classify transaction based on document type and OCR data"""
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
@@ -673,11 +1105,17 @@ class OCRTransactionService:
             }
             
         elif doc_type in [DocumentType.RECEIPT.value, DocumentType.INVOICE.value]:
-            transaction_type = TransactionType.EXPENSE
-            
-            from app.models.user import User
-            user = self.db.query(User).filter(User.id == user_id).first()
-            
+            resolved_direction = direction_resolution.candidate if direction_resolution else "unknown"
+            transaction_type = (
+                TransactionType.INCOME
+                if resolved_direction == "income"
+                else TransactionType.EXPENSE
+            )
+
+            user = load_sensitive_user_context(self.db, user_id)
+            method = "unknown"
+            deduct_requires_review = True
+
             if user:
                 # Build a rich description for classification by combining
                 # the transaction description with the raw text from the document
@@ -697,8 +1135,21 @@ class OCRTransactionService:
                 classification = self.classifier.classify_transaction(temp_transaction, user)
                 category = classification.category if classification.category else None
                 method = classification.method if hasattr(classification, 'method') else 'unknown'
-                
-                if category:
+                semantics = direction_resolution.semantics if direction_resolution else "unknown"
+
+                if transaction_type == TransactionType.INCOME:
+                    is_deductible = False
+                    deduction_reason = "Income is not deductible"
+                    deduct_requires_review = False
+                    if semantics == "credit_note":
+                        deduction_reason = "Credit note / reversal of prior income"
+                    elif semantics == "proforma":
+                        deduction_reason = "Proforma document requires manual confirmation"
+                        deduct_requires_review = True
+                    elif semantics == "delivery_note":
+                        deduction_reason = "Delivery note requires manual confirmation"
+                        deduct_requires_review = True
+                elif category:
                     # If LLM already provided deductibility, use it directly
                     if method == 'llm' and hasattr(classification, 'is_deductible') and classification.is_deductible is not None:
                         is_deductible = classification.is_deductible
@@ -714,12 +1165,21 @@ class OCRTransactionService:
                             description=description,
                             business_type=getattr(user, 'business_type', None),
                             business_industry=getattr(user, 'business_industry', None),
+                            user_id=user_id,
                         )
                         is_deductible = deduct_result.is_deductible
                         deduction_reason = deduct_result.reason
                         if deduct_result.tax_tip:
                             deduction_reason = f"{deduct_result.reason} | {deduct_result.tax_tip}"
                         deduct_requires_review = deduct_result.requires_review
+                    if semantics == "credit_note":
+                        deduction_reason = f"Credit note / reversal of prior expense | {deduction_reason}"
+                    elif semantics == "proforma":
+                        deduction_reason = "Proforma document requires manual confirmation"
+                        deduct_requires_review = True
+                    elif semantics == "delivery_note":
+                        deduction_reason = "Delivery note requires manual confirmation"
+                        deduct_requires_review = True
                 else:
                     is_deductible = False
                     deduction_reason = "Unable to determine deductibility"
@@ -730,6 +1190,8 @@ class OCRTransactionService:
                 is_deductible = False
                 deduction_reason = "Unable to determine deductibility"
                 confidence = 0.5
+                method = "unknown"
+                deduct_requires_review = True
                 
             return {
                 "transaction_type": transaction_type.value,

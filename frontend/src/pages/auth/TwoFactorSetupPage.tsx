@@ -18,20 +18,28 @@ const TwoFactorSetupPage = () => {
   const [setupLoading, setSetupLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     const initSetup = async () => {
       try {
         const response = await authService.setup2FA();
-        setQrCode(response.qr_code);
-        setSecret(response.secret);
+        if (!cancelled) {
+          setQrCode(response.qr_code);
+          setSecret(response.secret);
+        }
       } catch (err: any) {
-        setError(err.response?.data?.detail || t('common.error'));
+        if (!cancelled) {
+          setError(err.response?.data?.detail || t('common.error'));
+        }
       } finally {
-        setSetupLoading(false);
+        if (!cancelled) {
+          setSetupLoading(false);
+        }
       }
     };
 
     initSetup();
-  }, [t]);
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +56,14 @@ const TwoFactorSetupPage = () => {
         setError(t('auth.invalid2FACode'));
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('common.error'));
+      console.error('2FA verify failed:', err.response?.status, err.response?.data);
+      const detail = err.response?.data?.detail;
+      const detailObj = err.response?.data?._detail_obj;
+      setError(
+        (typeof detail === 'string' ? detail : null) ||
+        detailObj?.message ||
+        t('auth.invalid2FACode', 'Invalid verification code. Please try again.')
+      );
     } finally {
       setLoading(false);
     }

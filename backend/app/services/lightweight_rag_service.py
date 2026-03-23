@@ -153,6 +153,48 @@ class LightweightTaxRAG:
                 "回答要简短精确（最多3-4句话）。"
                 "你不是税务顾问 - 复杂情况请建议咨询专业人士。"
             ),
+            "fr": (
+                "Vous êtes un assistant fiscal pour les contribuables autrichiens. "
+                "Répondez aux questions UNIQUEMENT sur la base des informations fiscales fournies. "
+                "Si la réponse ne figure pas dans les informations, dites-le honnêtement. "
+                "Gardez des réponses courtes et précises (max 3-4 phrases). "
+                "Vous n'êtes PAS un conseiller fiscal - orientez les cas complexes vers un professionnel."
+            ),
+            "ru": (
+                "Вы — налоговый помощник для австрийских налогоплательщиков. "
+                "Отвечайте на вопросы ТОЛЬКО на основе предоставленной налоговой информации. "
+                "Если ответа нет в информации, честно скажите об этом. "
+                "Отвечайте кратко и точно (максимум 3-4 предложения). "
+                "Вы НЕ налоговый консультант — в сложных случаях рекомендуйте обратиться к специалисту."
+            ),
+            "hu": (
+                "Ön az osztrák adófizetők adóügyi asszisztense. "
+                "CSAK a megadott adóinformációk alapján válaszoljon a kérdésekre. "
+                "Ha a válasz nem található az információk között, mondja meg őszintén. "
+                "Tartsa a válaszokat rövidre és pontosra (max. 3-4 mondat). "
+                "Ön NEM adótanácsadó – összetett esetekben javasoljon szakértői konzultációt."
+            ),
+            "pl": (
+                "Jesteś asystentem podatkowym dla austriackich podatników. "
+                "Odpowiadaj na pytania WYŁĄCZNIE na podstawie dostarczonych informacji podatkowych. "
+                "Jeśli odpowiedzi nie ma w informacjach, powiedz o tym uczciwie. "
+                "Odpowiadaj krótko i precyzyjnie (maks. 3-4 zdania). "
+                "NIE jesteś doradcą podatkowym – w złożonych przypadkach zalecaj konsultację ze specjalistą."
+            ),
+            "tr": (
+                "Avusturyalı vergi mükellefleri için vergi asistanısınız. "
+                "Soruları YALNIZCA sağlanan vergi bilgilerine dayanarak yanıtlayın. "
+                "Yanıt bilgilerde yoksa bunu dürüstçe belirtin. "
+                "Yanıtları kısa ve öz tutun (maks. 3-4 cümle). "
+                "Vergi danışmanı DEĞİLSİNİZ – karmaşık durumlarda bir uzmana yönlendirin."
+            ),
+            "bs": (
+                "Vi ste porezni asistent za austrijske porezne obveznike. "
+                "Odgovarajte na pitanja ISKLJUČIVO na osnovu pruženih poreznih informacija. "
+                "Ako odgovor nije u informacijama, to iskreno recite. "
+                "Držite odgovore kratkim i preciznim (maks. 3-4 rečenice). "
+                "Vi NISTE porezni savjetnik – za složene slučajeve preporučite konsultaciju sa stručnjakom."
+            ),
         }
         
         prompt = base_prompts.get(language, base_prompts["de"])
@@ -248,6 +290,30 @@ class LightweightTaxRAG:
                 "⚠️ 这不是税务建议。"
                 "如需权威信息，请咨询 FinanzOnline 或税务顾问。"
             ),
+            "fr": (
+                "⚠️ Ceci ne constitue pas un conseil fiscal. "
+                "Pour des renseignements officiels, consultez FinanzOnline ou un conseiller fiscal."
+            ),
+            "ru": (
+                "⚠️ Это не является налоговой консультацией. "
+                "Для получения официальной информации обращайтесь в FinanzOnline или к налоговому консультанту."
+            ),
+            "hu": (
+                "⚠️ Ez nem adótanácsadás. "
+                "Hivatalos tájékoztatásért forduljon a FinanzOnline-hoz vagy adótanácsadóhoz."
+            ),
+            "pl": (
+                "⚠️ To nie jest porada podatkowa. "
+                "W celu uzyskania wiążących informacji skontaktuj się z FinanzOnline lub doradcą podatkowym."
+            ),
+            "tr": (
+                "⚠️ Bu bir vergi danışmanlığı değildir. "
+                "Bağlayıcı bilgi için FinanzOnline'a veya bir vergi danışmanına başvurun."
+            ),
+            "bs": (
+                "⚠️ Ovo nije porezni savjet. "
+                "Za službene informacije obratite se FinanzOnline-u ili poreznom savjetniku."
+            ),
         }
         return disclaimers.get(language, disclaimers["de"])
 
@@ -264,6 +330,30 @@ class LightweightTaxRAG:
             ),
             "zh": (
                 "本地税务助手当前不可用，请稍后再试。"
+            ),
+            "fr": (
+                "L'assistant fiscal local est actuellement indisponible. "
+                "Veuillez réessayer plus tard."
+            ),
+            "ru": (
+                "Локальный налоговый помощник в данный момент недоступен. "
+                "Пожалуйста, попробуйте позже."
+            ),
+            "hu": (
+                "A helyi adóügyi asszisztens jelenleg nem érhető el. "
+                "Kérjük, próbálja meg később."
+            ),
+            "pl": (
+                "Lokalny asystent podatkowy jest obecnie niedostępny. "
+                "Proszę spróbować ponownie później."
+            ),
+            "tr": (
+                "Yerel vergi asistanı şu anda kullanılamıyor. "
+                "Lütfen daha sonra tekrar deneyin."
+            ),
+            "bs": (
+                "Lokalni porezni asistent trenutno nije dostupan. "
+                "Molimo pokušajte ponovo kasnije."
             ),
         }
         return responses.get(language, responses["de"])
