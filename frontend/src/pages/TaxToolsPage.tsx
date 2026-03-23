@@ -214,11 +214,13 @@ const TaxToolsPage = () => {
           {!filingLoading && !filingSummary && selectedYear && (
             <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
           )}
-          {!filingLoading && filingSummary && filingSummary.record_count === 0 && (
+          {!filingLoading && filingSummary && (filingSummary.record_count ?? 0) === 0 && (!filingSummary.transactions || filingSummary.transactions.transaction_count === 0) && (
             <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
           )}
-          {!filingLoading && filingSummary && filingSummary.record_count > 0 && (
+          {!filingLoading && filingSummary && ((filingSummary.record_count ?? 0) > 0 || (filingSummary.transactions && filingSummary.transactions.transaction_count > 0)) && (
             <div className="filing-summary">
+              {(filingSummary.record_count ?? 0) > 0 && (
+                <>
               <div className="filing-totals-grid">
                 <div className="filing-total-card">
                   <span className="filing-label">{t('taxTools.page.taxableIncome', 'Taxable Income')}</span>
@@ -361,10 +363,61 @@ const TaxToolsPage = () => {
                   ))}
                 </div>
               )}
+              </>
+              )}
 
-              <p className="text-muted tax-tools-record-count">
-                {filingSummary.record_count} {t('taxTools.page.records', 'records')}
-              </p>
+              {(filingSummary.record_count ?? 0) > 0 && (
+                <p className="text-muted tax-tools-record-count">
+                  {filingSummary.record_count} {t('taxTools.page.records', 'confirmed records')}
+                </p>
+              )}
+
+              {filingSummary.transactions && filingSummary.transactions.transaction_count > 0 && (
+                <div className="filing-section filing-transactions-section">
+                  <h4 className="tax-tools-subheading">
+                    <FuturisticIcon icon={ClipboardList} tone="cyan" size="xs" />
+                    <span>
+                      {t('taxTools.page.transactionsSummary', 'Transactions')} ({filingSummary.transactions.transaction_count})
+                    </span>
+                  </h4>
+                  <div className="filing-totals-grid" style={{ marginBottom: '0.75rem' }}>
+                    <div className="filing-total-card">
+                      <span className="filing-label">{t('taxTools.page.txnIncome', 'Income')}</span>
+                      <span className="filing-value">
+                        € {filingSummary.transactions.income_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="filing-total-card">
+                      <span className="filing-label">{t('taxTools.page.txnExpense', 'Expenses')}</span>
+                      <span className="filing-value">
+                        € {filingSummary.transactions.expense_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="filing-total-card">
+                      <span className="filing-label">{t('taxTools.page.txnDeductible', 'Deductible')}</span>
+                      <span className="filing-value">
+                        € {filingSummary.transactions.deductible_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="filing-txn-categories">
+                    {filingSummary.transactions.by_category.map((cat) => (
+                      <div key={`${cat.type}-${cat.category}`} className="filing-item">
+                        <span className="filing-item-type">
+                          {t(`transactions.types.${cat.type}`, cat.type)}
+                        </span>
+                        <span className="filing-item-category">
+                          {t(`transactions.categories.${cat.category}`, cat.category)}
+                        </span>
+                        <span className="filing-item-count">{cat.count}×</span>
+                        <span className="filing-item-amount">
+                          € {cat.total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

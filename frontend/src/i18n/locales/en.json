@@ -74,6 +74,8 @@
     "uploadDocument": "Upload Document",
     "uploadDocumentDesc": "Upload receipts, invoices or contracts",
     "addTransaction": "Add Transaction",
+    "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF",
     "addTransactionDesc": "Manually record income or expenses",
     "viewTransactions": "View Transactions",
     "viewTransactionsDesc": "Review and manage your transactions",
@@ -326,6 +328,8 @@
       "title": "Getting Started",
       "description": "Upload your first document or record your first income or expense. Once Taxja has data, the dashboard becomes much more useful.",
       "addTransaction": "Add Transaction",
+      "exportCsv": "Export CSV",
+      "exportPdf": "Export PDF",
       "uploadDocument": "Upload Receipt",
       "setupProfile": "Set Up Profile"
     },
@@ -356,6 +360,8 @@
   "transactions": {
     "title": "Transactions",
     "addTransaction": "Add Transaction",
+    "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF",
     "editTransaction": "Edit Transaction",
     "transactionDetails": "Transaction Details",
     "type": "Type",
@@ -920,6 +926,21 @@
       "viewPurchaseContract": "View purchase contract",
       "viewRentalContract": "View rental contract",
       "viewSourceDocument": "View purchase document"
+    },
+    "pendingDocuments": {
+      "title": "Pending asset documents",
+      "hint": "Assets detected from purchase contracts, invoices, or receipts appear here. Once confirmed they become asset records automatically. Documents missing fields need your attention in the Documents page.",
+      "needsInput": "Needs input",
+      "missingFields": "Missing: {{fields}}",
+      "awaitingConfirmation": "Awaiting confirmation",
+      "openSourceDocument": "Open source document"
+    },
+    "form": {
+      "documentHint": {
+        "title": "Add a contract or proof file",
+        "message": "You can create the asset first, but uploading the purchase contract or a supporting document keeps the asset record complete."
+      },
+      "uploadDocument": "Upload document"
     }
   },
   "documents": {
@@ -944,178 +965,6 @@
     "reprocessStarted": "Reprocessing started. The current result stays visible until the new run finishes.",
     "reprocessFailed": "Re-processing failed, please try again",
     "reprocessTimeout": "Reprocessing is taking too long. Please try again later.",
-    "confirm": "Confirm",
-    "confirmSuccess": "Document confirmed",
-    "deleteDialog": {
-      "title": "Delete Document",
-      "hasRelatedData": "⚠️ This document is linked to the following data:",
-      "property": "Property",
-      "transactions": "Transactions",
-      "recurringTransaction": "Recurring Transaction",
-      "recurringTransactions": "Recurring Transactions",
-      "linkedMietvertrag": "Linked Rental Contract",
-      "linkedMietvertragWarn": "Choosing 'Delete Everything' will also delete this rental contract and its recurring transactions",
-      "deleteOptions": "Deletion Options:",
-      "documentOnly": "Delete document only (recommended)",
-      "documentOnlyDesc": "Deletes the document file but keeps all property and transaction data",
-      "withData": "Delete document and all related data",
-      "withDataDesc": "Deletes the document AND all linked properties, transactions, and recurring transactions",
-      "warning": "⚠️ Warning: This action cannot be undone!",
-      "recommendation": "💡 Recommendation: If you just want to clean up the document file, choose 'Delete document only'",
-      "cancel": "Cancel",
-      "confirmDocumentOnly": "Delete Document Only",
-      "confirmWithData": "Delete Everything"
-    },
-    "tabs": {
-      "list": "My Documents",
-      "upload": "Upload",
-      "bescheid": "Import Tax Notice"
-    },
-    "types": {
-      "payslip": "Payslip",
-      "receipt": "Receipt",
-      "invoice": "Invoice",
-      "purchase_contract": "Purchase Contract",
-      "rental_contract": "Rental Contract",
-      "loan_contract": "Loan Contract",
-      "bank_statement": "Bank Statement",
-      "property_tax": "Property Tax",
-      "svs_notice": "SVS Notice",
-      "lohnzettel": "Pay Slip (L16)",
-      "einkommensteuerbescheid": "Income Tax Assessment",
-      "e1_form": "Income Tax Declaration (E1)",
-      "l1_form": "Employee Tax Return (L1)",
-      "l1k_beilage": "Child Supplement (L1k)",
-      "l1ab_beilage": "Deductions Supplement (L1ab)",
-      "e1a_beilage": "Self-Employment Supplement (E1a)",
-      "e1b_beilage": "Rental Income Supplement (E1b)",
-      "e1kv_beilage": "Capital Gains Supplement (E1kv)",
-      "u1_form": "Annual VAT Return (U1)",
-      "u30_form": "VAT Pre-Filing (U30/UVA)",
-      "jahresabschluss": "Annual Financial Statement",
-      "spendenbestaetigung": "Donation Confirmation",
-      "versicherungsbestaetigung": "Insurance Confirmation",
-      "kinderbetreuungskosten": "Childcare Costs",
-      "fortbildungskosten": "Continuing Education Costs",
-      "pendlerpauschale": "Commuter Allowance",
-      "kirchenbeitrag": "Church Tax",
-      "grundbuchauszug": "Land Registry Extract",
-      "betriebskostenabrechnung": "Operating Cost Statement",
-      "gewerbeschein": "Trade License",
-      "kontoauszug": "Account Statement",
-      "other": "Other",
-      "unknown": "Unknown"
-    },
-    "documentTypes": {
-      "receipt": "Receipt",
-      "invoice": "Invoice",
-      "contract": "Contract",
-      "statement": "Statement",
-      "purchase_contract": "Purchase Contract",
-      "rental_contract": "Rental Contract",
-      "loan_contract": "Loan Contract",
-      "bank_statement": "Bank Statement",
-      "property_tax": "Property Tax",
-      "svs_notice": "SVS Notice",
-      "lohnzettel": "Pay Slip (L16)",
-      "einkommensteuerbescheid": "Income Tax Assessment",
-      "e1_form": "Income Tax Declaration (E1)",
-      "l1_form": "Employee Tax Return (L1)",
-      "l1k_beilage": "Child Supplement (L1k)",
-      "l1ab_beilage": "Deductions Supplement (L1ab)",
-      "e1a_beilage": "Self-Employment Supplement (E1a)",
-      "e1b_beilage": "Rental Income Supplement (E1b)",
-      "e1kv_beilage": "Capital Gains Supplement (E1kv)",
-      "u1_form": "Annual VAT Return (U1)",
-      "u30_form": "VAT Pre-Filing (U30/UVA)",
-      "jahresabschluss": "Annual Financial Statement",
-      "spendenbestaetigung": "Donation Confirmation",
-      "versicherungsbestaetigung": "Insurance Confirmation",
-      "kinderbetreuungskosten": "Childcare Costs",
-      "fortbildungskosten": "Continuing Education Costs",
-      "pendlerpauschale": "Commuter Allowance",
-      "kirchenbeitrag": "Church Tax",
-      "grundbuchauszug": "Land Registry Extract",
-      "betriebskostenabrechnung": "Operating Cost Statement",
-      "gewerbeschein": "Trade License",
-      "kontoauszug": "Account Statement",
-      "other": "Other",
-      "unknown": "Unknown"
-    },
-    "upload": {
-      "title": "Upload Documents",
-      "dragDrop": "Drag and drop files here, or click to select",
-      "mobileHint": "Choose files from your phone or scan a document with the camera",
-      "formats": "Supported formats: JPG, PNG, PDF (recommended under 5MB, max 10MB)",
-      "selectFiles": "Select Files",
-      "takePhoto": "Take Photo",
-      "progress": "Upload Progress",
-      "processing": "Recognizing document...",
-      "completed": "Completed",
-      "error": "Upload failed",
-      "retry": "Retry",
-      "clearCompleted": "Clear Completed",
-      "contextHintRental": "Uploading rental contract for property #{{propertyId}}",
-      "contextHintPurchase": "Uploading purchase contract for property #{{propertyId}}",
-      "contextHintLoan": "Uploading loan contract for property #{{propertyId}}",
-      "stagingTitle": "{{count}} photos ready to process",
-      "stagingHint": "Drag to reorder, then choose to merge into one document or upload separately.",
-      "mergeUpload": "Merge into 1 document ({{count}} pages)",
-      "uploadSeparately": "Upload separately ({{count}} documents)",
-      "clearStaging": "Clear",
-      "groupedPagesMeta": "{{count}} pages · {{size}} KB",
-      "captureSessionTitle": "{{count}} pages captured",
-      "captureSessionSubtitle": "Photos in the same group will be merged into one document before processing.",
-      "addPage": "Continue capturing",
-      "uploadGrouped": "Upload this document",
-      "clearCaptureSession": "Clear",
-      "duplicateReused": "Duplicate file, reused existing document",
-      "uploadButton": "Upload",
-      "stagingHintSingle": "Review the file below, then click Upload."
-    },
-    "search": {
-      "placeholder": "Search documents by name or content..."
-    },
-    "view": {
-      "grid": "Grid View",
-      "list": "List View"
-    },
-    "viewGrid": "Grid View",
-    "viewList": "List View",
-    "filters": {
-      "allTypes": "All Types",
-      "allYears": "All Years",
-      "startDate": "From Date",
-      "endDate": "To Date",
-      "needsReview": "Needs Review Only",
-      "clear": "Clear Filters"
-    },
-    "groups": {
-      "all": "All Documents",
-      "employment": "Employment & Payroll",
-      "self_employed": "Self-Employed / Business",
-      "property": "Property & Rental",
-      "social_insurance": "Insurance & Loans",
-      "tax_filing": "Tax Filing & Notices",
-      "deductions": "Tax Deduction Documents",
-      "expense": "Receipts & Invoices",
-      "banking": "Banking",
-      "other": "Other"
-    },
-    "list": {
-      "name": "File",
-      "type": "Category",
-      "date": "Date",
-      "uploadDate": "Upload Date",
-      "size": "Size",
-      "confidence": "Confidence",
-      "status": "Status"
-    },
-    "statusReady": "Ready",
-    "statusTransactionCreated": "Transaction created",
-    "emptyGroup": "No documents in this category yet for the current filters.",
-    "pageSize": "Items per page",
-    "perPage": "/ page",
     "review": {
       "title": "Review Recognition Results",
       "loadError": "Failed to load document for review",
@@ -1333,7 +1182,11 @@
         "kz_210": "KZ210 Gross Income",
         "city": "City",
         "postal_code": "Postal Code",
-        "unit_number": "Unit Number"
+        "unit_number": "Unit Number",
+        "confirmed": "Confirmed",
+        "confirmed_at": "Confirmed at",
+        "confirmed_by": "Confirmed by",
+        "transaction_type": "Transaction type"
       },
       "additionalFields": "Additional extracted fields",
       "contractRoleConfidenceLabel": "Confidence",
@@ -1363,8 +1216,189 @@
         "receipt": "Receipt",
         "standard_invoice": "Standard invoice"
       },
-      "openReview": "Review & Confirm OCR Results"
+      "openReview": "Review & Confirm OCR Results",
+      "moreSuggestions": "{{count}} more suggestions"
     },
+    "reviewSuccess": "Document reviewed",
+    "reviewFailed": "Review failed",
+    "deleteDialog": {
+      "title": "Delete Document",
+      "hasRelatedData": "⚠️ This document is linked to the following data:",
+      "property": "Property",
+      "transactions": "Transactions",
+      "recurringTransaction": "Recurring Transaction",
+      "recurringTransactions": "Recurring Transactions",
+      "linkedMietvertrag": "Linked Rental Contract",
+      "linkedMietvertragWarn": "Choosing 'Delete Everything' will also delete this rental contract and its recurring transactions",
+      "deleteOptions": "Deletion Options:",
+      "documentOnly": "Delete document only (recommended)",
+      "documentOnlyDesc": "Deletes the document file but keeps all property and transaction data",
+      "withData": "Delete document and all related data",
+      "withDataDesc": "Deletes the document AND all linked properties, transactions, and recurring transactions",
+      "warning": "⚠️ Warning: This action cannot be undone!",
+      "recommendation": "💡 Recommendation: If you just want to clean up the document file, choose 'Delete document only'",
+      "cancel": "Cancel",
+      "confirmDocumentOnly": "Delete Document Only",
+      "confirmWithData": "Delete Everything"
+    },
+    "tabs": {
+      "list": "My Documents",
+      "upload": "Upload",
+      "bescheid": "Import Tax Notice"
+    },
+    "types": {
+      "payslip": "Payslip",
+      "receipt": "Receipt",
+      "invoice": "Invoice",
+      "purchase_contract": "Purchase Contract",
+      "rental_contract": "Rental Contract",
+      "loan_contract": "Loan Contract",
+      "bank_statement": "Bank Statement",
+      "property_tax": "Property Tax",
+      "svs_notice": "SVS Notice",
+      "lohnzettel": "Pay Slip (L16)",
+      "einkommensteuerbescheid": "Income Tax Assessment",
+      "e1_form": "Income Tax Declaration (E1)",
+      "l1_form": "Employee Tax Return (L1)",
+      "l1k_beilage": "Child Supplement (L1k)",
+      "l1ab_beilage": "Deductions Supplement (L1ab)",
+      "e1a_beilage": "Self-Employment Supplement (E1a)",
+      "e1b_beilage": "Rental Income Supplement (E1b)",
+      "e1kv_beilage": "Capital Gains Supplement (E1kv)",
+      "u1_form": "Annual VAT Return (U1)",
+      "u30_form": "VAT Pre-Filing (U30/UVA)",
+      "jahresabschluss": "Annual Financial Statement",
+      "spendenbestaetigung": "Donation Confirmation",
+      "versicherungsbestaetigung": "Insurance Confirmation",
+      "kinderbetreuungskosten": "Childcare Costs",
+      "fortbildungskosten": "Continuing Education Costs",
+      "pendlerpauschale": "Commuter Allowance",
+      "kirchenbeitrag": "Church Tax",
+      "grundbuchauszug": "Land Registry Extract",
+      "betriebskostenabrechnung": "Operating Cost Statement",
+      "gewerbeschein": "Trade License",
+      "kontoauszug": "Account Statement",
+      "other": "Other",
+      "unknown": "Unknown"
+    },
+    "documentTypes": {
+      "receipt": "Receipt",
+      "invoice": "Invoice",
+      "contract": "Contract",
+      "statement": "Statement",
+      "purchase_contract": "Purchase Contract",
+      "rental_contract": "Rental Contract",
+      "loan_contract": "Loan Contract",
+      "bank_statement": "Bank Statement",
+      "property_tax": "Property Tax",
+      "svs_notice": "SVS Notice",
+      "lohnzettel": "Pay Slip (L16)",
+      "einkommensteuerbescheid": "Income Tax Assessment",
+      "e1_form": "Income Tax Declaration (E1)",
+      "l1_form": "Employee Tax Return (L1)",
+      "l1k_beilage": "Child Supplement (L1k)",
+      "l1ab_beilage": "Deductions Supplement (L1ab)",
+      "e1a_beilage": "Self-Employment Supplement (E1a)",
+      "e1b_beilage": "Rental Income Supplement (E1b)",
+      "e1kv_beilage": "Capital Gains Supplement (E1kv)",
+      "u1_form": "Annual VAT Return (U1)",
+      "u30_form": "VAT Pre-Filing (U30/UVA)",
+      "jahresabschluss": "Annual Financial Statement",
+      "spendenbestaetigung": "Donation Confirmation",
+      "versicherungsbestaetigung": "Insurance Confirmation",
+      "kinderbetreuungskosten": "Childcare Costs",
+      "fortbildungskosten": "Continuing Education Costs",
+      "pendlerpauschale": "Commuter Allowance",
+      "kirchenbeitrag": "Church Tax",
+      "grundbuchauszug": "Land Registry Extract",
+      "betriebskostenabrechnung": "Operating Cost Statement",
+      "gewerbeschein": "Trade License",
+      "kontoauszug": "Account Statement",
+      "other": "Other",
+      "unknown": "Unknown"
+    },
+    "upload": {
+      "title": "Upload Documents",
+      "dragDrop": "Drag and drop files here, or click to select",
+      "mobileHint": "Choose files from your phone or scan a document with the camera",
+      "formats": "Supported formats: JPG, PNG, PDF (recommended under 5MB, max 10MB)",
+      "selectFiles": "Select Files",
+      "takePhoto": "Take Photo",
+      "progress": "Upload Progress",
+      "processing": "Recognizing document...",
+      "completed": "Completed",
+      "error": "Upload failed",
+      "retry": "Retry",
+      "clearCompleted": "Clear Completed",
+      "contextHintRental": "Uploading rental contract for property #{{propertyId}}",
+      "contextHintPurchase": "Uploading purchase contract for property #{{propertyId}}",
+      "contextHintLoan": "Uploading loan contract for property #{{propertyId}}",
+      "stagingTitle": "{{count}} photos ready to process",
+      "stagingHint": "Drag to reorder, then choose to merge into one document or upload separately.",
+      "mergeUpload": "Merge into 1 document ({{count}} pages)",
+      "uploadSeparately": "Upload separately ({{count}} documents)",
+      "clearStaging": "Clear",
+      "groupedPagesMeta": "{{count}} pages · {{size}} KB",
+      "captureSessionTitle": "{{count}} pages captured",
+      "captureSessionSubtitle": "Photos in the same group will be merged into one document before processing.",
+      "addPage": "Continue capturing",
+      "uploadGrouped": "Upload this document",
+      "clearCaptureSession": "Clear",
+      "duplicateReused": "Duplicate file, reused existing document",
+      "uploadButton": "Upload",
+      "stagingHintSingle": "Review the file below, then click Upload."
+    },
+    "search": {
+      "placeholder": "Search documents by name or content..."
+    },
+    "view": {
+      "grid": "Grid View",
+      "list": "List View"
+    },
+    "viewGrid": "Grid View",
+    "viewList": "List View",
+    "filters": {
+      "allTypes": "All Types",
+      "allYears": "All Years",
+      "startDate": "From Date",
+      "endDate": "To Date",
+      "needsReview": "Needs Review Only",
+      "clear": "Clear Filters"
+    },
+    "groups": {
+      "all": "All Documents",
+      "employment": "Employment & Payroll",
+      "self_employed": "Self-Employed / Business",
+      "property": "Property & Rental",
+      "social_insurance": "Insurance & Loans",
+      "tax_filing": "Tax Filing & Notices",
+      "deductions": "Tax Deduction Documents",
+      "expense": "Receipts & Invoices",
+      "banking": "Banking",
+      "other": "Other"
+    },
+    "list": {
+      "name": "File",
+      "type": "Category",
+      "date": "Date",
+      "uploadDate": "Upload Date",
+      "size": "Size",
+      "confidence": "Confidence",
+      "status": "Status"
+    },
+    "statusReady": "Ready",
+    "statusTransactionCreated": "Transaction created",
+    "status": {
+      "processing": "Processing",
+      "pendingReview": "Pending review",
+      "transactionCreated": "Transaction created",
+      "contractProcessed": "Contract processed",
+      "reviewed": "Reviewed",
+      "recognized": "Recognized"
+    },
+    "emptyGroup": "No documents in this category yet for the current filters.",
+    "pageSize": "Items per page",
+    "perPage": "/ page",
     "bescheid": {
       "title": "Import Income Tax Assessment",
       "description": "Upload your Einkommensteuerbescheid to automatically capture the data",
@@ -1989,7 +2023,14 @@
     "fields": {
       "type": "Type"
     },
-    "preview": "Document preview"
+    "preview": "Document preview",
+    "reviewAction": "Review",
+    "reviewActionSuccess": "Document reviewed",
+    "reviewActionFailed": "Review failed",
+    "confirmReview": "Confirm review?",
+    "exportZip": "Export {{count}} documents as ZIP",
+    "exportSuccess": "{{count}} documents exported",
+    "exportError": "Export failed"
   },
   "profile": {
     "basicInfo": "Basic Information",
@@ -2200,6 +2241,8 @@
   },
   "reports": {
     "pageSubtitle": "Generate tax reports, check audit readiness, and export your data",
+    "unreviewedWarning": "{{count}} unreviewed transaction(s) are included in this report. Please review them for accuracy.",
+    "reviewTransactions": "Review transactions",
     "tabs": {
       "ea": "Income/Expense Report",
       "bilanz": "Balance Sheet / P&L",
@@ -2256,7 +2299,8 @@
         "bankspesen": "Bank Fees",
         "zinsen": "Interest Expenses",
         "sonstige": "Other Operating Expenses"
-      }
+      },
+      "regenerate": "Regenerate"
     },
     "bilanz": {
       "generate": "Generate Balance Sheet / P&L",
@@ -2501,7 +2545,7 @@
       "aggregate_total": "Aggregate total all properties",
       "property_result": "Result"
     },
-    "noOfficialTemplate": "No official BMF PDF template is available for this form. Please use our simplified preview above and file via FinanzOnline, or order the paper form from the tax office.",
+    "noOfficialTemplate": "No official BMF PDF template is available for this form. Clicking \"Download PDF\" will export the preview currently shown on this page. Please still file via FinanzOnline or order the paper form from the tax office if needed.",
     "officialPdfAvailable": "Official BMF PDF available",
     "selectForm": "Which form do you need?",
     "mainForm": "Main form"
@@ -2720,7 +2764,7 @@
         "deadline": "The 2026 tax filing deadline is June 30 — don't forget.",
         "receipts": "Office supplies, transport costs, and professional books can all be deducted as business expenses.",
         "svs": "SVS social insurance contributions are deductible too — make sure to record them.",
-        "homeOffice": "Working from home? You can deduct up to €3/day, max €300/year."
+        "homeOffice": "Working from home? You can deduct up to 3/day, max 300/year."
       },
       "nextDeadline": "Next deadline: {{title}} ({{date}})",
       "deleteSuccess": "🗑️ Document \"{{name}}\" has been deleted.",
@@ -2728,19 +2772,19 @@
       "deleteWithDataHint": "The document and all linked data have been deleted. If this was a mistake, re-upload the original document.",
       "personalizedTips": "Based on your data, here are some suggestions:",
       "potentialSave": "potential savings ~",
-      "recurringFound": "I noticed you uploaded a rental contract! I found a monthly rent of €{{rent}} for {{address}}. Want me to set up automatic tracking for this?",
+      "recurringFound": "I noticed you uploaded a rental contract! I found a monthly rent of {{rent}} for {{address}}. Want me to set up automatic tracking for this?",
       "recurringConfirmed": "Done! I've set up the recurring rental income — it'll be tracked automatically each month.",
       "recurringDismissed": "No problem, I won't create a recurring transaction for this one.",
       "skip": "Skip",
-      "recurringExpenseFound": "I detected a recurring expense in your document: \"{{description}}\", €{{amount}} ({{frequency}}). Want me to set up automatic tracking?",
+      "recurringExpenseFound": "I detected a recurring expense in your document: \"{{description}}\", {{amount}} ({{frequency}}). Want me to set up automatic tracking?",
       "recurringExpenseConfirmed": "Done! The recurring expense has been set up — it will be tracked automatically.",
       "setUnitPercentage": "📐 What percentage of the total property does this rental unit represent? (Affects depreciation calculation, e.g. 100 for fully rented, 33 for one-third)",
       "unitPercentageSaved": "✅ Rental unit percentage set to {{percentage}}%. Depreciation calculation updated.",
       "skipped": "OK, skipped. You can set the percentage later under Properties.",
       "uploadRenewal": "Upload renewal contract",
       "addContractManually": "Add contract manually",
-      "pendingRecurringIncome": "You have an unconfirmed recurring income from a previous upload: \"{{description}}\", €{{amount}}/month. Want to confirm it?",
-      "pendingRecurringExpense": "You have an unconfirmed recurring expense from a previous upload: \"{{description}}\", €{{amount}} ({{frequency}}). Want to confirm it?",
+      "pendingRecurringIncome": "You have an unconfirmed recurring income from a previous upload: \"{{description}}\", {{amount}}/month. Want to confirm it?",
+      "pendingRecurringExpense": "You have an unconfirmed recurring expense from a previous upload: \"{{description}}\", {{amount}} ({{frequency}}). Want to confirm it?",
       "contractExpiring": "Recurring transaction \"{{description}}\" expires in {{days}} days ({{endDate}}). Consider renewing or adjusting.",
       "contractExpired": "Recurring transaction \"{{description}}\" expired on {{endDate}}. Automatic tracking has stopped.",
       "multiReceiptDetected": "📑 Document \"{{name}}\" contains {{count}} items. Transactions have been created automatically. Click to view details.",
@@ -2773,7 +2817,16 @@
       "laterSaved": "No problem. You can archive this payroll year later.",
       "noPayrollThisMonth": "No employees this month",
       "recordPayrollMonth": "Record payroll month",
-      "viewDocument": "View document"
+      "viewDocument": "View document",
+      "remindLater": "Remind me later",
+      "dontRemindAgain": "Do not remind again",
+      "takeActionNow": "Take action now",
+      "snoozed": "Okay – I will remind you again later.",
+      "expandDetails": "Expand details",
+      "hideDetails": "Hide details",
+      "potentialSavings": "Potential savings",
+      "estimatedRefund": "Estimated refund",
+      "taxSaving": "Tax saving"
     },
     "confirmation": {
       "title": "Taxja needs your confirmation",
@@ -2948,7 +3001,7 @@
     "suggestions": {
       "title": "Smart Suggestions",
       "smartSuggestion": "Smart Suggestion",
-      "detectedPattern": "I noticed you've added \"{{description}}\" (€{{amount}}) {{occurrences}} times {{frequency}}. Should I record this automatically?",
+      "detectedPattern": "I noticed you've added \"{{description}}\" ({{amount}}) {{occurrences}} times {{frequency}}. Should I record this automatically?",
       "dayOfMonth": "Day",
       "type": "Type",
       "notNow": "Not now",
@@ -3561,7 +3614,9 @@
     "reasonConflicted": "Conflicting corrections were detected for this description",
     "reasonStrict": "Saved from your manual category correction.",
     "reasonAdaptive": "Learned adaptively from repeated confirmations.",
-    "ruleTypeOverride": "Override"
+    "ruleTypeOverride": "Override",
+    "searchPlaceholder": "Search by description or category...",
+    "searchDeductPlaceholder": "Search by description..."
   },
   "healthCheck": {
     "title": "Tax Health Check",
@@ -3614,6 +3669,8 @@
     "newUser": "Welcome! Start by uploading your first document or adding a transaction.",
     "gettingStarted": {
       "addTransaction": "Start by adding your first income or expense transaction.",
+      "exportCsv": "Export CSV",
+      "exportPdf": "Export PDF",
       "uploadDocument": "Upload a document (payslip, receipt, contract) to get started.",
       "addProperty": "Add your rental property to track depreciation and rental income."
     }
@@ -3658,320 +3715,320 @@
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Year Selector",
-        "message": "Switch between tax years here. All figures on the dashboard — income, expenses, and tax estimates — will update to reflect the selected year."
+        "title": "Tax Year",
+        "message": "Select the tax year you want to work with. All data on the dashboard will update accordingly."
       },
       "upload": {
         "title": "Quick Upload",
-        "message": "Drop invoices, receipts or contracts right here on the dashboard. Our OCR engine scans and creates transactions automatically — no need to leave this page."
+        "message": "Drag and drop documents here to upload them instantly. Taxja will classify and extract data automatically."
       },
       "overview": {
         "title": "Financial Overview",
-        "message": "These cards show your key financial metrics at a glance: total income, total expenses, estimated tax liability, net result, VAT threshold distance, and pending document reviews."
+        "message": "Your income, expenses, and tax summary at a glance. Each card shows a key metric for the selected year."
       },
       "trends": {
         "title": "Trend Charts",
-        "message": "Visual charts tracking your income and expenses over time. Spot seasonal patterns and compare month-by-month performance to plan ahead."
+        "message": "Track how your income and expenses develop over time. Spot patterns and plan ahead."
       },
       "plan": {
-        "title": "Subscription & Status",
-        "message": "View your current plan (Free, Plus, or Pro) and tagline here. Click to manage your subscription, switch plans, or check your credit balance."
+        "title": "Subscription Status",
+        "message": "See your current plan and remaining credits. Upgrade anytime to unlock more features."
       },
       "language": {
-        "title": "Language Switcher",
-        "message": "Taxja supports 9 languages: German, English, Chinese, French, Russian, Hungarian, Polish, Turkish, and Bosnian. The entire interface switches instantly to your chosen language."
+        "title": "Language",
+        "message": "Switch the interface language. Taxja supports German, English, Chinese, and more."
       },
       "theme": {
-        "title": "Theme Toggle",
-        "message": "Switch between the default light theme and the dark Cyber mode. The Cyber theme offers a futuristic look with reduced eye strain for nighttime use."
+        "title": "Theme",
+        "message": "Toggle between light and dark mode to suit your preference."
       }
     },
     "transactions": {
-      "filters": {
-        "title": "Filters",
-        "message": "Narrow down your transactions by date range, type (income/expense), category, property, or status. Combine multiple filters for precise results."
-      },
-      "list": {
-        "title": "Transaction List",
-        "message": "All your transactions appear here. Click any row to see full details, edit amounts, change categories, or link it to a property."
-      },
-      "paging": {
-        "title": "Pagination",
-        "message": "Navigate between pages of transactions. You can also change how many items are shown per page."
-      },
       "classRules": {
-        "title": "Classification Memory",
-        "message": "The system learns from your corrections. View and manage learned classification rules here — future transactions with similar descriptions will be auto-categorized based on your past decisions."
+        "title": "Classification Rules",
+        "message": "Manage rules that automatically categorise your transactions. Taxja learns from your corrections."
       },
       "export": {
-        "title": "Export to CSV",
-        "message": "Export all filtered transactions as a CSV file for your accountant, Excel spreadsheets, or other bookkeeping systems."
+        "title": "Export",
+        "message": "Download your transactions as CSV or PDF for your records or your tax advisor."
       },
       "addNew": {
         "title": "Add Transaction",
-        "message": "Create a new transaction manually. Enter amount, category, date, and optional details like receipt number or notes. Most transactions are created automatically from uploaded documents."
+        "message": "Manually create a new income or expense entry when you do not have a document to upload."
+      },
+      "filters": {
+        "title": "Filters",
+        "message": "Narrow down transactions by date, category, type, or amount to find exactly what you need."
+      },
+      "list": {
+        "title": "Transaction List",
+        "message": "All your transactions in one place. Click any row to view details, edit, or link a document."
+      },
+      "paging": {
+        "title": "Pagination",
+        "message": "Navigate through pages of transactions. Adjust the page size to see more or fewer entries."
       }
     },
     "documents": {
       "upload": {
-        "title": "Upload Zone",
-        "message": "Drag and drop files here, or click to browse. Supported formats include PDF, JPG, and PNG. Our OCR engine will extract the data automatically."
+        "title": "Upload Documents",
+        "message": "Upload invoices, receipts, or tax forms. Taxja will extract data using OCR and AI."
       },
       "tabs": {
-        "title": "Category Tabs",
-        "message": "Documents are grouped by type — invoices, receipts, contracts, tax forms, and more. Switch tabs to find what you need quickly."
+        "title": "Document Groups",
+        "message": "Documents are organised by status: pending review, processed, and archived. Switch tabs to filter."
       },
       "list": {
         "title": "Document List",
-        "message": "Browse all uploaded documents. Each entry shows the recognized type, extracted amount, processing status, and linked transaction."
+        "message": "Browse all uploaded documents. Click any item to review extracted data and link it to a transaction."
+      }
+    },
+    "documentDetail": {
+      "header": {
+        "title": "Document Header",
+        "message": "See the document name, upload date, and processing status. Use actions to re-process or delete."
+      },
+      "preview": {
+        "title": "Document Preview",
+        "message": "View the original document. Zoom in to check details against the extracted data."
+      },
+      "ocrData": {
+        "title": "Extracted Data",
+        "message": "Fields extracted by OCR and AI. Review each value and correct any errors before confirming."
+      },
+      "linked": {
+        "title": "Linked Records",
+        "message": "See which transaction or asset is linked to this document. Create new links directly from here."
+      },
+      "editMode": {
+        "title": "Edit Fields",
+        "message": "Switch to edit mode to correct extracted values. Your changes improve future AI accuracy."
       }
     },
     "reports": {
       "tabs": {
-        "title": "Report Tabs",
-        "message": "Choose the report type: E/A calculation (income & expenses), Saldenliste (trial balance), Bilanz, tax form previews (E1, L1, U1), and more."
-      },
-      "content": {
-        "title": "Report Content",
-        "message": "The generated report appears here. Review the figures, then export to PDF or CSV for your accountant or the Finanzamt."
+        "title": "Report Types",
+        "message": "Choose between income tax, VAT, and other report types. Each tab shows a different view."
       },
       "generate": {
         "title": "Generate Report",
-        "message": "Click here to generate the selected report for your chosen tax year. Depending on the report type, you can produce income/expense calculations, trial balances, balance sheets, or tax form previews."
+        "message": "Calculate your tax report for the selected period. The report updates with your latest data."
       },
       "print": {
         "title": "Print",
-        "message": "Print the generated report directly, or save it as PDF through your browser print dialog. Great for submitting to your accountant or keeping paper records."
+        "message": "Print the report directly from the browser for your paper records."
+      },
+      "content": {
+        "title": "Report Content",
+        "message": "The detailed breakdown of your tax calculation. Each line maps to a field on the official tax form."
       },
       "finanzOnline": {
-        "title": "Open FinanzOnline",
-        "message": "Opens the Austrian tax portal FinanzOnline in a new tab. You can file your tax return there using the data prepared here. Copy the form values from the preview above."
+        "title": "FinanzOnline",
+        "message": "Submit your tax return electronically to the Austrian tax authority via FinanzOnline."
       },
       "downloadForm": {
-        "title": "Download Official Form",
-        "message": "Download the official BMF tax form (PDF). Fill it in with the values from the preview above and submit it to your local Finanzamt or via FinanzOnline."
+        "title": "Download Form",
+        "message": "Download the pre-filled official tax form (E1, E1a, U30, etc.) as a PDF."
       }
     },
     "properties": {
-      "cards": {
-        "title": "All Assets",
-        "message": "Your properties, devices, vehicles, and other assets in one unified list. Click any card to view details, edit, or manage depreciation."
-      },
       "overview": {
-        "title": "Asset Overview",
-        "message": "Open the portfolio dashboard to compare all your properties and assets side by side."
+        "title": "Portfolio Overview",
+        "message": "View aggregated insights for all your properties and assets in one dashboard."
       },
       "add": {
-        "title": "Add Asset",
-        "message": "Manually add a new property, vehicle, or other asset. Enter the address, purchase price, construction date, and other details — depreciation (AfA) is calculated automatically."
+        "title": "Add Property",
+        "message": "Register a new property or asset. Taxja will track depreciation (AfA) and rental income automatically."
+      },
+      "cards": {
+        "title": "Property Cards",
+        "message": "Each card shows a property with key details: address, rental status, and current book value."
       },
       "edit": {
-        "title": "Edit Asset",
-        "message": "Click the pencil icon to edit an asset's details: address, type, purchase price, depreciation rate, and more. Changes are saved immediately."
+        "title": "Edit Property",
+        "message": "Update property details such as purchase price, area, or depreciation method."
       },
       "archive": {
-        "title": "Archive & Filter",
-        "message": "Archive assets you no longer actively manage. Toggle this checkbox to show or hide archived items in the list. Archived assets are still available for tax reports."
+        "title": "Archive Toggle",
+        "message": "Show or hide archived properties. Archived items are kept for the 7-year retention period (BAO §132)."
+      }
+    },
+    "assetInsights": {
+      "summary": {
+        "title": "Summary",
+        "message": "Key figures across all assets: total value, annual depreciation, and net rental income."
+      },
+      "portfolio": {
+        "title": "Portfolio Comparison",
+        "message": "Compare properties side by side on yield, occupancy, and other metrics."
+      },
+      "otherAssets": {
+        "title": "Other Assets",
+        "message": "Non-property assets like vehicles, equipment, or intangible assets tracked here."
+      },
+      "reports": {
+        "title": "Asset Reports",
+        "message": "Generate detailed asset reports for your tax advisor or for internal analysis."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Actions",
+        "message": "Edit, archive, or delete this property. Access additional tools like depreciation schedules."
+      },
+      "info": {
+        "title": "Property Information",
+        "message": "Core details: address, purchase date, price, area, and depreciation parameters."
+      },
+      "contracts": {
+        "title": "Rental Contracts",
+        "message": "Manage rental contracts for this property. Track tenants, rent amounts, and contract periods."
+      },
+      "transactions": {
+        "title": "Transactions",
+        "message": "All income and expenses linked to this property. Useful for Anlage V reporting."
+      }
+    },
+    "liabilities": {
+      "overview": {
+        "title": "Liabilities Overview",
+        "message": "See aggregated debt metrics: total outstanding, monthly payments, and interest totals."
+      },
+      "add": {
+        "title": "Add Liability",
+        "message": "Record a new loan or liability. Track repayments and deductible interest automatically."
+      },
+      "list": {
+        "title": "Liability List",
+        "message": "All your loans and liabilities in one place. Click any item to see payment schedules."
+      },
+      "detail": {
+        "title": "Detail Panel",
+        "message": "View repayment schedules, remaining balance, and linked property or asset."
       }
     },
     "recurring": {
       "create": {
         "title": "Create Recurring",
-        "message": "Set up a new recurring transaction — rent income, loan payments, insurance, or any regular expense. Choose frequency and start date."
+        "message": "Set up a recurring transaction that will be created automatically on a schedule."
       },
       "filters": {
         "title": "Filters",
-        "message": "Filter recurring transactions by type, frequency, property, or active/paused status to find exactly what you're looking for."
+        "message": "Filter recurring entries by frequency, category, or active status."
       },
       "list": {
         "title": "Recurring List",
-        "message": "All your recurring transactions are listed here. See when the next execution is due, pause or resume entries, or edit their details."
+        "message": "View and manage all recurring transactions. Pause, edit, or delete schedules as needed."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Asset & Liability Management",
-        "message": "Manage properties, equipment, and liabilities. Track depreciation, view your portfolio, and manage loans and borrowings."
+        "title": "Assets & Properties",
+        "message": "Manage real estate, vehicles, and other depreciable assets. Track AfA and book values."
       },
       "automation": {
-        "title": "Rules & Automation",
-        "message": "Set up recurring transactions and manage your classification memory. The system learns from your corrections to auto-categorize future transactions."
+        "title": "Automation",
+        "message": "Set up recurring transactions, classification rules, and automated workflows."
       },
       "taxtools": {
-        "title": "Tax Workspace",
-        "message": "Your all-in-one tax hub: prepare filings, review document readiness, get AI-powered guidance, and generate reports — everything in one place."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Action Bar",
-        "message": "All actions for this asset: upload or view purchase contract, browse rental contracts, edit details, or archive. Each button links to the relevant function."
-      },
-      "info": {
-        "title": "Asset Details",
-        "message": "All details at a glance: address, purchase price, construction year, depreciation rate, accumulated depreciation, remaining value, and ancillary costs. For non-RE assets: asset type, useful life, GWG status."
-      },
-      "contracts": {
-        "title": "Rental Contracts",
-        "message": "All rental contracts linked to this property. View rent, period, and status. Add new contracts, edit existing ones, or adjust the rental income allocation percentage."
-      },
-      "transactions": {
-        "title": "Linked Transactions",
-        "message": "All income and expenses linked to this property, grouped by year. Each year shows rental income, expenses, and net income — essential for your E1b tax filing."
-      }
-    },
-    "documentDetail": {
-      "header": {
-        "title": "Header Actions",
-        "message": "Navigate back to the documents list, download the original file, or reprocess the document through the OCR pipeline if the initial extraction was incomplete."
-      },
-      "preview": {
-        "title": "Document Preview",
-        "message": "The original document is displayed here — PDF files are shown inline, images are rendered directly. Use this to verify the extracted data against the source."
-      },
-      "ocrData": {
-        "title": "Extracted Data",
-        "message": "All fields extracted by OCR and AI appear here: amounts, dates, vendor names, tax rates, and more. The confidence score indicates how reliable the extraction is."
-      },
-      "linked": {
-        "title": "Linked Transaction",
-        "message": "When a document is matched to a transaction or asset, the link appears here. Click to jump directly to the linked record and review the details."
-      },
-      "editMode": {
-        "title": "Inline Editing",
-        "message": "Click any extracted field to correct it. Your corrections train the system and improve future extractions. Changes are saved immediately."
-      }
-    },
-    "assetInsights": {
-      "summary": {
-        "title": "Asset-Liability Summary",
-        "message": "See your total assets, liabilities, net worth, and monthly debt service at a glance."
-      },
-      "portfolio": {
-        "title": "Property Portfolio",
-        "message": "Compare rental income, expenses, and net yield across all your properties."
-      },
-      "otherAssets": {
-        "title": "Other Assets",
-        "message": "View devices, vehicles, and equipment with purchase values and depreciation details."
-      },
-      "reports": {
-        "title": "Individual Reports",
-        "message": "Generate income statements and depreciation schedules for any specific asset."
-      }
-    },
-    "liabilities": {
-      "overview": {
-        "title": "Asset-Liability Overview",
-        "message": "Scroll down to see your combined asset and liability summary with key metrics."
-      },
-      "add": {
-        "title": "Add Liability",
-        "message": "Record a new loan, borrowing, or other liability. Set repayment plans and link to properties."
-      },
-      "list": {
-        "title": "Liability List",
-        "message": "Browse all your active liabilities. Each card shows the outstanding balance and repayment progress."
-      },
-      "detail": {
-        "title": "Liability Detail",
-        "message": "View repayment schedule, interest trend chart, and linked transactions for the selected liability."
+        "title": "Tax Tools",
+        "message": "Advanced calculators for refund estimation, what-if scenarios, and audit preparation."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Tax Position & Refund",
-        "message": "Your estimated tax refund or liability at a glance. Based on your income, withheld tax, and deductions, the system calculates whether you can expect money back."
+        "title": "Refund Estimate",
+        "message": "Estimate your expected tax refund based on current income, deductions, and withheld tax."
       },
       "whatIf": {
-        "title": "What-If Simulator",
-        "message": "Model hypothetical scenarios: add extra income, deductions, or change your filing status to see how it affects your estimated tax. Great for tax planning."
+        "title": "What-If Scenarios",
+        "message": "Simulate changes like additional income or deductions to see how they affect your tax."
       },
       "flatRate": {
-        "title": "Flat-Rate Comparison",
-        "message": "Compare your actual expenses against the Austrian flat-rate deduction (Pauschalierung). See which method saves you more tax as a self-employed person."
+        "title": "Flat Rate Comparison",
+        "message": "Compare actual expenses against the Betriebsausgabenpauschale to find the better option."
+      },
+      "filing": {
+        "title": "Filing Summary",
+        "message": "Review a complete summary of all data before filing. Check for missing items or errors."
+      },
+      "employer": {
+        "title": "Employer Tax Certificate",
+        "message": "Enter data from your Lohnzettel (L16) to include employment income in your tax calculation."
       },
       "audit": {
         "title": "Audit Checklist",
-        "message": "Review your tax-year readiness with a comprehensive checklist. Verify that all required documents, filings, and records are in order before a potential audit."
-      },
-      "filing": {
-        "title": "Annual Tax Data Summary",
-        "message": "Review confirmed income, deductions, and VAT data by tax year. Select a year to see totals, detect conflicts, and verify source documents before filing."
-      },
-      "assetReport": {
-        "title": "Asset Report",
-        "message": "Select any tracked property or asset to generate detailed income statements and depreciation schedules."
+        "message": "Verify your records are complete and compliant before submitting your tax return."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Personal Information",
-        "message": "Your name, email, tax roles (employee, landlord, self-employed), and business details. These determine which tax features and deductions are available to you."
+        "message": "Your name, email, and contact details. Keep these up to date for tax correspondence."
       },
       "taxInfo": {
         "title": "Tax Profile",
-        "message": "Tax number, VAT status, and profit determination method. Completing these fields enables full automation for asset creation and OCR extraction."
+        "message": "Your tax number (Steuernummer), VAT status, and income types. Essential for correct calculations."
       },
       "commuting": {
-        "title": "Commuting & Home Office",
-        "message": "Set your commuting distance and public transport availability for Pendlerpauschale calculation. Home office days are used for the Telearbeit deduction (up to 100 days at 3 EUR/day)."
+        "title": "Commuting",
+        "message": "Enter your commuting details to calculate the Pendlerpauschale deduction automatically."
       },
       "security": {
-        "title": "Security Settings",
-        "message": "Enable two-factor authentication (2FA) for an extra layer of account protection. Manage your password and review active sessions."
+        "title": "Security",
+        "message": "Change your password and review active sessions. Enable two-factor authentication for extra safety."
       },
       "dataExport": {
-        "title": "Data Export & Account",
-        "message": "Export all your data as a ZIP archive for backup or migration. You can also manage your account settings and subscription from here."
+        "title": "Data & Privacy",
+        "message": "Export all your data or request account deletion. Your data belongs to you."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Classification Memory",
-        "message": "When you correct a transaction category, the system creates a rule so future transactions with similar descriptions are automatically categorized the same way."
+        "title": "Classification Rules",
+        "message": "Rules automatically categorise transactions based on patterns. Taxja learns from your manual corrections too."
       },
       "list": {
         "title": "Rules List",
-        "message": "All your learned classification rules appear here. Each rule shows the pattern it matches, the assigned category, and how many times it has been applied."
+        "message": "View, edit, or delete existing rules. Each rule matches a text pattern to a tax category."
       },
       "autoLearn": {
-        "title": "Auto-Learning",
-        "message": "Rules are created automatically from your corrections. You can also freeze rules to prevent them from being overwritten, or delete rules you no longer need."
+        "title": "Auto-Learned Rules",
+        "message": "Rules created automatically by the AI. Review and approve them to keep classification accurate."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "AI Tax Advisor",
-        "message": "Ask questions about Austrian tax law, deductibility of expenses, filing deadlines, or optimization strategies. The assistant uses your profile and transaction data for personalized answers."
+        "title": "AI Assistant",
+        "message": "Ask questions about Austrian tax law, your finances, or how to use Taxja. Powered by AI."
       },
       "input": {
         "title": "Chat Input",
-        "message": "Type your tax question here. You can also attach documents for the AI to analyze. Each message uses credits from your plan."
+        "message": "Type your question here. You can ask in German, English, or any supported language."
       },
       "proactive": {
-        "title": "Proactive Suggestions",
-        "message": "The AI may proactively suggest recurring transactions to confirm, missing documents to upload, or payroll files to process based on your data patterns."
+        "title": "Proactive Insights",
+        "message": "The assistant may suggest optimisations or flag potential issues based on your data."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Current Plan",
-        "message": "View your active subscription plan, billing cycle, and next billing date. You can upgrade, downgrade, or cancel from here."
+        "title": "Your Plan",
+        "message": "View your current subscription tier and included features. Upgrade to unlock more."
       },
       "billing": {
         "title": "Billing History",
-        "message": "Review past invoices and payment records. Payment methods are managed securely through Stripe."
+        "message": "Review past invoices, payment methods, and credit usage."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Filter Operations",
-        "message": "Filter your credit history by operation type: deductions, refunds, monthly resets, top-ups, or overage settlements."
+        "title": "Filter",
+        "message": "Filter credit transactions by type, date, or status to find specific entries."
       },
       "list": {
-        "title": "Credit Ledger",
-        "message": "Every credit transaction is logged here with the operation type, reason, timestamp, and amount. Positive amounts are credits added, negative amounts are credits consumed."
+        "title": "Credit History",
+        "message": "A detailed log of all credit purchases, usage, and remaining balance."
       }
     }
   },
@@ -4042,6 +4099,8 @@
   },
   "actions": {
     "addTransaction": "Add Transaction",
+    "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF",
     "askAI": "Ask AI",
     "generateReport": "Generate Report",
     "scanReceipt": "Scan Receipt"
@@ -4074,6 +4133,7 @@
       "manageSub": "Manage your liabilities"
     },
     "overview": {
+      "pageTitle": "Liability Overview",
       "title": "Asset-liability overview",
       "assetsVsLiabilities": "Balance snapshot",
       "taxFilter": "Tax filter",
@@ -4215,6 +4275,10 @@
     },
     "confirm": {
       "deactivate": "This will deactivate the liability instead of permanently deleting it. Continue?"
+    },
+    "pendingContracts": {
+      "title": "Pending loan contracts",
+      "subtitle": "Loan contracts that are still under review or missing key fields stay here until you finish them in Documents."
     }
   },
   "assetOverview": {
@@ -4274,6 +4338,10 @@
       "source": "Source",
       "conflictsWarning": "Data conflicts detected",
       "conflictSource": "Document",
+      "transactionsSummary": "Transactions",
+      "txnIncome": "Income",
+      "txnExpense": "Expenses",
+      "txnDeductible": "Deductible",
       "auditChecklist": "Audit Checklist",
       "auditSelectYear": "Select tax year",
       "flatRateNotApplicable": "Flat rate comparison is only available for self-employed users.",

@@ -125,10 +125,10 @@
     "businessType": "经营类型",
     "selectBusinessType": "请选择您的经营类型...",
     "businessTypes": {
-      "freiberufler": "自由职业者 (§22 EStG) — 医生、律师、会计师、IT顾问、建筑师、艺术家",
-      "gewerbetreibende": "工商经营者 (§23 EStG) — 零售、手工业、餐饮、电商、酒店、美容、运输",
-      "neueSelbstaendige": "新型自由职业者 — 培训师、教练、内容创作者、讲师",
-      "landForstwirtschaft": "农林业 (§21 EStG) — 农民、酒庄经营者、林业工作者、直销商"
+      "freiberufler": "自由职业者 (§22 EStG)  医生、律师、会计师、IT顾问、建筑师、艺术家",
+      "gewerbetreibende": "工商经营者 (§23 EStG)  零售、手工业、餐饮、电商、酒店、美容、运输",
+      "neueSelbstaendige": "新型自由职业者  培训师、教练、内容创作者、讲师",
+      "landForstwirtschaft": "农林业 (§21 EStG)  农民、酒庄经营者、林业工作者、直销商"
     },
     "businessTypeHints": {
       "freiberufler": "包括：医生/牙医/治疗师、律师/公证人、税务顾问/审计师、IT服务/软件开发、建筑师/工程师、艺术家/设计师。适用6%定额扣除率。",
@@ -382,7 +382,7 @@
     "recurringHint": "如月租金、保险费、订阅费等",
     "descriptionPlaceholder": "输入交易描述",
     "selectCategory": "选择类别",
-    "autoSuggestHint": "AI 自动识别 — 您可以随时更改类别",
+    "autoSuggestHint": "AI 自动识别  您可以随时更改类别",
     "property": "房产",
     "selectProperty": "选择房产（可选）",
     "propertyRecommended": "推荐",
@@ -567,54 +567,6 @@
     "reprocessStarted": "已开始重新处理文档，当前结果会保留到新结果完成",
     "reprocessFailed": "重新识别失败，请重试",
     "reprocessTimeout": "重新处理时间过长，请稍后再试。",
-    "confirm": "确认",
-    "confirmSuccess": "文档已确认",
-    "needsReview": "需要复核",
-    "previewNotAvailable": "暂不支持预览这种文件",
-    "search": {
-      "placeholder": "按文件名或识别内容搜索文档..."
-    },
-    "viewGrid": "网格视图",
-    "viewList": "列表视图",
-    "tabs": {
-      "list": "我的文档",
-      "upload": "上传",
-      "bescheid": "导入税务通知"
-    },
-    "filters": {
-      "allTypes": "所有类型",
-      "allYears": "全部年份",
-      "startDate": "开始日期",
-      "endDate": "结束日期",
-      "needsReview": "仅看需要复核",
-      "clear": "清空筛选"
-    },
-    "groups": {
-      "all": "全部文档",
-      "employment": "工资与雇佣",
-      "self_employed": "自营/企业",
-      "property": "房产与租赁",
-      "social_insurance": "保险与贷款",
-      "tax_filing": "税务申报与通知",
-      "deductions": "税务优惠凭证",
-      "expense": "票据发票",
-      "banking": "银行资料",
-      "other": "其他"
-    },
-    "list": {
-      "name": "文件",
-      "type": "分类",
-      "date": "日期",
-      "uploadDate": "上传日期",
-      "size": "大小",
-      "confidence": "识别可信度",
-      "status": "状态"
-    },
-    "statusReady": "已识别",
-    "statusTransactionCreated": "已生成交易",
-    "emptyGroup": "当前筛选下，这一类还没有文档。",
-    "pageSize": "每页显示",
-    "perPage": "条/页",
     "review": {
       "title": "核对识别结果",
       "loadError": "无法加载文档",
@@ -832,7 +784,11 @@
         "kz_210": "KZ210 总收入",
         "city": "城市",
         "postal_code": "邮政编码",
-        "unit_number": "单元号"
+        "unit_number": "单元号",
+        "confirmed": "已确认",
+        "confirmed_at": "确认时间",
+        "confirmed_by": "确认人",
+        "transaction_type": "交易类型"
       },
       "additionalFields": "其他提取字段",
       "contractRoleConfidenceLabel": "置信度",
@@ -862,8 +818,65 @@
         "receipt": "收据",
         "standard_invoice": "标准发票"
       },
-      "openReview": "核对并确认识别结果"
+      "openReview": "核对并确认识别结果",
+      "moreSuggestions": "还有 {{count}} 条建议"
     },
+    "reviewSuccess": "文档已审核",
+    "reviewFailed": "审核失败",
+    "needsReview": "需要复核",
+    "previewNotAvailable": "暂不支持预览这种文件",
+    "search": {
+      "placeholder": "按文件名或识别内容搜索文档..."
+    },
+    "viewGrid": "网格视图",
+    "viewList": "列表视图",
+    "tabs": {
+      "list": "我的文档",
+      "upload": "上传",
+      "bescheid": "导入税务通知"
+    },
+    "filters": {
+      "allTypes": "所有类型",
+      "allYears": "全部年份",
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "needsReview": "仅看需要复核",
+      "clear": "清空筛选"
+    },
+    "groups": {
+      "all": "全部文档",
+      "employment": "工资与雇佣",
+      "self_employed": "自营/企业",
+      "property": "房产与租赁",
+      "social_insurance": "保险与贷款",
+      "tax_filing": "税务申报与通知",
+      "deductions": "税务优惠凭证",
+      "expense": "票据发票",
+      "banking": "银行资料",
+      "other": "其他"
+    },
+    "list": {
+      "name": "文件",
+      "type": "分类",
+      "date": "日期",
+      "uploadDate": "上传日期",
+      "size": "大小",
+      "confidence": "识别可信度",
+      "status": "状态"
+    },
+    "statusReady": "已识别",
+    "statusTransactionCreated": "已生成交易",
+    "status": {
+      "processing": "处理中",
+      "pendingReview": "待审核",
+      "transactionCreated": "已生成交易",
+      "contractProcessed": "已生成合同",
+      "reviewed": "已审核",
+      "recognized": "已识别"
+    },
+    "emptyGroup": "当前筛选下，这一类还没有文档。",
+    "pageSize": "每页显示",
+    "perPage": "条/页",
     "types": {
       "payslip": "工资单",
       "receipt": "收据",
@@ -1194,7 +1207,7 @@
       "confirmTaxData": "确认导入",
       "taxDataConfirmed": "税务数据导入成功",
       "taxYear": "税务年度",
-      "lossDetected": "检测到亏损 — 将结转至未来年度",
+      "lossDetected": "检测到亏损  将结转至未来年度",
       "confidence": "识别置信度",
       "items": "条",
       "andMore": "及其他 {{count}} 条",
@@ -1607,7 +1620,14 @@
     "fields": {
       "type": "类型"
     },
-    "preview": "文档预览"
+    "preview": "文档预览",
+    "reviewAction": "审核",
+    "reviewActionSuccess": "文档已审核",
+    "reviewActionFailed": "审核失败",
+    "confirmReview": "确认审核？",
+    "exportZip": "导出 {{count}} 个文档为 ZIP",
+    "exportSuccess": "已导出 {{count}} 个文档",
+    "exportError": "导出失败"
   },
   "properties": {
     "title": "资产",
@@ -1734,7 +1754,7 @@
       "equipment": "设备"
     },
     "rentalIncomeSection": "租金收入",
-    "monthlyRent": "每月租金 (€)",
+    "monthlyRent": "每月租金 ()",
     "monthlyRentPlaceholder": "例如 1200.00",
     "monthlyRentHint": "填写后将自动创建每月定期租金收入记录。",
     "depreciationInfo": "折旧信息",
@@ -1857,7 +1877,7 @@
       "depreciationSchedule": "折旧计划",
       "depreciationScheduleDescription": "未来10年的预计年度折旧",
       "propertyComparisonTable": "详细房产对比",
-      "amount": "金额 (€)",
+      "amount": "金额 ()",
       "year": "年份",
       "annualDepreciation": "年度折旧",
       "totalDepreciation": "累计折旧",
@@ -1989,10 +2009,27 @@
       "viewPurchaseContract": "查看购房合同",
       "viewRentalContract": "查看租赁合同",
       "viewSourceDocument": "查看购置文件"
+    },
+    "pendingDocuments": {
+      "title": "待确认资产文档",
+      "hint": "系统从购置合同、发票或收据中识别出的资产会显示在这里。确认后自动创建资产记录，缺少信息的文档需要您在文档页面补充。",
+      "needsInput": "需要补充信息",
+      "missingFields": "缺少：{{fields}}",
+      "awaitingConfirmation": "等待确认",
+      "openSourceDocument": "打开来源文件"
+    },
+    "form": {
+      "documentHint": {
+        "title": "补充合同或证明文件",
+        "message": "先创建资产也可以，但上传购置合同或相关证明后，资产档案会更完整。"
+      },
+      "uploadDocument": "上传文件"
     }
   },
   "reports": {
     "pageSubtitle": "生成税务报告、检查审计准备情况并导出数据",
+    "unreviewedWarning": "{{count}} 笔未审核交易已纳入本报告，请检查其准确性。",
+    "reviewTransactions": "审核交易",
     "tabs": {
       "ea": "收支报表 (E/A)",
       "bilanz": "资产负债表 / 损益表",
@@ -2049,7 +2086,8 @@
         "bankspesen": "银行手续费",
         "zinsen": "利息费用",
         "sonstige": "其他经营费用"
-      }
+      },
+      "regenerate": "重新生成"
     },
     "bilanz": {
       "generate": "生成资产负债表 / 损益表",
@@ -2067,7 +2105,7 @@
       "z11": "11. 税后利润",
       "z13": "13. 资产负债表利润",
       "vatSummary": "增值税汇总",
-      "thresholdHint": "资产负债表 / 损益表仅在年营业额超过 €700,000 时需要编制（Buchführungspflicht 记账义务）。低于此金额可使用收支报表。",
+      "thresholdHint": "资产负债表 / 损益表仅在年营业额超过 700,000 时需要编制（Buchführungspflicht 记账义务）。低于此金额可使用收支报表。",
       "disclaimer": "本资产负债表是从交易数据简化导出的，仅供参考。正式年度财务报表（UGB §222）请咨询税务顾问或审计师。"
     },
     "saldenliste": {
@@ -2294,7 +2332,7 @@
         "deadline": "2026年度报税截止日是 6月30日，别忘了。",
         "receipts": "日常的办公用品、交通费、专业书籍都可以作为经营费用抵扣。",
         "svs": "SVS 社保缴费也是可以抵扣的，记得录入。",
-        "homeOffice": "在家办公？每天最多可以抵扣 €3，一年最多 €300。"
+        "homeOffice": "在家办公？每天最多可以抵扣 3，一年最多 300。"
       },
       "nextDeadline": "下一个截止日：{{title}}（{{date}}）",
       "deleteSuccess": "🗑️ 文档「{{name}}」已删除。",
@@ -2302,26 +2340,26 @@
       "deleteWithDataHint": "文档及所有关联数据已一并删除。如果是误删，建议重新上传原始凭证。",
       "personalizedTips": "根据你的数据，我有几条建议：",
       "potentialSave": "可节省约",
-      "recurringFound": "我看到你上传了一份租赁合同，识别到 {{address}} 的月租金是 €{{rent}}。需要我帮你设置每月自动记账吗？",
+      "recurringFound": "我看到你上传了一份租赁合同，识别到 {{address}} 的月租金是 {{rent}}。需要我帮你设置每月自动记账吗？",
       "recurringConfirmed": "好的，定期租金收入已设置完成！以后每个月会自动帮你记录。",
       "recurringDismissed": "没问题，这次就不设置定期交易了。",
       "skip": "跳过",
-      "recurringExpenseFound": "我在文档中识别到一笔定期支出：「{{description}}」，金额 €{{amount}}（{{frequency}}）。需要我帮你设置自动记账吗？",
+      "recurringExpenseFound": "我在文档中识别到一笔定期支出：「{{description}}」，金额 {{amount}}（{{frequency}}）。需要我帮你设置自动记账吗？",
       "recurringExpenseConfirmed": "好的，定期支出已设置完成！以后会自动帮你记录。",
       "setUnitPercentage": "📐 这份租赁合同的租赁单元占整栋房产的百分比是多少？（影响折旧计算，例如：整栋出租填100，出租1/3填33）",
       "unitPercentageSaved": "✅ 已设置租赁占比为 {{percentage}}%，折旧计算已更新。",
       "skipped": "好的，跳过了。你可以稍后在「资产管理」中设置。",
       "uploadRenewal": "上传续租合同",
       "addContractManually": "手动添加合同",
-      "pendingRecurringIncome": "你之前上传的文档中有一笔待确认的定期收入：「{{description}}」，月租金 €{{amount}}。需要确认吗？",
-      "pendingRecurringExpense": "你之前上传的文档中有一笔待确认的定期支出：「{{description}}」，金额 €{{amount}}（{{frequency}}）。需要确认吗？",
+      "pendingRecurringIncome": "你之前上传的文档中有一笔待确认的定期收入：「{{description}}」，月租金 {{amount}}。需要确认吗？",
+      "pendingRecurringExpense": "你之前上传的文档中有一笔待确认的定期支出：「{{description}}」，金额 {{amount}}（{{frequency}}）。需要确认吗？",
       "contractExpiring": "定期交易「{{description}}」将在 {{days}} 天后到期（{{endDate}}），请注意续约或调整。",
       "contractExpired": "定期交易「{{description}}」已于 {{endDate}} 到期，自动记账已停止。",
       "multiReceiptDetected": "📑 文档「{{name}}」中识别到 {{count}} 份内容，已自动创建对应的交易记录。点击查看详情。",
-      "assetFound": "检测到资产购买：{{name}}，价格 €{{price}}。请在文档页面确认创建。",
-      "propertyAutoCreated": "🏠 已从购房合同中自动创建房产记录：{{address}}，购买价 €{{price}}。自动识别可能不完全准确，建议前往「高级管理 → 资产管理」检查并修改房产信息。",
-      "recurringAutoCreated": "📋 已从租赁合同中自动创建定期收入：{{address}}，月租 €{{rent}}。建议前往「高级管理 → 定期交易」检查并修改相关信息。",
-      "recurringNoProperty": "📋 识别到租赁合同（{{address}}，月租 €{{rent}}），但未找到匹配的房产。请先上传购房合同或在「高级管理 → 资产管理」中手动创建房产，然后再确认此租赁合同。",
+      "assetFound": "检测到资产购买：{{name}}，价格 {{price}}。请在文档页面确认创建。",
+      "propertyAutoCreated": "🏠 已从购房合同中自动创建房产记录：{{address}}，购买价 {{price}}。自动识别可能不完全准确，建议前往「高级管理 → 资产管理」检查并修改房产信息。",
+      "recurringAutoCreated": "📋 已从租赁合同中自动创建定期收入：{{address}}，月租 {{rent}}。建议前往「高级管理 → 定期交易」检查并修改相关信息。",
+      "recurringNoProperty": "📋 识别到租赁合同（{{address}}，月租 {{rent}}），但未找到匹配的房产。请先上传购房合同或在「高级管理 → 资产管理」中手动创建房产，然后再确认此租赁合同。",
       "propertyAutoCreatedFromRental": "🏠 未找到匹配的房产，已根据租赁合同地址自动创建：{{address}}。购买价格等信息需要补充，建议上传购房合同或前往「高级管理 → 资产管理」手动完善。",
       "recurringPartialMatch": "⚠️ 租赁合同地址「{{rentalAddress}}」与房产地址「{{propertyAddress}}」不完全一致，可能是部分出租。请前往「高级管理 → 资产管理」设置该租赁单元占整栋房产的比例（用于折旧计算）。",
       "transactionAutoCreated": "✅ 已从文档中自动创建交易记录。如需撤销，可以在文档管理中删除该文档，关联的交易也会一并删除。",
@@ -2341,13 +2379,22 @@
       "employerAnnualArchiveDetected": "这看起来是 {{year}} 年度的薪资文件。是否要将其归档为历史薪资包？",
       "employerAnnualArchiveReminder": "您还有 {{count}} 个历史薪资年度包等待归档。",
       "employerMonthConfirmed": "{{month}} 已记录为有薪资发放的月份。",
-      "employerMonthDetected": "我在“{{name}}”中发现了 {{month}} 的薪资文件。是否要将该月记录为有员工薪资发放？",
+      "employerMonthDetected": "我在{{name}}中发现了 {{month}} 的薪资文件。是否要将该月记录为有员工薪资发放？",
       "employerMonthNoPayroll": "{{month}} 已标记为无员工薪资发放的月份。",
       "employerMonthReminder": "您有 {{count}} 个薪资月份等待确认。下一个雇主截止日期：{{date}}。",
       "later": "稍后",
       "laterSaved": "没问题。您可以稍后归档该薪资年度。",
       "noPayrollThisMonth": "本月无员工",
-      "recordPayrollMonth": "记录薪资月份"
+      "recordPayrollMonth": "记录薪资月份",
+      "remindLater": "稍后提醒",
+      "dontRemindAgain": "不再提醒",
+      "takeActionNow": "立即处理",
+      "snoozed": "好的，稍后我会再次提醒您。",
+      "expandDetails": "展开详情",
+      "hideDetails": "收起详情",
+      "potentialSavings": "潜在节省",
+      "estimatedRefund": "预估退税",
+      "taxSaving": "税务节省"
     },
     "confirmation": {
       "title": "Taxja 需要您的确认",
@@ -2383,7 +2430,7 @@
       "undo": "撤销",
       "undone": "已撤销，创建的项目已移除。",
       "undoFailed": "撤销失败，请手动删除。",
-      "duplicateUploadReused": "{{name}} 已上传过——已复用现有文件。",
+      "duplicateUploadReused": "{{name}} 已上传过已复用现有文件。",
       "loanRepayment": "贷款还款",
       "noAction": "操作配置缺失，请刷新页面。"
     },
@@ -2490,7 +2537,7 @@
     "suggestions": {
       "title": "定期交易建议",
       "smartSuggestion": "检测到可自动化的固定交易",
-      "detectedPattern": "系统发现您已经 {{occurrences}} 次记录“{{description}}”（€{{amount}}），而且看起来是按 {{frequency}} 重复出现的。",
+      "detectedPattern": "系统发现您已经 {{occurrences}} 次记录{{description}}（{{amount}}），而且看起来是按 {{frequency}} 重复出现的。",
       "dayOfMonth": "建议日期",
       "type": "交易类型",
       "notNow": "暂时不用",
@@ -2550,15 +2597,15 @@
   "onboarding": {
     "welcome": {
       "title": "欢迎使用 Taxja！",
-      "message": "你好！我是你的 Taxja AI 助手。我将带你了解平台的核心功能——自动文档扫描、实时税务概览、AI 智能建议等。让我带你看看！"
+      "message": "你好！我是你的 Taxja AI 助手。我将带你了解平台的核心功能自动文档扫描、实时税务概览、AI 智能建议等。让我带你看看！"
     },
     "documents": {
       "title": "智能文档处理",
-      "message": "在这里上传你的发票、收据或合同。系统会自动扫描、分类并创建交易记录——无需手动录入。还能自动识别资产和检测重复文档。"
+      "message": "在这里上传你的发票、收据或合同。系统会自动扫描、分类并创建交易记录无需手动录入。还能自动识别资产和检测重复文档。"
     },
     "dashboard": {
       "title": "你的税务指挥中心",
-      "message": "仪表盘实时展示你的财务全貌：收入与支出对比、税务预估、假设模拟分析和个性化节税建议。所有信息一目了然——包括截止日期提醒和快捷操作。"
+      "message": "仪表盘实时展示你的财务全貌：收入与支出对比、税务预估、假设模拟分析和个性化节税建议。所有信息一目了然包括截止日期提醒和快捷操作。"
     },
     "transactions": {
       "title": "交易记录",
@@ -2566,11 +2613,11 @@
     },
     "reports": {
       "title": "税务报告",
-      "message": "生成专业税务报告，包括收支计算、余额清单和税表预览。随时导出 PDF 或 CSV——一切都已为你的会计师或税务局准备就绪。"
+      "message": "生成专业税务报告，包括收支计算、余额清单和税表预览。随时导出 PDF 或 CSV一切都已为你的会计师或税务局准备就绪。"
     },
     "ai": {
       "title": "AI 税务顾问",
-      "message": "你的专属 AI 税务顾问随时在这里待命。问任何税务问题——它了解你的个人资料、房产和交易历史，每个回答都是针对你个人情况的定制建议。"
+      "message": "你的专属 AI 税务顾问随时在这里待命。问任何税务问题它了解你的个人资料、房产和交易历史，每个回答都是针对你个人情况的定制建议。"
     },
     "profile": {
       "title": "设置你的税务档案",
@@ -2593,7 +2640,7 @@
     "current_plan": "当前方案",
     "credits_per_month": "积分/月",
     "no_overage": "无超额",
-    "overage_price": "超额：€{{price}}/积分",
+    "overage_price": "超额：{{price}}/积分",
     "topup_available": "可充值（12个月有效）",
     "credits_word": "积分",
     "backToDashboard": "返回仪表板",
@@ -2758,10 +2805,10 @@
     "businessType": "经营类型",
     "selectBusinessType": "请选择...",
     "businessTypes": {
-      "freiberufler": "自由职业者 (§22 EStG) — 医生、律师、会计师、IT顾问、建筑师、艺术家",
-      "gewerbetreibende": "工商经营者 (§23 EStG) — 零售、手工业、餐饮、电商、酒店、美容、运输",
-      "neueSelbstaendige": "新型自由职业者 — 培训师、教练、内容创作者、讲师",
-      "landForstwirtschaft": "农林业 (§21 EStG) — 农民、酒庄经营者、林业工作者、直销商"
+      "freiberufler": "自由职业者 (§22 EStG)  医生、律师、会计师、IT顾问、建筑师、艺术家",
+      "gewerbetreibende": "工商经营者 (§23 EStG)  零售、手工业、餐饮、电商、酒店、美容、运输",
+      "neueSelbstaendige": "新型自由职业者  培训师、教练、内容创作者、讲师",
+      "landForstwirtschaft": "农林业 (§21 EStG)  农民、酒庄经营者、林业工作者、直销商"
     },
     "businessTypeHints": {
       "freiberufler": "包括：医生/牙医/治疗师、律师/公证人、税务顾问/审计师、IT服务/软件开发、建筑师/工程师、艺术家/设计师。适用6%定额扣除率。",
@@ -2870,7 +2917,7 @@
     "vatStatusHelp": "此设置是 智能识别 资产识别和税务自动化的增值税依据。只有在个人资料中保存此字段后，资产自动化才会生效。",
     "vatStatus": {
       "regelbesteuert": "需要，我开含增值税的发票",
-      "kleinunternehmer": "不需要，我年收入低于 €55,000（小企业免税）",
+      "kleinunternehmer": "不需要，我年收入低于 55,000（小企业免税）",
       "pauschaliert": "我用定额增值税方案",
       "unknown": "不确定，之后再设置"
     },
@@ -2887,7 +2934,7 @@
     "homeOfficeInfo": "居家办公 / Telearbeit",
     "telearbeitDays": "每年居家办公天数",
     "telearbeitDaysHelp": "您在家办公的天数（最多100天可抵扣）",
-    "employerTelearbeitPauschale": "雇主已支付的远程办公补贴（€）",
+    "employerTelearbeitPauschale": "雇主已支付的远程办公补贴（）",
     "employerTelearbeitPauschaleHelp": "雇主免税支付的远程办公金额",
     "telearbeitEstimate": "预计可抵扣金额",
     "telearbeitDaysLabel": "天",
@@ -2899,7 +2946,7 @@
     "cancelSubscriptionConfirm": "确定要取消订阅吗？您将保留访问权限直到当前计费周期结束。",
     "confirmCancel": "确认取消",
     "subscriptionCanceled": "订阅已取消，访问权限保留至计费周期结束。",
-    "cancelPending": "取消已预约 — 访问权限保留至计费周期结束。",
+    "cancelPending": "取消已预约  访问权限保留至计费周期结束。",
     "noActiveSubscription": "暂无有效订阅。",
     "deleteAccount": "删除账号",
     "deleteAccountWarning": "删除账号不可撤销。所有数据（交易记录、文档、税务报告）将被永久删除。",
@@ -3202,7 +3249,7 @@
     "familienbonus18_24": "家庭奖金（18-24岁）",
     "alleinverdienerBase": "单收入者抵免",
     "alleinverdienerPerChild": "单收入者每子女加算",
-    "pendlerEuro": "通勤补贴（€/km）",
+    "pendlerEuro": "通勤补贴（/km）",
     "sonderausgabenpauschale": "特殊支出定额",
     "zuschlagVerkehr": "交通抵免附加",
     "zuschlagIncomeLower": "附加收入下限",
@@ -3423,7 +3470,7 @@
       "aggregate_total": "所有房产汇总合计",
       "property_result": "结果"
     },
-    "noOfficialTemplate": "此表格暂无官方BMF PDF模板可供下载。请使用上方的简化预览版本，通过 FinanzOnline 在线提交，或向税务局预订纸质表格。",
+    "noOfficialTemplate": "此表格暂无官方 BMF PDF 模板。点击“下载 PDF”将导出当前页面中的预览表格；提交时请继续通过 FinanzOnline 在线申报，或向税务局申请纸质表格。",
     "officialPdfAvailable": "可下载官方BMF预填PDF",
     "selectForm": "选择您需要的报税表格",
     "mainForm": "主表格"
@@ -3480,7 +3527,7 @@
   },
   "savingsSuggestions": {
     "intro": "这里显示的是目前最值得优先处理的税务待办。每张卡都会告诉你为什么出现、你下一步该做什么。",
-    "amountHint": "这里的金额表示“可能可补记的扣除额度”或“需要复核的金额”，不等于最终退税金额。",
+    "amountHint": "这里的金额表示可能可补记的扣除额度或需要复核的金额，不等于最终退税金额。",
     "whyLabel": "为什么会看到这条",
     "nextStepLabel": "你现在要做什么",
     "afterLabel": "处理后会带来什么",
@@ -3546,7 +3593,7 @@
         "after": "记录后，系统才能评估这部分是否可用于税务抵扣。"
       },
       "review": {
-        "next": "打开这些被标成“不可抵扣”或分类不清的支出，检查类别、金额和凭证是否需要更正。",
+        "next": "打开这些被标成不可抵扣或分类不清的支出，检查类别、金额和凭证是否需要更正。",
         "after": "这能减少该抵扣却没被算进去的情况。"
       },
       "ocr": {
@@ -3595,7 +3642,7 @@
       "svsNotice": "SVS缴费通知",
       "bescheid": "所得税评估通知"
     },
-    "largeExpenseNoReceipt": "{{count}} 笔超过€500的可抵扣支出(共 {{total_amount}})缺少收据附件，建议补充以备税务审计",
+    "largeExpenseNoReceipt": "{{count}} 笔超过500的可抵扣支出(共 {{total_amount}})缺少收据附件，建议补充以备税务审计",
     "lowConfidenceDocuments": "{{count}} 份文档识别结果不太确定，建议检查一下",
     "vatThresholdApproaching": "您的自雇收入已达 {{amount}}，接近 {{threshold}} 小规模纳税人(Kleinunternehmer)门槛，超过需注册增值税",
     "sideIncomeThreshold": "您的副业收入已达 {{amount}}，接近 {{threshold}} 免税线，超过后需全额纳税",
@@ -3659,11 +3706,11 @@
     "dashboard": {
       "year": {
         "title": "年份选择器",
-        "message": "在这里切换税务年度。仪表盘上的所有数据——收入、支出和税务预估——都会更新为所选年份的数据。"
+        "message": "在这里切换税务年度。仪表盘上的所有数据收入、支出和税务预估都会更新为所选年份的数据。"
       },
       "upload": {
         "title": "快速上传",
-        "message": "直接在仪表盘拖放发票、收据或合同。OCR 引擎会自动扫描并创建交易记录——无需离开当前页面。"
+        "message": "直接在仪表盘拖放发票、收据或合同。OCR 引擎会自动扫描并创建交易记录无需离开当前页面。"
       },
       "overview": {
         "title": "财务概览",
@@ -3701,7 +3748,7 @@
       },
       "classRules": {
         "title": "分类记忆",
-        "message": "系统会从您的修正中学习。在这里查看和管理已学习的分类规则——未来相似描述的交易将根据您过去的决定自动分类。"
+        "message": "系统会从您的修正中学习。在这里查看和管理已学习的分类规则未来相似描述的交易将根据您过去的决定自动分类。"
       },
       "export": {
         "title": "导出 CSV",
@@ -3719,7 +3766,7 @@
       },
       "tabs": {
         "title": "分类标签",
-        "message": "文档按类型分组——发票、收据、合同、税务表单等。切换标签页快速找到所需文档。"
+        "message": "文档按类型分组发票、收据、合同、税务表单等。切换标签页快速找到所需文档。"
       },
       "list": {
         "title": "文档列表",
@@ -3763,7 +3810,7 @@
       },
       "add": {
         "title": "添加资产",
-        "message": "手动添加新的房产、车辆或其他资产。输入地址、购买价格、建造日期等详细信息——折旧（AfA）会自动计算。"
+        "message": "手动添加新的房产、车辆或其他资产。输入地址、购买价格、建造日期等详细信息折旧（AfA）会自动计算。"
       },
       "edit": {
         "title": "编辑资产",
@@ -3777,7 +3824,7 @@
     "recurring": {
       "create": {
         "title": "创建定期交易",
-        "message": "设置新的定期交易——租金收入、贷款还款、保险或任何固定支出。选择频率和开始日期。"
+        "message": "设置新的定期交易租金收入、贷款还款、保险或任何固定支出。选择频率和开始日期。"
       },
       "filters": {
         "title": "筛选器",
@@ -3799,7 +3846,7 @@
       },
       "taxtools": {
         "title": "税务工作台",
-        "message": "一站式税务中心：准备申报、检查文档就绪状态、获取 AI 智能指导、生成报告——所有功能集中在一处。"
+        "message": "一站式税务中心：准备申报、检查文档就绪状态、获取 AI 智能指导、生成报告所有功能集中在一处。"
       }
     },
     "propertyDetail": {
@@ -3817,7 +3864,7 @@
       },
       "transactions": {
         "title": "关联交易",
-        "message": "与该房产关联的所有收入和支出按年份分组。每年显示租金收入、支出和净收入——这对 E1b 报税至关重要。"
+        "message": "与该房产关联的所有收入和支出按年份分组。每年显示租金收入、支出和净收入这对 E1b 报税至关重要。"
       }
     },
     "documentDetail": {
@@ -3827,7 +3874,7 @@
       },
       "preview": {
         "title": "文档预览",
-        "message": "原始文档在此显示——PDF 文件内嵌展示，图片直接渲染。用于对照原件核实提取的数据。"
+        "message": "原始文档在此显示PDF 文件内嵌展示，图片直接渲染。用于对照原件核实提取的数据。"
       },
       "ocrData": {
         "title": "提取数据",
@@ -4074,6 +4121,7 @@
       "manageSub": "管理您的负债"
     },
     "overview": {
+      "pageTitle": "负债总览",
       "title": "资产负债概览",
       "assetsVsLiabilities": "余额快照",
       "taxFilter": "税务筛选",
@@ -4215,6 +4263,10 @@
     },
     "confirm": {
       "deactivate": "这将停用该负债，而不是永久删除。是否继续？"
+    },
+    "pendingContracts": {
+      "title": "待确认贷款合同",
+      "subtitle": "仍在审核中或缺少关键字段的贷款合同会先显示在这里，等您在文档页完成确认后再转成正式负债。"
     }
   },
   "assetOverview": {
@@ -4274,6 +4326,10 @@
       "source": "来源",
       "conflictsWarning": "检测到数据冲突",
       "conflictSource": "文档",
+      "transactionsSummary": "交易记录",
+      "txnIncome": "收入",
+      "txnExpense": "支出",
+      "txnDeductible": "可抵扣",
       "auditChecklist": "审计检查清单",
       "auditSelectYear": "选择税务年度",
       "flatRateNotApplicable": "统一税率对比仅适用于自雇用户。",

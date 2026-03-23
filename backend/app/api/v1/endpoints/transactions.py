@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, extract
 from app.db.base import get_db
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User
@@ -44,6 +44,135 @@ from app.services.user_deductibility_service import (
 import math
 
 router = APIRouter()
+
+TRANSACTION_EXPORT_LABELS = {
+    "en": {
+        "title": "Transaction export",
+        "generated": "Generated",
+        "filters": "Filters",
+        "date": "Date",
+        "type": "Type",
+        "description": "Description",
+        "category": "Category",
+        "amount": "Amount",
+        "deductible": "Deductible",
+        "yes": "Yes",
+        "no": "No",
+        "no_transactions": "No transactions matched the selected filters.",
+    },
+    "de": {
+        "title": "Transaktions-Export",
+        "generated": "Erstellt",
+        "filters": "Filter",
+        "date": "Datum",
+        "type": "Typ",
+        "description": "Beschreibung",
+        "category": "Kategorie",
+        "amount": "Betrag",
+        "deductible": "Absetzbar",
+        "yes": "Ja",
+        "no": "Nein",
+        "no_transactions": "Keine Transaktionen entsprechen den gewählten Filtern.",
+    },
+    "zh": {
+        "title": "交易导出",
+        "generated": "生成时间",
+        "filters": "筛选条件",
+        "date": "日期",
+        "type": "类型",
+        "description": "描述",
+        "category": "分类",
+        "amount": "金额",
+        "deductible": "可抵扣",
+        "yes": "是",
+        "no": "否",
+        "no_transactions": "没有符合当前筛选条件的交易。",
+    },
+    "fr": {
+        "title": "Export des transactions",
+        "generated": "Généré le",
+        "filters": "Filtres",
+        "date": "Date",
+        "type": "Type",
+        "description": "Description",
+        "category": "Catégorie",
+        "amount": "Montant",
+        "deductible": "Déductible",
+        "yes": "Oui",
+        "no": "Non",
+        "no_transactions": "Aucune transaction ne correspond aux filtres sélectionnés.",
+    },
+    "ru": {
+        "title": "Экспорт операций",
+        "generated": "Создано",
+        "filters": "Фильтры",
+        "date": "Дата",
+        "type": "Тип",
+        "description": "Описание",
+        "category": "Категория",
+        "amount": "Сумма",
+        "deductible": "Вычитается",
+        "yes": "Да",
+        "no": "Нет",
+        "no_transactions": "Нет операций, соответствующих выбранным фильтрам.",
+    },
+    "hu": {
+        "title": "Tranzakcióexport",
+        "generated": "Létrehozva",
+        "filters": "Szűrők",
+        "date": "Dátum",
+        "type": "Típus",
+        "description": "Leírás",
+        "category": "Kategória",
+        "amount": "Összeg",
+        "deductible": "Levonható",
+        "yes": "Igen",
+        "no": "Nem",
+        "no_transactions": "Nincs tranzakció a kiválasztott szűrőkhöz.",
+    },
+    "pl": {
+        "title": "Eksport transakcji",
+        "generated": "Wygenerowano",
+        "filters": "Filtry",
+        "date": "Data",
+        "type": "Typ",
+        "description": "Opis",
+        "category": "Kategoria",
+        "amount": "Kwota",
+        "deductible": "Odliczalne",
+        "yes": "Tak",
+        "no": "Nie",
+        "no_transactions": "Brak transakcji spełniających wybrane filtry.",
+    },
+    "tr": {
+        "title": "İşlem dışa aktarımı",
+        "generated": "Oluşturulma",
+        "filters": "Filtreler",
+        "date": "Tarih",
+        "type": "Tür",
+        "description": "Açıklama",
+        "category": "Kategori",
+        "amount": "Tutar",
+        "deductible": "İndirilebilir",
+        "yes": "Evet",
+        "no": "Hayır",
+        "no_transactions": "Seçili filtrelere uyan işlem bulunamadı.",
+    },
+    "bs": {
+        "title": "Izvoz transakcija",
+        "generated": "Generisano",
+        "filters": "Filteri",
+        "date": "Datum",
+        "type": "Tip",
+        "description": "Opis",
+        "category": "Kategorija",
+        "amount": "Iznos",
+        "deductible": "Odbitno",
+        "yes": "Da",
+        "no": "Ne",
+        "no_transactions": "Nema transakcija za odabrane filtere.",
+    },
+}
 
 ALLOWED_SORT_FIELDS = {"transaction_date", "amount", "created_at", "description"}
 CLASSIFIED_TRANSACTION_TYPES = {
@@ -418,6 +547,144 @@ def format_validation_error(exc: ValidationError) -> dict:
     }
 
 
+def _apply_transaction_non_date_filters(
+    query,
+    *,
+    type: Optional[TransactionType] = None,
+    income_category: Optional[IncomeCategory] = None,
+    expense_category: Optional[ExpenseCategory] = None,
+    is_deductible: Optional[bool] = None,
+    is_recurring: Optional[bool] = None,
+    needs_review: Optional[bool] = None,
+    min_amount: Optional[Decimal] = None,
+    max_amount: Optional[Decimal] = None,
+    search: Optional[str] = None,
+):
+    """Apply transaction filters that should not affect year quick-filter boundaries."""
+    if type:
+        query = query.filter(Transaction.type == type)
+
+    if income_category:
+        query = query.filter(Transaction.income_category == income_category)
+
+    if expense_category:
+        query = query.filter(Transaction.expense_category == expense_category)
+
+    if is_deductible is not None:
+        query = query.filter(Transaction.is_deductible == is_deductible)
+
+    if is_recurring is not None:
+        query = query.filter(Transaction.is_recurring == is_recurring)
+
+    if needs_review is not None:
+        if needs_review:
+            query = query.filter(Transaction.needs_review == True, Transaction.reviewed == False)
+        else:
+            query = query.filter(
+                (Transaction.needs_review == False) | (Transaction.reviewed == True)
+            )
+
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
+
+    if search:
+        query = query.filter(Transaction.description.ilike(f"%{search}%"))
+
+    return query
+
+
+def _apply_transaction_date_filters(
+    query,
+    *,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    tax_year: Optional[int] = None,
+):
+    """Apply date-specific filters to an existing transaction query."""
+    if date_from:
+        query = query.filter(Transaction.transaction_date >= date_from)
+
+    if date_to:
+        query = query.filter(Transaction.transaction_date <= date_to)
+
+    if tax_year is not None:
+        year_start = date(tax_year, 1, 1)
+        year_end = date(tax_year, 12, 31)
+        query = query.filter(
+            Transaction.transaction_date >= year_start,
+            Transaction.transaction_date <= year_end,
+        )
+
+    return query
+
+
+def _get_available_transaction_years(query) -> list[int]:
+    """Return distinct transaction years present in the filtered dataset."""
+    year_expr = extract("year", Transaction.transaction_date)
+    rows = (
+        query.with_entities(year_expr.label("year"))
+        .distinct()
+        .order_by(year_expr.desc())
+        .all()
+    )
+
+    years: list[int] = []
+    for row in rows:
+        raw_year = getattr(row, "year", row[0] if row else None)
+        if raw_year is None:
+            continue
+        year = int(raw_year)
+        if year not in years:
+            years.append(year)
+    return years
+
+
+def _query_transactions_for_export(
+    db: Session,
+    current_user: User,
+    *,
+    type: Optional[TransactionType] = None,
+    income_category: Optional[IncomeCategory] = None,
+    expense_category: Optional[ExpenseCategory] = None,
+    is_deductible: Optional[bool] = None,
+    is_recurring: Optional[bool] = None,
+    needs_review: Optional[bool] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    min_amount: Optional[Decimal] = None,
+    max_amount: Optional[Decimal] = None,
+    search: Optional[str] = None,
+    tax_year: Optional[int] = None,
+):
+    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    query = _apply_transaction_non_date_filters(
+        query,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+    )
+    query = _apply_transaction_date_filters(
+        query,
+        date_from=date_from,
+        date_to=date_to,
+        tax_year=tax_year,
+    )
+    return query.order_by(Transaction.transaction_date.desc()).all()
+
+
+def _get_transaction_export_labels(language: Optional[str]) -> dict[str, str]:
+    return TRANSACTION_EXPORT_LABELS.get(language or "en", TRANSACTION_EXPORT_LABELS["en"])
+
+
 @router.post(
     "",
     response_model=TransactionResponse,
@@ -765,57 +1032,27 @@ def get_transactions(
     This ensures proper year boundary isolation for tax calculations and reporting.
     """
     
-    # Build query
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
-    
-    # Apply filters
-    if type:
-        query = query.filter(Transaction.type == type)
-    
-    if income_category:
-        query = query.filter(Transaction.income_category == income_category)
-    
-    if expense_category:
-        query = query.filter(Transaction.expense_category == expense_category)
-    
-    if is_deductible is not None:
-        query = query.filter(Transaction.is_deductible == is_deductible)
-    
-    if is_recurring is not None:
-        query = query.filter(Transaction.is_recurring == is_recurring)
+    base_query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    base_query = _apply_transaction_non_date_filters(
+        base_query,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+    )
 
-    if needs_review is not None:
-        if needs_review:
-            query = query.filter(Transaction.needs_review == True, Transaction.reviewed == False)
-        else:
-            query = query.filter(
-                (Transaction.needs_review == False) | (Transaction.reviewed == True)
-            )
-
-    if date_from:
-        query = query.filter(Transaction.transaction_date >= date_from)
-    
-    if date_to:
-        query = query.filter(Transaction.transaction_date <= date_to)
-    
-    if min_amount is not None:
-        query = query.filter(Transaction.amount >= min_amount)
-    
-    if max_amount is not None:
-        query = query.filter(Transaction.amount <= max_amount)
-    
-    if search:
-        query = query.filter(Transaction.description.ilike(f"%{search}%"))
-    
-    # Multi-year data isolation: Filter by tax year if specified
-    if tax_year is not None:
-        # Tax year boundaries: January 1 to December 31 of the specified year
-        year_start = date(tax_year, 1, 1)
-        year_end = date(tax_year, 12, 31)
-        query = query.filter(
-            Transaction.transaction_date >= year_start,
-            Transaction.transaction_date <= year_end
-        )
+    available_years = _get_available_transaction_years(base_query)
+    query = _apply_transaction_date_filters(
+        base_query,
+        date_from=date_from,
+        date_to=date_to,
+        tax_year=tax_year,
+    )
     
     # Get total count before pagination
     total = query.count()
@@ -844,7 +1081,8 @@ def get_transactions(
         transactions=transactions,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=total_pages,
+        available_years=available_years,
     )
 
 
@@ -1037,9 +1275,18 @@ async def import_transactions_csv(
 
 @router.get("/export")
 def export_transactions_csv(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
     type: Optional[TransactionType] = Query(None),
+    income_category: Optional[IncomeCategory] = Query(None),
+    expense_category: Optional[ExpenseCategory] = Query(None),
+    is_deductible: Optional[bool] = Query(None),
+    is_recurring: Optional[bool] = Query(None),
+    needs_review: Optional[bool] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, ge=0),
+    max_amount: Optional[Decimal] = Query(None, ge=0),
+    search: Optional[str] = Query(None, max_length=100),
+    tax_year: Optional[int] = Query(None, ge=1900, le=2100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1047,15 +1294,22 @@ def export_transactions_csv(
     import csv
     import io
 
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
-    if start_date:
-        query = query.filter(Transaction.transaction_date >= start_date)
-    if end_date:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    if type:
-        query = query.filter(Transaction.type == type)
-
-    transactions = query.order_by(Transaction.transaction_date.desc()).all()
+    transactions = _query_transactions_for_export(
+        db,
+        current_user,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+        tax_year=tax_year,
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1077,6 +1331,137 @@ def export_transactions_csv(
         io.BytesIO(output.getvalue().encode("utf-8")),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+    )
+
+
+@router.get("/export/pdf")
+def export_transactions_pdf(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    type: Optional[TransactionType] = Query(None),
+    income_category: Optional[IncomeCategory] = Query(None),
+    expense_category: Optional[ExpenseCategory] = Query(None),
+    is_deductible: Optional[bool] = Query(None),
+    is_recurring: Optional[bool] = Query(None),
+    needs_review: Optional[bool] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, ge=0),
+    max_amount: Optional[Decimal] = Query(None, ge=0),
+    search: Optional[str] = Query(None, max_length=100),
+    tax_year: Optional[int] = Query(None, ge=1900, le=2100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export transactions as PDF."""
+    import io
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    transactions = _query_transactions_for_export(
+        db,
+        current_user,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+        tax_year=tax_year,
+    )
+
+    labels = _get_transaction_export_labels(getattr(current_user, "language", "en"))
+    styles = getSampleStyleSheet()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
+    )
+
+    filter_bits: list[str] = []
+    if tax_year is not None:
+        filter_bits.append(f"{labels['filters']}: {tax_year}")
+    elif date_from or date_to:
+        range_text = f"{date_from.isoformat() if date_from else '…'} - {date_to.isoformat() if date_to else '…'}"
+        filter_bits.append(f"{labels['filters']}: {range_text}")
+    if type:
+        filter_bits.append(f"{labels['type']}: {type.value}")
+    if search:
+        filter_bits.append(f"Search: {search}")
+
+    story = [
+        Paragraph(labels["title"], styles["Title"]),
+        Paragraph(
+            f"{labels['generated']}: {date.today().isoformat()}",
+            styles["Normal"],
+        ),
+    ]
+
+    if filter_bits:
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(" | ".join(filter_bits), styles["Italic"]))
+
+    story.append(Spacer(1, 6 * mm))
+
+    if not transactions:
+        story.append(Paragraph(labels["no_transactions"], styles["Normal"]))
+    else:
+        table_data = [[
+            labels["date"],
+            labels["type"],
+            labels["description"],
+            labels["category"],
+            labels["amount"],
+            labels["deductible"],
+        ]]
+
+        for txn in transactions:
+            table_data.append([
+                txn.transaction_date.isoformat(),
+                txn.type.value,
+                (txn.description or "")[:70],
+                _transaction_category_token(txn) or "",
+                f"{txn.amount:.2f}",
+                labels["yes"] if txn.is_deductible else labels["no"],
+            ])
+
+        table = Table(
+            table_data,
+            repeatRows=1,
+            colWidths=[28 * mm, 32 * mm, 85 * mm, 40 * mm, 28 * mm, 24 * mm],
+        )
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#141127")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f6ff")]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d9d5f7")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(table)
+
+    doc.build(story)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=transactions.pdf"},
     )
 
 
@@ -1274,6 +1659,13 @@ async def update_transaction(
 
     for field, value in update_data.items():
         setattr(transaction, field, value)
+
+    # When marking as reviewed, automatically clear needs_review
+    if update_data.get('reviewed') is True:
+        transaction.needs_review = False
+    # When explicitly clearing needs_review, mark as reviewed
+    if update_data.get('needs_review') is False and 'reviewed' not in update_data:
+        transaction.reviewed = True
 
     # Handle recurring activation/deactivation
     if 'is_recurring' in update_data:

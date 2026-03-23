@@ -213,6 +213,7 @@ class TransactionUpdate(BaseModel):
     vat_amount: Optional[Decimal] = Field(None, ge=0)
     document_id: Optional[int] = None
     liability_id: Optional[int] = None
+    needs_review: Optional[bool] = None
     reviewed: Optional[bool] = None
     locked: Optional[bool] = None
     suppress_rule_learning: Optional[bool] = None
@@ -453,6 +454,7 @@ class TransactionListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+    available_years: list[int] = []
 
 
 class TransactionFilterParams(BaseModel):

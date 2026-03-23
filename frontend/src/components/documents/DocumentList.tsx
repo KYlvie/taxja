@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import JSZip from 'jszip';
 import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -134,12 +135,6 @@ const DeleteIcon = () => (
   </svg>
 );
 
-const ConfirmIcon = () => (
-  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M9 12L11.5 14.5L15 9.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
-  </svg>
-);
 
 const RetryIcon = () => (
   <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -309,6 +304,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [confirmStage, setConfirmStage] = useState<'idle' | 'confirming'>('idle');
+  const [exporting, setExporting] = useState(false);
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
@@ -410,23 +407,61 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   };
 
   const needsConfirmation = (doc: Document): boolean => {
-    const ocr = doc.ocr_result as Record<string, any> | undefined;
-    return Boolean(ocr && !ocr.confirmed && doc.confidence_score != null);
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    return Boolean(doc.processed_at && doc.ocr_result && !ocr.confirmed);
   };
 
-  const handleConfirmOcr = async (document: Document, event: React.MouseEvent) => {
+  const handleReviewClick = async (doc: Document, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (confirmingId) return;
-    setConfirmingId(document.id);
+    if (confirmStage === 'idle' || confirmingId !== doc.id) {
+      // First click: show "confirm?" state
+      setConfirmingId(doc.id);
+      setConfirmStage('confirming');
+      // Auto-reset after 3 seconds if user doesn't click again
+      setTimeout(() => {
+        setConfirmStage((prev) => {
+          if (prev === 'confirming') { setConfirmingId(null); return 'idle'; }
+          return prev;
+        });
+      }, 3000);
+    } else {
+      // Second click: actually confirm
+      setConfirmStage('idle');
+      try {
+        await documentService.confirmOCR(doc.id);
+        aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+        loadDocuments();
+      } catch {
+        aiToast(t('documents.reviewActionFailed', 'Review failed'), 'error');
+      } finally {
+        setConfirmingId(null);
+      }
+    }
+  };
+
+  const handleExportFiltered = async () => {
+    if (exporting || yearFilteredDocuments.length === 0) return;
+    setExporting(true);
     try {
-      await documentService.confirmOCR(document.id);
-      aiToast(t('documents.confirmSuccess', 'Document confirmed'), 'success');
-      await loadDocuments();
-    } catch (error) {
-      console.error('Failed to confirm document:', error);
-      aiToast(t('common.saveFailed', 'Save failed'), 'error');
+      const zip = new JSZip();
+      for (const doc of yearFilteredDocuments) {
+        try {
+          const blob = await documentService.downloadDocument(doc.id);
+          zip.file(doc.file_name, blob);
+        } catch {
+          // skip failed downloads
+        }
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const groupLabel = activeGroup === 'all' ? 'all' : activeGroup;
+      const yearLabel = activeYear ? `_${activeYear}` : '';
+      const fileName = `taxja-documents_${groupLabel}${yearLabel}.zip`;
+      await saveBlobWithNativeShare(content, fileName, t('common.export'));
+      aiToast(t('documents.exportSuccess', { count: yearFilteredDocuments.length }), 'success');
+    } catch {
+      aiToast(t('documents.exportError'), 'error');
     } finally {
-      setConfirmingId(null);
+      setExporting(false);
     }
   };
 
@@ -459,23 +494,52 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     return 'DOC';
   };
 
-  const getStatusLabel = (document: Document) => {
-    if (document.transaction_id) {
-      return t('documents.statusTransactionCreated');
+  const getDocumentStatusInfo = (doc: Document): { label: string; tone: string } => {
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    const isConfirmed = ocr.confirmed === true;
+    const hasTransaction = !!doc.transaction_id;
+
+    // Failed / processing take priority
+    if (doc.ocr_status === 'failed') {
+      return { label: t('documents.failed'), tone: 'failed' };
     }
-    if (document.needs_review) return t('documents.needsReview');
-    if (document.ocr_status === 'processing') return t('documents.processing');
-    if (document.ocr_status === 'failed') return t('documents.failed');
-    return t('documents.statusReady');
+    if (doc.ocr_status === 'processing' || !doc.processed_at) {
+      return { label: t('documents.status.processing', 'Processing'), tone: 'processing' };
+    }
+
+    // Pending confirmation: processed but not confirmed and no transaction yet
+    if (!isConfirmed && !hasTransaction) {
+      return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
+    }
+
+    // Confirmed states — vary by document type
+    const docType = doc.document_type;
+    const receiptTypes = ['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note'];
+    const contractTypes = [
+      'rental_contract', 'mietvertrag', 'purchase_contract', 'loan_contract',
+      'kreditvertrag', 'versicherungsbestaetigung', 'insurance_confirmation',
+    ];
+
+    if (receiptTypes.includes(docType)) {
+      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
+    }
+    if (contractTypes.includes(docType)) {
+      return { label: t('documents.status.contractProcessed', 'Contract processed'), tone: 'linked' };
+    }
+    if (isConfirmed) {
+      return { label: t('documents.status.reviewed', 'Reviewed'), tone: 'ready' };
+    }
+
+    // Fallback — has transaction but not explicitly confirmed
+    if (hasTransaction) {
+      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
+    }
+
+    return { label: t('documents.status.recognized', 'Recognized'), tone: 'ready' };
   };
 
-  const getStatusTone = (document: Document) => {
-    if (document.transaction_id) return 'linked';
-    if (document.needs_review) return 'review';
-    if (document.ocr_status === 'processing') return 'processing';
-    if (document.ocr_status === 'failed') return 'failed';
-    return 'ready';
-  };
+  const getStatusLabel = (document: Document) => getDocumentStatusInfo(document).label;
+  const getStatusTone = (document: Document) => getDocumentStatusInfo(document).tone;
 
   const sortedDocuments = sortDocumentsByDate(documents);
   const groupedDocuments = documentGroups.map((group) => ({
@@ -520,14 +584,26 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderGridItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-card ${document.needs_review ? 'needs-review' : ''}`}
+      className={`document-card ${needsConfirmation(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-card-top">
         <div className="document-card-icon">{getDocumentIconLabel(document)}</div>
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
-          {getStatusLabel(document)}
-        </span>
+        {needsConfirmation(document) ? (
+          <button
+            type="button"
+            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+            onClick={(event) => handleReviewClick(document, event)}
+          >
+            {confirmingId === document.id && confirmStage === 'confirming'
+              ? t('documents.confirmReview', 'Confirm review?')
+              : t('documents.status.pendingReview', 'Pending review')}
+          </button>
+        ) : (
+          <span className={`document-status-badge ${getStatusTone(document)}`}>
+            {getStatusLabel(document)}
+          </span>
+        )}
       </div>
 
       <div className="document-card-body">
@@ -545,50 +621,40 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
         </span>
       </div>
 
-      <div className="document-row-actions">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={(event) => handleDownload(document, event)}
-          title={t('documents.download')}
-          aria-label={t('documents.download')}
-        >
-          <DownloadIcon />
-        </button>
-        {canReprocessDocument(document) && (
+      <div className="document-row-actions document-row-actions-card">
+        <div className="document-utility-actions">
           <button
             type="button"
-            className="retry-btn"
-            onClick={(event) => handleRetry(document, event)}
-            disabled={retryingId === document.id}
-            title={t('documents.reprocess')}
-            aria-label={t('documents.reprocess')}
+            className="download-btn"
+            onClick={(event) => handleDownload(document, event)}
+            title={t('documents.download')}
+            aria-label={t('documents.download')}
           >
-            <RetryIcon />
+            <DownloadIcon />
           </button>
-        )}
-        {needsConfirmation(document) && (
           <button
             type="button"
-            className="confirm-btn"
-            onClick={(event) => handleConfirmOcr(document, event)}
-            disabled={confirmingId === document.id}
-            title={t('documents.confirm', 'Confirm')}
-            aria-label={t('documents.confirm', 'Confirm')}
+            className="delete-btn"
+            onClick={(event) => handleDelete(document, event)}
+            disabled={deletingId === document.id}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
           >
-            <ConfirmIcon />
+            <DeleteIcon />
           </button>
-        )}
-        <button
-          type="button"
-          className="delete-btn"
-          onClick={(event) => handleDelete(document, event)}
-          disabled={deletingId === document.id}
-          title={t('common.delete')}
-          aria-label={t('common.delete')}
-        >
-          <DeleteIcon />
-        </button>
+          {canReprocessDocument(document) && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={(event) => handleRetry(document, event)}
+              disabled={retryingId === document.id}
+              title={t('documents.reprocess')}
+              aria-label={t('documents.reprocess')}
+            >
+              <RetryIcon />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -596,7 +662,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderListItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-row ${document.needs_review ? 'needs-review' : ''}`}
+      className={`document-row ${needsConfirmation(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-main-cell">
@@ -625,55 +691,57 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       </div>
 
       <div className="document-col document-col-status">
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
-          {getStatusLabel(document)}
-        </span>
+        {needsConfirmation(document) ? (
+          <button
+            type="button"
+            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+            onClick={(event) => handleReviewClick(document, event)}
+          >
+            {confirmingId === document.id && confirmStage === 'confirming'
+              ? t('documents.confirmReview', 'Confirm review?')
+              : t('documents.status.pendingReview', 'Pending review')}
+          </button>
+        ) : (
+          <span className={`document-status-badge ${getStatusTone(document)}`}>
+            {getStatusLabel(document)}
+          </span>
+        )}
       </div>
 
       <div className="document-row-actions">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={(event) => handleDownload(document, event)}
-          title={t('documents.download')}
-          aria-label={t('documents.download')}
-        >
-          <DownloadIcon />
-        </button>
-        {canReprocessDocument(document) && (
+        <div className="document-utility-actions">
           <button
             type="button"
-            className="retry-btn"
-            onClick={(event) => handleRetry(document, event)}
-            disabled={retryingId === document.id}
-            title={t('documents.reprocess')}
-            aria-label={t('documents.reprocess')}
+            className="download-btn"
+            onClick={(event) => handleDownload(document, event)}
+            title={t('documents.download')}
+            aria-label={t('documents.download')}
           >
-            <RetryIcon />
+            <DownloadIcon />
           </button>
-        )}
-        {needsConfirmation(document) && (
           <button
             type="button"
-            className="confirm-btn"
-            onClick={(event) => handleConfirmOcr(document, event)}
-            disabled={confirmingId === document.id}
-            title={t('documents.confirm', 'Confirm')}
-            aria-label={t('documents.confirm', 'Confirm')}
+            className="delete-btn"
+            onClick={(event) => handleDelete(document, event)}
+            disabled={deletingId === document.id}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
           >
-            <ConfirmIcon />
+            <DeleteIcon />
           </button>
-        )}
-        <button
-          type="button"
-          className="delete-btn"
-          onClick={(event) => handleDelete(document, event)}
-          disabled={deletingId === document.id}
-          title={t('common.delete')}
-          aria-label={t('common.delete')}
-        >
-          <DeleteIcon />
-        </button>
+          {canReprocessDocument(document) && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={(event) => handleRetry(document, event)}
+              disabled={retryingId === document.id}
+              title={t('documents.reprocess')}
+              aria-label={t('documents.reprocess')}
+            >
+              <RetryIcon />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -839,6 +907,21 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                     {t('documents.filters.needsReview')}: {reviewCount}
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="download-btn export-zip-btn"
+                  onClick={handleExportFiltered}
+                  disabled={exporting || yearFilteredDocuments.length === 0}
+                  title={t('documents.exportZip', { count: yearFilteredDocuments.length })}
+                  aria-label={t('documents.exportZip', { count: yearFilteredDocuments.length })}
+                >
+                  {exporting ? (
+                    <span className="icon-svg spinner-inline" />
+                  ) : (
+                    <DownloadIcon />
+                  )}
+                  <span>{t('common.export')}</span>
+                </button>
                 <Select value={String(pageSize)} onChange={v => { setPageSize(Number(v)); setPage(1); }}
                   aria-label={t('documents.pageSize')} size="sm"
                   options={PAGE_SIZE_OPTIONS.map(s => ({ value: String(s), label: `${s} ${t('documents.perPage')}` }))} />

@@ -66,7 +66,9 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({
           user: state.user ? { ...state.user, onboarding_completed: true } : null,
         }));
-        api.post('/auth/onboarding-complete').catch(() => {});
+        api.post('/auth/onboarding-complete').catch((err) => {
+          console.error('Failed to persist onboarding status:', err);
+        });
       },
     }),
     {

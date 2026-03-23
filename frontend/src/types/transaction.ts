@@ -221,4 +221,5 @@ export interface PaginatedResponse<T> {
   page: number;
   page_size: number;
   total_pages: number;
+  available_years?: number[];
 }

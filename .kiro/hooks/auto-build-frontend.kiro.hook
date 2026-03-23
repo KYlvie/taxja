@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Auto Build Frontend",
+  "description": "每次保存前端源文件时，自动运行 vite build，nginx 会立即提供新版本",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "frontend/src/**/*.tsx",
+      "frontend/src/**/*.ts",
+      "frontend/src/**/*.css",
+      "frontend/src/**/*.json"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd frontend && npx vite build",
+    "timeout": 120
+  }
+}

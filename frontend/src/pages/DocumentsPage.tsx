@@ -8,8 +8,6 @@ import { translateDeductionReason } from '../utils/translateDeductionReason';
 import DocumentList from '../components/documents/DocumentList';
 import OCRReview from '../components/documents/OCRReview';
 import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
-import BescheidImport from '../components/documents/BescheidImport';
-import E1FormImport from '../components/documents/E1FormImport';
 import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
@@ -62,12 +60,6 @@ type PipelineCurrentState =
   | 'finalizing'
   | 'completed'
   | 'phase_2_failed';
-
-const ACTIVE_REPROCESS_STATES = new Set<PipelineCurrentState>([
-  'processing_phase_1',
-  'first_result_available',
-  'finalizing',
-]);
 
 const RECEIPT_DOC_TYPES = new Set(['receipt', 'invoice']);
 const LEGACY_FINAL_ASSET_STATUSES = new Set(['confirmed', 'auto-created']);
@@ -286,12 +278,20 @@ const getAssetOutcome = (ocrResult: unknown): AssetOutcomeRecord | null => {
   return null;
 };
 
+const INTERMEDIATE_PIPELINE_STATES = new Set([
+  'processing_phase_1', 'first_result_available', 'finalizing',
+]);
+
 const getPipelineCurrentState = (
   ocrResult: unknown,
   processedAt?: string | null
 ): PipelineCurrentState | null => {
   const parsed = parseOcrData(ocrResult);
   const state = parsed?._pipeline?.current_state;
+  // If document is fully processed, don't show intermediate state banners
+  if (processedAt && typeof state === 'string' && INTERMEDIATE_PIPELINE_STATES.has(state)) {
+    return 'completed';
+  }
   if (typeof state === 'string' && state) {
     return state as PipelineCurrentState;
   }
@@ -854,12 +854,6 @@ const DocumentsPage = () => {
   const uploadType = searchParams.get('type');
   const resolverEnabled = isDocumentPresentationResolverEnabled();
   const [reviewingDocument, setReviewingDocument] = useState<Document | null>(null);
-  const [bescheidOcrText, setBescheidOcrText] = useState<string | null>(null);
-  const [bescheidDocId, setBescheidDocId] = useState<number | null>(null);
-  const [bescheidParseResult, setBescheidParseResult] = useState<any>(null);
-  const [e1OcrText, setE1OcrText] = useState<string | null>(null);
-  const [e1DocId, setE1DocId] = useState<number | null>(null);
-  const [e1ParseResult, setE1ParseResult] = useState<any>(null);
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
   const [linkedTransaction, setLinkedTransaction] = useState<Transaction | null>(null);
   const [linkedAsset, setLinkedAsset] = useState<Property | null>(null);
@@ -917,45 +911,10 @@ const DocumentsPage = () => {
   const [savingOcrField, setSavingOcrField] = useState<string | null>(null);
   const [ocrFieldError, setOcrFieldError] = useState<string | null>(null);
 
-  const clearDocumentPanels = useCallback(() => {
-    setReviewingDocument(null);
-    setViewingDocument(null);
-    setBescheidOcrText(null);
-    setBescheidDocId(null);
-    setBescheidParseResult(null);
-    setE1OcrText(null);
-    setE1DocId(null);
-    setE1ParseResult(null);
-  }, []);
+  const RECEIPT_INLINE_TYPES = new Set(['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note']);
+  const isReceiptOrInvoice = (doc: Document) =>
+    RECEIPT_INLINE_TYPES.has((doc.document_type as string || '').toLowerCase());
 
-  const routeDocumentWithPresentation = useCallback((doc: Document) => {
-    const decision = resolveDocumentPresentation(doc);
-    const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
-
-    if (decision.template === 'tax_import') {
-      clearDocumentPanels();
-      if ((doc.document_type as string) === 'einkommensteuerbescheid' && rawText) {
-        setBescheidOcrText(rawText);
-        setBescheidDocId(doc.id);
-        return;
-      }
-      if ((doc.document_type as string) === 'e1_form' && rawText) {
-        setE1OcrText(rawText);
-        setE1DocId(doc.id);
-        return;
-      }
-      setReviewingDocument(doc);
-      return;
-    }
-
-    clearDocumentPanels();
-    if (decision.template === 'receipt_workbench') {
-      setViewingDocument(doc);
-      return;
-    }
-
-    setReviewingDocument(doc);
-  }, [clearDocumentPanels]);
 
   const handleOcrFieldClick = (scopeKey: string, val: unknown) => {
     setOcrFieldError(null);
@@ -1313,47 +1272,24 @@ const DocumentsPage = () => {
     if (!documentId) {
       setViewingDocument(null);
       setReviewingDocument(null);
-      setBescheidOcrText('');
-      setE1OcrText('');
       return;
     }
     if (documentId) {
       const id = parseInt(documentId);
       if (!isNaN(id)) {
         documentService.getDocument(id).then((doc) => {
-          if (resolverEnabled) {
-            routeDocumentWithPresentation(doc);
-            return;
-          }
-
-          const docType = doc.document_type as string;
-          if (docType === 'einkommensteuerbescheid') {
-            const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
-            if (rawText) {
-              setBescheidOcrText(rawText);
-              setBescheidDocId(id);
-              return;
-            }
-          }
-          if (docType === 'e1_form') {
-            const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
-            if (rawText) {
-              setE1OcrText(rawText);
-              setE1DocId(id);
-              return;
-            }
-          }
-          if (doc.needs_review) {
-            setReviewingDocument(doc);
-          } else {
+          // Route: receipt/invoice types -> inline viewer, everything else -> OCRReview
+          if (isReceiptOrInvoice(doc)) {
             setViewingDocument(doc);
+          } else {
+            setReviewingDocument(doc);
           }
         }).catch((err) => {
           console.error('Failed to load document:', err);
         });
       }
     }
-  }, [documentId, resolverEnabled, routeDocumentWithPresentation]);
+  }, [documentId]);
 
   // Load document blob for preview
   useEffect(() => {
@@ -1448,48 +1384,12 @@ const DocumentsPage = () => {
   }, [viewingDocument?.id, viewingDocument?.ocr_result, linkedTransaction]);
 
   const handleDocumentSelect = async (document: Document) => {
-    if (resolverEnabled) {
-      try {
-        const detail = await documentService.getDocument(document.id);
-        routeDocumentWithPresentation(detail);
-        navigate(`/documents/${document.id}`, { replace: true });
-      } catch (err) {
-        console.error('Failed to load document detail for presentation routing:', err);
-      }
-      return;
-    }
-
-    const docType = document.document_type as string;
-    if (docType === 'einkommensteuerbescheid') {
-      try {
-        const detail = await documentService.getDocument(document.id);
-        const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
-        if (rawText) {
-          setBescheidOcrText(rawText);
-          setBescheidDocId(document.id);
-          return;
-        }
-      } catch (err) {
-        console.error('Failed to load Bescheid document:', err);
-      }
-    }
-    if (docType === 'e1_form') {
-      try {
-        const detail = await documentService.getDocument(document.id);
-        const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
-        if (rawText) {
-          setE1OcrText(rawText);
-          setE1DocId(document.id);
-          return;
-        }
-      } catch (err) {
-        console.error('Failed to load E1 document:', err);
-      }
-    }
-    if (document.needs_review) {
-      setReviewingDocument(document);
-    } else {
+    // Route: receipt/invoice types -> inline viewer, everything else -> OCRReview
+    if (isReceiptOrInvoice(document)) {
       setViewingDocument(document);
+      navigate(`/documents/${document.id}`, { replace: true });
+    } else {
+      setReviewingDocument(document);
       navigate(`/documents/${document.id}`, { replace: true });
     }
   };
@@ -1728,68 +1628,6 @@ const DocumentsPage = () => {
     }
   };
 
-  const [retryingOcr, setRetryingOcr] = useState(false);
-  const waitForRetryCompletion = useCallback(async (documentId: number) => {
-    let latest: Document | null = null;
-    const MAX_ATTEMPTS = 40;
-
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-      const updated = await documentService.getDocument(documentId);
-      latest = updated;
-      setViewingDocument((current) => (current?.id === documentId ? updated : current));
-
-      const currentState = getPipelineCurrentState(updated.ocr_result, updated.processed_at);
-      if (!currentState || !ACTIVE_REPROCESS_STATES.has(currentState)) {
-        return updated;
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
-    }
-
-    // Polling timed out — OCR likely failed silently on the backend
-    aiToast(t('documents.reprocessTimeout', 'Reprocessing is taking too long. Please try again later.'), 'warning');
-    return latest;
-  }, [t]);
-
-  const retryDocumentById = useCallback(async (documentId: number) => {
-    setRetryingOcr(true);
-    try {
-      await documentService.retryOcr(documentId);
-      aiToast(t('documents.reprocessStarted'), 'success');
-      return await waitForRetryCompletion(documentId);
-    } catch (error) {
-      console.error('Failed to retry OCR:', error);
-      aiToast(t('documents.reprocessFailed'), 'error');
-      throw error;
-    } finally {
-      setRetryingOcr(false);
-    }
-  }, [t, waitForRetryCompletion]);
-
-  const handleRetryTaxImportDocument = async (documentId: number, kind: 'bescheid' | 'e1') => {
-    if (retryingOcr) return;
-    const refreshed = await retryDocumentById(documentId);
-    if (!refreshed) {
-      return;
-    }
-    const currentState = getPipelineCurrentState(refreshed.ocr_result, refreshed.processed_at);
-    if (currentState && ACTIVE_REPROCESS_STATES.has(currentState)) {
-      aiToast('Claude is still reprocessing this document. Reopen it after completion to see the latest result.', 'info');
-      return;
-    }
-
-    if (kind === 'bescheid') {
-      setBescheidDocId(documentId);
-      setBescheidOcrText(refreshed.raw_text || '');
-      setBescheidParseResult(null);
-      return;
-    }
-
-    setE1DocId(documentId);
-    setE1OcrText(refreshed.raw_text || '');
-    setE1ParseResult(null);
-  };
-
   const handleOpenLinkedTransaction = () => {
     if (!viewingDocument?.transaction_id) return;
     navigate(`/transactions?transactionId=${viewingDocument.transaction_id}`);
@@ -1970,55 +1808,6 @@ const DocumentsPage = () => {
       setSavingReceiptIndex(null);
     }
   };
-
-  const handleBescheidComplete = () => {
-    setBescheidOcrText(null);
-    setBescheidDocId(null);
-    setBescheidParseResult(null);
-    navigate('/documents', { replace: true });
-    setRefreshKey((k) => k + 1);
-  };
-
-  const handleE1Complete = () => {
-    setE1OcrText(null);
-    setE1DocId(null);
-    setE1ParseResult(null);
-    navigate('/documents', { replace: true });
-    setRefreshKey((k) => k + 1);
-  };
-
-  // Bescheid / E1 import views (triggered when OCR detects these document types)
-  if (bescheidOcrText) {
-    return (
-      <div className="documents-page">
-        <BescheidImport
-          ocrText={bescheidOcrText}
-          documentId={bescheidDocId ?? undefined}
-          initialParseResult={bescheidParseResult}
-          onRetry={bescheidDocId ? () => handleRetryTaxImportDocument(bescheidDocId, 'bescheid') : undefined}
-          retrying={retryingOcr}
-          onImportComplete={handleBescheidComplete}
-          onCancel={handleBescheidComplete}
-        />
-      </div>
-    );
-  }
-
-  if (e1OcrText) {
-    return (
-      <div className="documents-page">
-        <E1FormImport
-          ocrText={e1OcrText}
-          documentId={e1DocId ?? undefined}
-          initialParseResult={e1ParseResult}
-          onRetry={e1DocId ? () => handleRetryTaxImportDocument(e1DocId, 'e1') : undefined}
-          retrying={retryingOcr}
-          onImportComplete={handleE1Complete}
-          onCancel={handleE1Complete}
-        />
-      </div>
-    );
-  }
 
   if (reviewingDocument) {
     if (resolverEnabled) {

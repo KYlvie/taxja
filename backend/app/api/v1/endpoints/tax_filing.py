@@ -4,7 +4,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from sqlalchemy import extract, func
+from decimal import Decimal
+from sqlalchemy import extract, func, case
 
 from app.db.base import get_db
 from app.models.user import User
@@ -78,6 +79,7 @@ def get_tax_filing_summary(
     )
 
     if not records:
+        txn_summary = _aggregate_transactions(db, current_user.id, year)
         return {
             "year": year,
             "income": [],
@@ -86,6 +88,8 @@ def get_tax_filing_summary(
             "other": [],
             "totals": _empty_totals(),
             "conflicts": [],
+            "record_count": 0,
+            "transactions": txn_summary,
         }
 
     income_items = []
@@ -123,8 +127,11 @@ def get_tax_filing_summary(
     # Estimate tax (simplified — use income tax brackets)
     estimated_tax = _estimate_tax(total_income)
     withheld_tax = sum(
-        float(r.data.get("kz_260") or 0) for r in records if r.data_type == "lohnzettel"
+        float(r.data.get("kz_260") or r.data.get("withheld_tax") or 0)
+        for r in records if r.data_type == "lohnzettel"
     )
+
+    txn_summary = _aggregate_transactions(db, current_user.id, year)
 
     return {
         "year": year,
@@ -143,6 +150,7 @@ def get_tax_filing_summary(
         },
         "conflicts": conflicts,
         "record_count": len(records),
+        "transactions": txn_summary,
     }
 
 
@@ -168,7 +176,7 @@ def _sum_income(items: list) -> float:
         d = item["data"]
         dt = item["data_type"]
         if dt == "lohnzettel":
-            total += float(d.get("kz_245") or 0)
+            total += float(d.get("kz_245") or d.get("gross_income") or 0)
         elif dt == "e1a":
             total += max(float(d.get("gewinn_verlust") or 0), 0)
         elif dt == "e1b":
@@ -240,4 +248,79 @@ def _empty_totals() -> dict:
         "withheld_tax": 0,
         "estimated_refund": 0,
         "total_vat_payable": 0,
+    }
+
+
+def _aggregate_transactions(db: Session, user_id: int, year: int) -> dict:
+    """Aggregate transactions for a given year, grouped by type and category."""
+    txns = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            extract("year", Transaction.transaction_date) == year,
+        )
+        .all()
+    )
+    if not txns:
+        return {
+            "transaction_count": 0,
+            "income_total": 0,
+            "expense_total": 0,
+            "deductible_total": 0,
+            "by_category": [],
+        }
+
+    cat_map: dict[str, dict] = {}
+    income_total = Decimal("0")
+    expense_total = Decimal("0")
+    deductible_total = Decimal("0")
+
+    for t in txns:
+        amt = t.amount or Decimal("0")
+        txn_type = t.type.value if hasattr(t.type, "value") else str(t.type)
+
+        if txn_type == "income":
+            income_total += amt
+            cat = (
+                t.income_category.value
+                if t.income_category and hasattr(t.income_category, "value")
+                else str(t.income_category or "other")
+            )
+        elif txn_type == "expense":
+            expense_total += amt
+            if t.is_deductible:
+                deductible_total += amt
+            cat = (
+                t.expense_category.value
+                if t.expense_category and hasattr(t.expense_category, "value")
+                else str(t.expense_category or "other")
+            )
+        else:
+            cat = txn_type
+
+        key = f"{txn_type}:{cat}"
+        if key not in cat_map:
+            cat_map[key] = {
+                "type": txn_type,
+                "category": cat,
+                "count": 0,
+                "total": Decimal("0"),
+                "deductible_total": Decimal("0"),
+            }
+        cat_map[key]["count"] += 1
+        cat_map[key]["total"] += amt
+        if txn_type == "expense" and t.is_deductible:
+            cat_map[key]["deductible_total"] += amt
+
+    by_category = sorted(cat_map.values(), key=lambda x: (-float(x["total"]), x["category"]))
+    for item in by_category:
+        item["total"] = round(float(item["total"]), 2)
+        item["deductible_total"] = round(float(item["deductible_total"]), 2)
+
+    return {
+        "transaction_count": len(txns),
+        "income_total": round(float(income_total), 2),
+        "expense_total": round(float(expense_total), 2),
+        "deductible_total": round(float(deductible_total), 2),
+        "by_category": by_category,
     }

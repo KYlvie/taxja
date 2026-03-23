@@ -1922,7 +1922,7 @@ Antworte NUR mit JSON:
 
             # Auto-create all suggestions as transactions
             for s in suggestions:
-                s["needs_review"] = False  # Don't nag the user
+                s["needs_review"] = True  # Mark for user review
                 try:
                     s["document_id"] = document.id
                     creation_result = service.create_transaction_from_suggestion_with_result(
@@ -2586,6 +2586,9 @@ Antworte NUR mit JSON:
             try:
                 # Ensure document_id is set
                 suggestion["document_id"] = document_id
+                # User has explicitly reviewed and approved these suggestions
+                suggestion["needs_review"] = False
+                suggestion["reviewed"] = True
                 creation_result = service.create_transaction_from_suggestion_with_result(
                     suggestion, user_id
                 )

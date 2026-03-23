@@ -19,6 +19,7 @@ import trSubscription from './locales/tr/subscription.json'
 import bs from './locales/bs.json'
 import bsSubscription from './locales/bs/subscription.json'
 import { normalizeLanguage } from '../utils/locale'
+import { sanitizeLocaleResource } from './localeSanitizer'
 
 const mergeLocaleResources = (
   base: Record<string, unknown>,
@@ -64,15 +65,15 @@ i18n
   .use(initReactI18next)
   .init({
     resources: {
-      de: { translation: mergeLocaleResources(de, deSubscription) },
-      en: { translation: mergeLocaleResources(en, enSubscription) },
-      zh: { translation: mergeLocaleResources(zh, zhSubscription) },
-      fr: { translation: mergeLocaleResources(fr, frSubscription) },
-      ru: { translation: mergeLocaleResources(ru, ruSubscription) },
-      hu: { translation: mergeLocaleResources(hu, huSubscription) },
-      pl: { translation: mergeLocaleResources(pl, plSubscription) },
-      tr: { translation: mergeLocaleResources(tr, trSubscription) },
-      bs: { translation: mergeLocaleResources(bs, bsSubscription) }
+      de: { translation: sanitizeLocaleResource('de', mergeLocaleResources(de, deSubscription)) },
+      en: { translation: sanitizeLocaleResource('en', mergeLocaleResources(en, enSubscription)) },
+      zh: { translation: sanitizeLocaleResource('zh', mergeLocaleResources(zh, zhSubscription)) },
+      fr: { translation: sanitizeLocaleResource('fr', mergeLocaleResources(fr, frSubscription)) },
+      ru: { translation: sanitizeLocaleResource('ru', mergeLocaleResources(ru, ruSubscription)) },
+      hu: { translation: sanitizeLocaleResource('hu', mergeLocaleResources(hu, huSubscription)) },
+      pl: { translation: sanitizeLocaleResource('pl', mergeLocaleResources(pl, plSubscription)) },
+      tr: { translation: sanitizeLocaleResource('tr', mergeLocaleResources(tr, trSubscription)) },
+      bs: { translation: sanitizeLocaleResource('bs', mergeLocaleResources(bs, bsSubscription)) }
     },
     lng: initialLanguage,
     fallbackLng: 'de',

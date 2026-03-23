@@ -159,6 +159,10 @@ class LLMService:
         self.groq_enabled = getattr(settings, "GROQ_ENABLED", False) or os.getenv("GROQ_ENABLED", "").lower() == "true"
         self.groq_api_key = getattr(settings, "GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
         self.groq_model = getattr(settings, "GROQ_MODEL", "") or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        self.groq_base_url = (
+            getattr(settings, "GROQ_BASE_URL", "")
+            or os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        )
         self.groq_vision_model = (
             getattr(settings, "GROQ_VISION_MODEL", "")
             or os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
@@ -196,7 +200,7 @@ class LLMService:
             try:
                 self.groq_client = OpenAI(
                     api_key=self.groq_api_key,
-                    base_url="https://api.groq.com/openai/v1"
+                    base_url=self.groq_base_url
                 )
                 logger.info("Groq LLM enabled: %s", self.groq_model)
             except Exception as e:

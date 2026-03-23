@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Bot, CheckCircle2, Info, TriangleAlert, Trash2, type LucideIcon } from 'lucide-react';
-import FuturisticIcon, { type FuturisticIconTone } from './FuturisticIcon';
+import RobotMascot from './RobotMascot';
 import './ConfirmDialog.css';
 
 export interface ConfirmDialogProps {
@@ -17,6 +17,8 @@ export interface ConfirmDialogProps {
   onCancel?: () => void;
 }
 
+const ROBOT_SIZE = 420;
+
 const ConfirmDialog = ({
   isOpen,
   title,
@@ -30,117 +32,122 @@ const ConfirmDialog = ({
   onCancel,
 }: ConfirmDialogProps) => {
   const { t } = useTranslation();
-  const [showMessage, setShowMessage] = useState(false);
-  const [showButtons, setShowButtons] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [showBubble, setShowBubble] = useState(false);
   const [typedText, setTypedText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [showButtons, setShowButtons] = useState(false);
+  const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) {
-      setShowMessage(false);
-      setShowButtons(false);
+    if (isOpen) {
+      setVisible(true);
+      setExiting(false);
       setTypedText('');
-      setIsTyping(false);
-      return;
+      setShowBubble(false);
+      setShowButtons(false);
+
+      // Show bubble after robot entrance animation
+      const bubbleTimer = setTimeout(() => {
+        setShowBubble(true);
+        // Type out the message
+        let i = 0;
+        const speed = Math.max(8, Math.min(25, 600 / message.length));
+        const typeInterval = setInterval(() => {
+          i++;
+          setTypedText(message.slice(0, i));
+          if (i >= message.length) {
+            clearInterval(typeInterval);
+            setTimeout(() => setShowButtons(true), 200);
+          }
+        }, speed);
+        return () => clearInterval(typeInterval);
+      }, 500);
+
+      return () => clearTimeout(bubbleTimer);
+    } else {
+      if (visible) {
+        setExiting(true);
+        const exitTimer = setTimeout(() => {
+          setVisible(false);
+          setExiting(false);
+        }, 400);
+        return () => clearTimeout(exitTimer);
+      }
     }
-
-    // Show typing indicator first, then type out message
-    setIsTyping(true);
-    setShowMessage(true);
-
-    const typingDelay = setTimeout(() => {
-      setIsTyping(false);
-      // Type out the message character by character
-      let i = 0;
-      const speed = Math.max(8, Math.min(25, 600 / message.length));
-      const typeInterval = setInterval(() => {
-        i++;
-        setTypedText(message.slice(0, i));
-        if (i >= message.length) {
-          clearInterval(typeInterval);
-          setTimeout(() => setShowButtons(true), 200);
-        }
-      }, speed);
-
-      return () => clearInterval(typeInterval);
-    }, 600);
-
-    return () => clearTimeout(typingDelay);
   }, [isOpen, message]);
 
-  if (!isOpen) return null;
+  if (!visible) return null;
 
-  const variantIcon: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
-    info: { icon: Info, tone: 'violet' },
-    warning: { icon: TriangleAlert, tone: 'amber' },
-    danger: { icon: Trash2, tone: 'rose' },
-    success: { icon: CheckCircle2, tone: 'emerald' },
+  const variantColors: Record<string, string> = {
+    info: '#7c3aed',
+    warning: '#d97706',
+    danger: '#dc2626',
+    success: '#16a34a',
   };
 
-  const btnClass = 'cfd-btn cfd-btn--' + variant;
+  const handleConfirm = () => {
+    setExiting(true);
+    setTimeout(() => {
+      onConfirm();
+    }, 300);
+  };
 
-  return (
-    <div className="cfd-overlay" onClick={onCancel} role="dialog" aria-modal="true">
-      <div className="cfd-dialog" onClick={(e) => e.stopPropagation()}>
-        {/* AI Assistant header */}
-        <div className="cfd-header">
-          <div className="cfd-avatar">
-            <span className="cfd-avatar-icon">
-              <FuturisticIcon icon={Bot} tone="violet" size="sm" />
-            </span>
-            <span className="cfd-avatar-pulse" />
-          </div>
-          <div className="cfd-header-info">
-            <span className="cfd-assistant-name">Taxja AI</span>
-            <span className="cfd-status">{isTyping ? t('ai.typing', 'Typing...') : t('ai.online', 'Online')}</span>
-          </div>
+  const handleCancel = () => {
+    setExiting(true);
+    setTimeout(() => {
+      onCancel?.();
+    }, 300);
+  };
+
+  return createPortal(
+    <div
+      className={`cfd-robot-overlay ${exiting ? 'cfd-robot-overlay--exit' : ''}`}
+      onClick={handleCancel}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="cfd-robot-scene" onClick={(e) => e.stopPropagation()}>
+        {/* 3D Robot */}
+        <div className="cfd-robot-container">
+          <RobotMascot size={ROBOT_SIZE} />
         </div>
 
-        {/* Chat area */}
-        <div className="cfd-chat">
-          {showMessage && (
-            <div className="cfd-bubble-row">
-              <div className="cfd-bubble-avatar">
-                <FuturisticIcon icon={Bot} tone="violet" size="xs" />
+        {/* Floating text bubble */}
+        {showBubble && (
+          <div className={`cfd-robot-bubble cfd-robot-bubble--${variant}`}>
+            {title && (
+              <div className="cfd-robot-bubble-title">
+                {title}
               </div>
-              <div className={'cfd-bubble cfd-bubble--' + variant}>
-                {isTyping ? (
-                  <div className="cfd-typing-dots">
-                    <span /><span /><span />
-                  </div>
-                ) : (
-                  <>
-                    {title && (
-                      <div className="cfd-bubble-title">
-                        <FuturisticIcon icon={variantIcon[variant].icon} tone={variantIcon[variant].tone} size="xs" /> {title}
-                      </div>
-                    )}
-                    <div className="cfd-bubble-text">
-                      {typedText}
-                      {messageNode && typedText.length >= message.length && (
-                        <div className="cfd-bubble-extra" style={{ marginTop: '8px' }}>{messageNode}</div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+            )}
+            <div className="cfd-robot-bubble-text">
+              {typedText}
+              {typedText.length >= message.length && messageNode && (
+                <div className="cfd-robot-bubble-extra">{messageNode}</div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Action buttons */}
-        <div className={'cfd-actions' + (showButtons ? ' cfd-actions--visible' : '')}>
-          {showCancel && (
-            <button className="cfd-btn cfd-btn--cancel" onClick={onCancel}>
-              {cancelText || t('common.cancel')}
-            </button>
-          )}
-          <button className={btnClass} onClick={onConfirm} disabled={!showButtons}>
-            {confirmText || t('common.confirm')}
-          </button>
-        </div>
+            {/* Action buttons inside bubble */}
+            <div className={`cfd-robot-actions ${showButtons ? 'cfd-robot-actions--visible' : ''}`}>
+              {showCancel && (
+                <button className="cfd-robot-btn cfd-robot-btn--cancel" onClick={handleCancel}>
+                  {cancelText || t('common.cancel')}
+                </button>
+              )}
+              <button
+                className="cfd-robot-btn cfd-robot-btn--confirm"
+                style={{ '--btn-color': variantColors[variant] } as React.CSSProperties}
+                onClick={handleConfirm}
+                disabled={!showButtons}
+              >
+                {confirmText || t('common.confirm')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

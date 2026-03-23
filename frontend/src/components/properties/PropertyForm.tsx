@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Property, PropertyType, PropertyFormData, ASSET_USEFUL_LIFE } from '../../types/property';
 import Select from '../common/Select';
 import './PropertyForm.css';
@@ -199,6 +200,18 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
       <h2>
         {property ? t('properties.editProperty') : t('properties.addProperty')}
       </h2>
+
+      {!property && (
+        <div className="property-doc-callout">
+          <div>
+            <strong>{t('properties.form.documentHint.title', 'Upload a supporting document')}</strong>
+            <p>{t('properties.form.documentHint.message', 'Upload a purchase contract or supporting file to keep the asset record complete.')}</p>
+          </div>
+          <Link className="btn btn-secondary btn-sm" to="/documents">
+            {t('properties.form.uploadDocument', 'Upload document')}
+          </Link>
+        </div>
+      )}
 
       {/* Asset category selector — only for new assets */}
       {!property && (

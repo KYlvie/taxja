@@ -83,6 +83,8 @@ const ClassificationRules = () => {
   const [selectedDeductibilityIds, setSelectedDeductibilityIds] = useState<number[]>([]);
   const [classificationPage, setClassificationPage] = useState(1);
   const [deductibilityPage, setDeductibilityPage] = useState(1);
+  const [classSearch, setClassSearch] = useState('');
+  const [deductSearch, setDeductSearch] = useState('');
 
   useEffect(() => {
     void fetchRules();
@@ -188,15 +190,29 @@ const ClassificationRules = () => {
   };
 
   const totalCount = rules.length + deductibilityRules.length;
-  const allClassificationIds = rules.map((rule) => rule.id);
-  const allDeductibilityIds = deductibilityRules.map((rule) => rule.id);
-  const classificationPageCount = Math.max(1, Math.ceil(rules.length / PAGE_SIZE));
-  const deductibilityPageCount = Math.max(1, Math.ceil(deductibilityRules.length / PAGE_SIZE));
-  const paginatedRules = rules.slice(
+
+  const filteredRules = rules.filter((r) =>
+    !classSearch
+    || r.normalized_description?.toLowerCase().includes(classSearch.toLowerCase())
+    || r.original_description?.toLowerCase().includes(classSearch.toLowerCase())
+    || r.category?.toLowerCase().includes(classSearch.toLowerCase())
+  );
+  const filteredDeductibilityRules = deductibilityRules.filter((r) =>
+    !deductSearch
+    || r.normalized_description?.toLowerCase().includes(deductSearch.toLowerCase())
+    || r.original_description?.toLowerCase().includes(deductSearch.toLowerCase())
+    || r.expense_category?.toLowerCase().includes(deductSearch.toLowerCase())
+  );
+
+  const allClassificationIds = filteredRules.map((rule) => rule.id);
+  const allDeductibilityIds = filteredDeductibilityRules.map((rule) => rule.id);
+  const classificationPageCount = Math.max(1, Math.ceil(filteredRules.length / PAGE_SIZE));
+  const deductibilityPageCount = Math.max(1, Math.ceil(filteredDeductibilityRules.length / PAGE_SIZE));
+  const paginatedRules = filteredRules.slice(
     (classificationPage - 1) * PAGE_SIZE,
     classificationPage * PAGE_SIZE,
   );
-  const paginatedDeductibilityRules = deductibilityRules.slice(
+  const paginatedDeductibilityRules = filteredDeductibilityRules.slice(
     (deductibilityPage - 1) * PAGE_SIZE,
     deductibilityPage * PAGE_SIZE,
   );
@@ -406,7 +422,19 @@ const ClassificationRules = () => {
             <span className="cr-section-count">{rules.length}</span>
           </div>
         </div>
-        {rules.length === 0 ? (
+        <div className="cr-search">
+          <input
+            type="text"
+            placeholder={t('classificationRules.searchPlaceholder', 'Search by description or category...')}
+            value={classSearch}
+            onChange={(e) => { setClassSearch(e.target.value); setClassificationPage(1); }}
+            className="cr-search-input"
+          />
+          {classSearch && (
+            <button type="button" onClick={() => { setClassSearch(''); setClassificationPage(1); }} className="cr-search-clear">&times;</button>
+          )}
+        </div>
+        {filteredRules.length === 0 ? (
           renderSectionEmpty(
             t(
               'classificationRules.categoryEmpty',
@@ -514,7 +542,19 @@ const ClassificationRules = () => {
             <span className="cr-section-count">{deductibilityRules.length}</span>
           </div>
         </div>
-        {deductibilityRules.length === 0 ? (
+        <div className="cr-search">
+          <input
+            type="text"
+            placeholder={t('classificationRules.searchDeductPlaceholder', 'Search by description...')}
+            value={deductSearch}
+            onChange={(e) => { setDeductSearch(e.target.value); setDeductibilityPage(1); }}
+            className="cr-search-input"
+          />
+          {deductSearch && (
+            <button type="button" onClick={() => { setDeductSearch(''); setDeductibilityPage(1); }} className="cr-search-clear">&times;</button>
+          )}
+        </div>
+        {filteredDeductibilityRules.length === 0 ? (
           renderSectionEmpty(
             t(
               'classificationRules.deductibilityEmpty',

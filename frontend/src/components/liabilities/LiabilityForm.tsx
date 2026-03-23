@@ -188,13 +188,13 @@ const LiabilityForm = ({
       {(!initialValue || initialValue.requires_supporting_document) && (
         <div className="liability-doc-callout">
           <div>
-            <strong>{t('liabilities.documents.manualUploadTitle')}</strong>
+            <strong>{t('liabilities.documents.manualUploadTitle', 'Add the contract or proof file for this liability')}</strong>
             <p>
-              {t('liabilities.documents.manualUploadHint')}
+              {t('liabilities.documents.manualUploadHint', 'Manual liabilities can be created first, but uploading the linked contract or proof keeps the document trail complete and lets Taxja manage it like property-backed records.')}
             </p>
           </div>
           <Link className="btn btn-secondary btn-sm" to={supportingDocumentLink}>
-            {t('liabilities.documents.uploadSupportingDocument')}
+            {t('liabilities.documents.uploadSupportingDocument', 'Upload contract / proof')}
           </Link>
         </div>
       )}
@@ -203,7 +203,7 @@ const LiabilityForm = ({
         <div className="liability-form-section">
           <div className="liability-form-row">
             <div className="liability-form-field">
-              <label htmlFor="liability-type">{t('liabilities.fields.liabilityType')}</label>
+              <label htmlFor="liability-type">{t('liabilities.fields.liabilityType')} <span className="required">*</span></label>
               <Select
                 id="liability-type"
                 value={state.liability_type}
@@ -224,7 +224,7 @@ const LiabilityForm = ({
           </div>
 
           <div className="liability-form-field liability-form-field--full">
-            <label htmlFor="liability-display-name">{t('liabilities.fields.displayName')}</label>
+            <label htmlFor="liability-display-name">{t('liabilities.fields.displayName')} <span className="required">*</span></label>
             <input
               id="liability-display-name"
               type="text"
@@ -263,7 +263,7 @@ const LiabilityForm = ({
         <div className="liability-form-section">
           <div className="liability-form-row">
             <div className="liability-form-field">
-              <label htmlFor="liability-principal">{t('liabilities.fields.principalAmount')}</label>
+              <label htmlFor="liability-principal">{t('liabilities.fields.principalAmount')} <span className="required">*</span></label>
               <input
                 id="liability-principal"
                 type="number"
@@ -317,7 +317,7 @@ const LiabilityForm = ({
 
           <div className="liability-form-row">
             <div className="liability-form-field">
-              <label htmlFor="liability-start-date">{t('liabilities.fields.startDate')}</label>
+              <label htmlFor="liability-start-date">{t('liabilities.fields.startDate')} <span className="required">*</span></label>
               <DateInput
                 id="liability-start-date"
                 value={state.start_date}

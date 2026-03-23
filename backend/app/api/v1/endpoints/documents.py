@@ -2994,11 +2994,11 @@ def create_transaction_from_document(
 
         "message": (
 
-            "Transaction created successfully"
+            get_error_message("transaction_created_successfully", _get_lang(request, current_user))
 
             if creation_result.created
 
-            else "Duplicate prevented. Existing transaction reused."
+            else get_error_message("duplicate_transaction_reused", _get_lang(request, current_user))
 
         ),
 
@@ -3351,6 +3351,10 @@ def confirm_ocr_results(
 
     document.ocr_result = ocr_result
 
+    # Clear the review flag so the document no longer shows as pending
+    if confirm_request.confirmed:
+        document.needs_review = False
+
     db.commit()
 
     # Auto-create transaction if not already linked
@@ -3370,6 +3374,10 @@ def confirm_ocr_results(
             suggestion = ocr_service.create_transaction_suggestion(document_id, current_user.id)
 
             if suggestion:
+
+                # User explicitly confirmed — mark as reviewed, no review needed
+                suggestion["needs_review"] = False
+                suggestion["reviewed"] = True
 
                 creation_result = ocr_service.create_transaction_from_suggestion_with_result(
 

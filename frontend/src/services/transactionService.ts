@@ -75,6 +75,9 @@ export const transactionService = {
       page: data.page || 1,
       page_size: data.page_size || 50,
       total_pages: data.total_pages || 0,
+      available_years: Array.isArray(data.available_years)
+        ? data.available_years.map((year: number | string) => Number(year)).filter((year: number) => Number.isFinite(year))
+        : [],
     };
   },
 
@@ -235,11 +238,33 @@ export const transactionService = {
   exportCSV: async (filters?: TransactionFilters): Promise<Blob> => {
     const params: Record<string, any> = {};
     if (filters) {
-      if (filters.start_date) params.start_date = filters.start_date;
-      if (filters.end_date) params.end_date = filters.end_date;
+      if (filters.start_date) params.date_from = filters.start_date;
+      if (filters.end_date) params.date_to = filters.end_date;
       if (filters.type) params.type = filters.type;
+      if (filters.search) params.search = filters.search;
+      if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
+      if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
+      if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
     }
     const response = await api.get('/transactions/export', {
+      params,
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  exportPDF: async (filters?: TransactionFilters): Promise<Blob> => {
+    const params: Record<string, any> = {};
+    if (filters) {
+      if (filters.start_date) params.date_from = filters.start_date;
+      if (filters.end_date) params.date_to = filters.end_date;
+      if (filters.type) params.type = filters.type;
+      if (filters.search) params.search = filters.search;
+      if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
+      if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
+      if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
+    }
+    const response = await api.get('/transactions/export/pdf', {
       params,
       responseType: 'blob',
     });

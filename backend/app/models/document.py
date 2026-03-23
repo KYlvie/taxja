@@ -50,7 +50,7 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Foreign key to user
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Document type
     document_type = Column(SQLEnum(DocumentType), nullable=False, index=True)
@@ -68,10 +68,10 @@ class Document(Base):
     confidence_score = Column(Numeric(3, 2), nullable=True)  # 0.00 to 1.00
     
     # Foreign key to transaction (optional, set after transaction is created)
-    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
     
     # Parent document (for multi-form PDF splitting)
-    parent_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True, index=True)
+    parent_document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Archival status
     is_archived = Column(Boolean, default=False, nullable=False)
@@ -83,6 +83,7 @@ class Document(Base):
     
     # Relationships
     user = relationship("User", back_populates="documents")
+    bank_statement_imports = relationship("BankStatementImport", back_populates="source_document")
     # No direct relationship to Transaction - use transaction_id foreign key directly if needed
     
     def __repr__(self):

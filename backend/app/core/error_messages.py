@@ -22,6 +22,8 @@ Usage:
 
 from typing import Dict, Any, Optional
 
+from app.core.text_encoding import repair_mojibake
+
 
 # Error message dictionary with de, en, zh, fr, ru, hu, pl, tr, bs translations
 ERROR_MESSAGES: Dict[str, Dict[str, str]] = {
@@ -1541,6 +1543,28 @@ ERROR_MESSAGES: Dict[str, Dict[str, str]] = {
         "tr": "Varlik basariyla olusturuldu.",
         "bs": "Imovina je uspjesno kreirana.",
     },
+    "transaction_created_successfully": {
+        "de": "Transaktion erfolgreich erstellt.",
+        "en": "Transaction created successfully.",
+        "zh": "交易已成功创建。",
+        "fr": "Transaction créée avec succès.",
+        "ru": "Транзакция успешно создана.",
+        "hu": "A tranzakció sikeresen létrehozva.",
+        "pl": "Transakcja została pomyślnie utworzona.",
+        "tr": "Islem basariyla olusturuldu.",
+        "bs": "Transakcija je uspjesno kreirana.",
+    },
+    "duplicate_transaction_reused": {
+        "de": "Duplikat verhindert. Bestehende Transaktion wiederverwendet.",
+        "en": "Duplicate prevented. Existing transaction reused.",
+        "zh": "已防止重复。已复用现有交易。",
+        "fr": "Doublon évité. Transaction existante réutilisée.",
+        "ru": "Дубликат предотвращён. Существующая транзакция использована повторно.",
+        "hu": "Duplikáció megakadályozva. Meglévő tranzakció újrahasználva.",
+        "pl": "Duplikat zapobieżony. Wykorzystano istniejącą transakcję.",
+        "tr": "Kopya onlendi. Mevcut islem yeniden kullanildi.",
+        "bs": "Duplikat sprijecen. Postojeca transakcija ponovo iskoristena.",
+    },
     "tax_data_already_confirmed": {
         "de": "Steuerdaten wurden bereits aus diesem Dokument bestätigt.",
         "en": "Tax data already confirmed from this document.",
@@ -1988,6 +2012,20 @@ OCR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
         "pl": "Uzupełnienie LLM", "tr": "LLM takviyesi", "bs": "LLM dopuna",
     },
 }
+
+
+def _repair_translation_table(table: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+    return {
+        key: {
+            language: repair_mojibake(value)
+            for language, value in translations.items()
+        }
+        for key, translations in table.items()
+    }
+
+
+ERROR_MESSAGES = _repair_translation_table(ERROR_MESSAGES)
+OCR_FIELD_LABELS = _repair_translation_table(OCR_FIELD_LABELS)
 
 
 def get_ocr_field_label(field_name: str, language: str = "de") -> str:

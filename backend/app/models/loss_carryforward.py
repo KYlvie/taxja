@@ -14,7 +14,7 @@ class LossCarryforward(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Foreign key to user
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Loss year (the year the loss occurred)
     loss_year = Column(Integer, nullable=False, index=True)

@@ -24,7 +24,7 @@ class UserClassificationRule(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Normalized full description (lowered, noise stripped, but product keywords kept)
     normalized_description = Column(String(300), nullable=False, index=True)

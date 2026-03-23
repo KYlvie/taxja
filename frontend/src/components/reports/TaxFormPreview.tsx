@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Select from '../common/Select';
 import reportService, { TaxFormData, TaxFormField, EligibleForm } from '../../services/reportService';
 import YearWarning from './YearWarning';
 import { getLocaleForLanguage } from '../../utils/locale';
+import exportElementToPdf from '../../utils/exportElementToPdf';
 import './TaxFormPreview.css';
 
 /** Section definitions matching official BMF form layout */
@@ -104,6 +105,7 @@ const TaxFormPreview = () => {
   const [eligibleForms, setEligibleForms] = useState<EligibleForm[]>([]);
   const [selectedFormType, setSelectedFormType] = useState<string>('MAIN');
   const [loadingForms, setLoadingForms] = useState(false);
+  const previewExportRef = useRef<HTMLDivElement | null>(null);
 
   const lang = (i18n.language.split('-')[0] || 'de') as 'de' | 'en' | 'zh' | 'fr' | 'ru';
 
@@ -283,6 +285,21 @@ const TaxFormPreview = () => {
   const handleDownloadPDF = async () => {
     try {
       const formType = formData?.form_type || selectedFormType || 'E1';
+      if (!selectedFormHasTemplate) {
+        if (!previewExportRef.current || !formData) {
+          throw new Error('preview_export_unavailable');
+        }
+
+        await exportElementToPdf({
+          element: previewExportRef.current,
+          filename: `Taxja-${formType}-${taxYear}.pdf`,
+          title: getFormName(),
+          subtitle: `${t('reports.taxYear')}: ${taxYear}`,
+          brandLabel: 'Taxja',
+        });
+        return;
+      }
+
       const blob = await reportService.downloadFilledFormPDF(formType, taxYear);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -427,18 +444,25 @@ const TaxFormPreview = () => {
           <Select id="tf-year" value={String(taxYear)} onChange={v => setTaxYear(Number(v))}
             options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))} size="sm" />
         </div>
-        <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
-          {loading ? t('common.loading') : t('reports.taxForm.generate')}
-        </button>
-        {formData && (
-          <button className="btn btn-secondary" onClick={handlePrint}>
-            {'\uD83D\uDDA8\uFE0F'} {t('reports.ea.print')}
+        {!formData ? (
+          <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
+            {loading ? t('common.loading') : t('reports.taxForm.generate')}
           </button>
-        )}
-        {formData && selectedFormHasTemplate && (
-          <button className="btn btn-primary" onClick={handleDownloadPDF}>
-            {'\uD83D\uDCE5'} {t('reports.taxForm.downloadPDF')}
-          </button>
+        ) : (
+          <>
+            <button className="btn btn-secondary" onClick={handlePrint}>
+              {'\uD83D\uDDA8\uFE0F'} {t('reports.ea.print')}
+            </button>
+            {selectedFormHasTemplate ? (
+              <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                {'\uD83D\uDCE5'} {t('reports.taxForm.downloadPDF')}
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                {'\uD83D\uDCE5'} {t('reports.ea.downloadPDF', 'Download PDF')}
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -454,7 +478,7 @@ const TaxFormPreview = () => {
       {error && <div className="alert alert-error">{'\u26A0\uFE0F'} {error}</div>}
 
       {formData && (
-        <div className="tf-content" id="tf-print-area">
+        <div className="tf-content" id="tf-print-area" ref={previewExportRef}>
           <div className="tf-bmf-header">
             <div className="tf-bmf-header-left">
               <h2>{t('taxFormPreview.bmfHeader')}</h2>
@@ -528,7 +552,7 @@ const TaxFormPreview = () => {
           <div className="tf-summary">
             <h3>{'\u03A3'} {t('reports.taxForm.summary')}</h3>
             <div className="tf-summary-grid">
-              {getSummaryKeys()
+              {formData.summary && getSummaryKeys()
                 .filter(key => {
                   const val = formData.summary[key];
                   return val !== undefined && (val !== 0 || TOTAL_KEYS.has(key));
@@ -545,7 +569,7 @@ const TaxFormPreview = () => {
             </div>
 
             {/* Property breakdown section */}
-            {formData.summary.rental_by_property && Object.keys(formData.summary.rental_by_property).length > 0 && (
+            {formData.summary?.rental_by_property && Object.keys(formData.summary.rental_by_property).length > 0 && (
               <div className="tf-property-breakdown">
                 <h4>{getSummaryLabel('rental_by_property')}</h4>
                 <div className="tf-property-list">
@@ -560,7 +584,7 @@ const TaxFormPreview = () => {
             )}
 
             {/* Property expenses breakdown */}
-            {formData.summary.property_expenses && Object.keys(formData.summary.property_expenses).length > 0 && (
+            {formData.summary?.property_expenses && Object.keys(formData.summary.property_expenses).length > 0 && (
               <div className="tf-property-breakdown">
                 <h4>{getSummaryLabel('property_expenses')}</h4>
                 <div className="tf-property-list">
@@ -575,7 +599,7 @@ const TaxFormPreview = () => {
             )}
 
             {/* Property depreciation */}
-            {formData.summary.property_depreciation && formData.summary.property_depreciation > 0 && (
+            {formData.summary?.property_depreciation && formData.summary.property_depreciation > 0 && (
               <div className="tf-property-breakdown">
                 <div className="tf-property-item is-depreciation">
                   <span className="tf-property-label">{getSummaryLabel('property_depreciation')}</span>

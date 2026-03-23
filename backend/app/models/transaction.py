@@ -166,7 +166,6 @@ EXPENSE_CATEGORY_ENUM = SQLEnum(
     ExpenseCategory,
     name="expensecategory",
     values_callable=_expense_category_db_labels,
-    validate_strings=True,
 )
 
 
@@ -178,7 +177,7 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Foreign key to user
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Foreign key to property (nullable - not all transactions are property-related)
     property_id = Column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -210,7 +209,7 @@ class Transaction(Base):
     vat_type = Column(String(50), nullable=True, default="DOMESTIC")
     
     # Foreign key to document (for OCR integration)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
     
     # Classification confidence (0.0 to 1.0)
     classification_confidence = Column(Numeric(3, 2), nullable=True)
@@ -233,6 +232,10 @@ class Transaction(Base):
 
     # Import source
     import_source = Column(String(50), nullable=True)  # csv, psd2, manual, ocr
+
+    # Bank statement reconciliation flags
+    bank_reconciled = Column(Boolean, default=False, nullable=False)
+    bank_reconciled_at = Column(DateTime, nullable=True)
     
     # Recurring transaction fields
     is_recurring = Column(Boolean, default=False, nullable=False)

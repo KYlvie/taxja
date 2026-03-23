@@ -34,7 +34,7 @@ class EmployerAnnualArchive(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     tax_year = Column(Integer, nullable=False, index=True)
     status = Column(
         SQLEnum(EmployerAnnualArchiveStatus),
@@ -80,11 +80,11 @@ class EmployerAnnualArchiveDocument(Base):
     id = Column(Integer, primary_key=True, index=True)
     annual_archive_id = Column(
         Integer,
-        ForeignKey("employer_annual_archives.id"),
+        ForeignKey("employer_annual_archives.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     relation_type = Column(String(30), nullable=False, default="supporting")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

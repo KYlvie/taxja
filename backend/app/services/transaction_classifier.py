@@ -59,8 +59,16 @@ class TransactionClassifier:
         else:
             self._user_svc = None
 
-    def classify_transaction(self, transaction, user_context=None) -> ClassificationResult:
-        """Classify a transaction using the hybrid pipeline."""
+    def classify_transaction(
+        self, transaction, user_context=None, *, _store_side_effects: bool = True
+    ) -> ClassificationResult:
+        """Classify a transaction using the hybrid pipeline.
+
+        Args:
+            _store_side_effects: When False, skip LLM correction storage.
+                Used by learn_from_correction to avoid creating a duplicate
+                ClassificationCorrection record.
+        """
         if not getattr(transaction, "description", None):
             return ClassificationResult(
                 category=None,
@@ -98,7 +106,9 @@ class TransactionClassifier:
             )
 
         if best_result.confidence < Decimal("0.90"):
-            llm_result = self._try_llm_classify(transaction, user_context)
+            llm_result = self._try_llm_classify(
+                transaction, user_context, _store=_store_side_effects
+            )
             if llm_result is not None and llm_result.confidence > best_result.confidence:
                 return llm_result
 
@@ -116,7 +126,7 @@ class TransactionClassifier:
 
         from app.models.classification_correction import ClassificationCorrection
 
-        original_result = self.classify_transaction(transaction)
+        original_result = self.classify_transaction(transaction, _store_side_effects=False)
         correction = ClassificationCorrection(
             transaction_id=transaction.id,
             user_id=user_id,
@@ -297,7 +307,9 @@ class TransactionClassifier:
         except Exception:
             self.db.rollback()
 
-    def _try_llm_classify(self, transaction, user_context=None) -> Optional[ClassificationResult]:
+    def _try_llm_classify(
+        self, transaction, user_context=None, *, _store: bool = True
+    ) -> Optional[ClassificationResult]:
         """Try the LLM-backed classifier when rule+ML confidence stays low."""
         try:
             from app.services.llm_classifier import get_llm_classifier
@@ -329,7 +341,8 @@ class TransactionClassifier:
             result.is_deductible = getattr(llm_result, "is_deductible", None)
             result.deduction_reason = getattr(llm_result, "deduction_reason", None)
 
-            self._store_llm_correction(transaction, llm_result, user_type)
+            if _store:
+                self._store_llm_correction(transaction, llm_result, user_type)
             return result
         except Exception:
             return None

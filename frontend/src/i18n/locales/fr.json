@@ -125,10 +125,10 @@
     "businessType": "Type d'activite independante",
     "selectBusinessType": "Veuillez selectionner votre type d'activite...",
     "businessTypes": {
-      "freiberufler": "Profession liberale (§22 EStG) — Medecin, Avocat, Comptable, Consultant IT, Architecte, Artiste",
-      "gewerbetreibende": "Commerce/Entreprise (§23 EStG) — Commerce de detail, Artisanat, Restauration, E-Commerce, Hotellerie, Esthetique, Transport",
-      "neueSelbstaendige": "Nouveaux independants — Formateur, Coach, Createur de contenu, Charge de cours",
-      "landForstwirtschaft": "Agriculture et sylviculture (§21 EStG) — Agriculteur, Viticulteur, Forestier, Vente directe"
+      "freiberufler": "Profession liberale (§22 EStG)  Medecin, Avocat, Comptable, Consultant IT, Architecte, Artiste",
+      "gewerbetreibende": "Commerce/Entreprise (§23 EStG)  Commerce de detail, Artisanat, Restauration, E-Commerce, Hotellerie, Esthetique, Transport",
+      "neueSelbstaendige": "Nouveaux independants  Formateur, Coach, Createur de contenu, Charge de cours",
+      "landForstwirtschaft": "Agriculture et sylviculture (§21 EStG)  Agriculteur, Viticulteur, Forestier, Vente directe"
     },
     "businessTypeHints": {
       "freiberufler": "Incl. : Medecin/Dentiste/Therapeute, Avocat/Notaire, Conseiller fiscal/Auditeur, Services IT/Dev logiciel, Architecte/Ingenieur, Artiste/Designer. Deduction forfaitaire de 6 %.",
@@ -365,7 +365,7 @@
     "descriptionPlaceholder": "Entrez la description de la transaction",
     "category": "Categorie",
     "selectCategory": "Selectionner une categorie",
-    "autoSuggestHint": "Detection automatique — vous pouvez modifier la categorie a tout moment",
+    "autoSuggestHint": "Detection automatique  vous pouvez modifier la categorie a tout moment",
     "deductible": "Deductible fiscalement",
     "deductibleYes": "Oui, deductible",
     "notDeductible": "Non deductible",
@@ -433,10 +433,10 @@
     "types": {
       "income": "Revenu",
       "expense": "Depense",
-      "asset_acquisition": "Acquisition d’actif",
+      "asset_acquisition": "Acquisition dactif",
       "liability_drawdown": "Tirage de prêt",
       "liability_repayment": "Remboursement du principal",
-      "tax_payment": "Paiement d’impôt",
+      "tax_payment": "Paiement dimpôt",
       "transfer": "Transfert"
     },
     "categories": {
@@ -555,16 +555,16 @@
     "postalCode": "Code postal",
     "purchaseSection": "Informations d'achat",
     "purchaseDate": "Date d'achat",
-    "purchasePrice": "Prix d'achat (€)",
-    "buildingValue": "Valeur du bâtiment (€)",
+    "purchasePrice": "Prix d'achat ()",
+    "buildingValue": "Valeur du bâtiment ()",
     "constructionYear": "Année de construction",
     "depreciationRate": "Taux d'amortissement (%)",
     "depreciationRateHint": "Taux d'amortissement annuel (1,5 % pour les bâtiments d'avant 1915, 2,0 % pour les plus récents)",
     "purchaseCostsSection": "Frais d'acquisition",
     "purchaseCostsDescription": "Facultatif : enregistrez les frais liés à l'achat à des fins fiscales",
-    "grunderwerbsteuer": "Droits de mutation immobilière (€)",
-    "notaryFees": "Frais de notaire (€)",
-    "registryFees": "Frais de registre foncier (€)",
+    "grunderwerbsteuer": "Droits de mutation immobilière ()",
+    "notaryFees": "Frais de notaire ()",
+    "registryFees": "Frais de registre foncier ()",
     "autoCalculated80Percent": "Calculé automatiquement à 80 % du prix d'achat",
     "autoDeterminedRate": "Déterminé automatiquement en fonction de l'année de construction",
     "ownerOccupiedDisclaimer": "Avis pour les biens occupés par le propriétaire",
@@ -729,7 +729,7 @@
       "depreciationSchedule": "Tableau d'amortissement",
       "depreciationScheduleDescription": "Amortissement annuel projeté sur les 10 prochaines années",
       "propertyComparisonTable": "Comparaison détaillée des biens",
-      "amount": "Montant (€)",
+      "amount": "Montant ()",
       "year": "Année",
       "annualDepreciation": "Amortissement annuel",
       "totalDepreciation": "Amortissement total",
@@ -920,6 +920,13 @@
       "viewPurchaseContract": "Voir le contrat d'achat",
       "viewRentalContract": "Voir le contrat de location",
       "viewSourceDocument": "Voir le document d'achat"
+    },
+    "form": {
+      "documentHint": {
+        "title": "Ajouter un contrat ou un justificatif",
+        "message": "Vous pouvez d’abord créer l’actif, mais le contrat d’achat ou un justificatif rendra sa fiche complète."
+      },
+      "uploadDocument": "Téléverser le document"
     }
   },
   "documents": {
@@ -944,178 +951,6 @@
     "reprocessStarted": "Retraitement lancé. Le résultat actuel reste visible jusqu'à la fin du nouveau traitement.",
     "reprocessFailed": "Échec du retraitement, veuillez réessayer",
     "reprocessTimeout": "Le retraitement prend trop de temps. Veuillez réessayer plus tard.",
-    "confirm": "Confirmer",
-    "confirmSuccess": "Document confirmé",
-    "deleteDialog": {
-      "title": "Supprimer le document",
-      "hasRelatedData": "⚠️ Ce document est lié aux données suivantes :",
-      "property": "Bien immobilier",
-      "transactions": "Transactions",
-      "recurringTransaction": "Transaction récurrente",
-      "recurringTransactions": "Transactions récurrentes",
-      "linkedMietvertrag": "Contrat de location lié",
-      "linkedMietvertragWarn": "En choisissant « Tout supprimer », ce contrat de location et ses transactions récurrentes seront également supprimés",
-      "deleteOptions": "Options de suppression :",
-      "documentOnly": "Supprimer le document uniquement (recommandé)",
-      "documentOnlyDesc": "Supprime le fichier du document mais conserve toutes les données de biens et de transactions",
-      "withData": "Supprimer le document et toutes les données associées",
-      "withDataDesc": "Supprime le document ET tous les biens, transactions et transactions récurrentes liés",
-      "warning": "⚠️ Attention : cette action est irréversible !",
-      "recommendation": "💡 Recommandation : si vous souhaitez simplement nettoyer le fichier du document, choisissez « Supprimer le document uniquement »",
-      "cancel": "Annuler",
-      "confirmDocumentOnly": "Supprimer le document uniquement",
-      "confirmWithData": "Tout supprimer"
-    },
-    "tabs": {
-      "list": "Mes documents",
-      "upload": "Télécharger",
-      "bescheid": "Importer un avis d'imposition"
-    },
-    "types": {
-      "payslip": "Fiche de paie",
-      "receipt": "Reçu",
-      "invoice": "Facture",
-      "purchase_contract": "Contrat d'achat",
-      "rental_contract": "Contrat de location",
-      "loan_contract": "Contrat de prêt",
-      "bank_statement": "Relevé bancaire",
-      "property_tax": "Taxe foncière",
-      "svs_notice": "Avis SVS",
-      "lohnzettel": "Fiche de paie (L16)",
-      "einkommensteuerbescheid": "Avis d'imposition sur le revenu (Einkommensteuerbescheid)",
-      "e1_form": "Déclaration d'impôt sur le revenu (E1)",
-      "l1_form": "Déclaration de salarié (L1)",
-      "l1k_beilage": "Annexe enfants (L1k)",
-      "l1ab_beilage": "Annexe déductions (L1ab)",
-      "e1a_beilage": "Annexe travail indépendant (E1a)",
-      "e1b_beilage": "Annexe revenus locatifs (E1b)",
-      "e1kv_beilage": "Annexe plus-values (E1kv)",
-      "u1_form": "Déclaration annuelle de TVA (U1)",
-      "u30_form": "Déclaration préalable de TVA (U30/UVA)",
-      "jahresabschluss": "Bilan annuel (Jahresabschluss)",
-      "spendenbestaetigung": "Confirmation de don",
-      "versicherungsbestaetigung": "Confirmation d'assurance",
-      "kinderbetreuungskosten": "Frais de garde d'enfants",
-      "fortbildungskosten": "Frais de formation continue",
-      "pendlerpauschale": "Indemnité de trajet domicile-travail (Pendlerpauschale)",
-      "kirchenbeitrag": "Contribution ecclésiastique (Kirchenbeitrag)",
-      "grundbuchauszug": "Extrait du registre foncier (Grundbuchauszug)",
-      "betriebskostenabrechnung": "Décompte des charges (Betriebskostenabrechnung)",
-      "gewerbeschein": "Licence commerciale (Gewerbeschein)",
-      "kontoauszug": "Relevé de compte",
-      "other": "Autre",
-      "unknown": "Inconnu"
-    },
-    "documentTypes": {
-      "receipt": "Reçu",
-      "invoice": "Facture",
-      "contract": "Contrat",
-      "statement": "Relevé",
-      "purchase_contract": "Contrat d'achat",
-      "rental_contract": "Contrat de location",
-      "loan_contract": "Contrat de prêt",
-      "bank_statement": "Relevé bancaire",
-      "property_tax": "Taxe foncière",
-      "svs_notice": "Avis SVS",
-      "lohnzettel": "Fiche de paie (L16)",
-      "einkommensteuerbescheid": "Avis d'imposition sur le revenu (Einkommensteuerbescheid)",
-      "e1_form": "Déclaration d'impôt sur le revenu (E1)",
-      "l1_form": "Déclaration de salarié (L1)",
-      "l1k_beilage": "Annexe enfants (L1k)",
-      "l1ab_beilage": "Annexe déductions (L1ab)",
-      "e1a_beilage": "Annexe travail indépendant (E1a)",
-      "e1b_beilage": "Annexe revenus locatifs (E1b)",
-      "e1kv_beilage": "Annexe plus-values (E1kv)",
-      "u1_form": "Déclaration annuelle de TVA (U1)",
-      "u30_form": "Déclaration préalable de TVA (U30/UVA)",
-      "jahresabschluss": "Bilan annuel (Jahresabschluss)",
-      "spendenbestaetigung": "Confirmation de don",
-      "versicherungsbestaetigung": "Confirmation d'assurance",
-      "kinderbetreuungskosten": "Frais de garde d'enfants",
-      "fortbildungskosten": "Frais de formation continue",
-      "pendlerpauschale": "Indemnité de trajet domicile-travail (Pendlerpauschale)",
-      "kirchenbeitrag": "Contribution ecclésiastique (Kirchenbeitrag)",
-      "grundbuchauszug": "Extrait du registre foncier (Grundbuchauszug)",
-      "betriebskostenabrechnung": "Décompte des charges (Betriebskostenabrechnung)",
-      "gewerbeschein": "Licence commerciale (Gewerbeschein)",
-      "kontoauszug": "Relevé de compte",
-      "other": "Autre",
-      "unknown": "Inconnu"
-    },
-    "upload": {
-      "title": "Télécharger des documents",
-      "dragDrop": "Glissez-déposez les fichiers ici, ou cliquez pour sélectionner",
-      "mobileHint": "Choisissez des fichiers depuis votre téléphone ou numérisez un document avec l'appareil photo",
-      "formats": "Formats acceptés : JPG, PNG, PDF (max 10 Mo)",
-      "selectFiles": "Sélectionner des fichiers",
-      "takePhoto": "Prendre une photo",
-      "progress": "Progression du téléchargement",
-      "processing": "Reconnaissance du document...",
-      "completed": "Terminé",
-      "error": "Échec du téléchargement",
-      "retry": "Réessayer",
-      "clearCompleted": "Effacer les terminés",
-      "contextHintRental": "Téléchargement du contrat de location pour le bien n° {{propertyId}}",
-      "contextHintPurchase": "Téléchargement du contrat d'achat pour le bien n° {{propertyId}}",
-      "contextHintLoan": "Téléchargement du contrat de prêt pour le bien n° {{propertyId}}",
-      "stagingTitle": "{{count}} photos prêtes à traiter",
-      "stagingHint": "Faites glisser pour réorganiser, puis choisissez de fusionner en un seul document ou de télécharger séparément.",
-      "mergeUpload": "Fusionner en 1 document ({{count}} pages)",
-      "uploadSeparately": "Télécharger séparément ({{count}} documents)",
-      "clearStaging": "Effacer",
-      "groupedPagesMeta": "{{count}} pages · {{size}} Ko",
-      "captureSessionTitle": "{{count}} pages capturées",
-      "captureSessionSubtitle": "Les photos du même groupe seront fusionnées en un seul document avant le traitement.",
-      "addPage": "Continuer la capture",
-      "uploadGrouped": "Télécharger ce document",
-      "clearCaptureSession": "Effacer",
-      "duplicateReused": "Fichier en double, document existant réutilisé",
-      "uploadButton": "Telecharger",
-      "stagingHintSingle": "Verifiez le fichier ci-dessous, puis cliquez sur Telecharger."
-    },
-    "search": {
-      "placeholder": "Rechercher des documents par nom ou contenu..."
-    },
-    "view": {
-      "grid": "Vue en grille",
-      "list": "Vue en liste"
-    },
-    "viewGrid": "Vue en grille",
-    "viewList": "Vue en liste",
-    "filters": {
-      "allTypes": "Tous les types",
-      "allYears": "Toutes les années",
-      "startDate": "À partir du",
-      "endDate": "Jusqu'au",
-      "needsReview": "Vérification nécessaire uniquement",
-      "clear": "Effacer les filtres"
-    },
-    "groups": {
-      "all": "Tous les documents",
-      "employment": "Emploi et paie",
-      "self_employed": "Travail indépendant / Entreprise",
-      "property": "Immobilier et location",
-      "social_insurance": "Assurance et prêts",
-      "tax_filing": "Déclarations et avis fiscaux",
-      "deductions": "Documents de déduction fiscale",
-      "expense": "Reçus et factures",
-      "banking": "Banque",
-      "other": "Autre"
-    },
-    "list": {
-      "name": "Fichier",
-      "type": "Catégorie",
-      "date": "Date",
-      "uploadDate": "Date de téléchargement",
-      "size": "Taille",
-      "confidence": "Confiance",
-      "status": "Statut"
-    },
-    "statusReady": "Prêt",
-    "statusTransactionCreated": "Transaction créée",
-    "emptyGroup": "Aucun document dans cette catégorie pour les filtres actuels.",
-    "pageSize": "Éléments par page",
-    "perPage": "/ page",
     "review": {
       "title": "Vérifier les résultats de la reconnaissance",
       "loadError": "Échec du chargement du document pour vérification",
@@ -1332,7 +1167,11 @@
         "kz_210": "KZ210 Revenu brut",
         "city": "Ville",
         "postal_code": "Code postal",
-        "unit_number": "Numéro d'appartement"
+        "unit_number": "Numéro d'appartement",
+        "confirmed": "Confirmé",
+        "confirmed_at": "Confirmé le",
+        "confirmed_by": "Confirmé par",
+        "transaction_type": "Type de transaction"
       },
       "additionalFields": "Champs supplementaires extraits",
       "contractRoleConfidenceLabel": "Confiance",
@@ -1366,8 +1205,189 @@
       "changesSaved": "Modifications enregistrées",
       "confirmedSuccess": "Document confirmé",
       "confirmed": "Confirmé",
-      "openReview": "Vérifier et confirmer les résultats OCR"
+      "openReview": "Vérifier et confirmer les résultats OCR",
+      "moreSuggestions": "{{count}} suggestions supplémentaires"
     },
+    "reviewSuccess": "Document vérifié",
+    "reviewFailed": "Vérification échouée",
+    "deleteDialog": {
+      "title": "Supprimer le document",
+      "hasRelatedData": "⚠️ Ce document est lié aux données suivantes :",
+      "property": "Bien immobilier",
+      "transactions": "Transactions",
+      "recurringTransaction": "Transaction récurrente",
+      "recurringTransactions": "Transactions récurrentes",
+      "linkedMietvertrag": "Contrat de location lié",
+      "linkedMietvertragWarn": "En choisissant « Tout supprimer », ce contrat de location et ses transactions récurrentes seront également supprimés",
+      "deleteOptions": "Options de suppression :",
+      "documentOnly": "Supprimer le document uniquement (recommandé)",
+      "documentOnlyDesc": "Supprime le fichier du document mais conserve toutes les données de biens et de transactions",
+      "withData": "Supprimer le document et toutes les données associées",
+      "withDataDesc": "Supprime le document ET tous les biens, transactions et transactions récurrentes liés",
+      "warning": "⚠️ Attention : cette action est irréversible !",
+      "recommendation": "💡 Recommandation : si vous souhaitez simplement nettoyer le fichier du document, choisissez « Supprimer le document uniquement »",
+      "cancel": "Annuler",
+      "confirmDocumentOnly": "Supprimer le document uniquement",
+      "confirmWithData": "Tout supprimer"
+    },
+    "tabs": {
+      "list": "Mes documents",
+      "upload": "Télécharger",
+      "bescheid": "Importer un avis d'imposition"
+    },
+    "types": {
+      "payslip": "Fiche de paie",
+      "receipt": "Reçu",
+      "invoice": "Facture",
+      "purchase_contract": "Contrat d'achat",
+      "rental_contract": "Contrat de location",
+      "loan_contract": "Contrat de prêt",
+      "bank_statement": "Relevé bancaire",
+      "property_tax": "Taxe foncière",
+      "svs_notice": "Avis SVS",
+      "lohnzettel": "Fiche de paie (L16)",
+      "einkommensteuerbescheid": "Avis d'imposition sur le revenu (Einkommensteuerbescheid)",
+      "e1_form": "Déclaration d'impôt sur le revenu (E1)",
+      "l1_form": "Déclaration de salarié (L1)",
+      "l1k_beilage": "Annexe enfants (L1k)",
+      "l1ab_beilage": "Annexe déductions (L1ab)",
+      "e1a_beilage": "Annexe travail indépendant (E1a)",
+      "e1b_beilage": "Annexe revenus locatifs (E1b)",
+      "e1kv_beilage": "Annexe plus-values (E1kv)",
+      "u1_form": "Déclaration annuelle de TVA (U1)",
+      "u30_form": "Déclaration préalable de TVA (U30/UVA)",
+      "jahresabschluss": "Bilan annuel (Jahresabschluss)",
+      "spendenbestaetigung": "Confirmation de don",
+      "versicherungsbestaetigung": "Confirmation d'assurance",
+      "kinderbetreuungskosten": "Frais de garde d'enfants",
+      "fortbildungskosten": "Frais de formation continue",
+      "pendlerpauschale": "Indemnité de trajet domicile-travail (Pendlerpauschale)",
+      "kirchenbeitrag": "Contribution ecclésiastique (Kirchenbeitrag)",
+      "grundbuchauszug": "Extrait du registre foncier (Grundbuchauszug)",
+      "betriebskostenabrechnung": "Décompte des charges (Betriebskostenabrechnung)",
+      "gewerbeschein": "Licence commerciale (Gewerbeschein)",
+      "kontoauszug": "Relevé de compte",
+      "other": "Autre",
+      "unknown": "Inconnu"
+    },
+    "documentTypes": {
+      "receipt": "Reçu",
+      "invoice": "Facture",
+      "contract": "Contrat",
+      "statement": "Relevé",
+      "purchase_contract": "Contrat d'achat",
+      "rental_contract": "Contrat de location",
+      "loan_contract": "Contrat de prêt",
+      "bank_statement": "Relevé bancaire",
+      "property_tax": "Taxe foncière",
+      "svs_notice": "Avis SVS",
+      "lohnzettel": "Fiche de paie (L16)",
+      "einkommensteuerbescheid": "Avis d'imposition sur le revenu (Einkommensteuerbescheid)",
+      "e1_form": "Déclaration d'impôt sur le revenu (E1)",
+      "l1_form": "Déclaration de salarié (L1)",
+      "l1k_beilage": "Annexe enfants (L1k)",
+      "l1ab_beilage": "Annexe déductions (L1ab)",
+      "e1a_beilage": "Annexe travail indépendant (E1a)",
+      "e1b_beilage": "Annexe revenus locatifs (E1b)",
+      "e1kv_beilage": "Annexe plus-values (E1kv)",
+      "u1_form": "Déclaration annuelle de TVA (U1)",
+      "u30_form": "Déclaration préalable de TVA (U30/UVA)",
+      "jahresabschluss": "Bilan annuel (Jahresabschluss)",
+      "spendenbestaetigung": "Confirmation de don",
+      "versicherungsbestaetigung": "Confirmation d'assurance",
+      "kinderbetreuungskosten": "Frais de garde d'enfants",
+      "fortbildungskosten": "Frais de formation continue",
+      "pendlerpauschale": "Indemnité de trajet domicile-travail (Pendlerpauschale)",
+      "kirchenbeitrag": "Contribution ecclésiastique (Kirchenbeitrag)",
+      "grundbuchauszug": "Extrait du registre foncier (Grundbuchauszug)",
+      "betriebskostenabrechnung": "Décompte des charges (Betriebskostenabrechnung)",
+      "gewerbeschein": "Licence commerciale (Gewerbeschein)",
+      "kontoauszug": "Relevé de compte",
+      "other": "Autre",
+      "unknown": "Inconnu"
+    },
+    "upload": {
+      "title": "Télécharger des documents",
+      "dragDrop": "Glissez-déposez les fichiers ici, ou cliquez pour sélectionner",
+      "mobileHint": "Choisissez des fichiers depuis votre téléphone ou numérisez un document avec l'appareil photo",
+      "formats": "Formats acceptés : JPG, PNG, PDF (max 10 Mo)",
+      "selectFiles": "Sélectionner des fichiers",
+      "takePhoto": "Prendre une photo",
+      "progress": "Progression du téléchargement",
+      "processing": "Reconnaissance du document...",
+      "completed": "Terminé",
+      "error": "Échec du téléchargement",
+      "retry": "Réessayer",
+      "clearCompleted": "Effacer les terminés",
+      "contextHintRental": "Téléchargement du contrat de location pour le bien n° {{propertyId}}",
+      "contextHintPurchase": "Téléchargement du contrat d'achat pour le bien n° {{propertyId}}",
+      "contextHintLoan": "Téléchargement du contrat de prêt pour le bien n° {{propertyId}}",
+      "stagingTitle": "{{count}} photos prêtes à traiter",
+      "stagingHint": "Faites glisser pour réorganiser, puis choisissez de fusionner en un seul document ou de télécharger séparément.",
+      "mergeUpload": "Fusionner en 1 document ({{count}} pages)",
+      "uploadSeparately": "Télécharger séparément ({{count}} documents)",
+      "clearStaging": "Effacer",
+      "groupedPagesMeta": "{{count}} pages · {{size}} Ko",
+      "captureSessionTitle": "{{count}} pages capturées",
+      "captureSessionSubtitle": "Les photos du même groupe seront fusionnées en un seul document avant le traitement.",
+      "addPage": "Continuer la capture",
+      "uploadGrouped": "Télécharger ce document",
+      "clearCaptureSession": "Effacer",
+      "duplicateReused": "Fichier en double, document existant réutilisé",
+      "uploadButton": "Telecharger",
+      "stagingHintSingle": "Verifiez le fichier ci-dessous, puis cliquez sur Telecharger."
+    },
+    "search": {
+      "placeholder": "Rechercher des documents par nom ou contenu..."
+    },
+    "view": {
+      "grid": "Vue en grille",
+      "list": "Vue en liste"
+    },
+    "viewGrid": "Vue en grille",
+    "viewList": "Vue en liste",
+    "filters": {
+      "allTypes": "Tous les types",
+      "allYears": "Toutes les années",
+      "startDate": "À partir du",
+      "endDate": "Jusqu'au",
+      "needsReview": "Vérification nécessaire uniquement",
+      "clear": "Effacer les filtres"
+    },
+    "groups": {
+      "all": "Tous les documents",
+      "employment": "Emploi et paie",
+      "self_employed": "Travail indépendant / Entreprise",
+      "property": "Immobilier et location",
+      "social_insurance": "Assurance et prêts",
+      "tax_filing": "Déclarations et avis fiscaux",
+      "deductions": "Documents de déduction fiscale",
+      "expense": "Reçus et factures",
+      "banking": "Banque",
+      "other": "Autre"
+    },
+    "list": {
+      "name": "Fichier",
+      "type": "Catégorie",
+      "date": "Date",
+      "uploadDate": "Date de téléchargement",
+      "size": "Taille",
+      "confidence": "Confiance",
+      "status": "Statut"
+    },
+    "statusReady": "Prêt",
+    "statusTransactionCreated": "Transaction créée",
+    "status": {
+      "processing": "En cours de traitement",
+      "pendingReview": "En attente de vérification",
+      "transactionCreated": "Transaction créée",
+      "contractProcessed": "Contrat traité",
+      "reviewed": "Vérifié",
+      "recognized": "Reconnu"
+    },
+    "emptyGroup": "Aucun document dans cette catégorie pour les filtres actuels.",
+    "pageSize": "Éléments par page",
+    "perPage": "/ page",
     "bescheid": {
       "title": "Importer un avis d'imposition sur le revenu",
       "description": "Téléchargez votre Einkommensteuerbescheid (avis d'imposition) pour capturer automatiquement les données",
@@ -1576,7 +1596,7 @@
       "confirmTaxData": "Confirmer l'importation",
       "taxDataConfirmed": "Données fiscales importées avec succès",
       "taxYear": "Année fiscale",
-      "lossDetected": "Perte détectée — sera reportée sur les années suivantes",
+      "lossDetected": "Perte détectée  sera reportée sur les années suivantes",
       "confidence": "Confiance de la reconnaissance",
       "items": "éléments",
       "andMore": "et {{count}} de plus",
@@ -1992,7 +2012,14 @@
     "fields": {
       "type": "Type"
     },
-    "preview": "Aperçu du document"
+    "preview": "Aperçu du document",
+    "reviewAction": "Vérifier",
+    "reviewActionSuccess": "Document vérifié",
+    "reviewActionFailed": "Vérification échouée",
+    "confirmReview": "Confirmer?",
+    "exportZip": "Exporter {{count}} documents en ZIP",
+    "exportSuccess": "{{count}} documents exportés",
+    "exportError": "Erreur d'exportation"
   },
   "profile": {
     "basicInfo": "Informations de base",
@@ -2015,10 +2042,10 @@
     "businessType": "Type de travail indépendant",
     "selectBusinessType": "Veuillez sélectionner...",
     "businessTypes": {
-      "freiberufler": "Profession libérale (§22 EStG) — Médecin, avocat, comptable, consultant informatique, architecte, artiste",
-      "gewerbetreibende": "Commerce/Entreprise (§23 EStG) — Commerce de détail, artisanat, restauration, e-commerce, hôtellerie, beauté, transport",
-      "neueSelbstaendige": "Nouveaux indépendants — Formateur, coach, créateur de contenu, chargé de cours",
-      "landForstwirtschaft": "Agriculture et sylviculture (§21 EStG) — Agriculteur, viticulteur, forestier, vente directe"
+      "freiberufler": "Profession libérale (§22 EStG)  Médecin, avocat, comptable, consultant informatique, architecte, artiste",
+      "gewerbetreibende": "Commerce/Entreprise (§23 EStG)  Commerce de détail, artisanat, restauration, e-commerce, hôtellerie, beauté, transport",
+      "neueSelbstaendige": "Nouveaux indépendants  Formateur, coach, créateur de contenu, chargé de cours",
+      "landForstwirtschaft": "Agriculture et sylviculture (§21 EStG)  Agriculteur, viticulteur, forestier, vente directe"
     },
     "businessTypeHints": {
       "freiberufler": "Incl. : médecin/dentiste/thérapeute, avocat/notaire, conseiller fiscal/auditeur, services informatiques/développement, architecte/ingénieur, artiste/designer. Déduction forfaitaire de 6 %.",
@@ -2127,7 +2154,7 @@
     "vatStatusHelp": "Ce paramètre est la référence TVA utilisée pour la reconnaissance automatique des actifs et l'automatisation fiscale. La création automatique des actifs ne fonctionne que lorsque ce champ est enregistré dans votre profil.",
     "vatStatus": {
       "regelbesteuert": "Oui, j'émets des factures avec TVA",
-      "kleinunternehmer": "Non, mon chiffre d'affaires annuel est inférieur à 55 000 € (régime des petites entreprises)",
+      "kleinunternehmer": "Non, mon chiffre d'affaires annuel est inférieur à 55 000  (régime des petites entreprises)",
       "pauschaliert": "J'utilise le régime forfaitaire de TVA",
       "unknown": "Je ne suis pas sûr, je configurerai cela plus tard"
     },
@@ -2144,7 +2171,7 @@
     "homeOfficeInfo": "Bureau à domicile / télétravail",
     "telearbeitDays": "Jours de télétravail par an",
     "telearbeitDaysHelp": "Nombre de jours travaillés depuis le domicile (max. 100 éligibles à la déduction)",
-    "employerTelearbeitPauschale": "Indemnité de télétravail versée par l'employeur (€)",
+    "employerTelearbeitPauschale": "Indemnité de télétravail versée par l'employeur ()",
     "employerTelearbeitPauschaleHelp": "Montant exonéré d'impôt versé par votre employeur pour le télétravail",
     "telearbeitEstimate": "Déduction estimée",
     "telearbeitDaysLabel": "jours",
@@ -2156,7 +2183,7 @@
     "cancelSubscriptionConfirm": "Êtes-vous sûr de vouloir résilier votre abonnement ? Vous conserverez l'accès jusqu'à la fin de la période de facturation en cours.",
     "confirmCancel": "Oui, résilier",
     "subscriptionCanceled": "Abonnement résilié. L'accès est maintenu jusqu'à la fin de la période de facturation.",
-    "cancelPending": "Résiliation en attente — accès maintenu jusqu'à la fin de la période de facturation.",
+    "cancelPending": "Résiliation en attente  accès maintenu jusqu'à la fin de la période de facturation.",
     "noActiveSubscription": "Aucun abonnement actif.",
     "deleteAccount": "Supprimer le compte",
     "deleteAccountWarning": "La suppression de votre compte est irréversible. Toutes les données (transactions, documents, rapports fiscaux) seront définitivement supprimées.",
@@ -2203,6 +2230,8 @@
   },
   "reports": {
     "pageSubtitle": "Générez des rapports fiscaux, vérifiez la conformité d'audit et exportez vos données",
+    "unreviewedWarning": "{{count}} transaction(s) non vérifiée(s) sont incluses dans ce rapport. Veuillez les vérifier.",
+    "reviewTransactions": "Vérifier les transactions",
     "tabs": {
       "ea": "Rapport recettes/dépenses",
       "bilanz": "Bilan / Compte de résultat",
@@ -2259,7 +2288,8 @@
         "bankspesen": "Frais bancaires",
         "zinsen": "Charges d'intérêts",
         "sonstige": "Autres charges d'exploitation"
-      }
+      },
+      "regenerate": "Régénérer"
     },
     "bilanz": {
       "generate": "Générer le bilan / Compte de résultat",
@@ -2277,7 +2307,7 @@
       "z11": "11. Résultat après impôts",
       "z13": "13. Bénéfice non distribué",
       "vatSummary": "Récapitulatif TVA",
-      "thresholdHint": "Le bilan / compte de résultat n'est obligatoire que pour un chiffre d'affaires supérieur à 700 000 € (obligation de tenue de livres). En dessous de ce seuil, le rapport recettes/dépenses est suffisant.",
+      "thresholdHint": "Le bilan / compte de résultat n'est obligatoire que pour un chiffre d'affaires supérieur à 700 000  (obligation de tenue de livres). En dessous de ce seuil, le rapport recettes/dépenses est suffisant.",
       "disclaimer": "Ce bilan est une dérivation simplifiée à partir des données de transactions et sert uniquement de référence. Pour les dépôts officiels de Jahresabschluss (UGB §222), consultez un Steuerberater ou un Wirtschaftsprüfer."
     },
     "saldenliste": {
@@ -2504,7 +2534,7 @@
       "aggregate_total": "Total agrégé de tous les biens",
       "property_result": "Résultat"
     },
-    "noOfficialTemplate": "Aucun modèle PDF officiel du BMF n'est disponible pour ce formulaire. Veuillez utiliser notre aperçu simplifié ci-dessus et déposer via FinanzOnline, ou commander le formulaire papier auprès du centre des impôts.",
+    "noOfficialTemplate": "Aucun modèle PDF officiel du BMF n'est disponible pour ce formulaire. Le bouton « Télécharger le PDF » exportera à la place l'aperçu actuellement affiché sur cette page. Veuillez ensuite déposer via FinanzOnline ou commander le formulaire papier si nécessaire.",
     "officialPdfAvailable": "PDF officiel du BMF disponible",
     "selectForm": "De quel formulaire avez-vous besoin ?",
     "mainForm": "Formulaire principal"
@@ -2711,17 +2741,17 @@
     },
     "proactive": {
       "loginGreeting": "Bon retour ! Voici un aperçu rapide de votre activité récente :",
-      "noDocuments": "Vous n'avez encore téléchargé aucun document. Commencez par télécharger vos reçus et factures récents — j'analyserai les déductions pour vous.",
+      "noDocuments": "Vous n'avez encore téléchargé aucun document. Commencez par télécharger vos reçus et factures récents  j'analyserai les déductions pour vous.",
       "fewTransactions": "Vous n'avez que {{count}} transactions pour le moment. Ajoutez-en davantage pour que je puisse vous fournir une analyse fiscale plus précise.",
       "uploadSuccess": "✓ Le document « {{name}} » a été traité.",
-      "uploadNeedsReview": "Le document « {{name}} » nécessite votre vérification — veuillez contrôler les résultats de la reconnaissance.",
+      "uploadNeedsReview": "Le document « {{name}} » nécessite votre vérification  veuillez contrôler les résultats de la reconnaissance.",
       "uploadError": "Un problème est survenu lors du traitement de « {{name}} ». Essayez de le télécharger à nouveau ou saisissez-le manuellement.",
       "taxTip": "💡 Conseil rapide :",
       "tips": {
-        "deadline": "La date limite de déclaration fiscale 2026 est le 30 juin — n'oubliez pas.",
+        "deadline": "La date limite de déclaration fiscale 2026 est le 30 juin  n'oubliez pas.",
         "receipts": "Les fournitures de bureau, les frais de transport et les livres professionnels peuvent tous être déduits comme frais professionnels.",
-        "svs": "Les cotisations d'assurance sociale SVS sont également déductibles — n'oubliez pas de les enregistrer.",
-        "homeOffice": "Vous travaillez depuis chez vous ? Vous pouvez déduire jusqu'à 3 €/jour, maximum 300 €/an."
+        "svs": "Les cotisations d'assurance sociale SVS sont également déductibles  n'oubliez pas de les enregistrer.",
+        "homeOffice": "Vous travaillez depuis chez vous ? Vous pouvez déduire jusqu'à 3 /jour, maximum 300 /an."
       },
       "nextDeadline": "Prochaine échéance : {{title}} ({{date}})",
       "deleteSuccess": "🗑️ Le document « {{name}} » a été supprimé.",
@@ -2729,30 +2759,30 @@
       "deleteWithDataHint": "Le document et toutes les données liées ont été supprimés. Si c'était une erreur, téléchargez à nouveau le document original.",
       "personalizedTips": "Basé sur vos données, voici quelques suggestions :",
       "potentialSave": "économies potentielles ~",
-      "recurringFound": "J'ai remarqué que vous avez téléchargé un contrat de location ! J'ai trouvé un loyer mensuel de {{rent}} € pour {{address}}. Souhaitez-vous que je configure un suivi automatique ?",
-      "recurringConfirmed": "Terminé ! J'ai configuré le revenu locatif récurrent — il sera suivi automatiquement chaque mois.",
+      "recurringFound": "J'ai remarqué que vous avez téléchargé un contrat de location ! J'ai trouvé un loyer mensuel de {{rent}}  pour {{address}}. Souhaitez-vous que je configure un suivi automatique ?",
+      "recurringConfirmed": "Terminé ! J'ai configuré le revenu locatif récurrent  il sera suivi automatiquement chaque mois.",
       "recurringDismissed": "Pas de problème, je ne créerai pas de transaction récurrente pour celui-ci.",
       "skip": "Ignorer",
-      "recurringExpenseFound": "J'ai détecté une dépense récurrente dans votre document : « {{description}} », {{amount}} € ({{frequency}}). Souhaitez-vous que je configure un suivi automatique ?",
-      "recurringExpenseConfirmed": "Terminé ! La dépense récurrente a été configurée — elle sera suivie automatiquement.",
+      "recurringExpenseFound": "J'ai détecté une dépense récurrente dans votre document : « {{description}} », {{amount}}  ({{frequency}}). Souhaitez-vous que je configure un suivi automatique ?",
+      "recurringExpenseConfirmed": "Terminé ! La dépense récurrente a été configurée  elle sera suivie automatiquement.",
       "setUnitPercentage": "📐 Quel pourcentage de la propriété totale cette unité locative représente-t-elle ? (Affecte le calcul de l'amortissement, ex. 100 pour entièrement loué, 33 pour un tiers)",
       "unitPercentageSaved": "✅ Le pourcentage de l'unité locative a été fixé à {{percentage}} %. Le calcul de l'amortissement a été mis à jour.",
       "skipped": "OK, ignoré. Vous pourrez définir le pourcentage plus tard dans Propriétés.",
       "uploadRenewal": "Télécharger le contrat de renouvellement",
       "addContractManually": "Ajouter un contrat manuellement",
-      "pendingRecurringIncome": "Vous avez un revenu récurrent non confirmé d'un téléchargement précédent : « {{description}} », {{amount}} €/mois. Souhaitez-vous le confirmer ?",
-      "pendingRecurringExpense": "Vous avez une dépense récurrente non confirmée d'un téléchargement précédent : « {{description}} », {{amount}} € ({{frequency}}). Souhaitez-vous la confirmer ?",
+      "pendingRecurringIncome": "Vous avez un revenu récurrent non confirmé d'un téléchargement précédent : « {{description}} », {{amount}} /mois. Souhaitez-vous le confirmer ?",
+      "pendingRecurringExpense": "Vous avez une dépense récurrente non confirmée d'un téléchargement précédent : « {{description}} », {{amount}}  ({{frequency}}). Souhaitez-vous la confirmer ?",
       "contractExpiring": "La transaction récurrente « {{description}} » expire dans {{days}} jours ({{endDate}}). Pensez à la renouveler ou à l'ajuster.",
       "contractExpired": "La transaction récurrente « {{description}} » a expiré le {{endDate}}. Le suivi automatique a été arrêté.",
       "multiReceiptDetected": "📑 Le document « {{name}} » contient {{count}} éléments. Les transactions ont été créées automatiquement. Cliquez pour voir les détails.",
-      "assetFound": "Achat d'actif détecté : {{name}}, prix {{price}} €. Veuillez confirmer sur la page des documents.",
-      "propertyAutoCreated": "🏠 Propriété créée automatiquement à partir du contrat d'achat : {{address}}, prix {{price}} €. La reconnaissance peut ne pas être entièrement précis — veuillez vérifier et modifier sous « Avancé → Propriétés ».",
-      "recurringAutoCreated": "📋 Revenu récurrent créé automatiquement à partir du contrat de location : {{address}}, loyer mensuel {{rent}} €. Veuillez vérifier et modifier sous « Avancé → Transactions récurrentes ».",
-      "recurringNoProperty": "📋 Contrat de location détecté ({{address}}, loyer {{rent}} €), mais aucune propriété correspondante trouvée. Veuillez d'abord télécharger le contrat d'achat ou créer la propriété sous « Avancé → Propriétés ».",
-      "propertyAutoCreatedFromRental": "🏠 Aucune propriété correspondante trouvée — créée automatiquement à partir de l'adresse du contrat de location : {{address}}. Le prix d'achat et les autres détails sont manquants. Veuillez télécharger le contrat d'achat ou modifier la propriété sous « Avancé → Propriétés ».",
-      "recurringPartialMatch": "⚠️ L'adresse du contrat de location « {{rentalAddress}} » ne correspond pas exactement à l'adresse de la propriété « {{propertyAddress}} » — il peut s'agir d'une location partielle. Veuillez définir le pourcentage de l'unité sous « Avancé → Propriétés » (utilisé pour le calcul de l'amortissement).",
-      "transactionAutoCreated": "✅ Transaction créée automatiquement à partir du document. Pour annuler, supprimez le document — les transactions liées seront également supprimées.",
-      "taxFormDetected": "📋 Formulaire fiscal détecté dans « {{name}} » — les données extraites sont prêtes pour vérification. Cliquez pour voir et confirmer.",
+      "assetFound": "Achat d'actif détecté : {{name}}, prix {{price}} . Veuillez confirmer sur la page des documents.",
+      "propertyAutoCreated": "🏠 Propriété créée automatiquement à partir du contrat d'achat : {{address}}, prix {{price}} . La reconnaissance peut ne pas être entièrement précis  veuillez vérifier et modifier sous « Avancé → Propriétés ».",
+      "recurringAutoCreated": "📋 Revenu récurrent créé automatiquement à partir du contrat de location : {{address}}, loyer mensuel {{rent}} . Veuillez vérifier et modifier sous « Avancé → Transactions récurrentes ».",
+      "recurringNoProperty": "📋 Contrat de location détecté ({{address}}, loyer {{rent}} ), mais aucune propriété correspondante trouvée. Veuillez d'abord télécharger le contrat d'achat ou créer la propriété sous « Avancé → Propriétés ».",
+      "propertyAutoCreatedFromRental": "🏠 Aucune propriété correspondante trouvée  créée automatiquement à partir de l'adresse du contrat de location : {{address}}. Le prix d'achat et les autres détails sont manquants. Veuillez télécharger le contrat d'achat ou modifier la propriété sous « Avancé → Propriétés ».",
+      "recurringPartialMatch": "⚠️ L'adresse du contrat de location « {{rentalAddress}} » ne correspond pas exactement à l'adresse de la propriété « {{propertyAddress}} »  il peut s'agir d'une location partielle. Veuillez définir le pourcentage de l'unité sous « Avancé → Propriétés » (utilisé pour le calcul de l'amortissement).",
+      "transactionAutoCreated": "✅ Transaction créée automatiquement à partir du document. Pour annuler, supprimez le document  les transactions liées seront également supprimées.",
+      "taxFormDetected": "📋 Formulaire fiscal détecté dans « {{name}} »  les données extraites sont prêtes pour vérification. Cliquez pour voir et confirmer.",
       "viewAndConfirm": "Voir et confirmer",
       "taxFormViewed": "Navigation vers le document pour vérification.",
       "viewDetails": "Voir les détails",
@@ -2774,7 +2804,16 @@
       "laterSaved": "Pas de problème. Vous pourrez archiver cette année de paie plus tard.",
       "noPayrollThisMonth": "Pas d'employés ce mois-ci",
       "recordPayrollMonth": "Enregistrer le mois de paie",
-      "viewDocument": "Voir le document"
+      "viewDocument": "Voir le document",
+      "remindLater": "Me rappeler plus tard",
+      "dontRemindAgain": "Ne plus rappeler",
+      "takeActionNow": "Agir maintenant",
+      "snoozed": "D'accord, je vous le rappellerai plus tard.",
+      "expandDetails": "Développer les détails",
+      "hideDetails": "Masquer les détails",
+      "potentialSavings": "Économies potentielles",
+      "estimatedRefund": "Remboursement estimé",
+      "taxSaving": "Économie fiscale"
     },
     "confirmation": {
       "title": "Taxja a besoin de votre confirmation",
@@ -2808,7 +2847,7 @@
       "undo": "Annuler",
       "undone": "Annulé. L'élément créé a été supprimé.",
       "undoFailed": "L'annulation a échoué. Veuillez supprimer manuellement.",
-      "duplicateUploadReused": "{{name}} a déjà été téléchargé — le document existant a été réutilisé.",
+      "duplicateUploadReused": "{{name}} a déjà été téléchargé  le document existant a été réutilisé.",
       "linked": "Document lié à un enregistrement existant. Aucun doublon créé.",
       "linkExisting": "Doublon détecté",
       "loanRepayment": "Remboursement de prêt",
@@ -2827,7 +2866,7 @@
       "tooLow": "La valeur est inférieure au minimum ({{min}})."
     },
     "sourceTierLightweight": "Réponse basique (IA limitée disponible)",
-    "sourceTierRuleBased": "Réponse basique (service d’IA temporairement indisponible)",
+    "sourceTierRuleBased": "Réponse basique (service dIA temporairement indisponible)",
     "pageDescription": "Posez des questions à l'assistant fiscal IA sur les règles fiscales autrichiennes, la déductibilité et les options d'optimisation."
   },
   "pwa": {
@@ -2951,7 +2990,7 @@
     "suggestions": {
       "title": "Suggestions intelligentes",
       "smartSuggestion": "Suggestion intelligente",
-      "detectedPattern": "J'ai remarqué que vous avez ajouté « {{description}} » ({{amount}} €) {{occurrences}} fois {{frequency}}. Dois-je l'enregistrer automatiquement ?",
+      "detectedPattern": "J'ai remarqué que vous avez ajouté « {{description}} » ({{amount}} ) {{occurrences}} fois {{frequency}}. Dois-je l'enregistrer automatiquement ?",
       "dayOfMonth": "Jour",
       "type": "Type",
       "notNow": "Pas maintenant",
@@ -2996,7 +3035,7 @@
     "recommended": "Recommandé",
     "credits_per_month": "crédits/mois",
     "no_overage": "Pas de dépassement",
-    "overage_price": "Dépassement : {{price}} €/crédit",
+    "overage_price": "Dépassement : {{price}} /crédit",
     "topup_available": "Recharge disponible (validité 12 mois)",
     "credits_word": "crédits",
     "billing": {
@@ -3333,7 +3372,7 @@
     "familienbonus18_24": "Bonus familial (18-24 ans)",
     "alleinverdienerBase": "Crédit soutien de famille unique",
     "alleinverdienerPerChild": "Soutien de famille unique par enfant",
-    "pendlerEuro": "Indemnité de déplacement (€/km)",
+    "pendlerEuro": "Indemnité de déplacement (/km)",
     "sonderausgabenpauschale": "Forfait dépenses spéciales",
     "zuschlagVerkehr": "Supplément crédit transport",
     "zuschlagIncomeLower": "Revenu inférieur supplément",
@@ -3426,7 +3465,7 @@
     "agbFinal": "§ 14 Dispositions finales",
     "agbFinalContent": "Le droit autrichien s'applique, à l'exclusion de la Convention des Nations Unies sur les contrats de vente internationale de marchandises. Les dispositions impératives de la loi autrichienne sur la protection des consommateurs (KSchG) s'appliquent aux consommateurs. Si des dispositions individuelles sont invalides, les dispositions restantes demeurent effectives.",
     "datenschutzTitle": "Politique de confidentialité",
-    "datenschutzMeta": "Conformément aux art. 13 et 14 du RGPD — En date de : mars 2026",
+    "datenschutzMeta": "Conformément aux art. 13 et 14 du RGPD  En date de : mars 2026",
     "controller": "1. Responsable du traitement",
     "controllerContent": "Ylvie Khoo\nThenneberg 51\n2571 Thenneberg, Autriche\nE-mail : taxja@oohk.com\nTéléphone : +43 664 460 1118",
     "dataCollected": "2. Données collectées",
@@ -3518,10 +3557,10 @@
       "svsNotice": "Avis de cotisation SVS",
       "bescheid": "Avis d'imposition"
     },
-    "largeExpenseNoReceipt": "{{count}} dépenses déductibles de plus de 500 € (total {{total_amount}}) n'ont pas de reçu joint. Joignez des documents pour la sécurité en cas d'audit.",
+    "largeExpenseNoReceipt": "{{count}} dépenses déductibles de plus de 500  (total {{total_amount}}) n'ont pas de reçu joint. Joignez des documents pour la sécurité en cas d'audit.",
     "lowConfidenceDocuments": "{{count}} documents ont une faible confiance de reconnaissance et nécessitent une vérification manuelle.",
-    "vatThresholdApproaching": "Votre chiffre d'affaires d'activité indépendante est de {{amount}} — vous approchez du seuil de TVA Kleinunternehmer de {{threshold}}. Le dépassement nécessite l'inscription à la TVA.",
-    "sideIncomeThreshold": "Vos revenus complémentaires sont de {{amount}} — vous approchez du seuil d'exonération de {{threshold}}. Les revenus au-delà de ce seuil sont entièrement imposables.",
+    "vatThresholdApproaching": "Votre chiffre d'affaires d'activité indépendante est de {{amount}}  vous approchez du seuil de TVA Kleinunternehmer de {{threshold}}. Le dépassement nécessite l'inscription à la TVA.",
+    "sideIncomeThreshold": "Vos revenus complémentaires sont de {{amount}}  vous approchez du seuil d'exonération de {{threshold}}. Les revenus au-delà de ce seuil sont entièrement imposables.",
     "deadlineApproaching": "L'échéance fiscale « {{deadline_name}} » est dans {{days_remaining}} jours ({{date}}).",
     "deadlines": {
       "annualReturn": "Déclaration fiscale annuelle (en ligne)",
@@ -3569,7 +3608,7 @@
     },
     "dashboard": {
       "title": "Votre tableau de bord",
-      "message": "Le tableau de bord vous offre un aperçu complet : revenus et dépenses en un coup d'œil, conseils d'économies fiscales et rappels d'actions. Tout ce qu'il vous faut en un seul endroit."
+      "message": "Le tableau de bord vous offre un aperçu complet : revenus et dépenses en un coup d'il, conseils d'économies fiscales et rappels d'actions. Tout ce qu'il vous faut en un seul endroit."
     },
     "transactions": {
       "title": "Transactions",
@@ -3577,7 +3616,7 @@
     },
     "reports": {
       "title": "Rapports fiscaux",
-      "message": "Générez des rapports fiscaux professionnels comprenant le calcul E/A, le Saldenliste et les aperçus de formulaires fiscaux. Exportez en PDF ou CSV à tout moment — tout est prêt pour votre comptable ou le Finanzamt."
+      "message": "Générez des rapports fiscaux professionnels comprenant le calcul E/A, le Saldenliste et les aperçus de formulaires fiscaux. Exportez en PDF ou CSV à tout moment  tout est prêt pour votre comptable ou le Finanzamt."
     },
     "ai": {
       "title": "Assistant IA",
@@ -3596,11 +3635,11 @@
     "dashboard": {
       "year": {
         "title": "Sélecteur d'année",
-        "message": "Changez d'année fiscale ici. Tous les chiffres du tableau de bord — revenus, dépenses et estimations fiscales — seront mis à jour pour l'année sélectionnée."
+        "message": "Changez d'année fiscale ici. Tous les chiffres du tableau de bord  revenus, dépenses et estimations fiscales  seront mis à jour pour l'année sélectionnée."
       },
       "upload": {
         "title": "Téléchargement rapide",
-        "message": "Déposez factures, reçus ou contrats directement ici sur le tableau de bord. Notre moteur OCR numérise et crée les transactions automatiquement — sans quitter la page."
+        "message": "Déposez factures, reçus ou contrats directement ici sur le tableau de bord. Notre moteur OCR numérise et crée les transactions automatiquement  sans quitter la page."
       },
       "overview": {
         "title": "Aperçu financier",
@@ -3656,7 +3695,7 @@
       },
       "tabs": {
         "title": "Onglets de catégorie",
-        "message": "Les documents sont regroupés par type — factures, reçus, contrats, formulaires fiscaux, etc. Changez d'onglet pour trouver rapidement ce que vous cherchez."
+        "message": "Les documents sont regroupés par type  factures, reçus, contrats, formulaires fiscaux, etc. Changez d'onglet pour trouver rapidement ce que vous cherchez."
       },
       "list": {
         "title": "Liste des documents",
@@ -3714,7 +3753,7 @@
     "recurring": {
       "create": {
         "title": "Créer une récurrence",
-        "message": "Configurez une nouvelle transaction récurrente — loyer, remboursement de prêt, assurance ou toute dépense régulière. Choisissez la fréquence et la date de début."
+        "message": "Configurez une nouvelle transaction récurrente  loyer, remboursement de prêt, assurance ou toute dépense régulière. Choisissez la fréquence et la date de début."
       },
       "filters": {
         "title": "Filtres",
@@ -3736,7 +3775,7 @@
       },
       "taxtools": {
         "title": "Espace fiscal",
-        "message": "Votre centre fiscal tout-en-un : préparez les déclarations, vérifiez la disponibilité des documents, obtenez des conseils IA et générez des rapports — tout en un seul endroit."
+        "message": "Votre centre fiscal tout-en-un : préparez les déclarations, vérifiez la disponibilité des documents, obtenez des conseils IA et générez des rapports  tout en un seul endroit."
       }
     },
     "propertyDetail": {
@@ -3764,7 +3803,7 @@
       },
       "preview": {
         "title": "Apercu du document",
-        "message": "Le document original est affiche ici — les fichiers PDF sont integres, les images sont rendues directement. Utilisez cet apercu pour verifier les donnees extraites."
+        "message": "Le document original est affiche ici  les fichiers PDF sont integres, les images sont rendues directement. Utilisez cet apercu pour verifier les donnees extraites."
       },
       "ocrData": {
         "title": "Donnees extraites",
@@ -3782,7 +3821,7 @@
     "assetInsights": {
       "summary": {
         "title": "Résumé actifs-passifs",
-        "message": "Consultez d'un coup d'œil le total de vos actifs, passifs, patrimoine net et service mensuel de la dette."
+        "message": "Consultez d'un coup d'il le total de vos actifs, passifs, patrimoine net et service mensuel de la dette."
       },
       "portfolio": {
         "title": "Portefeuille immobilier",
@@ -3818,7 +3857,7 @@
     "taxTools": {
       "refund": {
         "title": "Situation fiscale et remboursement",
-        "message": "Votre remboursement d'impôt estimé ou votre dette fiscale en un coup d'œil. En fonction de vos revenus, de l'impôt retenu et de vos déductions, le système calcule si vous pouvez espérer un remboursement."
+        "message": "Votre remboursement d'impôt estimé ou votre dette fiscale en un coup d'il. En fonction de vos revenus, de l'impôt retenu et de vos déductions, le système calcule si vous pouvez espérer un remboursement."
       },
       "whatIf": {
         "title": "Simulateur « Et si »",
@@ -4200,7 +4239,7 @@
       "missingTitle": "Justificatif encore manquant",
       "missingHint": "Televersez le contrat ou le justificatif afin que Taxja puisse garder cette dette liee a sa source et l utiliser correctement dans les etapes suivantes.",
       "linkedDocumentId": "Document #{{id}}",
-      "pendingHint": "Les contrats confirmés deviennent automatiquement des dettes. Les contrats encore en révision ou avec des champs manquants restent ici jusqu’à ce que vous les terminiez dans Documents.",
+      "pendingHint": "Les contrats confirmés deviennent automatiquement des dettes. Les contrats encore en révision ou avec des champs manquants restent ici jusquà ce que vous les terminiez dans Documents.",
       "pendingMissingFields": "Champs manquants : {{fields}}",
       "pendingNeedsInput": "Informations requises",
       "pendingReview": "En attente de confirmation",
@@ -4214,6 +4253,10 @@
     },
     "confirm": {
       "deactivate": "Cette action desactivera la dette au lieu de la supprimer definitivement. Continuer ?"
+    },
+    "pendingContracts": {
+      "title": "Contrats de prêt en attente",
+      "subtitle": "Les contrats de prêt encore en révision ou avec des champs clés manquants restent ici jusqu’à leur finalisation dans Documents."
     }
   },
   "assetOverview": {

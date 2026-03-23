@@ -15,6 +15,13 @@ from app.models.classification_correction import ClassificationCorrection
 from app.models.property import Property, PropertyType, PropertyStatus
 from app.models.property_loan import PropertyLoan
 from app.models.liability import Liability, LiabilityType, LiabilityReportCategory
+from app.models.bank_statement_import import (
+    BankStatementImport,
+    BankStatementImportSourceType,
+    BankStatementLine,
+    BankStatementLineStatus,
+    BankStatementSuggestedAction,
+)
 from app.models.reminder_state import ReminderState
 from app.models.loan_installment import (
     LoanInstallment,
@@ -93,6 +100,11 @@ __all__ = [
     "Liability",
     "LiabilityType",
     "LiabilityReportCategory",
+    "BankStatementImport",
+    "BankStatementImportSourceType",
+    "BankStatementLine",
+    "BankStatementLineStatus",
+    "BankStatementSuggestedAction",
     "ReminderState",
     "LoanInstallment",
     "LoanInstallmentSource",

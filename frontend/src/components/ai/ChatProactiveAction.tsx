@@ -190,7 +190,21 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
   const isConfirmed = message.actionStatus === 'confirmed';
   const isDismissed = message.actionStatus === 'dismissed';
   const isPending = message.bucket ? true : message.actionStatus === 'pending';
-  const canExpand = Boolean(message.actionData && Object.keys(message.actionData).length > 0);
+  // Only show expand button if there are user-visible fields (not just internal metadata)
+  const internalKeys = new Set([
+    'suggestion_type', 'suggestion_id', 'suggestion_status',
+    'decision', 'quality_gate_decision',
+    'category', 'action_label_key', 'action label key',
+    'bucket', 'priority', 'source', 'trigger',
+  ]);
+  const visibleDataEntries = Object.entries(message.actionData || {}).filter(([key, value]) => {
+    if (value === null || value === undefined || value === '') return false;
+    if (internalKeys.has(key)) return false;
+    if (key.startsWith('suggestion_') || key.startsWith('_')) return false;
+    if (typeof value === 'string' && value.includes('.') && !value.includes(' ') && value.length > 15) return false;
+    return true;
+  });
+  const canExpand = visibleDataEntries.length > 0;
   const linkActions = [
     message.link
       ? {
@@ -209,6 +223,9 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
         }
       : null,
   ].filter((action): action is { href: string; label: string } => Boolean(action));
+  // Hide link actions when primary button already navigates to the same destination
+  const hasNavigatingPrimary = message.bucket !== 'terminal_action' && !!message.link;
+  const visibleLinkActions = hasNavigatingPrimary ? [] : linkActions;
 
   return (
     <>
@@ -221,7 +238,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
               className="chat-proactive-toggle"
             >
               {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {t('ai.proactive.viewDetails', 'View details')}
+              {expanded ? t('ai.proactive.hideDetails', 'Hide details') : t('ai.proactive.expandDetails', 'Expand details')}
             </button>
           )}
 
@@ -232,12 +249,41 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                   if (value === null || value === undefined || value === '') {
                     return false;
                   }
-                  return !key.startsWith('suggestion_') && key !== 'decision' && key !== 'quality_gate_decision';
+                  // Hide internal metadata fields
+                  const internalKeys = new Set([
+                    'suggestion_type', 'suggestion_id', 'suggestion_status',
+                    'decision', 'quality_gate_decision',
+                    'category', 'action_label_key', 'action label key',
+                    'bucket', 'priority', 'source', 'trigger',
+                  ]);
+                  if (internalKeys.has(key)) return false;
+                  if (key.startsWith('suggestion_') || key.startsWith('_')) return false;
+                  // Hide values that look like i18n keys
+                  if (typeof value === 'string' && value.includes('.') && !value.includes(' ') && value.length > 15) return false;
+                  return true;
                 })
                 .slice(0, 6)
-                .map(([key, value]) => (
+                .map(([key, value]) => {
+                  // Translate known field names
+                  const labelMap: Record<string, string> = {
+                    monthly_rent: t('documents.review.fields.monthlyRent', 'Monthly rent'),
+                    amount: t('documents.review.fields.amount', 'Amount'),
+                    property_address: t('documents.review.fields.propertyAddress', 'Address'),
+                    description: t('common.description', 'Description'),
+                    merchant: t('documents.review.fields.merchant', 'Merchant'),
+                    date: t('documents.review.fields.date', 'Date'),
+                    loan_amount: t('documents.review.fields.loanAmount', 'Loan amount'),
+                    interest_rate: t('documents.review.fields.interestRate', 'Interest rate'),
+                    lender_name: t('documents.review.fields.lenderName', 'Lender'),
+                    potential_savings: t('ai.proactive.potentialSavings', 'Potential savings'),
+                    'potential savings': t('ai.proactive.potentialSavings', 'Potential savings'),
+                    estimated_refund: t('ai.proactive.estimatedRefund', 'Estimated refund'),
+                    tax_saving: t('ai.proactive.taxSaving', 'Tax saving'),
+                  };
+                  const label = labelMap[key] || key.replace(/_/g, ' ');
+                  return (
                   <div key={key} className="chat-recurring-row">
-                    <span>{key.replace(/_/g, ' ')}</span>
+                    <span>{label}</span>
                     <span className="chat-recurring-value">
                       {typeof value === 'number'
                         ? `€ ${value.toLocaleString(getLocaleForLanguage(i18n.language), {
@@ -247,7 +293,8 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                         : String(value)}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           )}
 
@@ -270,9 +317,9 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
             </button>
           </div>
 
-          {linkActions.length > 0 && (
+          {visibleLinkActions.length > 0 && (
             <div className="chat-inline-link-actions">
-              {linkActions.map((action) => (
+              {visibleLinkActions.map((action) => (
                 <button
                   key={`${message.id}-${action.href}`}
                   type="button"

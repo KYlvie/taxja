@@ -6,6 +6,9 @@ import {
 } from '../utils/documentFieldLabel';
 
 const dictionary: Record<string, string> = {
+  'documents.review.transactionType': 'Transaction type (Translated)',
+  'documents.documentType': 'Document type (Translated)',
+  'documents.review.fields.myRole': 'My role (Translated)',
   'documents.review.taxFieldLabels.employer_name': 'Employer (Translated)',
   'documents.review.taxFieldLabels.employee_name': 'Employee (Translated)',
   'documents.review.taxFieldLabels.loan_amount': 'Loan amount (Translated)',
@@ -31,6 +34,8 @@ describe('document field label helpers', () => {
   it('formats normalized field labels through i18n keys', () => {
     expect(formatDocumentFieldLabel('Employer Name', t)).toBe('Employer (Translated)');
     expect(formatDocumentFieldLabel('loan_amount', t)).toBe('Loan amount (Translated)');
+    expect(formatDocumentFieldLabel('Transaction Type', t)).toBe('Transaction type (Translated)');
+    expect(formatDocumentFieldLabel('Document Type', t)).toBe('Document type (Translated)');
   });
 
   it('translates quoted field names inside OCR suggestions', () => {

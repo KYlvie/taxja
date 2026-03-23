@@ -725,6 +725,7 @@ class OCRTransactionService:
             classification_confidence=Decimal(str(suggestion.get("confidence", 0.5))),
             classification_method=suggestion.get("classification_method"),
             needs_review=suggestion.get("needs_review", True),
+            reviewed=suggestion.get("reviewed", False),
         )
         
         self.db.add(transaction)

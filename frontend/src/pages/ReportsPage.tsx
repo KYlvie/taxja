@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BarChart3, ClipboardList, FileStack, Landmark, Scale, type LucideIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BarChart3, ClipboardList, FileStack, Landmark, Scale, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { transactionService } from '../services/transactionService';
 import { useAuthStore } from '../stores/authStore';
 import FuturisticIcon, { type FuturisticIconTone } from '../components/common/FuturisticIcon';
 import EAReport from '../components/reports/EAReport';
@@ -29,6 +31,14 @@ const ReportsPage = () => {
     || userType === 'mixed';
 
   const [activeTab, setActiveTab] = useState<TabType>(isGmbH ? 'bilanz' : 'ea');
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
+
+  useEffect(() => {
+    transactionService
+      .getAll({ needs_review: true }, { page: 1, page_size: 1 })
+      .then((res) => setUnreviewedCount(res.total))
+      .catch(() => setUnreviewedCount(0));
+  }, []);
 
   return (
     <div className="reports-page">
@@ -57,13 +67,6 @@ const ReportsPage = () => {
           </button>
         )}
         <button
-          className={`tab ${activeTab === 'taxform' ? 'active' : ''}`}
-          onClick={() => setActiveTab('taxform')}
-        >
-          <FuturisticIcon icon={tabMeta.taxform.icon} tone={tabMeta.taxform.tone} size="xs" />
-          <span>{isGmbH ? 'K1' : t('reports.tabs.taxForm')}</span>
-        </button>
-        <button
           className={`tab ${activeTab === 'saldenliste' ? 'active' : ''}`}
           onClick={() => setActiveTab('saldenliste')}
         >
@@ -73,11 +76,33 @@ const ReportsPage = () => {
         <button
           className={`tab ${activeTab === 'periodensaldenliste' ? 'active' : ''}`}
           onClick={() => setActiveTab('periodensaldenliste')}
-        >
+          >
           <FuturisticIcon icon={tabMeta.periodensaldenliste.icon} tone={tabMeta.periodensaldenliste.tone} size="xs" />
           <span>{t('reports.tabs.periodensaldenliste')}</span>
         </button>
+        <button
+          className={`tab tab-taxform ${activeTab === 'taxform' ? 'active' : ''}`}
+          onClick={() => setActiveTab('taxform')}
+        >
+          <FuturisticIcon icon={tabMeta.taxform.icon} tone={tabMeta.taxform.tone} size="xs" />
+          <span>{isGmbH ? 'K1' : t('reports.tabs.taxForm')}</span>
+        </button>
       </div>
+
+      {unreviewedCount > 0 && (
+        <div className="report-warning-banner">
+          <TriangleAlert size={16} />
+          <span>
+            {t('reports.unreviewedWarning', {
+              count: unreviewedCount,
+              defaultValue: '{{count}} unreviewed transaction(s) are included in this report. Please review them for accuracy.'
+            })}
+          </span>
+          <Link to="/transactions?needs_review=true">
+            {t('reports.reviewTransactions', 'Review transactions')}
+          </Link>
+        </div>
+      )}
 
       <div className="tab-content">
         {activeTab === 'ea' && (

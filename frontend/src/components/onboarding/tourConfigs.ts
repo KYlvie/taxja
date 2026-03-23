@@ -8,7 +8,7 @@ import { FileUp, Building2, RefreshCw,
   User, ShieldCheck, BriefcaseBusiness, CreditCard, History, NotebookTabs } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-/* ═══════════════════════════════════════════════════════════ */
+/* Tour configuration types */
 export interface TourStep {
   icon: LucideIcon;
   titleKey: string;
@@ -18,7 +18,7 @@ export interface TourStep {
   placement: 'center' | 'right' | 'top' | 'bottom' | 'left';
 }
 
-/* ── Per-page tour configurations ── */
+/* Per-page tour configurations */
 const PAGE_TOURS: Record<string, TourStep[]> = {
   '/dashboard': [
     { icon: CalendarRange,   titleKey: 'tour.dashboard.year.title',     messageKey: 'tour.dashboard.year.message',     target: '.year-selector',       placement: 'bottom' },
@@ -100,7 +100,8 @@ const PAGE_TOURS: Record<string, TourStep[]> = {
     { icon: Sliders,       titleKey: 'tour.taxTools.whatIf.title',     messageKey: 'tour.taxTools.whatIf.message',     target: '.tax-tools-nav-item:nth-child(2)', fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
     { icon: Scale,         titleKey: 'tour.taxTools.flatRate.title',   messageKey: 'tour.taxTools.flatRate.message',   target: '.tax-tools-nav-item:nth-child(3)', fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
     { icon: ClipboardList, titleKey: 'tour.taxTools.filing.title',     messageKey: 'tour.taxTools.filing.message',     target: '.tax-tools-nav-item:nth-child(4)', fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
-    { icon: NotebookTabs,  titleKey: 'tour.taxTools.audit.title',       messageKey: 'tour.taxTools.audit.message',       target: '.tax-tools-nav-item:last-child',  fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
+    { icon: BriefcaseBusiness, titleKey: 'tour.taxTools.employer.title', messageKey: 'tour.taxTools.employer.message', target: '.tax-tools-nav-item:nth-child(5)', fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
+    { icon: NotebookTabs,  titleKey: 'tour.taxTools.audit.title',       messageKey: 'tour.taxTools.audit.message',       target: '.tax-tools-nav-item:nth-child(6)',  fallbackTarget: '.tax-tools-sidebar', placement: 'right' },
   ],
   '/profile': [
     { icon: User,              titleKey: 'tour.profile.basicInfo.title',   messageKey: 'tour.profile.basicInfo.message',   target: '.profile-section:nth-child(1)',  fallbackTarget: '.profile-form', placement: 'top' },
@@ -129,7 +130,7 @@ const PAGE_TOURS: Record<string, TourStep[]> = {
   ],
 };
 
-/* ── Route matcher (prefix match for parametric routes) ── */
+/* Route matcher (prefix match for parametric routes) */
 export function getPageTourSteps(pathname: string): TourStep[] | null {
   // Exact match first (empty arrays mean "no tour for this route")
   if (pathname in PAGE_TOURS) {
@@ -137,14 +138,14 @@ export function getPageTourSteps(pathname: string): TourStep[] | null {
     return steps.length > 0 ? steps : null;
   }
 
-  // Parametric detail pages: /properties/123 → /properties/:id
+  // Parametric detail pages: /properties/123 -> /properties/:id
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length >= 2) {
     const paramRoute = '/' + segments[0] + '/:id';
     if (PAGE_TOURS[paramRoute]) return PAGE_TOURS[paramRoute];
   }
 
-  // Prefix match fallback: /properties/123 → /properties
+  // Prefix match fallback: /properties/123 -> /properties
   for (const route of Object.keys(PAGE_TOURS)) {
     if (!route.includes(':') && pathname.startsWith(route + '/')) return PAGE_TOURS[route];
   }

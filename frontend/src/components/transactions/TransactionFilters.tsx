@@ -8,19 +8,19 @@ import './TransactionFilters.css';
 
 interface TransactionFiltersProps {
   filters: Filters;
+  availableYears?: number[];
   onFilterChange: (filters: Filters) => void;
   onClear: () => void;
 }
 
 const TransactionFilters = ({
   filters,
+  availableYears = [],
   onFilterChange,
   onClear,
 }: TransactionFiltersProps) => {
   const { t, i18n } = useTranslation();
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
-  const currentYear = new Date().getFullYear();
-  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
   // Derive active year from date filters
   const activeYear = (() => {
@@ -63,18 +63,20 @@ const TransactionFilters = ({
 
   return (
     <div className="transaction-filters">
-      <div className="year-quick-filter">
-        {yearOptions.map((year) => (
-          <button
-            key={year}
-            type="button"
-            className={`year-pill ${activeYear === year ? 'active' : ''}`}
-            onClick={() => handleYearClick(year)}
-          >
-            {year}
-          </button>
-        ))}
-      </div>
+      {availableYears.length > 0 ? (
+        <div className="year-quick-filter">
+          {availableYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              className={`year-pill ${activeYear === year ? 'active' : ''}`}
+              onClick={() => handleYearClick(year)}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="filters-grid">
         <div className="filter-group">

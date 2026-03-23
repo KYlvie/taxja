@@ -250,7 +250,7 @@ def calculate_gewinnfreibetrag(
     # Total cap per taxpayer per year
     total = grundfreibetrag + actual_investment_freibetrag
     capped = False
-    if total > config.max_total_freibetrag:
+    if total >= config.max_total_freibetrag:
         actual_investment_freibetrag = (config.max_total_freibetrag - grundfreibetrag).quantize(
             Decimal("0.01")
         )

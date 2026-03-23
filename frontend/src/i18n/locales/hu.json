@@ -74,6 +74,8 @@
     "uploadDocument": "Dokumentum feltöltése",
     "uploadDocumentDesc": "Számlák, bizonylatok vagy szerződések feltöltése",
     "addTransaction": "Tranzakció hozzáadása",
+    "exportCsv": "CSV exportálása",
+    "exportPdf": "PDF exportálása",
     "addTransactionDesc": "Bevétel vagy kiadás manuális rögzítése",
     "viewTransactions": "Tranzakciók megtekintése",
     "viewTransactionsDesc": "Tranzakciók áttekintése és kezelése",
@@ -326,6 +328,8 @@
       "title": "Első lépések",
       "description": "Töltse fel első dokumentumát, vagy rögzítse első bevételét vagy kiadását. Ha a Taxja adatokkal rendelkezik, az irányítópult sokkal hasznosabbá válik.",
       "addTransaction": "Tranzakció hozzáadása",
+      "exportCsv": "CSV exportálása",
+      "exportPdf": "PDF exportálása",
       "uploadDocument": "Bizonylat feltöltése",
       "setupProfile": "Profil beállítása"
     },
@@ -356,6 +360,8 @@
   "transactions": {
     "title": "Tranzakciók",
     "addTransaction": "Tranzakció hozzáadása",
+    "exportCsv": "CSV exportálása",
+    "exportPdf": "PDF exportálása",
     "editTransaction": "Tranzakció szerkesztése",
     "transactionDetails": "Tranzakció részletei",
     "type": "Típus",
@@ -920,6 +926,13 @@
       "viewPurchaseContract": "Adásvételi szerződés megtekintése",
       "viewRentalContract": "Bérleti szerződés megtekintése",
       "viewSourceDocument": "Vásárlási dokumentum megtekintése"
+    },
+    "form": {
+      "documentHint": {
+        "title": "Szerződés vagy igazoló dokumentum hozzáadása",
+        "message": "Az eszköz először létrehozható, de a vásárlási szerződés vagy más igazolás teljessé teszi a nyilvántartást."
+      },
+      "uploadDocument": "Dokumentum feltöltése"
     }
   },
   "documents": {
@@ -944,178 +957,6 @@
     "reprocessStarted": "Újrafeldolgozás elindítva. A jelenlegi eredmény látható marad, amíg az új feldolgozás be nem fejeződik.",
     "reprocessFailed": "Az újrafeldolgozás sikertelen, kérjük próbálja újra",
     "reprocessTimeout": "Az újrafeldolgozás túl sokáig tart. Kérjük, próbálja meg később.",
-    "confirm": "Megerősítés",
-    "confirmSuccess": "Dokumentum megerősítve",
-    "deleteDialog": {
-      "title": "Dokumentum törlése",
-      "hasRelatedData": "⚠️ Ez a dokumentum a következő adatokhoz kapcsolódik:",
-      "property": "Ingatlan",
-      "transactions": "Tranzakciók",
-      "recurringTransaction": "Ismétlődő tranzakció",
-      "recurringTransactions": "Ismétlődő tranzakciók",
-      "linkedMietvertrag": "Kapcsolt bérleti szerződés",
-      "linkedMietvertragWarn": "A 'Mindent töröl' opció választása a bérleti szerződést és az ismétlődő tranzakciókat is törli",
-      "deleteOptions": "Törlési lehetőségek:",
-      "documentOnly": "Csak a dokumentum törlése (ajánlott)",
-      "documentOnlyDesc": "Törli a dokumentum fájlt, de megtartja az összes ingatlan- és tranzakciós adatot",
-      "withData": "Dokumentum és összes kapcsolódó adat törlése",
-      "withDataDesc": "Törli a dokumentumot ÉS az összes kapcsolt ingatlant, tranzakciót és ismétlődő tranzakciót",
-      "warning": "⚠️ Figyelmeztetés: Ez a művelet nem vonható vissza!",
-      "recommendation": "💡 Javaslat: Ha csak a dokumentum fájlt szeretné eltávolítani, válassza a 'Csak a dokumentum törlése' opciót",
-      "cancel": "Mégse",
-      "confirmDocumentOnly": "Csak dokumentum törlése",
-      "confirmWithData": "Mindent töröl"
-    },
-    "tabs": {
-      "list": "Dokumentumaim",
-      "upload": "Feltöltés",
-      "bescheid": "Adóhatározat importálása"
-    },
-    "types": {
-      "payslip": "Fizetési bizonylat",
-      "receipt": "Nyugta",
-      "invoice": "Számla",
-      "purchase_contract": "Adásvételi szerződés",
-      "rental_contract": "Bérleti szerződés",
-      "loan_contract": "Kölcsönszerződés",
-      "bank_statement": "Bankszámlakivonat",
-      "property_tax": "Ingatlanadó",
-      "svs_notice": "SVS értesítés",
-      "lohnzettel": "Bérjegyzék (L16)",
-      "einkommensteuerbescheid": "Jövedelemadó határozat",
-      "e1_form": "Jövedelemadó bevallás (E1)",
-      "l1_form": "Munkavállalói adóbevallás (L1)",
-      "l1k_beilage": "Gyermek kiegészítés (L1k)",
-      "l1ab_beilage": "Levonások kiegészítés (L1ab)",
-      "e1a_beilage": "Önálló vállalkozás kiegészítés (E1a)",
-      "e1b_beilage": "Bérleti jövedelem kiegészítés (E1b)",
-      "e1kv_beilage": "Tőkejövedelem kiegészítés (E1kv)",
-      "u1_form": "Éves ÁFA bevallás (U1)",
-      "u30_form": "ÁFA előbevallás (U30/UVA)",
-      "jahresabschluss": "Éves beszámoló",
-      "spendenbestaetigung": "Adományigazolás",
-      "versicherungsbestaetigung": "Biztosítási igazolás",
-      "kinderbetreuungskosten": "Gyermekgondozási költségek",
-      "fortbildungskosten": "Továbbképzési költségek",
-      "pendlerpauschale": "Ingázási hozzájárulás",
-      "kirchenbeitrag": "Egyházi hozzájárulás",
-      "grundbuchauszug": "Telekkönyvi kivonat",
-      "betriebskostenabrechnung": "Üzemeltetési költség elszámolás",
-      "gewerbeschein": "Vállalkozói engedély",
-      "kontoauszug": "Számlakivonat",
-      "other": "Egyéb",
-      "unknown": "Ismeretlen"
-    },
-    "documentTypes": {
-      "receipt": "Nyugta",
-      "invoice": "Számla",
-      "contract": "Szerződés",
-      "statement": "Kivonat",
-      "purchase_contract": "Adásvételi szerződés",
-      "rental_contract": "Bérleti szerződés",
-      "loan_contract": "Kölcsönszerződés",
-      "bank_statement": "Bankszámlakivonat",
-      "property_tax": "Ingatlanadó",
-      "svs_notice": "SVS értesítés",
-      "lohnzettel": "Bérjegyzék (L16)",
-      "einkommensteuerbescheid": "Jövedelemadó határozat",
-      "e1_form": "Jövedelemadó bevallás (E1)",
-      "l1_form": "Munkavállalói adóbevallás (L1)",
-      "l1k_beilage": "Gyermek kiegészítés (L1k)",
-      "l1ab_beilage": "Levonások kiegészítés (L1ab)",
-      "e1a_beilage": "Önálló vállalkozás kiegészítés (E1a)",
-      "e1b_beilage": "Bérleti jövedelem kiegészítés (E1b)",
-      "e1kv_beilage": "Tőkejövedelem kiegészítés (E1kv)",
-      "u1_form": "Éves ÁFA bevallás (U1)",
-      "u30_form": "ÁFA előbevallás (U30/UVA)",
-      "jahresabschluss": "Éves beszámoló",
-      "spendenbestaetigung": "Adományigazolás",
-      "versicherungsbestaetigung": "Biztosítási igazolás",
-      "kinderbetreuungskosten": "Gyermekgondozási költségek",
-      "fortbildungskosten": "Továbbképzési költségek",
-      "pendlerpauschale": "Ingázási hozzájárulás",
-      "kirchenbeitrag": "Egyházi hozzájárulás",
-      "grundbuchauszug": "Telekkönyvi kivonat",
-      "betriebskostenabrechnung": "Üzemeltetési költség elszámolás",
-      "gewerbeschein": "Vállalkozói engedély",
-      "kontoauszug": "Számlakivonat",
-      "other": "Egyéb",
-      "unknown": "Ismeretlen"
-    },
-    "upload": {
-      "title": "Dokumentumok feltöltése",
-      "dragDrop": "Húzza ide a fájlokat, vagy kattintson a kiválasztáshoz",
-      "mobileHint": "Válasszon fájlokat a telefonjáról, vagy szkenneljen dokumentumot a kamerával",
-      "formats": "Támogatott formátumok: JPG, PNG, PDF (ajánlott 5MB alatt, maximum 10MB)",
-      "selectFiles": "Fájlok kiválasztása",
-      "takePhoto": "Fénykép készítése",
-      "progress": "Feltöltési folyamat",
-      "processing": "Dokumentum felismerése...",
-      "completed": "Befejezve",
-      "error": "Feltöltés sikertelen",
-      "retry": "Újrapróbálás",
-      "clearCompleted": "Befejezettek törlése",
-      "contextHintRental": "Bérleti szerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
-      "contextHintPurchase": "Adásvételi szerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
-      "contextHintLoan": "Kölcsönszerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
-      "stagingTitle": "{{count}} fénykép feldolgozásra kész",
-      "stagingHint": "Húzza az átrendezéshez, majd válassza ki, hogy egy dokumentummá egyesíti, vagy külön tölti fel.",
-      "mergeUpload": "Egyesítés 1 dokumentumba ({{count}} oldal)",
-      "uploadSeparately": "Külön feltöltés ({{count}} dokumentum)",
-      "clearStaging": "Törlés",
-      "groupedPagesMeta": "{{count}} oldal · {{size}} KB",
-      "captureSessionTitle": "{{count}} oldal rögzítve",
-      "captureSessionSubtitle": "Az azonos csoportban lévő fotók feldolgozás előtt egy dokumentummá lesznek egyesítve.",
-      "addPage": "Rögzítés folytatása",
-      "uploadGrouped": "Dokumentum feltöltése",
-      "clearCaptureSession": "Törlés",
-      "duplicateReused": "Duplikált fájl, meglévő dokumentum újrafelhasználva",
-      "uploadButton": "Feltoltes",
-      "stagingHintSingle": "Ellenorizze a fajlt lent, majd kattintson a Feltoltes gombra."
-    },
-    "search": {
-      "placeholder": "Dokumentumok keresése név vagy tartalom alapján..."
-    },
-    "view": {
-      "grid": "Rácsnézet",
-      "list": "Listanézet"
-    },
-    "viewGrid": "Rácsnézet",
-    "viewList": "Listanézet",
-    "filters": {
-      "allTypes": "Összes típus",
-      "allYears": "Összes év",
-      "startDate": "Dátumtól",
-      "endDate": "Dátumig",
-      "needsReview": "Csak felülvizsgálatra váró",
-      "clear": "Szűrők törlése"
-    },
-    "groups": {
-      "all": "Összes dokumentum",
-      "employment": "Foglalkoztatás és bérszámfejtés",
-      "self_employed": "Egyéni vállalkozás / Üzlet",
-      "property": "Ingatlan és bérbeadás",
-      "social_insurance": "Biztosítás és hitelek",
-      "tax_filing": "Adóbevallás és határozatok",
-      "deductions": "Adólevonási dokumentumok",
-      "expense": "Nyugták és számlák",
-      "banking": "Banki ügyek",
-      "other": "Egyéb"
-    },
-    "list": {
-      "name": "Fájl",
-      "type": "Kategória",
-      "date": "Dátum",
-      "uploadDate": "Feltöltés dátuma",
-      "size": "Méret",
-      "confidence": "Megbízhatóság",
-      "status": "Állapot"
-    },
-    "statusReady": "Kész",
-    "statusTransactionCreated": "Tranzakció létrehozva",
-    "emptyGroup": "Ebben a kategóriában még nincsenek dokumentumok a jelenlegi szűrőkkel.",
-    "pageSize": "Elemek oldalanként",
-    "perPage": "/ oldal",
     "review": {
       "title": "Felismerési eredmények áttekintése",
       "loadError": "A dokumentum betöltése sikertelen",
@@ -1332,7 +1173,11 @@
         "kz_210": "KZ210 Bruttó jövedelem",
         "city": "Város",
         "postal_code": "Irányítószám",
-        "unit_number": "Lakásszám"
+        "unit_number": "Lakásszám",
+        "confirmed": "Megerősítve",
+        "confirmed_at": "Megerősítve ekkor",
+        "confirmed_by": "Megerősítette",
+        "transaction_type": "Tranzakció típusa"
       },
       "additionalFields": "További kinyert mezok",
       "contractRoleConfidenceLabel": "Megbízhatóság",
@@ -1366,8 +1211,189 @@
       "changesSaved": "Változtatások mentve",
       "confirmedSuccess": "Dokumentum megerősítve",
       "confirmed": "Megerősítve",
-      "openReview": "OCR eredmények áttekintése és megerősítése"
+      "openReview": "OCR eredmények áttekintése és megerősítése",
+      "moreSuggestions": "Még {{count}} javaslat"
     },
+    "reviewSuccess": "Dokumentum ellenőrizve",
+    "reviewFailed": "Ellenőrzés sikertelen",
+    "deleteDialog": {
+      "title": "Dokumentum törlése",
+      "hasRelatedData": "⚠️ Ez a dokumentum a következő adatokhoz kapcsolódik:",
+      "property": "Ingatlan",
+      "transactions": "Tranzakciók",
+      "recurringTransaction": "Ismétlődő tranzakció",
+      "recurringTransactions": "Ismétlődő tranzakciók",
+      "linkedMietvertrag": "Kapcsolt bérleti szerződés",
+      "linkedMietvertragWarn": "A 'Mindent töröl' opció választása a bérleti szerződést és az ismétlődő tranzakciókat is törli",
+      "deleteOptions": "Törlési lehetőségek:",
+      "documentOnly": "Csak a dokumentum törlése (ajánlott)",
+      "documentOnlyDesc": "Törli a dokumentum fájlt, de megtartja az összes ingatlan- és tranzakciós adatot",
+      "withData": "Dokumentum és összes kapcsolódó adat törlése",
+      "withDataDesc": "Törli a dokumentumot ÉS az összes kapcsolt ingatlant, tranzakciót és ismétlődő tranzakciót",
+      "warning": "⚠️ Figyelmeztetés: Ez a művelet nem vonható vissza!",
+      "recommendation": "💡 Javaslat: Ha csak a dokumentum fájlt szeretné eltávolítani, válassza a 'Csak a dokumentum törlése' opciót",
+      "cancel": "Mégse",
+      "confirmDocumentOnly": "Csak dokumentum törlése",
+      "confirmWithData": "Mindent töröl"
+    },
+    "tabs": {
+      "list": "Dokumentumaim",
+      "upload": "Feltöltés",
+      "bescheid": "Adóhatározat importálása"
+    },
+    "types": {
+      "payslip": "Fizetési bizonylat",
+      "receipt": "Nyugta",
+      "invoice": "Számla",
+      "purchase_contract": "Adásvételi szerződés",
+      "rental_contract": "Bérleti szerződés",
+      "loan_contract": "Kölcsönszerződés",
+      "bank_statement": "Bankszámlakivonat",
+      "property_tax": "Ingatlanadó",
+      "svs_notice": "SVS értesítés",
+      "lohnzettel": "Bérjegyzék (L16)",
+      "einkommensteuerbescheid": "Jövedelemadó határozat",
+      "e1_form": "Jövedelemadó bevallás (E1)",
+      "l1_form": "Munkavállalói adóbevallás (L1)",
+      "l1k_beilage": "Gyermek kiegészítés (L1k)",
+      "l1ab_beilage": "Levonások kiegészítés (L1ab)",
+      "e1a_beilage": "Önálló vállalkozás kiegészítés (E1a)",
+      "e1b_beilage": "Bérleti jövedelem kiegészítés (E1b)",
+      "e1kv_beilage": "Tőkejövedelem kiegészítés (E1kv)",
+      "u1_form": "Éves ÁFA bevallás (U1)",
+      "u30_form": "ÁFA előbevallás (U30/UVA)",
+      "jahresabschluss": "Éves beszámoló",
+      "spendenbestaetigung": "Adományigazolás",
+      "versicherungsbestaetigung": "Biztosítási igazolás",
+      "kinderbetreuungskosten": "Gyermekgondozási költségek",
+      "fortbildungskosten": "Továbbképzési költségek",
+      "pendlerpauschale": "Ingázási hozzájárulás",
+      "kirchenbeitrag": "Egyházi hozzájárulás",
+      "grundbuchauszug": "Telekkönyvi kivonat",
+      "betriebskostenabrechnung": "Üzemeltetési költség elszámolás",
+      "gewerbeschein": "Vállalkozói engedély",
+      "kontoauszug": "Számlakivonat",
+      "other": "Egyéb",
+      "unknown": "Ismeretlen"
+    },
+    "documentTypes": {
+      "receipt": "Nyugta",
+      "invoice": "Számla",
+      "contract": "Szerződés",
+      "statement": "Kivonat",
+      "purchase_contract": "Adásvételi szerződés",
+      "rental_contract": "Bérleti szerződés",
+      "loan_contract": "Kölcsönszerződés",
+      "bank_statement": "Bankszámlakivonat",
+      "property_tax": "Ingatlanadó",
+      "svs_notice": "SVS értesítés",
+      "lohnzettel": "Bérjegyzék (L16)",
+      "einkommensteuerbescheid": "Jövedelemadó határozat",
+      "e1_form": "Jövedelemadó bevallás (E1)",
+      "l1_form": "Munkavállalói adóbevallás (L1)",
+      "l1k_beilage": "Gyermek kiegészítés (L1k)",
+      "l1ab_beilage": "Levonások kiegészítés (L1ab)",
+      "e1a_beilage": "Önálló vállalkozás kiegészítés (E1a)",
+      "e1b_beilage": "Bérleti jövedelem kiegészítés (E1b)",
+      "e1kv_beilage": "Tőkejövedelem kiegészítés (E1kv)",
+      "u1_form": "Éves ÁFA bevallás (U1)",
+      "u30_form": "ÁFA előbevallás (U30/UVA)",
+      "jahresabschluss": "Éves beszámoló",
+      "spendenbestaetigung": "Adományigazolás",
+      "versicherungsbestaetigung": "Biztosítási igazolás",
+      "kinderbetreuungskosten": "Gyermekgondozási költségek",
+      "fortbildungskosten": "Továbbképzési költségek",
+      "pendlerpauschale": "Ingázási hozzájárulás",
+      "kirchenbeitrag": "Egyházi hozzájárulás",
+      "grundbuchauszug": "Telekkönyvi kivonat",
+      "betriebskostenabrechnung": "Üzemeltetési költség elszámolás",
+      "gewerbeschein": "Vállalkozói engedély",
+      "kontoauszug": "Számlakivonat",
+      "other": "Egyéb",
+      "unknown": "Ismeretlen"
+    },
+    "upload": {
+      "title": "Dokumentumok feltöltése",
+      "dragDrop": "Húzza ide a fájlokat, vagy kattintson a kiválasztáshoz",
+      "mobileHint": "Válasszon fájlokat a telefonjáról, vagy szkenneljen dokumentumot a kamerával",
+      "formats": "Támogatott formátumok: JPG, PNG, PDF (ajánlott 5MB alatt, maximum 10MB)",
+      "selectFiles": "Fájlok kiválasztása",
+      "takePhoto": "Fénykép készítése",
+      "progress": "Feltöltési folyamat",
+      "processing": "Dokumentum felismerése...",
+      "completed": "Befejezve",
+      "error": "Feltöltés sikertelen",
+      "retry": "Újrapróbálás",
+      "clearCompleted": "Befejezettek törlése",
+      "contextHintRental": "Bérleti szerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
+      "contextHintPurchase": "Adásvételi szerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
+      "contextHintLoan": "Kölcsönszerződés feltöltése a(z) #{{propertyId}} ingatlanhoz",
+      "stagingTitle": "{{count}} fénykép feldolgozásra kész",
+      "stagingHint": "Húzza az átrendezéshez, majd válassza ki, hogy egy dokumentummá egyesíti, vagy külön tölti fel.",
+      "mergeUpload": "Egyesítés 1 dokumentumba ({{count}} oldal)",
+      "uploadSeparately": "Külön feltöltés ({{count}} dokumentum)",
+      "clearStaging": "Törlés",
+      "groupedPagesMeta": "{{count}} oldal · {{size}} KB",
+      "captureSessionTitle": "{{count}} oldal rögzítve",
+      "captureSessionSubtitle": "Az azonos csoportban lévő fotók feldolgozás előtt egy dokumentummá lesznek egyesítve.",
+      "addPage": "Rögzítés folytatása",
+      "uploadGrouped": "Dokumentum feltöltése",
+      "clearCaptureSession": "Törlés",
+      "duplicateReused": "Duplikált fájl, meglévő dokumentum újrafelhasználva",
+      "uploadButton": "Feltoltes",
+      "stagingHintSingle": "Ellenorizze a fajlt lent, majd kattintson a Feltoltes gombra."
+    },
+    "search": {
+      "placeholder": "Dokumentumok keresése név vagy tartalom alapján..."
+    },
+    "view": {
+      "grid": "Rácsnézet",
+      "list": "Listanézet"
+    },
+    "viewGrid": "Rácsnézet",
+    "viewList": "Listanézet",
+    "filters": {
+      "allTypes": "Összes típus",
+      "allYears": "Összes év",
+      "startDate": "Dátumtól",
+      "endDate": "Dátumig",
+      "needsReview": "Csak felülvizsgálatra váró",
+      "clear": "Szűrők törlése"
+    },
+    "groups": {
+      "all": "Összes dokumentum",
+      "employment": "Foglalkoztatás és bérszámfejtés",
+      "self_employed": "Egyéni vállalkozás / Üzlet",
+      "property": "Ingatlan és bérbeadás",
+      "social_insurance": "Biztosítás és hitelek",
+      "tax_filing": "Adóbevallás és határozatok",
+      "deductions": "Adólevonási dokumentumok",
+      "expense": "Nyugták és számlák",
+      "banking": "Banki ügyek",
+      "other": "Egyéb"
+    },
+    "list": {
+      "name": "Fájl",
+      "type": "Kategória",
+      "date": "Dátum",
+      "uploadDate": "Feltöltés dátuma",
+      "size": "Méret",
+      "confidence": "Megbízhatóság",
+      "status": "Állapot"
+    },
+    "statusReady": "Kész",
+    "statusTransactionCreated": "Tranzakció létrehozva",
+    "status": {
+      "processing": "Feldolgozás",
+      "pendingReview": "Ellenőrzésre vár",
+      "transactionCreated": "Tranzakció létrehozva",
+      "contractProcessed": "Szerződés feldolgozva",
+      "reviewed": "Ellenőrizve",
+      "recognized": "Felismerve"
+    },
+    "emptyGroup": "Ebben a kategóriában még nincsenek dokumentumok a jelenlegi szűrőkkel.",
+    "pageSize": "Elemek oldalanként",
+    "perPage": "/ oldal",
     "bescheid": {
       "title": "Jövedelemadó határozat importálása",
       "description": "Töltse fel az Einkommensteuerbescheid-et az adatok automatikus rögzítéséhez",
@@ -1992,7 +2018,14 @@
     "fields": {
       "type": "Típus"
     },
-    "preview": "Dokumentum előnézet"
+    "preview": "Dokumentum előnézet",
+    "reviewAction": "Ellenőrzés",
+    "reviewActionSuccess": "Dokumentum ellenőrizve",
+    "reviewActionFailed": "Ellenőrzés sikertelen",
+    "confirmReview": "Megerősíti?",
+    "exportZip": "{{count}} dokumentum exportálása ZIP-be",
+    "exportSuccess": "{{count}} dokumentum exportálva",
+    "exportError": "Exportálás sikertelen"
   },
   "profile": {
     "basicInfo": "Alapinformációk",
@@ -2203,6 +2236,8 @@
   },
   "reports": {
     "pageSubtitle": "Adójelentések készítése, audit-készültség ellenőrzése és adatok exportálása",
+    "unreviewedWarning": "{{count}} nem ellenőrzött tranzakció szerepel ebben a jelentésben. Kérjük, ellenőrizze a pontosságukat.",
+    "reviewTransactions": "Tranzakciók ellenőrzése",
     "tabs": {
       "ea": "Bevétel/Kiadás jelentés",
       "bilanz": "Mérleg / Eredménykimutatás",
@@ -2259,7 +2294,8 @@
         "bankspesen": "Bankköltségek",
         "zinsen": "Kamatköltségek",
         "sonstige": "Egyéb üzleti költségek"
-      }
+      },
+      "regenerate": "Újragenerálás"
     },
     "bilanz": {
       "generate": "Mérleg / Eredménykimutatás készítése",
@@ -2504,7 +2540,7 @@
       "aggregate_total": "Összesítés az összes ingatlanra",
       "property_result": "Eredmény"
     },
-    "noOfficialTemplate": "Ehhez a nyomtatványhoz nem érhető el hivatalos BMF PDF sablon. Kérjük, használja az egyszerűsített előnézetet és adja be a FinanzOnline-on keresztül.",
+    "noOfficialTemplate": "Ehhez a nyomtatványhoz nem érhető el hivatalos BMF PDF sablon. A „PDF letöltése” gomb ilyenkor az oldalon látható előnézeti táblázatot exportálja PDF-be. Ezután továbbra is a FinanzOnline rendszeren keresztül nyújtsa be, vagy kérjen papírűrlapot, ha szükséges.",
     "officialPdfAvailable": "Hivatalos BMF PDF elérhető",
     "selectForm": "Melyik nyomtatványra van szüksége?",
     "mainForm": "Fő nyomtatvány"
@@ -2721,7 +2757,7 @@
         "deadline": "A 2026-os adóbevallási határidő június 30 — ne felejtse el.",
         "receipts": "Irodaszerek, utazási költségek és szakkönyvek mind levonhatók üzleti kiadásként.",
         "svs": "Az SVS társadalombiztosítási járulékok is levonhatók — rögzítse őket.",
-        "homeOffice": "Otthonról dolgozik? Napi legfeljebb 3 €-t, évi max. 300 €-t vonhat le."
+        "homeOffice": "Otthonról dolgozik? Napi legfeljebb 3 -t, évi max. 300 -t vonhat le."
       },
       "nextDeadline": "Következő határidő: {{title}} ({{date}})",
       "deleteSuccess": "🗑️ A(z) \"{{name}}\" dokumentum törölve.",
@@ -2729,19 +2765,19 @@
       "deleteWithDataHint": "A dokumentum és az összes kapcsolt adat törölve. Ha ez hiba volt, töltse fel újra az eredeti dokumentumot.",
       "personalizedTips": "Az Ön adatai alapján néhány javaslat:",
       "potentialSave": "lehetséges megtakarítás ~",
-      "recurringFound": "Észrevettem, hogy bérleti szerződést töltött fel! {{address}} havi bérleti díja €{{rent}}. Beállítsam az automatikus nyomon követést?",
+      "recurringFound": "Észrevettem, hogy bérleti szerződést töltött fel! {{address}} havi bérleti díja {{rent}}. Beállítsam az automatikus nyomon követést?",
       "recurringConfirmed": "Kész! Beállítottam az ismétlődő bérleti bevételt — minden hónapban automatikusan nyomon lesz követve.",
       "recurringDismissed": "Rendben, nem hozok létre ismétlődő tranzakciót ehhez.",
       "skip": "Kihagyás",
-      "recurringExpenseFound": "Ismétlődő kiadást észleltem a dokumentumban: \"{{description}}\", €{{amount}} ({{frequency}}). Beállítsam az automatikus nyomon követést?",
+      "recurringExpenseFound": "Ismétlődő kiadást észleltem a dokumentumban: \"{{description}}\", {{amount}} ({{frequency}}). Beállítsam az automatikus nyomon követést?",
       "recurringExpenseConfirmed": "Kész! Az ismétlődő kiadás beállítva — automatikusan nyomon lesz követve.",
       "setUnitPercentage": "📐 Az ingatlan hány százalékát képviseli ez a bérelt egység? (Befolyásolja az értékcsökkenés számítását, pl. 100 teljes bérbeadás, 33 egyharmad esetén)",
       "unitPercentageSaved": "✅ Bérelt egység százalék beállítva: {{percentage}}%. Értékcsökkenés számítás frissítve.",
       "skipped": "OK, kihagyva. A százalékot később beállíthatja az Ingatlanok alatt.",
       "uploadRenewal": "Megújítási szerződés feltöltése",
       "addContractManually": "Szerződés manuális hozzáadása",
-      "pendingRecurringIncome": "Korábbi feltöltésből megerősítetlen ismétlődő bevétele van: \"{{description}}\", €{{amount}}/hó. Megerősíti?",
-      "pendingRecurringExpense": "Korábbi feltöltésből megerősítetlen ismétlődő kiadása van: \"{{description}}\", €{{amount}} ({{frequency}}). Megerősíti?",
+      "pendingRecurringIncome": "Korábbi feltöltésből megerősítetlen ismétlődő bevétele van: \"{{description}}\", {{amount}}/hó. Megerősíti?",
+      "pendingRecurringExpense": "Korábbi feltöltésből megerősítetlen ismétlődő kiadása van: \"{{description}}\", {{amount}} ({{frequency}}). Megerősíti?",
       "contractExpiring": "Az ismétlődő tranzakció \"{{description}}\" {{days}} napon belül lejár ({{endDate}}). Fontolja meg a megújítást.",
       "contractExpired": "Az ismétlődő tranzakció \"{{description}}\" lejárt ({{endDate}}). Az automatikus nyomon követés leállt.",
       "multiReceiptDetected": "📑 A(z) \"{{name}}\" dokumentum {{count}} tételt tartalmaz. A tranzakciók automatikusan létrehozva.",
@@ -2774,7 +2810,16 @@
       "laterSaved": "Nincs probléma. Ezt a bérszámfejtési évet később is archiválhatja.",
       "noPayrollThisMonth": "Ebben a hónapban nincsenek alkalmazottak",
       "recordPayrollMonth": "Bérszámfejtési hónap rögzítése",
-      "viewDocument": "Dokumentum megtekintése"
+      "viewDocument": "Dokumentum megtekintése",
+      "remindLater": "Emlékeztessen később",
+      "dontRemindAgain": "Ne emlékeztessen többet",
+      "takeActionNow": "Azonnali intézkedés",
+      "snoozed": "Rendben, később emlékeztetem.",
+      "expandDetails": "Részletek mutatása",
+      "hideDetails": "Részletek elrejtése",
+      "potentialSavings": "Lehetséges megtakarítás",
+      "estimatedRefund": "Becsült visszatérítés",
+      "taxSaving": "Adómegtakarítás"
     },
     "confirmation": {
       "title": "A Taxja megerősítést kér",
@@ -2951,7 +2996,7 @@
     "suggestions": {
       "title": "Intelligens javaslatok",
       "smartSuggestion": "Intelligens javaslat",
-      "detectedPattern": "Észrevettem, hogy a(z) \"{{description}}\" (€{{amount}}) {{occurrences}} alkalommal {{frequency}} lett hozzáadva. Rögzítsem automatikusan?",
+      "detectedPattern": "Észrevettem, hogy a(z) \"{{description}}\" ({{amount}}) {{occurrences}} alkalommal {{frequency}} lett hozzáadva. Rögzítsem automatikusan?",
       "dayOfMonth": "Nap",
       "type": "Típus",
       "notNow": "Most nem",
@@ -3446,7 +3491,7 @@
     "dataExport": "8. Adatexport",
     "dataExportContent": "A Taxja beépített adatexport funkciót (JSON/CSV) biztosít a fiókbeállításokban.",
     "cookies": "9. Sütik",
-    "cookiesContent": "A Taxja kizárólag feltétlenül szükséges sütiket használ az ePrivacy irányelv 5. cikk (3) bekezdése és az osztrák TKG 2021 § 165(3) szerint. Nem használunk nyomkövető, elemző vagy hirdetési sütiket.",
+    "cookiesContent": "A Taxja kizárólag feltétlenül szükséges sütiket használ az ePrivacy irányelv 5. cikk (3) bekezdése és az osztrák TKG 2021 § 165(3) szerint. Külön hozzájárulás nem szükséges, mivel ezek a sütik elengedhetetlenek a kért szolgáltatás nyújtásához.\n\n• access_token (HttpOnly, Secure, SameSite=Lax): Hitelesítési azonosító, 30 percig érvényes.\n• refresh_token (HttpOnly, Secure, SameSite=Strict): Automatikus munkamenet-megújítást tesz lehetővé újbóli bejelentkezés nélkül, 7 napig érvényes.\n• Nyelvi beállítás: A böngésző helyi tárolójában van elmentve (nem süti).\n\nMinden hitelesítési süti védett a HttpOnly (nincs JavaScript-hozzáférés), Secure (csak HTTPS) és SameSite (CSRF-védelem) jelzőkkel. Nem használunk nyomkövető, elemző vagy hirdetési sütiket.",
     "complaint": "10. Panaszjog",
     "complaintContent": "Osztrák Adatvédelmi Hatóság, Barichgasse 40–42, 1030 Wien, dsb@dsb.gv.at, www.dsb.gv.at"
   },
@@ -3498,7 +3543,9 @@
     "reasonConflicted": "Ellentmondó javításokat észleltünk ehhez a leíráshoz",
     "reasonStrict": "Mentve a kézi kategória javításból.",
     "reasonAdaptive": "Adaptívan tanulva ismételt megerősítésekből.",
-    "ruleTypeOverride": "Felülbírálat"
+    "ruleTypeOverride": "Felülbírálat",
+    "searchPlaceholder": "Keresés leírás vagy kategória alapján...",
+    "searchDeductPlaceholder": "Keresés leírás alapján..."
   },
   "healthCheck": {
     "title": "Adó-egészségügyi ellenőrzés",
@@ -3551,6 +3598,8 @@
     "newUser": "Üdvözöljük! Kezdje az első dokumentum feltöltésével vagy egy tranzakció hozzáadásával.",
     "gettingStarted": {
       "addTransaction": "Kezdje az első bevételi vagy kiadási tranzakció hozzáadásával.",
+      "exportCsv": "CSV exportálása",
+      "exportPdf": "PDF exportálása",
       "uploadDocument": "Töltsön fel egy dokumentumot (bérjegyzék, bizonylat, szerződés) a kezdéshez.",
       "addProperty": "Adja hozzá bérleti ingatlanát az értékcsökkenés és bérleti bevétel nyomon követéséhez."
     }
@@ -3595,316 +3644,320 @@
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Évválasztó",
-        "message": "Itt válthatsz az adóévek között. Az irányítópult összes adata — bevételek, kiadások és adóbecslések — a kiválasztott évre frissül."
+        "title": "Adóév",
+        "message": "Válassza ki a kívánt adóévet. Az irányítópult összes adata ennek megfelelően frissül."
       },
       "upload": {
         "title": "Gyors feltöltés",
-        "message": "Húzd ide a számlákat, nyugtákat vagy szerződéseket közvetlenül az irányítópultra. Az OCR motorunk automatikusan beolvassa és létrehozza a tranzakciókat — nem kell elhagynod az oldalt."
+        "message": "Húzza ide a dokumentumokat az azonnali feltöltéshez. A Taxja automatikusan osztályozza és kinyeri az adatokat."
       },
       "overview": {
         "title": "Pénzügyi áttekintés",
-        "message": "Ezek a kártyák egy pillantásra mutatják a legfontosabb pénzügyi mutatókat: összbevétel, összkiadás, becsült adóteher, nettó eredmény, ÁFA küszöb és ellenőrzésre váró dokumentumok."
+        "message": "Bevételek, kiadások és adóösszesítés egy pillantásra. Minden kártya egy kulcsfontosságú mutatót jelenít meg."
       },
       "trends": {
-        "title": "Trendgrafikonok",
-        "message": "Vizuális grafikonok követik bevételeid és kiadásaid alakulását. Fedezd fel a szezonális mintákat és hasonlítsd össze hónapról hónapra."
+        "title": "Trenddiagramok",
+        "message": "Kövesse nyomon bevételei és kiadásai időbeli alakulását. Fedezzen fel mintákat és tervezzen előre."
       },
       "plan": {
-        "title": "Előfizetés és státusz",
-        "message": "Itt lathatja az aktualis csomagjat es a szlogent. Kattintson az elofizetes kezelesehez."
+        "title": "Előfizetési állapot",
+        "message": "Tekintse meg jelenlegi csomagját és a fennmaradó krediteket. Bármikor válthat magasabb csomagra."
       },
       "language": {
-        "title": "Nyelvvalto",
-        "message": "A Taxja 9 nyelvet tamogat. A teljes felulet azonnal az On altal valasztott nyelvre valt."
+        "title": "Nyelv",
+        "message": "Váltson felületi nyelvet. A Taxja támogatja a németet, angolt, kínait és más nyelveket."
       },
       "theme": {
-        "title": "Temavalto",
-        "message": "Valtson a vilagos tema es a sotet Cyber mod kozott a szem terhelese csokkentese erdekeben."
+        "title": "Téma",
+        "message": "Váltson a világos és sötét mód között ízlése szerint."
       }
     },
     "transactions": {
+      "classRules": {
+        "title": "Osztályozási szabályok",
+        "message": "Kezelje a tranzakciókat automatikusan kategorizáló szabályokat. A Taxja tanul a javításaiból."
+      },
+      "export": {
+        "title": "Exportálás",
+        "message": "Töltse le tranzakcióit CSV vagy PDF formátumban nyilvántartásához vagy adótanácsadójának."
+      },
+      "addNew": {
+        "title": "Tranzakció hozzáadása",
+        "message": "Manuálisan hozzon létre új bevételi vagy kiadási bejegyzést, ha nincs feltöltendő dokumentum."
+      },
       "filters": {
         "title": "Szűrők",
-        "message": "Szűrd a tranzakciókat időszak, típus (bevétel/kiadás), kategória, ingatlan vagy állapot szerint. Kombinálj több szűrőt a pontos eredményekhez."
+        "message": "Szűrje a tranzakciókat dátum, kategória, típus vagy összeg szerint."
       },
       "list": {
         "title": "Tranzakciólista",
-        "message": "Minden tranzakciód itt jelenik meg. Kattints egy sorra a részletek megtekintéséhez, összeg szerkesztéséhez vagy kategória módosításához."
+        "message": "Minden tranzakció egy helyen. Kattintson bármely sorra a részletekért, szerkesztéshez vagy dokumentum csatolásához."
       },
       "paging": {
         "title": "Lapozás",
-        "message": "Navigálj a tranzakciós oldalak között. Az oldalankénti elemszámot is módosíthatod."
-      },
-      "classRules": {
-        "title": "Osztalyozasi memoria",
-        "message": "A rendszer tanul a javitasaibol. Itt tekintheti meg es kezelheti a tanult osztalyozasi szabalyokat."
-      },
-      "export": {
-        "title": "Exportalas CSV-be",
-        "message": "Exportalja az osszes szurt tranzakciot CSV fajlba a konyvelo vagy Excel szamara."
-      },
-      "addNew": {
-        "title": "Tranzakcio hozzaadasa",
-        "message": "Hozzon letre uj tranzakciot kezzel. Adja meg az osszeget, kategoriat, datumot es az opcionalis reszleteket."
+        "message": "Navigáljon a tranzakciós oldalak között. Állítsa be az oldalankénti elemszámot."
       }
     },
     "documents": {
       "upload": {
-        "title": "Feltöltési zóna",
-        "message": "Húzd ide a fájlokat, vagy kattints a tallózáshoz. Támogatott formátumok: PDF, JPG és PNG. Az OCR motorunk automatikusan kivonja az adatokat."
+        "title": "Dokumentumok feltöltése",
+        "message": "Töltsön fel számlákat, nyugtákat vagy adónyomtatványokat. A Taxja OCR-rel és MI-vel nyeri ki az adatokat."
       },
       "tabs": {
-        "title": "Kategória fülek",
-        "message": "A dokumentumok típus szerint vannak csoportosítva — számlák, nyugták, szerződések, adónyomtatványok stb. Válts fület a gyors kereséshez."
+        "title": "Dokumentumcsoportok",
+        "message": "A dokumentumok állapot szerint vannak rendezve: ellenőrzésre vár, feldolgozott és archivált. Váltson füleket a szűréshez."
       },
       "list": {
         "title": "Dokumentumlista",
-        "message": "Böngészd az összes feltöltött dokumentumot. Minden bejegyzés mutatja a felismert típust, kinyert összeget, feldolgozási állapotot és a kapcsolt tranzakciót."
+        "message": "Böngésszen az összes feltöltött dokumentum között. Kattintson egy elemre a kinyert adatok ellenőrzéséhez."
+      }
+    },
+    "documentDetail": {
+      "header": {
+        "title": "Dokumentum fejléce",
+        "message": "Dokumentum neve, feltöltési dátuma és feldolgozási állapota. Használja a műveleteket az újrafeldolgozáshoz vagy törléshez."
+      },
+      "preview": {
+        "title": "Dokumentum előnézet",
+        "message": "Tekintse meg az eredeti dokumentumot. Nagyítson a részletekre a kinyert adatokkal való összehasonlításhoz."
+      },
+      "ocrData": {
+        "title": "Kinyert adatok",
+        "message": "OCR-rel és MI-vel kinyert mezők. Ellenőrizzen minden értéket és javítsa a hibákat a megerősítés előtt."
+      },
+      "linked": {
+        "title": "Kapcsolódó rekordok",
+        "message": "Tekintse meg, melyik tranzakció vagy eszköz kapcsolódik ehhez a dokumentumhoz. Hozzon létre új kapcsolatokat közvetlenül."
+      },
+      "editMode": {
+        "title": "Mezők szerkesztése",
+        "message": "Váltson szerkesztési módba a kinyert értékek javításához. Módosításai javítják az MI jövőbeli pontosságát."
       }
     },
     "reports": {
       "tabs": {
-        "title": "Jelentés fülek",
-        "message": "Válaszd ki a jelentés típusát: E/A számítás, főkönyvi kivonat, mérleg, adónyomtatvány előnézet (E1, L1, U1) és további."
+        "title": "Jelentéstípusok",
+        "message": "Válasszon jövedelemadó, áfa és más jelentéstípusok közül."
+      },
+      "generate": {
+        "title": "Jelentés generálása",
+        "message": "Számítsa ki az adójelentést a kiválasztott időszakra. A jelentés a legfrissebb adatokkal frissül."
+      },
+      "print": {
+        "title": "Nyomtatás",
+        "message": "Nyomtassa ki a jelentést közvetlenül a böngészőből papíralapú nyilvántartáshoz."
       },
       "content": {
         "title": "Jelentés tartalma",
-        "message": "A generált jelentés itt jelenik meg. Ellenőrizd az adatokat, majd exportáld PDF-be vagy CSV-be a könyvelődnek vagy az adóhivatalnak."
-      },
-      "generate": {
-        "title": "Jelentes letrehozasa",
-        "message": "Kattintson ide a kivalasztott jelentes letrehozasahoz a megadott adoevre."
-      },
-      "print": {
-        "title": "Nyomtatas",
-        "message": "Nyomtassa ki a letrehozott jelentest kozvetlenul, vagy mentse PDF-kent a bongeszo nyomtatasi parbeszedablakan keresztul."
+        "message": "Az adószámítás részletes bontása. Minden sor megfelel a hivatalos nyomtatvány egy mezőjének."
       },
       "finanzOnline": {
-        "title": "FinanzOnline megnyitasa",
-        "message": "Megnyitja az osztrak adoportalt (FinanzOnline) egy uj lapon az adobevallas benyujtasahoz."
+        "title": "FinanzOnline",
+        "message": "Nyújtsa be adóbevallását elektronikusan az osztrák adóhatóságnak a FinanzOnline-on keresztül."
       },
       "downloadForm": {
-        "title": "Hivatalos urlap letoltese",
-        "message": "Toltse le a hivatalos BMF adonyomtatvanyt (PDF) es toltse ki az elozetesben megadott ertekekkel."
+        "title": "Nyomtatvány letöltése",
+        "message": "Töltse le az előre kitöltött hivatalos adónyomtatványt (E1, E1a, U30 stb.) PDF formátumban."
       }
     },
     "properties": {
-      "cards": {
-        "title": "Összes eszköz",
-        "message": "Ingatlanjai, eszközei, járművei és egyéb vagyontárgyai egységes listában. Kattintson egy kártyára a részletekért, szerkesztéshez vagy értékcsökkenés kezeléséhez."
-      },
       "overview": {
-        "title": "Eszközáttekintés",
-        "message": "Nyissa meg a portfólió irányítópultot az összes ingatlan és eszköz összehasonlításához."
+        "title": "Portfólió áttekintés",
+        "message": "Tekintse meg az összes ingatlan és eszköz összesített mutatóit egyetlen irányítópulton."
       },
       "add": {
-        "title": "Eszkoz hozzaadasa",
-        "message": "Adjon hozza kezzel uj ingatlant, jarmuvet vagy egyeb eszkozt. Az ertekcsokkenest a rendszer automatikusan szamolja."
+        "title": "Ingatlan hozzáadása",
+        "message": "Regisztráljon új ingatlant vagy eszközt. A Taxja automatikusan számítja az értékcsökkenést (AfA) és a bérbevételt."
+      },
+      "cards": {
+        "title": "Ingatlankártyák",
+        "message": "Minden kártya egy ingatlant mutat kulcsfontosságú adatokkal: cím, bérleti állapot és aktuális könyv szerinti érték."
       },
       "edit": {
-        "title": "Eszkoz szerkesztese",
-        "message": "Kattintson a ceruza ikonra az eszkoz reszleteinek szerkesztesehez."
+        "title": "Ingatlan szerkesztése",
+        "message": "Frissítse az adatokat: vételár, terület vagy értékcsökkenési módszer."
       },
       "archive": {
-        "title": "Archivalas es szures",
-        "message": "Archivalja az eszkozoket, amelyeket mar nem kezel aktivan. Jelolonegyzet atkapcsolasaval megjelenithetok az archivalt elemek."
+        "title": "Archívum kapcsoló",
+        "message": "Jelenítse meg vagy rejtse el az archivált ingatlanokat. Az archivált tételek a BAO §132 szerint 7 évig megőrződnek."
+      }
+    },
+    "assetInsights": {
+      "summary": {
+        "title": "Összefoglaló",
+        "message": "Kulcsmutatók az összes eszközre: összérték, éves értékcsökkenés és nettó bérbevétel."
+      },
+      "portfolio": {
+        "title": "Portfólió összehasonlítás",
+        "message": "Hasonlítsa össze az ingatlanokat egymás mellett hozam, kihasználtság és más mutatók alapján."
+      },
+      "otherAssets": {
+        "title": "Egyéb eszközök",
+        "message": "Nem ingatlan eszközök: járművek, berendezések vagy immateriális javak nyilvántartása itt történik."
+      },
+      "reports": {
+        "title": "Eszközjelentések",
+        "message": "Készítsen részletes eszközjelentéseket adótanácsadójának vagy belső elemzéshez."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Műveletek",
+        "message": "Szerkessze, archiválja vagy törölje ezt az ingatlant. Hozzáférés további eszközökhöz, például értékcsökkenési ütemtervekhez."
+      },
+      "info": {
+        "title": "Ingatlaninformációk",
+        "message": "Alapadatok: cím, vásárlás dátuma, ár, terület és értékcsökkenési paraméterek."
+      },
+      "contracts": {
+        "title": "Bérleti szerződések",
+        "message": "Kezelje az ingatlan bérleti szerződéseit. Kövesse nyomon a bérlőket, bérleti díjakat és szerződési időszakokat."
+      },
+      "transactions": {
+        "title": "Tranzakciók",
+        "message": "Az ingatlanhoz kapcsolódó összes bevétel és kiadás. Hasznos az Anlage V jelentéséhez."
+      }
+    },
+    "liabilities": {
+      "overview": {
+        "title": "Kötelezettségek áttekintése",
+        "message": "Összesített adósságmutatók: teljes egyenleg, havi törlesztések és kamatok összesen."
+      },
+      "add": {
+        "title": "Kötelezettség hozzáadása",
+        "message": "Rögzítsen új hitelt vagy kötelezettséget. A törlesztések és levonható kamatok automatikusan nyomon követhetők."
+      },
+      "list": {
+        "title": "Kötelezettséglista",
+        "message": "Minden hitel és kötelezettség egy helyen. Kattintson egy elemre a törlesztési ütemterv megtekintéséhez."
+      },
+      "detail": {
+        "title": "Részletek panel",
+        "message": "Tekintse meg a törlesztési ütemtervet, a fennmaradó egyenleget és a kapcsolódó ingatlant vagy eszközt."
       }
     },
     "recurring": {
       "create": {
         "title": "Ismétlődő létrehozása",
-        "message": "Állíts be új ismétlődő tranzakciót — bérleti díj, hiteltörlesztés, biztosítás vagy bármilyen rendszeres kiadás. Válaszd ki a gyakoriságot és kezdő dátumot."
+        "message": "Állítson be ismétlődő tranzakciót, amely automatikusan létrejön ütemezés szerint."
       },
       "filters": {
         "title": "Szűrők",
-        "message": "Szűrd az ismétlődő tranzakciókat típus, gyakoriság, ingatlan vagy állapot (aktív/szüneteltett) szerint."
+        "message": "Szűrje az ismétlődő bejegyzéseket gyakoriság, kategória vagy aktív állapot szerint."
       },
       "list": {
         "title": "Ismétlődő lista",
-        "message": "Minden ismétlődő tranzakciód itt van felsorolva. Lásd a következő végrehajtás dátumát, szüneteltesd vagy folytasd, vagy szerkeszd a részleteket."
+        "message": "Tekintse meg és kezelje az összes ismétlődő tranzakciót. Szüneteltesse, szerkessze vagy törölje."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Vagyon- és kötelezettségkezelés",
-        "message": "Kezelje ingatlanait, berendezéseit és kötelezettségeit. Kövesse az értékcsökkenést, tekintse át portfólióját, és kezelje hiteleit."
+        "title": "Eszközök és ingatlanok",
+        "message": "Kezelje az ingatlanokat, járműveket és más amortizálható eszközöket. Kövesse az AfA-t és könyv szerinti értékeket."
       },
       "automation": {
-        "title": "Szabályok és automatizálás",
-        "message": "Állíts be ismétlődő tranzakciókat és kezeld a besorolási memóriát. A rendszer tanul a javításaidból, hogy automatikusan kategorizálja a jövőbeli tranzakciókat."
+        "title": "Automatizálás",
+        "message": "Állítson be ismétlődő tranzakciókat, osztályozási szabályokat és automatizált folyamatokat."
       },
       "taxtools": {
-        "title": "Adó munkaterület",
-        "message": "Minden egyben adóközpont: bevallások előkészítése, dokumentumok ellenőrzése, AI tanácsadás és jelentések generálása — minden egy helyen."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Muveleti sor",
-        "message": "Az eszkozzel kapcsolatos osszes muvelet itt talalhato."
-      },
-      "info": {
-        "title": "Eszkoz reszletei",
-        "message": "Az eszkoz osszes reszlete egy helyen."
-      },
-      "contracts": {
-        "title": "Berleti szerzodesek",
-        "message": "Az ingatlanhoz kapcsolodo osszes berleti szerzodes."
-      },
-      "transactions": {
-        "title": "Kapcsolodo tranzakciok",
-        "message": "Osszes bevetel es kiadas evek szerint."
-      }
-    },
-    "documentDetail": {
-      "header": {
-        "title": "Fejlec muveletek",
-        "message": "Visszateres a dokumentumlistahoz, az eredeti fajl letoltese, vagy a dokumentum ujrafeldolgozasa az OCR-csovezeteken, ha az elso kinyeres hianyos volt."
-      },
-      "preview": {
-        "title": "Dokumentum elonezet",
-        "message": "Az eredeti dokumentum itt jelenik meg — PDF fajlok beagyazva, kepek kozvetlenul renderelve. Hasznaljon az ellenorzeshez a forrassal valo osszevetes soran."
-      },
-      "ocrData": {
-        "title": "Kinyert adatok",
-        "message": "Az OCR es MI altal kinyert osszes mezo itt jelenik meg: osszegek, datumok, szallitoi nevek, adokulcsok es egyebek. A megbizhatosagi pontszam jelzi a kinyeres megbizhatosagat."
-      },
-      "linked": {
-        "title": "Kapcsolodo tranzakcio",
-        "message": "Ha egy dokumentum tranzakciohoz vagy eszkozhoz van rendelve, a hivatkozas itt jelenik meg. Kattintson a kapcsolodo rekordra valo kozvetlen ugrashoz."
-      },
-      "editMode": {
-        "title": "Helyben szerkesztes",
-        "message": "Kattintson barmelyik kinyert mezore a javitashoz. A javitasok betanitjak a rendszert es javitjak a jovobeli kinyereseket. A valtozasok azonnal mentesre kerulnek."
-      }
-    },
-    "assetInsights": {
-      "summary": {
-        "title": "Eszköz-kötelezettség összefoglaló",
-        "message": "Tekintse át összes eszközét, kötelezettségeit, nettó vagyonát és havi adósságszolgálatát egy pillantással."
-      },
-      "portfolio": {
-        "title": "Ingatlanportfólió",
-        "message": "Hasonlítsa össze a bérleti bevételt, kiadásokat és nettó hozamot az összes ingatlanra vonatkozóan."
-      },
-      "otherAssets": {
-        "title": "Egyéb eszközök",
-        "message": "Tekintse meg az eszközöket, járműveket és berendezéseket vásárlási értékkel és értékcsökkenési részletekkel."
-      },
-      "reports": {
-        "title": "Egyedi jelentések",
-        "message": "Készítsen eredménykimutatásokat és értékcsökkenési ütemterveket bármely konkrét eszközre."
-      }
-    },
-    "liabilities": {
-      "overview": {
-        "title": "Eszköz-kötelezettség áttekintés",
-        "message": "Görgessen le az eszközök és kötelezettségek összesített áttekintéséhez a legfontosabb mutatókkal."
-      },
-      "add": {
-        "title": "Kötelezettség hozzáadása",
-        "message": "Rögzítsen új hitelt, kölcsönt vagy egyéb kötelezettséget. Állítson be törlesztési terveket és kapcsolja ingatlanokhoz."
-      },
-      "list": {
-        "title": "Kötelezettséglista",
-        "message": "Böngéssze az összes aktív kötelezettségét. Minden kártya mutatja a fennálló egyenleget és a törlesztés előrehaladását."
-      },
-      "detail": {
-        "title": "Kötelezettség részletei",
-        "message": "Tekintse meg a törlesztési ütemtervet, a kamattrend grafikont és a kiválasztott kötelezettséghez kapcsolódó tranzakciókat."
+        "title": "Adóeszközök",
+        "message": "Haladó kalkulátorok: visszatérítés becslése, mi-lenne-ha forgatókönyvek és ellenőrzési felkészülés."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Adópozíció és visszatérítés",
-        "message": "Becsült adó-visszatérítése vagy adótartozása egy pillantásra. Jövedelme, levont adója és levonásai alapján a rendszer kiszámítja, számíthat-e visszatérítésre."
+        "title": "Visszatérítés becslése",
+        "message": "Becsülje meg a várható adó-visszatérítést jelenlegi jövedelme, levonásai és visszatartott adója alapján."
       },
       "whatIf": {
-        "title": "„Mi lenne, ha” szimulátor",
-        "message": "Modellezzen hipotetikus forgatókönyveket: adjon hozzá extra jövedelmet, levonásokat vagy módosítsa adóbevallási státuszát, hogy lássa a hatást a becsült adóra. Kiváló adótervezéshez."
+        "title": "Mi-lenne-ha forgatókönyvek",
+        "message": "Szimulálja a változásokat, például további jövedelmet vagy levonásokat, és nézze meg az adóhatást."
       },
       "flatRate": {
-        "title": "Átalánydíjas összehasonlítás",
-        "message": "Hasonlítsa össze tényleges kiadásait az osztrák átalány-levonással (Pauschalierung). Tudja meg, melyik módszer takarít meg Önnek több adót egyéni vállalkozóként."
+        "title": "Átalány összehasonlítás",
+        "message": "Hasonlítsa össze a tényleges kiadásokat a Betriebsausgabenpauschale-val a jobb opció megtalálásához."
       },
       "filing": {
-        "title": "Éves adóadat-összesítő",
-        "message": "Tekintse át a megerősített jövedelmeket, levonásokat és áfa-adatokat adóévenként. Válasszon egy évet az összegek megtekintéséhez, ütközések felderítéséhez és a forrásdokumentumok ellenőrzéséhez a bevallás előtt."
+        "title": "Beadási összefoglaló",
+        "message": "Tekintse át az összes adat teljes összefoglalóját beadás előtt. Ellenőrizze a hiányzó tételeket vagy hibákat."
       },
-      "assetReport": {
-        "title": "Eszközjelentés",
-        "message": "Válasszon bármely nyilvántartott ingatlant vagy eszközt részletes jövedelemkimutatások és értékcsökkenési ütemtervek előállításához."
+      "employer": {
+        "title": "Munkáltatói igazolás",
+        "message": "Adja meg a Lohnzettel (L16) adatait, hogy a munkaviszonyból származó jövedelmet belefoglalja az adószámításba."
+      },
+      "audit": {
+        "title": "Ellenőrzési lista",
+        "message": "Ellenőrizze, hogy nyilvántartásai teljesek és megfelelőek-e az adóbevallás benyújtása előtt."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Személyes adatok",
-        "message": "Az Ön neve, e-mail-címe, adózási szerepkörei (munkavállaló, bérbeadó, egyéni vállalkozó) és üzleti adatai. Ezek határozzák meg, mely adózási funkciók és levonások érhetők el az Ön számára."
+        "message": "Neve, e-mail címe és elérhetősége. Tartsa naprakészen az adólevelezéshez."
       },
       "taxInfo": {
         "title": "Adóprofil",
-        "message": "Adószám, áfa-státusz és eredménymegállapítási módszer. Ezen mezők kitöltése aktiválja az eszközlétrehozás és az OCR-kinyerés teljes automatizálását."
+        "message": "Adószáma (Steuernummer), áfaállapota és jövedelemtípusok. Elengedhetetlen a pontos számításokhoz."
       },
       "commuting": {
-        "title": "Ingázás és otthoni iroda",
-        "message": "Állítsa be az ingázási távolságot és a tömegközlekedés elérhetőségét a Pendlerpauschale számításához. Az otthoni munkanapok a Telearbeit levonáshoz használatosak (legfeljebb 100 nap, napi 3 EUR)."
+        "title": "Ingázás",
+        "message": "Adja meg ingázási adatait a Pendlerpauschale levonás automatikus számításához."
       },
       "security": {
-        "title": "Biztonsági beállítások",
-        "message": "Engedélyezze a kétfaktoros hitelesítést (2FA) fiókja fokozott védelméhez. Kezelje jelszavát és tekintse át az aktív munkameneteket."
+        "title": "Biztonság",
+        "message": "Változtassa meg jelszavát és tekintse meg az aktív munkameneteket. Engedélyezze a kétfaktoros hitelesítést."
       },
       "dataExport": {
-        "title": "Adatexport és fiók",
-        "message": "Exportálja összes adatát ZIP-archívumként biztonsági mentéshez vagy migrációhoz. Innen kezelheti fiókbeállításait és előfizetését is."
+        "title": "Adatok és adatvédelem",
+        "message": "Exportálja összes adatát vagy kérje fiókja törlését. Az adatai az Öné."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Osztályozási memória",
-        "message": "Amikor Ön kijavít egy tranzakciókategóriát, a rendszer szabályt hoz létre, hogy a hasonló leírású jövőbeli tranzakciókat automatikusan ugyanúgy kategorizálja."
+        "title": "Osztályozási szabályok",
+        "message": "A szabályok automatikusan kategorizálják a tranzakciókat minták alapján. A Taxja a manuális javításaiból is tanul."
       },
       "list": {
         "title": "Szabálylista",
-        "message": "Itt jelennek meg az összes tanult osztályozási szabály. Minden szabály mutatja a felismert mintát, a hozzárendelt kategóriát és az alkalmazások számát."
+        "message": "Tekintse meg, szerkessze vagy törölje a meglévő szabályokat. Minden szabály egy szöveges mintát rendel egy adókategóriához."
       },
       "autoLearn": {
-        "title": "Automatikus tanulás",
-        "message": "A szabályok automatikusan jönnek létre az Ön javításai alapján. A szabályokat rögzítheti is a felülírás megakadályozásához, vagy törölheti a már nem szükséges szabályokat."
+        "title": "Automatikusan tanult szabályok",
+        "message": "Az MI által automatikusan létrehozott szabályok. Ellenőrizze és hagyja jóvá őket a pontos osztályozás érdekében."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "AI adótanácsadó",
-        "message": "Tegyen fel kérdéseket az osztrák adójogról, kiadások levonhatóságáról, bevallási határidőkről vagy optimalizálási stratégiákról. Az asszisztens az Ön profilját és tranzakciós adatait használja személyre szabott válaszokhoz."
+        "title": "MI Asszisztens",
+        "message": "Kérdezzen az osztrák adójogról, pénzügyeiről vagy a Taxja használatáról."
       },
       "input": {
-        "title": "Chat beviteli mező",
-        "message": "Írja be adózási kérdését itt. Dokumentumokat is csatolhat az AI elemzéséhez. Minden üzenet krediteket használ fel a csomagjából."
+        "title": "Chat bevitel",
+        "message": "Írja be kérdését itt. Kérdezhet németül, angolul vagy bármely támogatott nyelven."
       },
       "proactive": {
         "title": "Proaktív javaslatok",
-        "message": "Az AI proaktívan javasolhat megerősítendő ismétlődő tranzakciókat, feltöltendő hiányzó dokumentumokat vagy feldolgozandó Lohnzettel fájlokat az Ön adatmintái alapján."
+        "message": "Az asszisztens optimalizálásokat javasolhat vagy felhívhatja a figyelmet lehetséges problémákra az adatai alapján."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Jelenlegi csomag",
-        "message": "Tekintse meg aktív előfizetési csomagját, számlázási ciklusát és a következő számlázási dátumot. Innen válthat magasabb vagy alacsonyabb csomagra, vagy lemondhatja előfizetését."
+        "title": "Az Ön csomagja",
+        "message": "Tekintse meg jelenlegi előfizetési szintjét és a benne foglalt funkciókat. Váltson magasabb csomagra a több lehetőségért."
       },
       "billing": {
         "title": "Számlázási előzmények",
-        "message": "Tekintse át a korábbi számlákat és fizetési nyilvántartásokat. A fizetési módokat biztonságosan a Stripe kezeli."
+        "message": "Tekintse meg korábbi számláit, fizetési módokat és a kreditfelhasználást."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Műveletek szűrése",
-        "message": "Szűrje kreditelőzményeit művelettípus szerint: levonások, visszatérítések, havi visszaállítások, feltöltések vagy túlhasználati elszámolások."
+        "title": "Szűrő",
+        "message": "Szűrje a kredittranzakciókat típus, dátum vagy állapot szerint konkrét bejegyzések kereséséhez."
       },
       "list": {
-        "title": "Kreditnapló",
-        "message": "Minden kredittranzakció itt kerül naplózásra a művelettípussal, okkal, időbélyeggel és összeggel. A pozitív összegek jóváírt kreditek, a negatív összegek felhasznált kreditek."
+        "title": "Kreditelőzmények",
+        "message": "Részletes napló az összes kreditvásárlásról, felhasználásról és fennmaradó egyenlegről."
       }
     }
   },
@@ -4041,6 +4094,8 @@
   },
   "actions": {
     "addTransaction": "Tranzakció hozzáadása",
+    "exportCsv": "CSV exportálása",
+    "exportPdf": "PDF exportálása",
     "askAI": "AI kérdezése",
     "generateReport": "Jelentés készítése",
     "scanReceipt": "Nyugta szkennelése"
@@ -4214,6 +4269,10 @@
     },
     "confirm": {
       "deactivate": "Ez a muvelet torles helyett inaktivalja a kotelezettseget. Folytatja?"
+    },
+    "pendingContracts": {
+      "title": "Függő kölcsönszerződések",
+      "subtitle": "Az ellenőrzésre váró vagy hiányos kulcsmezőkkel rendelkező szerződések itt maradnak, amíg a Dokumentumok között be nem fejezi őket."
     }
   },
   "assetOverview": {

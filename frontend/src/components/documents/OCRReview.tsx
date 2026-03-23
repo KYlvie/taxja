@@ -16,10 +16,10 @@ import { resolveDocumentPresentation } from '../../documents/presentation/resolv
 import type {
   DocumentPresentationTemplate,
 } from '../../documents/presentation/types';
-import BescheidImport from './BescheidImport';
 import SubpageBackLink from '../common/SubpageBackLink';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import './OCRReview.css';
+import './BescheidImport.css';
 
 interface OCRReviewProps {
   documentId: number;
@@ -34,6 +34,7 @@ interface OCRReviewProps {
 
 const TAX_REVIEW_DOCUMENT_TYPES = new Set<string>([
   DocumentType.LOHNZETTEL,
+  DocumentType.EINKOMMENSTEUERBESCHEID,
   DocumentType.E1_FORM,
   DocumentType.L1_FORM,
   DocumentType.L1K_BEILAGE,
@@ -59,7 +60,16 @@ const TAX_FIELD_PRIORITY = [
   'year',
   'taxpayer_name',
   'steuernummer',
+  'finanzamt',
   'employer_name',
+  'einkommen',
+  'einkuenfte_nichtselbstaendig',
+  'einkuenfte_vermietung',
+  'festgesetzte_einkommensteuer',
+  'abgabengutschrift',
+  'abgabennachforderung',
+  'werbungskosten_pauschale',
+  'telearbeitspauschale',
   'gewinn_verlust',
   'umsatz_20',
   'umsatz_10',
@@ -77,12 +87,16 @@ const TAX_FIELD_SKIP = new Set([
   'correction_history',
   'learning_data',
   'raw_text',
+  'vermietung_details',
+  'all_kz_values',
 ]);
 
 const isTaxReviewDocumentType = (documentType?: string) =>
   !!documentType && TAX_REVIEW_DOCUMENT_TYPES.has(documentType);
 
 const isProcessingPipelineState = (document: OCRReviewData['document'] | null) => {
+  // If the document has been fully processed (has processed_at), it's not processing
+  if (document?.processed_at) return false;
   const currentState = document?.ocr_result?._pipeline?.current_state;
   return typeof currentState === 'string' && OCR_PROCESSING_STATES.has(currentState);
 };
@@ -222,8 +236,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedDocType, setSelectedDocType] = useState<string>('');
   const [selectedTxnType, setSelectedTxnType] = useState<'income' | 'expense'>('expense');
-  const [bescheidMode, setBescheidMode] = useState(false);
-  const [bescheidOcrText, setBescheidOcrText] = useState<string>('');
   const [retryingOcr] = useState(false);
   const [reprocessPending, setReprocessPending] = useState(false);
   const retryPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -266,12 +278,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       // Initialize document type from OCR result
       setSelectedDocType(data.document.document_type || '');
 
-      // Detect Bescheid documents and switch to specialized import view
       const dt = data.document.document_type;
-      if ((dt as string) === 'einkommensteuerbescheid' && data.document.raw_text) {
-        setBescheidMode(true);
-        setBescheidOcrText(data.document.raw_text);
-      }
 
       setSelectedTxnType(
         resolveInitialTransactionType(
@@ -372,7 +379,20 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       }
 
       await documentService.correctOCR(documentId, dataToSend);
-      aiToast(t('documents.review.changesSaved', 'Changes saved'), 'success');
+
+      // If not yet confirmed, also call confirm endpoint
+      const isConfirmed = extracted_data?.confirmed || reviewData?.document?.transaction_id;
+      if (!isConfirmed) {
+        try {
+          await documentService.confirmOCR(documentId);
+          aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+        } catch {
+          // Confirm may fail for some doc types, still save succeeded
+          aiToast(t('documents.review.changesSaved', 'Changes saved'), 'success');
+        }
+      } else {
+        aiToast(t('documents.review.changesSaved', 'Changes saved'), 'success');
+      }
       onConfirm?.();
     } catch (err: any) {
       aiToast(t('common.saveFailed', 'Save failed'), 'error');
@@ -439,23 +459,24 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     return null;
   }
 
-  // Show specialized Bescheid import view
-  if (bescheidMode && bescheidOcrText) {
-    const handleBescheidDone = () => {
-      if (onConfirm) onConfirm();
-      else navigate('/documents');
-    };
-    return (
-      <BescheidImport
-        ocrText={bescheidOcrText}
-        documentId={documentId}
-        onImportComplete={handleBescheidDone}
-        onCancel={() => { if (onCancel) onCancel(); else navigate('/documents'); }}
-      />
-    );
-  }
-
   const { document, extracted_data, suggestions } = reviewData;
+  const translatedSuggestions = (suggestions ?? []).map((suggestion) =>
+    translateDocumentSuggestionText(
+      suggestion.replace(
+        /['"â€œâ€â€˜â€™\[]([A-Za-z][A-Za-z0-9_ ]{1,80})['"â€œâ€â€˜â€™\]]/g,
+        (_match: string, fieldName: string) => `"${formatDocumentFieldLabel(fieldName, t)}"`
+      ),
+      t,
+    ),
+  );
+  const suggestionPreviewLimit = 6;
+  const suggestionPreview = translatedSuggestions.slice(0, suggestionPreviewLimit);
+  const remainingSuggestionCount = Math.max(
+    0,
+    translatedSuggestions.length - suggestionPreview.length,
+  );
+  const showExpandedSuggestions = document.needs_review && translatedSuggestions.length > 0;
+  const showSuggestionPopover = !document.needs_review && translatedSuggestions.length > 0;
   const purchaseContractKind = String(
     editedData.purchase_contract_kind
       || extracted_data.purchase_contract_kind
@@ -712,6 +733,38 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </span>
             )}
           </div>
+          {showSuggestionPopover && (
+            <div className="review-suggestions-inline">
+              <button
+                type="button"
+                className="review-suggestions-trigger"
+                aria-label={`${t('documents.review.suggestions')} (${translatedSuggestions.length})`}
+                aria-haspopup="dialog"
+              >
+                <span className="review-suggestions-trigger__icon" aria-hidden="true">
+                  i
+                </span>
+                <span>{t('documents.review.suggestions')}</span>
+                <span className="review-suggestions__count">{translatedSuggestions.length}</span>
+              </button>
+              <div className="review-suggestions-popover" role="tooltip">
+                <h4>{t('documents.review.suggestions')}</h4>
+                <ul className="review-suggestions-popover__list">
+                  {suggestionPreview.map((translated, index) => (
+                    <li key={index}>{translated}</li>
+                  ))}
+                </ul>
+                {remainingSuggestionCount > 0 && (
+                  <p className="review-suggestions-popover__footer">
+                    {t('documents.review.moreSuggestions', {
+                      count: remainingSuggestionCount,
+                      defaultValue: `${remainingSuggestionCount} more suggestions`,
+                    })}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -734,18 +787,18 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         </div>
       )}
 
-      {suggestions && suggestions.length > 0 && (
+      {showExpandedSuggestions && (
         <div className="review-suggestions">
-          <h4>{t('documents.review.suggestions')}</h4>
+          <div className="review-suggestions__header">
+            <div className="review-suggestions__title-group">
+              <h4>{t('documents.review.suggestions')}</h4>
+              <span className="review-suggestions__count">{translatedSuggestions.length}</span>
+            </div>
+          </div>
           <ul>
-            {suggestions.map((suggestion, index) => {
-              // Translate field names in suggestions like "Please verify 'field_name' field"
-              const translated = translateDocumentSuggestionText(suggestion.replace(
-                /['"“”‘’\[]([A-Za-z][A-Za-z0-9_ ]{1,80})['"“”‘’\]]/g,
-                (_match: string, fieldName: string) => `"${formatDocumentFieldLabel(fieldName, t)}"`
-              ), t);
-              return <li key={index}>{translated}</li>;
-            })}
+            {translatedSuggestions.map((translated, index) => (
+              <li key={index}>{translated}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -1013,6 +1066,14 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                       'vorsteuer',
                       'zahllast',
                       'gewinn_verlust',
+                      'einkommen',
+                      'festgesetzte_einkommensteuer',
+                      'abgabengutschrift',
+                      'abgabennachforderung',
+                      'einkuenfte_nichtselbstaendig',
+                      'einkuenfte_vermietung',
+                      'werbungskosten_pauschale',
+                      'telearbeitspauschale',
                     ].includes(fieldName);
 
                   return (
@@ -1042,79 +1103,135 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                   );
                 })
               )}
+
+              {/* Bescheid: vermietung_details breakdown */}
+              {selectedDocType === 'einkommensteuerbescheid' && (() => {
+                const vermietungDetails = (extracted_data as any).vermietung_details
+                  || (document.ocr_result as any)?.vermietung_details;
+                if (!Array.isArray(vermietungDetails) || vermietungDetails.length === 0) return null;
+                return (
+                  <div className="review-tax-subsection">
+                    <h4>{t('documents.bescheid.rentalIncome', 'Rental income details')}</h4>
+                    <div className="bescheid-summary-list">
+                      {vermietungDetails.map((detail: { address: string; amount: number }, index: number) => (
+                        <div key={`${detail.address}-${index}`} className="bescheid-vv-row">
+                          <span>{detail.address}</span>
+                          <span>
+                            {detail.amount != null
+                              ? Number(detail.amount).toLocaleString(getLocaleForLanguage(i18n.language), { style: 'currency', currency: 'EUR' })
+                              : '-'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* E1 form: all_kz_values dynamic Kennzahlen */}
+              {selectedDocType === 'e1_form' && (() => {
+                const allKz: Record<string, any> = (extracted_data as any).all_kz_values
+                  || (document.ocr_result as any)?.all_kz_values
+                  || {};
+                const kzEntries = Object.entries(allKz).filter(([, v]) => v != null && String(v).trim() !== '');
+                if (kzEntries.length === 0) return null;
+                return (
+                  <div className="review-tax-subsection">
+                    <h4>{t('documents.e1.extractedKZ', 'Extracted Kennzahlen')}</h4>
+                    {kzEntries.map(([kzKey, kzValue]) => (
+                      <div className="form-group" key={kzKey}>
+                        <label>KZ {kzKey.replace(/^kz_/, '')}</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editedData[kzKey] ?? kzValue ?? ''}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            handleFieldChange(kzKey, nextValue === '' ? null : Number(nextValue));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <>
-              {!isDirectionSensitive && (
-                <div className="form-group">
-                  <label>{t('documents.review.transactionType')}</label>
-                  <div className="txn-type-toggle">
-                    <button
-                      type="button"
-                      className={`toggle-btn ${selectedTxnType === 'income' ? 'active income' : ''}`}
-                      onClick={() => { setSelectedTxnType('income'); handleFieldChange('document_transaction_direction', 'income'); }}
-                    >
-                      {t('transactions.types.income')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`toggle-btn ${selectedTxnType === 'expense' ? 'active expense' : ''}`}
-                      onClick={() => { setSelectedTxnType('expense'); handleFieldChange('document_transaction_direction', 'expense'); }}
-                    >
-                      {t('transactions.types.expense')}
-                    </button>
+              {!isContractRoleSensitive && (
+                <>
+                  {!isDirectionSensitive && (
+                    <div className="form-group">
+                      <label>{t('documents.review.transactionType')}</label>
+                      <div className="txn-type-toggle">
+                        <button
+                          type="button"
+                          className={`toggle-btn ${selectedTxnType === 'income' ? 'active income' : ''}`}
+                          onClick={() => { setSelectedTxnType('income'); handleFieldChange('document_transaction_direction', 'income'); }}
+                        >
+                          {t('transactions.types.income')}
+                        </button>
+                        <button
+                          type="button"
+                          className={`toggle-btn ${selectedTxnType === 'expense' ? 'active expense' : ''}`}
+                          onClick={() => { setSelectedTxnType('expense'); handleFieldChange('document_transaction_direction', 'expense'); }}
+                        >
+                          {t('transactions.types.expense')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-group">
+                    <label>{t('documents.review.fields.date')}</label>
+                    <DateInput
+                      value={editedData.date || ''}
+                      onChange={(val) => handleFieldChange('date', val)}
+                      className={getConfidenceClass(extracted_data.confidence?.date)}
+                      locale={getLocaleForLanguage(i18n.language)}
+                      todayLabel={String(t('common.today', 'Today'))}
+                    />
+                    {extracted_data.confidence?.date && (
+                      <span className="field-confidence">
+                        {(extracted_data.confidence.date * 100).toFixed(0)}%
+                      </span>
+                    )}
                   </div>
-                </div>
+
+                  <div className="form-group">
+                    <label>{t('documents.review.fields.amount')}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editedData.amount || ''}
+                      onChange={(e) =>
+                        handleFieldChange('amount', parseFloat(e.target.value))
+                      }
+                      className={getConfidenceClass(extracted_data.confidence?.amount)}
+                    />
+                    {extracted_data.confidence?.amount && (
+                      <span className="field-confidence">
+                        {(extracted_data.confidence.amount * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="form-group">
+                    <label>{t('documents.review.fields.merchant')}</label>
+                    <input
+                      type="text"
+                      value={editedData.merchant || ''}
+                      onChange={(e) => handleFieldChange('merchant', e.target.value)}
+                      className={getConfidenceClass(extracted_data.confidence?.merchant)}
+                    />
+                    {extracted_data.confidence?.merchant && (
+                      <span className="field-confidence">
+                        {(extracted_data.confidence.merchant * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
-
-              <div className="form-group">
-                <label>{t('documents.review.fields.date')}</label>
-                <DateInput
-                  value={editedData.date || ''}
-                  onChange={(val) => handleFieldChange('date', val)}
-                  className={getConfidenceClass(extracted_data.confidence?.date)}
-                  locale={getLocaleForLanguage(i18n.language)}
-                  todayLabel={String(t('common.today', 'Today'))}
-                />
-                {extracted_data.confidence?.date && (
-                  <span className="field-confidence">
-                    {(extracted_data.confidence.date * 100).toFixed(0)}%
-                  </span>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label>{t('documents.review.fields.amount')}</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editedData.amount || ''}
-                  onChange={(e) =>
-                    handleFieldChange('amount', parseFloat(e.target.value))
-                  }
-                  className={getConfidenceClass(extracted_data.confidence?.amount)}
-                />
-                {extracted_data.confidence?.amount && (
-                  <span className="field-confidence">
-                    {(extracted_data.confidence.amount * 100).toFixed(0)}%
-                  </span>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label>{t('documents.review.fields.merchant')}</label>
-                <input
-                  type="text"
-                  value={editedData.merchant || ''}
-                  onChange={(e) => handleFieldChange('merchant', e.target.value)}
-                  className={getConfidenceClass(extracted_data.confidence?.merchant)}
-                />
-                {extracted_data.confidence?.merchant && (
-                  <span className="field-confidence">
-                    {(extracted_data.confidence.merchant * 100).toFixed(0)}%
-                  </span>
-                )}
-              </div>
             </>
           )}
 
@@ -1532,6 +1649,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               '_additional_receipts', '_receipt_count', '_pipeline', '_validation',
               'correction_history', 'multiple_receipts', 'receipt_count', 'receipts',
               'total_amount', 'purchase_contract_kind', '_extraction_method', '_llm_supplement',
+              'confirmed', 'confirmed_at', 'confirmed_by',
             ]);
             const extraFields = Object.entries(editedData).filter(
               ([k, v]) => !displayedKeys.has(k) && !k.startsWith('_') && v !== null && v !== undefined && typeof v !== 'object'
@@ -1574,7 +1692,12 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? t('common.saving') : t('common.save')}
+          {saving
+            ? t('common.saving')
+            : (extracted_data?.confirmed || reviewData?.document?.transaction_id)
+              ? t('common.save')
+              : t('documents.reviewAction', 'Review')
+          }
         </button>
       </div>
 

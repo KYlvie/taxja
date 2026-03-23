@@ -332,3 +332,35 @@
   font-size: 0.8rem;
   margin-top: 12px;
 }
+
+/* Transaction category items in filing summary */
+.filing-txn-categories .filing-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 8px;
+}
+
+.filing-item-category {
+  font-size: 0.85rem;
+  color: var(--color-text-primary, #374151);
+}
+
+.filing-item-count {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #9ca3af);
+  min-width: 2.5em;
+  text-align: right;
+}
+
+.filing-item-amount {
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-width: 6em;
+  text-align: right;
+}
+
+.filing-transactions-section {
+  margin-top: 1rem;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 0.75rem;
+}

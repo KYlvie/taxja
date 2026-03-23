@@ -4,6 +4,8 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   margin-bottom: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .year-quick-filter {

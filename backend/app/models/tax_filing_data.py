@@ -15,10 +15,10 @@ class TaxFilingData(Base):
     __tablename__ = "tax_filing_data"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     tax_year = Column(Integer, nullable=False, index=True)
     data_type = Column(String(50), nullable=False, index=True)  # l16, l1, e1a, e1b, etc.
-    source_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    source_document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
     data = Column(JSON, nullable=False)  # Extracted structured data
     status = Column(String(20), default="pending")  # pending / confirmed / rejected
     created_at = Column(DateTime, default=datetime.utcnow)

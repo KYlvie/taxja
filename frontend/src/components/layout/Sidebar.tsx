@@ -86,7 +86,7 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
         </div>
 
         <Link to="/" className="sidebar-brand" onClick={onClose}>
-          <span className="sidebar-brand-mark">TJ</span>
+          <span className="sidebar-brand-mark">T</span>
           <div className="sidebar-brand-copy">
             <strong>{t('common.appName')}</strong>
             <span>{copy.sidebarSubtitle}</span>

@@ -4,7 +4,7 @@ import Header from './Header';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
 import FloatingAIChat from '../ai/FloatingAIChat';
-
+import DisclaimerModal from '../common/DisclaimerModal';
 import DraggableRobot from '../common/DraggableRobot';
 import OnboardingGuide from '../onboarding/OnboardingGuide';
 import { getPageTourSteps } from '../onboarding/tourConfigs';
@@ -18,7 +18,24 @@ const SIDEBAR_COLLAPSED_KEY = 'taxja_sidebar_collapsed';
 const AppLayout = () => {
   const location = useLocation();
 
-  const user = useAuthStore((s) => s.user);
+  const { user, isAuthenticated } = useAuthStore((s) => ({ user: s.user, isAuthenticated: s.isAuthenticated }));
+
+  // Show disclaimer once per login session
+  const [showDisclaimer, setShowDisclaimer] = useState(() => {
+    const accepted = sessionStorage.getItem('taxja_disclaimer_accepted');
+    return !accepted;
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      sessionStorage.removeItem('taxja_disclaimer_accepted');
+    }
+  }, [isAuthenticated]);
+
+  const handleDisclaimerAccept = () => {
+    sessionStorage.setItem('taxja_disclaimer_accepted', '1');
+    setShowDisclaimer(false);
+  };
   const mainTilt = useCyberTilt<HTMLElement>(4);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -96,6 +113,9 @@ const AppLayout = () => {
           steps={tourSteps}
           isPageTour={isPageTour}
         />
+      )}
+      {showDisclaimer && (!user || user.onboarding_completed !== false) && (
+        <DisclaimerModal isOpen={showDisclaimer} onAccept={handleDisclaimerAccept} />
       )}
     </div>
   );

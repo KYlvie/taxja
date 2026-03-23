@@ -920,6 +920,13 @@
       "viewPurchaseContract": "Satın alma sözleşmesini görüntüle",
       "viewRentalContract": "Kira sözleşmesini görüntüle",
       "viewSourceDocument": "Satın alma belgesini görüntüle"
+    },
+    "form": {
+      "documentHint": {
+        "title": "Sözleşme veya destekleyici belge ekleyin",
+        "message": "Varlığı önce oluşturabilirsiniz; ancak satın alma sözleşmesi veya destekleyici belge kaydı tamamlar."
+      },
+      "uploadDocument": "Belge yükle"
     }
   },
   "documents": {
@@ -944,178 +951,6 @@
     "reprocessStarted": "Yeniden isleme basladi. Yeni islem bitene kadar mevcut sonuc gorunur kalir.",
     "reprocessFailed": "Yeniden isleme basarisiz, lutfen tekrar deneyin",
     "reprocessTimeout": "Yeniden isleme cok uzun suruyor. Lutfen daha sonra tekrar deneyin.",
-    "confirm": "Onayla",
-    "confirmSuccess": "Belge onaylandi",
-    "deleteDialog": {
-      "title": "Belgeyi Sil",
-      "hasRelatedData": "Bu belge asagidaki verilere baglidir:",
-      "property": "Mulk",
-      "transactions": "Islemler",
-      "recurringTransaction": "Yinelenen Islem",
-      "recurringTransactions": "Yinelenen Islemler",
-      "linkedMietvertrag": "Bagli Kira Sozlesmesi",
-      "linkedMietvertragWarn": "'Her Seyi Sil' secenegi bu kira sozlesmesini ve yinelenen islemlerini de silecektir",
-      "deleteOptions": "Silme Secenekleri:",
-      "documentOnly": "Yalnizca belgeyi sil (onerilen)",
-      "documentOnlyDesc": "Belge dosyasini siler ancak tum mulk ve islem verilerini korur",
-      "withData": "Belgeyi ve tum ilgili verileri sil",
-      "withDataDesc": "Belgeyi VE bagli tum mulkleri, islemleri ve yinelenen islemleri siler",
-      "warning": "Uyari: Bu islem geri alinamaz!",
-      "recommendation": "Oneri: Yalnizca belge dosyasini temizlemek istiyorsaniz, 'Yalnizca belgeyi sil' secenegini secin",
-      "cancel": "Iptal",
-      "confirmDocumentOnly": "Yalnizca Belgeyi Sil",
-      "confirmWithData": "Her Seyi Sil"
-    },
-    "tabs": {
-      "list": "Belgelerim",
-      "upload": "Yukle",
-      "bescheid": "Vergi Bildirimi Aktar"
-    },
-    "types": {
-      "payslip": "Maas Bordrosu",
-      "receipt": "Makbuz",
-      "invoice": "Fatura",
-      "purchase_contract": "Satin Alma Sozlesmesi",
-      "rental_contract": "Kira Sozlesmesi",
-      "loan_contract": "Kredi Sozlesmesi",
-      "bank_statement": "Banka Ekstresi",
-      "property_tax": "Emlak Vergisi",
-      "svs_notice": "SVS Bildirimi",
-      "lohnzettel": "Maas Bordrosu (L16)",
-      "einkommensteuerbescheid": "Gelir Vergisi Degerlendirmesi",
-      "e1_form": "Gelir Vergisi Beyannamesi (E1)",
-      "l1_form": "Calisan Vergi Beyannamesi (L1)",
-      "l1k_beilage": "Cocuk Ek Formu (L1k)",
-      "l1ab_beilage": "Indirimler Ek Formu (L1ab)",
-      "e1a_beilage": "Serbest Meslek Ek Formu (E1a)",
-      "e1b_beilage": "Kira Geliri Ek Formu (E1b)",
-      "e1kv_beilage": "Sermaye Kazanci Ek Formu (E1kv)",
-      "u1_form": "Yillik KDV Beyannamesi (U1)",
-      "u30_form": "KDV On Bildirimi (U30/UVA)",
-      "jahresabschluss": "Yillik Mali Tablo",
-      "spendenbestaetigung": "Bagis Onay Belgesi",
-      "versicherungsbestaetigung": "Sigorta Onay Belgesi",
-      "kinderbetreuungskosten": "Cocuk Bakim Giderleri",
-      "fortbildungskosten": "Sureekli Egitim Giderleri",
-      "pendlerpauschale": "Ise Gidis-Gelis Odeneggi",
-      "kirchenbeitrag": "Kilise Vergisi",
-      "grundbuchauszug": "Tapu Sicil Ozeti",
-      "betriebskostenabrechnung": "Isletme Gideri Tablosu",
-      "gewerbeschein": "Ticaret Belgesi",
-      "kontoauszug": "Hesap Ozeti",
-      "other": "Diger",
-      "unknown": "Bilinmiyor"
-    },
-    "documentTypes": {
-      "receipt": "Makbuz",
-      "invoice": "Fatura",
-      "contract": "Sozlesme",
-      "statement": "Ekstre",
-      "purchase_contract": "Satin Alma Sozlesmesi",
-      "rental_contract": "Kira Sozlesmesi",
-      "loan_contract": "Kredi Sozlesmesi",
-      "bank_statement": "Banka Ekstresi",
-      "property_tax": "Emlak Vergisi",
-      "svs_notice": "SVS Bildirimi",
-      "lohnzettel": "Maas Bordrosu (L16)",
-      "einkommensteuerbescheid": "Gelir Vergisi Degerlendirmesi",
-      "e1_form": "Gelir Vergisi Beyannamesi (E1)",
-      "l1_form": "Calisan Vergi Beyannamesi (L1)",
-      "l1k_beilage": "Cocuk Ek Formu (L1k)",
-      "l1ab_beilage": "Indirimler Ek Formu (L1ab)",
-      "e1a_beilage": "Serbest Meslek Ek Formu (E1a)",
-      "e1b_beilage": "Kira Geliri Ek Formu (E1b)",
-      "e1kv_beilage": "Sermaye Kazanci Ek Formu (E1kv)",
-      "u1_form": "Yillik KDV Beyannamesi (U1)",
-      "u30_form": "KDV On Bildirimi (U30/UVA)",
-      "jahresabschluss": "Yillik Mali Tablo",
-      "spendenbestaetigung": "Bagis Onay Belgesi",
-      "versicherungsbestaetigung": "Sigorta Onay Belgesi",
-      "kinderbetreuungskosten": "Cocuk Bakim Giderleri",
-      "fortbildungskosten": "Surekli Egitim Giderleri",
-      "pendlerpauschale": "Ise Gidis-Gelis Odenegi",
-      "kirchenbeitrag": "Kilise Vergisi",
-      "grundbuchauszug": "Tapu Sicil Ozeti",
-      "betriebskostenabrechnung": "Isletme Gideri Tablosu",
-      "gewerbeschein": "Ticaret Belgesi",
-      "kontoauszug": "Hesap Ozeti",
-      "other": "Diger",
-      "unknown": "Bilinmiyor"
-    },
-    "upload": {
-      "title": "Belge Yukle",
-      "dragDrop": "Dosyalari buraya surukleyin ve birakin veya secmek icin tiklayin",
-      "mobileHint": "Telefonunuzdan dosya secin veya kamerayla belge tarayin",
-      "formats": "Desteklenen formatlar: JPG, PNG, PDF (5MB alti onerilen, maks 10MB)",
-      "selectFiles": "Dosya Sec",
-      "takePhoto": "Fotograf Cek",
-      "progress": "Yukleme Ilerlemesi",
-      "processing": "Belge taniniyor...",
-      "completed": "Tamamlandi",
-      "error": "Yukleme basarisiz",
-      "retry": "Tekrar Dene",
-      "clearCompleted": "Tamamlananlari Temizle",
-      "contextHintRental": "Mulk #{{propertyId}} icin kira sozlesmesi yukleniyor",
-      "contextHintPurchase": "Mulk #{{propertyId}} icin satin alma sozlesmesi yukleniyor",
-      "contextHintLoan": "Mulk #{{propertyId}} icin kredi sozlesmesi yukleniyor",
-      "stagingTitle": "{{count}} fotograf isleme hazir",
-      "stagingHint": "Siralama icin surukleyin, ardindan bir belgede birlestirmeyi veya ayri ayri yuklemeyi secin.",
-      "mergeUpload": "1 belgede birlestir ({{count}} sayfa)",
-      "uploadSeparately": "Ayri ayri yukle ({{count}} belge)",
-      "clearStaging": "Temizle",
-      "groupedPagesMeta": "{{count}} sayfa · {{size}} KB",
-      "captureSessionTitle": "{{count}} sayfa yakalandi",
-      "captureSessionSubtitle": "Ayni gruptaki fotograflar islenmeden once tek bir belgede birlestirilecektir.",
-      "addPage": "Yakalamaya devam et",
-      "uploadGrouped": "Bu belgeyi yukle",
-      "clearCaptureSession": "Temizle",
-      "duplicateReused": "Tekrarlanan dosya, mevcut belge yeniden kullanildi",
-      "uploadButton": "Yukle",
-      "stagingHintSingle": "Asagidaki dosyayi inceleyin, ardindan Yukle tusuna basin."
-    },
-    "search": {
-      "placeholder": "Belgeleri ad veya icerige gore ara..."
-    },
-    "view": {
-      "grid": "Izgara Gorunumu",
-      "list": "Liste Gorunumu"
-    },
-    "viewGrid": "Izgara Gorunumu",
-    "viewList": "Liste Gorunumu",
-    "filters": {
-      "allTypes": "Tum Turler",
-      "allYears": "Tum Yillar",
-      "startDate": "Baslangic Tarihi",
-      "endDate": "Bitis Tarihi",
-      "needsReview": "Yalnizca Inceleme Gerektirenler",
-      "clear": "Filtreleri Temizle"
-    },
-    "groups": {
-      "all": "Tum Belgeler",
-      "employment": "Istihdam ve Bordro",
-      "self_employed": "Serbest Meslek / Isletme",
-      "property": "Mulk ve Kiralama",
-      "social_insurance": "Sigorta ve Krediler",
-      "tax_filing": "Vergi Beyannamesi ve Bildirimler",
-      "deductions": "Vergi Indirim Belgeleri",
-      "expense": "Makbuzlar ve Faturalar",
-      "banking": "Bankacilik",
-      "other": "Diger"
-    },
-    "list": {
-      "name": "Dosya",
-      "type": "Kategori",
-      "date": "Tarih",
-      "uploadDate": "Yuklenme Tarihi",
-      "size": "Boyut",
-      "confidence": "Guven",
-      "status": "Durum"
-    },
-    "statusReady": "Hazir",
-    "statusTransactionCreated": "Islem olusturuldu",
-    "emptyGroup": "Mevcut filtreler icin bu kategoride henuz belge yok.",
-    "pageSize": "Sayfa basina oge",
-    "perPage": "/ sayfa",
     "review": {
       "title": "Tanima Sonuclarini Incele",
       "loadError": "Belge inceleme icin yuklenemedi",
@@ -1332,7 +1167,11 @@
         "kz_210": "KZ210 Brut Gelir",
         "city": "Şehir",
         "postal_code": "Posta Kodu",
-        "unit_number": "Daire Numarası"
+        "unit_number": "Daire Numarası",
+        "confirmed": "Onaylandı",
+        "confirmed_at": "Onaylanma zamanı",
+        "confirmed_by": "Onaylayan",
+        "transaction_type": "İşlem türü"
       },
       "additionalFields": "Ek cikarilan alanlar",
       "contractRoleConfidenceLabel": "Güven",
@@ -1366,8 +1205,189 @@
       "changesSaved": "Değişiklikler kaydedildi",
       "confirmedSuccess": "Belge onaylandı",
       "confirmed": "Onaylandı",
-      "openReview": "OCR sonuçlarını incele ve onayla"
+      "openReview": "OCR sonuçlarını incele ve onayla",
+      "moreSuggestions": "{{count}} ek öneri"
     },
+    "reviewSuccess": "Belge incelendi",
+    "reviewFailed": "Inceleme basarisiz",
+    "deleteDialog": {
+      "title": "Belgeyi Sil",
+      "hasRelatedData": "Bu belge asagidaki verilere baglidir:",
+      "property": "Mulk",
+      "transactions": "Islemler",
+      "recurringTransaction": "Yinelenen Islem",
+      "recurringTransactions": "Yinelenen Islemler",
+      "linkedMietvertrag": "Bagli Kira Sozlesmesi",
+      "linkedMietvertragWarn": "'Her Seyi Sil' secenegi bu kira sozlesmesini ve yinelenen islemlerini de silecektir",
+      "deleteOptions": "Silme Secenekleri:",
+      "documentOnly": "Yalnizca belgeyi sil (onerilen)",
+      "documentOnlyDesc": "Belge dosyasini siler ancak tum mulk ve islem verilerini korur",
+      "withData": "Belgeyi ve tum ilgili verileri sil",
+      "withDataDesc": "Belgeyi VE bagli tum mulkleri, islemleri ve yinelenen islemleri siler",
+      "warning": "Uyari: Bu islem geri alinamaz!",
+      "recommendation": "Oneri: Yalnizca belge dosyasini temizlemek istiyorsaniz, 'Yalnizca belgeyi sil' secenegini secin",
+      "cancel": "Iptal",
+      "confirmDocumentOnly": "Yalnizca Belgeyi Sil",
+      "confirmWithData": "Her Seyi Sil"
+    },
+    "tabs": {
+      "list": "Belgelerim",
+      "upload": "Yukle",
+      "bescheid": "Vergi Bildirimi Aktar"
+    },
+    "types": {
+      "payslip": "Maas Bordrosu",
+      "receipt": "Makbuz",
+      "invoice": "Fatura",
+      "purchase_contract": "Satin Alma Sozlesmesi",
+      "rental_contract": "Kira Sozlesmesi",
+      "loan_contract": "Kredi Sozlesmesi",
+      "bank_statement": "Banka Ekstresi",
+      "property_tax": "Emlak Vergisi",
+      "svs_notice": "SVS Bildirimi",
+      "lohnzettel": "Maas Bordrosu (L16)",
+      "einkommensteuerbescheid": "Gelir Vergisi Degerlendirmesi",
+      "e1_form": "Gelir Vergisi Beyannamesi (E1)",
+      "l1_form": "Calisan Vergi Beyannamesi (L1)",
+      "l1k_beilage": "Cocuk Ek Formu (L1k)",
+      "l1ab_beilage": "Indirimler Ek Formu (L1ab)",
+      "e1a_beilage": "Serbest Meslek Ek Formu (E1a)",
+      "e1b_beilage": "Kira Geliri Ek Formu (E1b)",
+      "e1kv_beilage": "Sermaye Kazanci Ek Formu (E1kv)",
+      "u1_form": "Yillik KDV Beyannamesi (U1)",
+      "u30_form": "KDV On Bildirimi (U30/UVA)",
+      "jahresabschluss": "Yillik Mali Tablo",
+      "spendenbestaetigung": "Bagis Onay Belgesi",
+      "versicherungsbestaetigung": "Sigorta Onay Belgesi",
+      "kinderbetreuungskosten": "Cocuk Bakim Giderleri",
+      "fortbildungskosten": "Sureekli Egitim Giderleri",
+      "pendlerpauschale": "Ise Gidis-Gelis Odeneggi",
+      "kirchenbeitrag": "Kilise Vergisi",
+      "grundbuchauszug": "Tapu Sicil Ozeti",
+      "betriebskostenabrechnung": "Isletme Gideri Tablosu",
+      "gewerbeschein": "Ticaret Belgesi",
+      "kontoauszug": "Hesap Ozeti",
+      "other": "Diger",
+      "unknown": "Bilinmiyor"
+    },
+    "documentTypes": {
+      "receipt": "Makbuz",
+      "invoice": "Fatura",
+      "contract": "Sozlesme",
+      "statement": "Ekstre",
+      "purchase_contract": "Satin Alma Sozlesmesi",
+      "rental_contract": "Kira Sozlesmesi",
+      "loan_contract": "Kredi Sozlesmesi",
+      "bank_statement": "Banka Ekstresi",
+      "property_tax": "Emlak Vergisi",
+      "svs_notice": "SVS Bildirimi",
+      "lohnzettel": "Maas Bordrosu (L16)",
+      "einkommensteuerbescheid": "Gelir Vergisi Degerlendirmesi",
+      "e1_form": "Gelir Vergisi Beyannamesi (E1)",
+      "l1_form": "Calisan Vergi Beyannamesi (L1)",
+      "l1k_beilage": "Cocuk Ek Formu (L1k)",
+      "l1ab_beilage": "Indirimler Ek Formu (L1ab)",
+      "e1a_beilage": "Serbest Meslek Ek Formu (E1a)",
+      "e1b_beilage": "Kira Geliri Ek Formu (E1b)",
+      "e1kv_beilage": "Sermaye Kazanci Ek Formu (E1kv)",
+      "u1_form": "Yillik KDV Beyannamesi (U1)",
+      "u30_form": "KDV On Bildirimi (U30/UVA)",
+      "jahresabschluss": "Yillik Mali Tablo",
+      "spendenbestaetigung": "Bagis Onay Belgesi",
+      "versicherungsbestaetigung": "Sigorta Onay Belgesi",
+      "kinderbetreuungskosten": "Cocuk Bakim Giderleri",
+      "fortbildungskosten": "Surekli Egitim Giderleri",
+      "pendlerpauschale": "Ise Gidis-Gelis Odenegi",
+      "kirchenbeitrag": "Kilise Vergisi",
+      "grundbuchauszug": "Tapu Sicil Ozeti",
+      "betriebskostenabrechnung": "Isletme Gideri Tablosu",
+      "gewerbeschein": "Ticaret Belgesi",
+      "kontoauszug": "Hesap Ozeti",
+      "other": "Diger",
+      "unknown": "Bilinmiyor"
+    },
+    "upload": {
+      "title": "Belge Yukle",
+      "dragDrop": "Dosyalari buraya surukleyin ve birakin veya secmek icin tiklayin",
+      "mobileHint": "Telefonunuzdan dosya secin veya kamerayla belge tarayin",
+      "formats": "Desteklenen formatlar: JPG, PNG, PDF (5MB alti onerilen, maks 10MB)",
+      "selectFiles": "Dosya Sec",
+      "takePhoto": "Fotograf Cek",
+      "progress": "Yukleme Ilerlemesi",
+      "processing": "Belge taniniyor...",
+      "completed": "Tamamlandi",
+      "error": "Yukleme basarisiz",
+      "retry": "Tekrar Dene",
+      "clearCompleted": "Tamamlananlari Temizle",
+      "contextHintRental": "Mulk #{{propertyId}} icin kira sozlesmesi yukleniyor",
+      "contextHintPurchase": "Mulk #{{propertyId}} icin satin alma sozlesmesi yukleniyor",
+      "contextHintLoan": "Mulk #{{propertyId}} icin kredi sozlesmesi yukleniyor",
+      "stagingTitle": "{{count}} fotograf isleme hazir",
+      "stagingHint": "Siralama icin surukleyin, ardindan bir belgede birlestirmeyi veya ayri ayri yuklemeyi secin.",
+      "mergeUpload": "1 belgede birlestir ({{count}} sayfa)",
+      "uploadSeparately": "Ayri ayri yukle ({{count}} belge)",
+      "clearStaging": "Temizle",
+      "groupedPagesMeta": "{{count}} sayfa · {{size}} KB",
+      "captureSessionTitle": "{{count}} sayfa yakalandi",
+      "captureSessionSubtitle": "Ayni gruptaki fotograflar islenmeden once tek bir belgede birlestirilecektir.",
+      "addPage": "Yakalamaya devam et",
+      "uploadGrouped": "Bu belgeyi yukle",
+      "clearCaptureSession": "Temizle",
+      "duplicateReused": "Tekrarlanan dosya, mevcut belge yeniden kullanildi",
+      "uploadButton": "Yukle",
+      "stagingHintSingle": "Asagidaki dosyayi inceleyin, ardindan Yukle tusuna basin."
+    },
+    "search": {
+      "placeholder": "Belgeleri ad veya icerige gore ara..."
+    },
+    "view": {
+      "grid": "Izgara Gorunumu",
+      "list": "Liste Gorunumu"
+    },
+    "viewGrid": "Izgara Gorunumu",
+    "viewList": "Liste Gorunumu",
+    "filters": {
+      "allTypes": "Tum Turler",
+      "allYears": "Tum Yillar",
+      "startDate": "Baslangic Tarihi",
+      "endDate": "Bitis Tarihi",
+      "needsReview": "Yalnizca Inceleme Gerektirenler",
+      "clear": "Filtreleri Temizle"
+    },
+    "groups": {
+      "all": "Tum Belgeler",
+      "employment": "Istihdam ve Bordro",
+      "self_employed": "Serbest Meslek / Isletme",
+      "property": "Mulk ve Kiralama",
+      "social_insurance": "Sigorta ve Krediler",
+      "tax_filing": "Vergi Beyannamesi ve Bildirimler",
+      "deductions": "Vergi Indirim Belgeleri",
+      "expense": "Makbuzlar ve Faturalar",
+      "banking": "Bankacilik",
+      "other": "Diger"
+    },
+    "list": {
+      "name": "Dosya",
+      "type": "Kategori",
+      "date": "Tarih",
+      "uploadDate": "Yuklenme Tarihi",
+      "size": "Boyut",
+      "confidence": "Guven",
+      "status": "Durum"
+    },
+    "statusReady": "Hazir",
+    "statusTransactionCreated": "Islem olusturuldu",
+    "status": {
+      "processing": "Isleniyor",
+      "pendingReview": "Inceleme bekliyor",
+      "transactionCreated": "Islem olusturuldu",
+      "contractProcessed": "Sozlesme islendi",
+      "reviewed": "Incelendi",
+      "recognized": "Tanindi"
+    },
+    "emptyGroup": "Mevcut filtreler icin bu kategoride henuz belge yok.",
+    "pageSize": "Sayfa basina oge",
+    "perPage": "/ sayfa",
     "bescheid": {
       "title": "Gelir Vergisi Degerlendirmesi Aktar",
       "description": "Verileri otomatik olarak yakalamak icin Einkommensteuerbescheid belgenizi yukleyin",
@@ -1992,7 +2012,14 @@
     "fields": {
       "type": "Tür"
     },
-    "preview": "Belge önizlemesi"
+    "preview": "Belge önizlemesi",
+    "reviewAction": "İncele",
+    "reviewActionSuccess": "Belge incelendi",
+    "reviewActionFailed": "İnceleme başarısız",
+    "confirmReview": "Onayla?",
+    "exportZip": "{{count}} belgeyi ZIP olarak dışa aktar",
+    "exportSuccess": "{{count}} belge dışa aktarıldı",
+    "exportError": "Dışa aktarma başarısız"
   },
   "profile": {
     "basicInfo": "Temel Bilgiler",
@@ -2203,6 +2230,8 @@
   },
   "reports": {
     "pageSubtitle": "Vergi raporlari olusturun, denetim hazirligini kontrol edin ve verilerinizi disa aktarin",
+    "unreviewedWarning": "Bu raporda {{count}} incelenmemis islem bulunmaktadir. Lutfen dogruluklarini kontrol edin.",
+    "reviewTransactions": "Islemleri incele",
     "tabs": {
       "ea": "Gelir/Gider Raporu",
       "bilanz": "Bilanco / Kar-Zarar",
@@ -2259,7 +2288,8 @@
         "bankspesen": "Banka Ucretleri",
         "zinsen": "Faiz Giderleri",
         "sonstige": "Diger Isletme Giderleri"
-      }
+      },
+      "regenerate": "Yeniden oluştur"
     },
     "bilanz": {
       "generate": "Bilanco / Kar-Zarar Olustur",
@@ -2504,7 +2534,7 @@
       "aggregate_total": "Tum mulklerin toplam tutari",
       "property_result": "Sonuc"
     },
-    "noOfficialTemplate": "Bu form icin resmi BMF PDF sablonu mevcut degildir. Lutfen yukaridaki basitlestirilmis onizlemeyi kullanin ve FinanzOnline uzerinden beyanname verin veya vergi dairesinden kagit formu talep edin.",
+    "noOfficialTemplate": "Bu form için resmi bir BMF PDF şablonu yok. Bu durumda “PDF indir” düğmesi sayfada gördüğünüz mevcut önizleme tablosunu PDF olarak dışa aktarır. Ardından yine FinanzOnline üzerinden gönderin veya gerekirse vergi dairesinden kağıt form isteyin.",
     "officialPdfAvailable": "Resmi BMF PDF mevcut",
     "selectForm": "Hangi forma ihtiyaciniz var?",
     "mainForm": "Ana form"
@@ -2755,7 +2785,7 @@
       "taxFormDetected": "\"{{name}}\" belgesinde vergi formu algilandi -- cikarilan veriler inceleme icin hazir. Goruntulemek ve onaylamak icin tiklayin.",
       "viewAndConfirm": "Goruntule ve Onayla",
       "taxFormViewed": "Inceleme icin belgeye yonlendirildi.",
-      "viewDetails": "Ayrintilari goruntule",
+      "viewDetails": "Detayları gör",
       "pendingTaxForm": "\"{{name}}\" belgesinden onaylanmamis vergi formu verileriniz var. Vergi beyannamenize dahil etmek icin inceleyin ve onaylayin.",
       "actionFailed": "Islem basarisiz oldu",
       "alreadyConfirmed": "Onaylandi",
@@ -2774,7 +2804,16 @@
       "laterSaved": "Sorun degil. Bu bordro yilini daha sonra arsivleyebilirsiniz.",
       "noPayrollThisMonth": "Bu ay calisan yok",
       "recordPayrollMonth": "Bordro ayini kaydet",
-      "viewDocument": "Belgeyi goruntule"
+      "viewDocument": "Belgeyi goruntule",
+      "remindLater": "Daha sonra hatırlat",
+      "dontRemindAgain": "Bir daha hatırlatma",
+      "takeActionNow": "Şimdi işlem yap",
+      "snoozed": "Tamam, daha sonra tekrar hatırlatacağım.",
+      "expandDetails": "Detayları genişlet",
+      "hideDetails": "Detayları gizle",
+      "potentialSavings": "Potansiyel tasarruf",
+      "estimatedRefund": "Tahmini iade",
+      "taxSaving": "Vergi tasarrufu"
     },
     "confirmation": {
       "title": "Taxja onayinizi gerektiriyor",
@@ -2808,7 +2847,7 @@
       "undo": "Geri Al",
       "undone": "Geri alindi. Olusturulan oge kaldirildi.",
       "undoFailed": "Geri alma basarisiz. Lutfen manuel olarak kaldirin.",
-      "duplicateUploadReused": "{{name}} zaten yuklenmisti — mevcut belge yeniden kullanildi.",
+      "duplicateUploadReused": "{{name}} zaten yuklenmisti  mevcut belge yeniden kullanildi.",
       "linked": "Belge mevcut kayda baglandi. Tekrarlanan kayit olusturulmadi.",
       "linkExisting": "Tekrarlanan Kayit Tespit Edildi",
       "loanRepayment": "Kredi Geri Odemesi",
@@ -3577,7 +3616,7 @@
     },
     "reports": {
       "title": "Vergi Raporları",
-      "message": "E/A hesaplaması, Saldenliste ve vergi formu önizlemeleri dahil profesyonel vergi raporları oluşturun. İstediğiniz zaman PDF veya CSV olarak dışa aktarın — her şey muhasebeciniz veya Finanzamt için hazırdır."
+      "message": "E/A hesaplaması, Saldenliste ve vergi formu önizlemeleri dahil profesyonel vergi raporları oluşturun. İstediğiniz zaman PDF veya CSV olarak dışa aktarın  her şey muhasebeciniz veya Finanzamt için hazırdır."
     },
     "ai": {
       "title": "AI Asistan",
@@ -3596,11 +3635,11 @@
     "dashboard": {
       "year": {
         "title": "Yıl Seçici",
-        "message": "Buradan vergi yıllarını değiştirin. Paneldeki tüm veriler — gelir, gider ve vergi tahminleri — seçilen yıl için güncellenecektir."
+        "message": "Buradan vergi yıllarını değiştirin. Paneldeki tüm veriler  gelir, gider ve vergi tahminleri  seçilen yıl için güncellenecektir."
       },
       "upload": {
         "title": "Hızlı Yükleme",
-        "message": "Faturaları, makbuzları veya sözleşmeleri doğrudan panele bırakın. OCR motorumuz otomatik olarak tarar ve işlemler oluşturur — sayfadan ayrılmanıza gerek yok."
+        "message": "Faturaları, makbuzları veya sözleşmeleri doğrudan panele bırakın. OCR motorumuz otomatik olarak tarar ve işlemler oluşturur  sayfadan ayrılmanıza gerek yok."
       },
       "overview": {
         "title": "Finansal Genel Bakış",
@@ -3656,7 +3695,7 @@
       },
       "tabs": {
         "title": "Kategori Sekmeleri",
-        "message": "Belgeler türe göre gruplandırılmıştır — faturalar, makbuzlar, sözleşmeler, vergi formları vb. Hızlı bulmak için sekmeleri değiştirin."
+        "message": "Belgeler türe göre gruplandırılmıştır  faturalar, makbuzlar, sözleşmeler, vergi formları vb. Hızlı bulmak için sekmeleri değiştirin."
       },
       "list": {
         "title": "Belge Listesi",
@@ -3714,7 +3753,7 @@
     "recurring": {
       "create": {
         "title": "Tekrarlayan Oluştur",
-        "message": "Yeni bir tekrarlayan işlem ayarlayın — kira geliri, kredi ödemesi, sigorta veya herhangi bir düzenli gider. Sıklığı ve başlangıç tarihini seçin."
+        "message": "Yeni bir tekrarlayan işlem ayarlayın  kira geliri, kredi ödemesi, sigorta veya herhangi bir düzenli gider. Sıklığı ve başlangıç tarihini seçin."
       },
       "filters": {
         "title": "Filtreler",
@@ -3736,7 +3775,7 @@
       },
       "taxtools": {
         "title": "Vergi Çalışma Alanı",
-        "message": "Hepsi bir arada vergi merkeziniz: beyanname hazırlığı, belge kontrolü, AI rehberliği ve rapor oluşturma — her şey tek bir yerde."
+        "message": "Hepsi bir arada vergi merkeziniz: beyanname hazırlığı, belge kontrolü, AI rehberliği ve rapor oluşturma  her şey tek bir yerde."
       }
     },
     "propertyDetail": {
@@ -3764,7 +3803,7 @@
       },
       "preview": {
         "title": "Belge Onizleme",
-        "message": "Orijinal belge burada goruntulenir — PDF dosyalari gomulu, resimler dogrudan islenir. Cikarilan verileri kaynakla dogrulamak icin kullanin."
+        "message": "Orijinal belge burada goruntulenir  PDF dosyalari gomulu, resimler dogrudan islenir. Cikarilan verileri kaynakla dogrulamak icin kullanin."
       },
       "ocrData": {
         "title": "Cikarilan Veriler",
@@ -4214,6 +4253,10 @@
     },
     "confirm": {
       "deactivate": "Bu islem yukumlulugu kalici olarak silmek yerine pasif hale getirecek. Devam edilsin mi?"
+    },
+    "pendingContracts": {
+      "title": "Bekleyen kredi sözleşmeleri",
+      "subtitle": "Hâlâ incelenen veya temel alanları eksik olan sözleşmeler, Belgeler bölümünde tamamlayana kadar burada kalır."
     }
   },
   "assetOverview": {

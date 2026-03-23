@@ -490,7 +490,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
         {isEmpty && (
           <div className="chat-welcome">
             <div className="chat-welcome-advisor">
-              <div className="chat-advisor-avatar-lg">TJ</div>
+              <div className="chat-advisor-avatar-lg">T</div>
               <div className="chat-welcome-text">
                 <p className="chat-welcome-greeting">
                   {t('ai.welcomeTitle', 'Hi, I\'m your Taxja advisor')}
@@ -513,7 +513,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
           return (
             <div key={message.id} className={`chat-msg ${message.role}`}>
               {isAssistant && (
-                <div className={`chat-msg-avatar${showAvatar ? '' : ' invisible'}`}>TJ</div>
+                <div className={`chat-msg-avatar${showAvatar ? '' : ' invisible'}`}>T</div>
               )}
               <div className="chat-msg-bubble">
                 {message.role === 'user' ? (
@@ -539,7 +539,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
 
               return (
               <div key={pm.id} className="chat-msg assistant chat-proactive-bubble">
-                <div className="chat-msg-avatar">TJ</div>
+                <div className="chat-msg-avatar">T</div>
                 <div className="chat-msg-bubble">
                   <button
                     type="button"
@@ -1003,7 +1003,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
 
         {isLoading && (
           <div className="chat-msg assistant">
-            <div className="chat-msg-avatar">TJ</div>
+            <div className="chat-msg-avatar">T</div>
             <div className="chat-msg-bubble">
               <div className="chat-typing">
                 <span className="chat-typing-dot" />

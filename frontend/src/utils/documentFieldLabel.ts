@@ -6,6 +6,12 @@ const SURROUNDED_FIELD_PATTERN =
 const MISSING_FIELDS_PATTERN =
   /\b(Missing:\s*)([A-Za-z][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_]*)+)/g;
 
+const DOCUMENT_FIELD_LABEL_ALIASES: Record<string, string[]> = {
+  transaction_type: ['documents.review.transactionType'],
+  document_type: ['documents.documentType'],
+  user_contract_role: ['documents.review.fields.myRole'],
+};
+
 export const normalizeDocumentFieldKey = (fieldName: string): string => {
   const stripped = fieldName.trim().replace(STRIP_EDGE_PUNCTUATION, '');
 
@@ -44,6 +50,7 @@ export const formatDocumentFieldLabel = (fieldName: string, t: TFunction): strin
 
   if (normalized) {
     const candidates = [
+      ...(DOCUMENT_FIELD_LABEL_ALIASES[normalized] ?? []),
       `documents.review.taxFieldLabels.${normalized}`,
       `documents.suggestion.fields.${normalized}`,
     ];
