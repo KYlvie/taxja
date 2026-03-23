@@ -1,7 +1,13 @@
 import type { SupportedLanguage } from '../utils/locale';
 
-type LocaleValue = string | number | boolean | null | LocaleObject | LocaleValue[];
-type LocaleObject = Record<string, LocaleValue>;
+type LocalePrimitive = string | number | boolean | null;
+interface LocaleObject {
+  [key: string]: LocaleNode;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+interface LocaleArray extends Array<LocaleNode> {}
+// Use interface-based recursion to avoid circular type alias error
+type LocaleNode = LocalePrimitive | LocaleObject | LocaleArray;
 
 const CP1252_BYTE_BY_CODE_POINT = new Map<number, number>([
   [0x20ac, 0x80],
@@ -466,7 +472,7 @@ export const repairMojibakeText = (value: string): string => {
   return replaceWindows1252Controls(repaired);
 };
 
-const repairLocaleValue = (value: LocaleValue): LocaleValue => {
+const repairLocaleValue = (value: LocaleNode): LocaleNode => {
   if (typeof value === 'string') {
     return repairMojibakeText(value);
   }
@@ -477,7 +483,7 @@ const repairLocaleValue = (value: LocaleValue): LocaleValue => {
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, repairLocaleValue(nestedValue as LocaleValue)])
+      Object.entries(value).map(([key, nestedValue]) => [key, repairLocaleValue(nestedValue as LocaleNode)])
     );
   }
 

@@ -27,7 +27,7 @@ jobs:
 
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build
+        run: npx vite build
 
       - name: Upload frontend dist
         if: github.event_name == 'push'
