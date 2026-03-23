@@ -57,9 +57,9 @@ STRIPE_OVERAGE_PRODUCT_ID=prod_UApZwABQQOY9SW
 ENABLE_EMAIL_NOTIFICATIONS=true
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=ylvie.khoo@gmail.com
-SMTP_PASSWORD=dzobcjugezwzyrxb
-SMTP_FROM_EMAIL=ylvie.khoo@gmail.com
+SMTP_USER=your-smtp-user@gmail.com
+SMTP_PASSWORD=your-smtp-app-password
+SMTP_FROM_EMAIL=your-smtp-user@gmail.com
 SMTP_FROM_NAME=Taxja
 SMTP_USE_TLS=true
 """
