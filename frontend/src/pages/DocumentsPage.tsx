@@ -24,7 +24,6 @@ import { useRefreshStore } from '../stores/refreshStore';
 import { aiToast } from '../stores/aiToastStore';
 import { getLocaleForLanguage } from '../utils/locale';
 import i18n from '../i18n';
-import { canReprocessDocument } from '../utils/documentReprocessing';
 import { formatTransactionCategoryLabel } from '../utils/formatTransactionCategoryLabel';
 import { getApiErrorMessage, getLineItemReconciliationError } from '../utils/apiError';
 import isDocumentPresentationResolverEnabled from '../documents/presentation/featureFlag';
@@ -1766,16 +1765,6 @@ const DocumentsPage = () => {
       setRetryingOcr(false);
     }
   }, [t, waitForRetryCompletion]);
-
-  const handleRetryOcr = async () => {
-    if (!viewingDocument || retryingOcr) return;
-    aiToast(t('documents.reprocessStarting', 'Starting reprocess...'), 'info');
-    try {
-      await retryDocumentById(viewingDocument.id);
-    } catch {
-      // error toast already shown inside retryDocumentById
-    }
-  };
 
   const handleRetryTaxImportDocument = async (documentId: number, kind: 'bescheid' | 'e1') => {
     if (retryingOcr) return;

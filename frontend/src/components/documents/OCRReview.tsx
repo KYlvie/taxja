@@ -8,7 +8,6 @@ import { getLocaleForLanguage } from '../../utils/locale';
 import { documentService } from '../../services/documentService';
 import { OCRReviewData, ExtractedData, DocumentType } from '../../types/document';
 import { aiToast } from '../../stores/aiToastStore';
-import { canReprocessDocument } from '../../utils/documentReprocessing';
 import {
   formatDocumentFieldLabel,
   translateDocumentSuggestionText,
@@ -225,7 +224,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const [selectedTxnType, setSelectedTxnType] = useState<'income' | 'expense'>('expense');
   const [bescheidMode, setBescheidMode] = useState(false);
   const [bescheidOcrText, setBescheidOcrText] = useState<string>('');
-  const [retryingOcr, setRetryingOcr] = useState(false);
+  const [retryingOcr] = useState(false);
   const [reprocessPending, setReprocessPending] = useState(false);
   const retryPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -399,26 +398,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     } catch (error) {
       console.error('Failed to download:', error);
       aiToast(t('documents.downloadFailed', 'Download failed'), 'error');
-    }
-  };
-
-  const handleRetryOcr = async () => {
-    if (!reviewData || !canReprocessDocument(reviewData.document) || retryingOcr) {
-      return;
-    }
-
-    setRetryingOcr(true);
-    try {
-      await documentService.retryOcr(reviewData.document.id);
-      setReprocessPending(true);
-      aiToast(t('documents.reprocessStarted'), 'success');
-      await loadReviewData(false);
-      pollForReprocessCompletion();
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || t('documents.reprocessFailed'));
-      aiToast(t('documents.reprocessFailed'), 'error');
-    } finally {
-      setRetryingOcr(false);
     }
   };
 

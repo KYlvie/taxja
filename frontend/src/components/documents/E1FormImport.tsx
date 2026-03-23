@@ -297,7 +297,6 @@ const E1FormImport = ({
             </div>
             <div className="extracted-data">
               <h3>{t('documents.review.extractedData')}</h3>
-              <fieldset className="review-form-fieldset" disabled={loading}>
               <fieldset className="review-form-fieldset" disabled={mode === 'readonly' || loading}>
                 <section className="bescheid-section">
                   <div className="bescheid-section-header">
