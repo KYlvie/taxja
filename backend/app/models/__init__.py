@@ -55,6 +55,7 @@ from app.models.employer_annual_archive import (
 )
 from app.models.asset_policy_snapshot import AssetPolicySnapshot
 from app.models.asset_event import AssetEvent, AssetEventType, AssetEventTriggerSource
+from app.models.reminder_state import ReminderState
 from app.models.credit_balance import CreditBalance
 from app.models.credit_ledger import (
     CreditLedger,
@@ -136,6 +137,7 @@ __all__ = [
     "AssetEvent",
     "AssetEventType",
     "AssetEventTriggerSource",
+    "ReminderState",
     "CreditBalance",
     "CreditLedger",
     "CreditOperation",

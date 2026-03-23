@@ -554,7 +554,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                   ))}
 
                   {/* Recurring transaction confirmation card */}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.monthly_rent && (
@@ -639,18 +639,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                   )}
 
                   {/* Show result after action */}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.recurringConfirmed')}
                     </div>
                   )}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.recurringDismissed')}
                     </div>
                   )}
 
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.year_month && (
@@ -719,7 +719,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       )}
                     </div>
                   )}
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />{' '}
                       {t('ai.proactive.employerMonthConfirmed', {
@@ -728,7 +728,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.employerMonthNoPayroll', {
                         defaultValue: '{{month}} has been marked as a month without employees.',
@@ -736,7 +736,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.tax_year && (
@@ -801,7 +801,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       )}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />{' '}
                       {t('ai.proactive.employerAnnualArchiveConfirmed', {
@@ -810,7 +810,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.laterSaved', {
                         defaultValue: 'No problem. You can archive this payroll year later.',
@@ -819,7 +819,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                   )}
 
                   {/* Contract expired — action buttons: upload renewal or go to manual add */}
-                  {pm.type === 'contract_expired' && pm.actionStatus === 'pending' && (
+                  {!pm.bucket && pm.type === 'contract_expired' && pm.actionStatus === 'pending' && (
                     <div className="chat-recurring-actions" style={{ marginTop: '8px' }}>
                       <button
                         className="chat-recurring-btn confirm"
@@ -846,14 +846,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </button>
                     </div>
                   )}
-                  {pm.type === 'contract_expired' && pm.actionStatus !== 'pending' && (
+                  {!pm.bucket && pm.type === 'contract_expired' && pm.actionStatus !== 'pending' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />
                     </div>
                   )}
 
                   {/* Unit percentage prompt — inline input in chat */}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'pending' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'pending' && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         <div className="chat-recurring-row">
@@ -894,19 +894,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </div>
                     </div>
                   )}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.unitPercentageSaved', { percentage: percentageInputs[pm.id] || '' })}
                     </div>
                   )}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.skipped')}
                     </div>
                   )}
 
                   {/* Tax form review — show extracted data summary + view button */}
-                  {pm.type === 'tax_form_review' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'tax_form_review' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.suggestion_type && (
@@ -949,7 +949,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </div>
                     </div>
                   )}
-                  {pm.type === 'tax_form_review' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'tax_form_review' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.taxFormViewed', 'Navigated to document for review.')}
                     </div>

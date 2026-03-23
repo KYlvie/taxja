@@ -197,6 +197,7 @@ class User(Base):
     employer_annual_archives = relationship("EmployerAnnualArchive", back_populates="user", cascade="all, delete-orphan")
     asset_policy_snapshots = relationship("AssetPolicySnapshot", back_populates="user", cascade="all, delete-orphan")
     asset_events = relationship("AssetEvent", back_populates="user", cascade="all, delete-orphan")
+    reminder_states = relationship("ReminderState", back_populates="user", cascade="all, delete-orphan")
     credit_balance = relationship("CreditBalance", back_populates="user", uselist=False, cascade="all, delete-orphan")
     credit_ledger = relationship("CreditLedger", back_populates="user", cascade="all, delete-orphan")
     topup_purchases = relationship("TopupPurchase", back_populates="user", cascade="all, delete-orphan")

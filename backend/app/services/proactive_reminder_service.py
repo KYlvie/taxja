@@ -12,6 +12,7 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.document import Document

@@ -37,6 +37,11 @@ export interface ActionDescriptor {
   detailLabel?: string;
 }
 
+export type ReminderBucket =
+  | 'terminal_action'
+  | 'snoozeable_condition'
+  | 'time_based_repeat';
+
 /**
  * Unified UI state enum.
  * Backend returns this single stable value — frontend doesn't derive from multiple fields.
@@ -99,6 +104,15 @@ export interface ProactiveMessage {
   dismissed?: boolean;
   /** Unified action descriptor — enables generic dispatch without per-type switch */
   action?: ActionDescriptor;
+  /** Server-owned reminder id for lifecycle endpoints */
+  serverId?: string;
+  /** Whether this proactive message originated from the unified backend reminder feed */
+  messageOrigin?: 'server' | 'local';
+  bucket?: ReminderBucket;
+  kind?: string;
+  sourceType?: string;
+  snoozedUntil?: string | null;
+  nextDueAt?: string | null;
 }
 
 // =============================================================================
@@ -198,6 +212,7 @@ interface AIAdvisorState {
 
   // --- Existing actions (unchanged signatures) ---
   pushMessage: (msg: Omit<ProactiveMessage, 'id' | 'timestamp' | 'read'>) => void;
+  syncServerMessages: (messages: ProactiveMessage[]) => void;
   markAllRead: () => void;
   clearMessages: () => void;
   setLoginGreetingShown: () => void;
@@ -258,6 +273,10 @@ function capByTimestamp(messages: StructuredChatMessage[], max: number): Structu
     .slice(-max);
 }
 
+function countUnreadMessages(messages: ProactiveMessage[]): number {
+  return messages.reduce((count, message) => count + (!message.read && !message.dismissed ? 1 : 0), 0);
+}
+
 // =============================================================================
 // Store Implementation
 // =============================================================================
@@ -287,14 +306,49 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         read: false,
       };
       const messages = [...state.messages, newMsg].slice(-20);
-      return { messages, unreadCount: state.unreadCount + 1 };
+      return { messages, unreadCount: countUnreadMessages(messages) };
+    }),
+
+  syncServerMessages: (incomingMessages) =>
+    set((state) => {
+      const localMessages = state.messages.filter((message) => message.messageOrigin !== 'server');
+      const existingServerById = new Map(
+        state.messages
+          .filter((message) => message.messageOrigin === 'server' && message.serverId)
+          .map((message) => [message.serverId as string, message])
+      );
+
+      const normalizedServerMessages = incomingMessages.map((message) => {
+        const existing = message.serverId ? existingServerById.get(message.serverId) : undefined;
+        return {
+          ...message,
+          id: existing?.id || message.id || generateId(),
+          timestamp: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp),
+          read: existing?.read ?? false,
+          dismissed: false,
+          actionStatus:
+            message.actionStatus ??
+            existing?.actionStatus ??
+            (message.bucket === 'terminal_action' ? 'pending' : undefined),
+          messageOrigin: 'server' as const,
+        };
+      });
+
+      const messages = [...localMessages, ...normalizedServerMessages].slice(-40);
+      return {
+        messages,
+        unreadCount: countUnreadMessages(messages),
+      };
     }),
 
   markAllRead: () =>
-    set((state) => ({
-      messages: state.messages.map((m) => ({ ...m, read: true })),
-      unreadCount: 0,
-    })),
+    set((state) => {
+      const messages = state.messages.map((m) => ({ ...m, read: true }));
+      return {
+        messages,
+        unreadCount: countUnreadMessages(messages),
+      };
+    }),
 
   clearMessages: () => set({
     messages: [],
@@ -310,11 +364,15 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
   },
 
   updateMessageAction: (messageId, status) =>
-    set((state) => ({
-      messages: state.messages.map((m) =>
+    set((state) => {
+      const messages = state.messages.map((m) =>
         m.id === messageId ? { ...m, actionStatus: status } : m
-      ),
-    })),
+      );
+      return {
+        messages,
+        unreadCount: countUnreadMessages(messages),
+      };
+    }),
 
   dismissMessage: (messageId) =>
     set((state) => {
@@ -324,7 +382,8 @@ export const useAIAdvisorStore = create<AIAdvisorState>((set, get) => ({
         messages: state.messages.map((m) =>
           m.id === messageId ? { ...m, read: true, dismissed: true } : m
         ),
-        unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+        unreadCount:
+          wasUnread ? Math.max(0, state.unreadCount - 1) : countUnreadMessages(state.messages),
       };
     }),
 

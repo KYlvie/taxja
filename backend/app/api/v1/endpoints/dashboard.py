@@ -17,7 +17,6 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.services.dashboard_service import DashboardService
 from app.services.proactive_reminder_service import ProactiveReminderService
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
