@@ -66,7 +66,12 @@
     "datePicker": "Odabir datuma",
     "name": "Naziv",
     "saveFailed": "Spremanje neuspješno",
-    "status": "Status"
+    "status": "Status",
+    "date": "Datum",
+    "oneClickConfirm": "Potvrdi sve",
+    "bulkConfirmTransactionsTooltip": "Potvrdi sve transakcije na čekanju",
+    "bulkConfirmDocumentsTooltip": "Potvrdi sve dokumente na čekanju",
+    "bulkConfirmSuccess": "Potvrđeno {{count}} stavki"
   },
   "quickActions": {
     "title": "Brze akcije",
@@ -383,6 +388,7 @@
     "cancelOverride": "Otkazi",
     "userOverride": "Korisnicka korekcija",
     "hasDocument": "Ima pripadajuci dokument",
+    "bankReconciled": "Bankovni uskladjeno",
     "systemGenerated": "Sistemski generisano (automatska amortizacija)",
     "needsReview": "Potreban pregled",
     "aiReviewNotes": "AI napomene za pregled",
@@ -544,7 +550,9 @@
     },
     "fields": {
       "lohnsteuer": "Porez na plate"
-    }
+    },
+    "partiallyDeductible": "Djelomično",
+    "deductibilityDerivedFromItems": "Izvedeno iz stavki"
   },
   "properties": {
     "title": "Nekretnine",
@@ -1357,7 +1365,7 @@
       "allYears": "Sve godine",
       "startDate": "Od datuma",
       "endDate": "Do datuma",
-      "needsReview": "Samo za pregled",
+      "needsReview": "Potreban pregled",
       "clear": "Obrisi filtere"
     },
     "groups": {
@@ -2025,7 +2033,7 @@
     "reviewActionSuccess": "Dokument pregledan",
     "reviewActionFailed": "Pregled nije uspio",
     "confirmReview": "Potvrditi?",
-    "exportZip": "Izvezi {{count}} dokumenata kao ZIP",
+    "exportZip": "Izvezi ZIP",
     "exportSuccess": "{{count}} dokumenata izvezeno",
     "exportError": "Izvoz nije uspio",
     "bankWorkbench": {
@@ -2282,7 +2290,7 @@
     "errorGeneric": "Nije moguce prihvatiti napomenu. Molimo pokusajte ponovo."
   },
   "reports": {
-    "pageSubtitle": "Generisanje poreskih izvjestaja, provjera spremnosti za reviziju i izvoz vasih podataka",
+    "pageSubtitle": "Generisite izvjestaje o prihodima, preglede stanja i poreske obrasce te pregledajte nepregledane transakcije prije podnosenja",
     "unreviewedWarning": "{{count}} nepregledanih transakcija je ukljuceno u ovaj izvjestaj. Molimo provjerite njihovu tacnost.",
     "reviewTransactions": "Pregledaj transakcije",
     "tabs": {
@@ -2904,7 +2912,13 @@
       "linked": "Dokument povezan sa postojecim zapisom. Duplikat nije kreiran.",
       "linkExisting": "Detektovan duplikat",
       "loanRepayment": "Otplata zajma",
-      "noAction": "Konfiguracija akcije nedostaje. Molimo osvjezite stranicu."
+      "noAction": "Konfiguracija akcije nedostaje. Molimo osvjezite stranicu.",
+      "from": "Od",
+      "address": "Adresa",
+      "item": "Stavka",
+      "matchType": "Tip podudaranja",
+      "reason": "Razlog",
+      "taxpayerName": "Porezni obveznik"
     },
     "followUp": {
       "header": "Trebam jos nekoliko detalja:",

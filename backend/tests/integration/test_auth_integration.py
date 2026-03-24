@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from app.core.security import get_password_hash
 from app.models.user import User
+from app.services.google_identity_service import GoogleIdentity
 
 
 class TestUserRegistration:
@@ -198,7 +199,8 @@ class TestEmailVerificationAndLogin:
             json={"email": test_user["email"], "password": "WrongPassword123!"},
         )
         assert response.status_code == 401
-        assert "incorrect" in response.json()["detail"].lower()
+        detail = response.json()["detail"].lower()
+        assert "incorrect" in detail or "passwort" in detail
 
     def test_access_profile_with_login_token(self, client, test_user):
         login_response = client.post(
@@ -217,6 +219,115 @@ class TestEmailVerificationAndLogin:
         assert profile["email"] == test_user["email"]
         assert profile["name"] == test_user["full_name"]
         assert "tax_profile_completeness" in profile
+
+
+class TestGoogleLogin:
+    """Google sign-in for existing accounts."""
+
+    @patch(
+        "app.api.v1.endpoints.auth.verify_google_identity_token",
+        return_value=GoogleIdentity(
+            subject="google-subject-123",
+            email="googleuser@example.com",
+            email_verified=True,
+            name="Google User",
+        ),
+    )
+    def test_google_login_links_existing_account_by_email(
+        self,
+        _mock_verify_google,
+        client,
+        db,
+    ):
+        db.add(
+            User(
+                email="googleuser@example.com",
+                name="Google User",
+                password_hash=get_password_hash("Password123!"),
+                user_type="employee",
+                email_verified=True,
+            )
+        )
+        db.commit()
+
+        response = client.post(
+            "/api/v1/auth/google",
+            json={"credential": "google-credential"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user"]["email"] == "googleuser@example.com"
+        assert data["token_type"] == "bearer"
+        assert "access_token" in data
+
+        user = db.query(User).filter(User.email == "googleuser@example.com").first()
+        assert user is not None
+        assert user.google_subject == "google-subject-123"
+
+    @patch("app.api.v1.endpoints.auth.TrialService.activate_trial")
+    @patch(
+        "app.api.v1.endpoints.auth.verify_google_identity_token",
+        return_value=GoogleIdentity(
+            subject="google-unverified-123",
+            email="pendinggoogle@example.com",
+            email_verified=True,
+            name="Pending Google",
+        ),
+    )
+    def test_google_login_verifies_existing_unverified_account(
+        self,
+        _mock_verify_google,
+        mock_activate_trial,
+        client,
+        db,
+    ):
+        db.add(
+            User(
+                email="pendinggoogle@example.com",
+                name="Pending Google",
+                password_hash=get_password_hash("Password123!"),
+                user_type="employee",
+                email_verified=False,
+                email_verification_token="verify-token",
+            )
+        )
+        db.commit()
+
+        response = client.post(
+            "/api/v1/auth/google",
+            json={"credential": "google-credential"},
+        )
+
+        assert response.status_code == 200
+        user = db.query(User).filter(User.email == "pendinggoogle@example.com").first()
+        assert user is not None
+        assert user.email_verified is True
+        assert user.email_verification_token is None
+        assert user.google_subject == "google-unverified-123"
+        mock_activate_trial.assert_called_once_with(user.id)
+
+    @patch(
+        "app.api.v1.endpoints.auth.verify_google_identity_token",
+        return_value=GoogleIdentity(
+            subject="google-new-123",
+            email="newgoogle@example.com",
+            email_verified=True,
+            name="New Google",
+        ),
+    )
+    def test_google_login_rejects_unknown_email(
+        self,
+        _mock_verify_google,
+        client,
+    ):
+        response = client.post(
+            "/api/v1/auth/google",
+            json={"credential": "google-credential"},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "google_account_not_registered"
 
 
 class TestPasswordResetFlow:

@@ -88,7 +88,9 @@ describe('DocumentList review status', () => {
     });
   });
 
-  it('keeps the row status aligned with the needs-review summary', async () => {
+  it('reports the filtered summary without rendering the legacy export UI', async () => {
+    const onSummaryChange = vi.fn();
+
     getDocuments.mockResolvedValue({
       documents: [
         {
@@ -114,16 +116,19 @@ describe('DocumentList review status', () => {
 
     render(
       <MemoryRouter>
-        <DocumentList />
+        <DocumentList onSummaryChange={onSummaryChange} />
       </MemoryRouter>,
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Needs review: 1')).toBeInTheDocument();
+      expect(onSummaryChange).toHaveBeenCalledWith({
+        totalCount: 1,
+        reviewCount: 1,
+        confirmableIds: [],
+      });
     });
 
-    expect(screen.getByText('Pending review')).toBeInTheDocument();
-    expect(screen.queryByText('Transaction created')).not.toBeInTheDocument();
-    expect(screen.getByText('ZIP')).toBeInTheDocument();
+    expect(screen.getAllByText('All documents').length).toBeGreaterThan(0);
+    expect(screen.queryByText('ZIP')).not.toBeInTheDocument();
   });
 });

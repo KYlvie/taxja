@@ -66,7 +66,12 @@
     "datePicker": "日期选择器",
     "name": "名称",
     "saveFailed": "保存失败",
-    "status": "状态"
+    "status": "状态",
+    "date": "日期",
+    "oneClickConfirm": "一键确认",
+    "bulkConfirmTransactionsTooltip": "确认所有待审核的交易",
+    "bulkConfirmDocumentsTooltip": "确认所有待审核的文档",
+    "bulkConfirmSuccess": "已确认 {{count}} 项"
   },
   "quickActions": {
     "title": "快捷操作",
@@ -514,6 +519,7 @@
       "blocked": "{{count}} 笔交易关联了文档，无法删除。"
     },
     "hasDocument": "有支持文档",
+    "bankReconciled": "已对账",
     "systemGenerated": "系统生成（自动折旧）",
     "import": {
       "title": "导入交易",
@@ -538,7 +544,9 @@
     },
     "fields": {
       "lohnsteuer": "工资税"
-    }
+    },
+    "partiallyDeductible": "部分可抵扣",
+    "deductibilityDerivedFromItems": "由明细条目决定"
   },
   "documents": {
     "title": "文档",
@@ -840,8 +848,9 @@
       "allYears": "全部年份",
       "startDate": "开始日期",
       "endDate": "结束日期",
-      "needsReview": "仅看需要复核",
-      "clear": "清空筛选"
+      "needsReview": "需要复核",
+      "clear": "清除",
+      "apply": "应用"
     },
     "groups": {
       "all": "全部文档",
@@ -1627,7 +1636,7 @@
     "reviewActionSuccess": "文档已审核",
     "reviewActionFailed": "审核失败",
     "confirmReview": "确认审核？",
-    "exportZip": "导出 {{count}} 个文档为 ZIP",
+    "exportZip": "导出 ZIP",
     "exportSuccess": "已导出 {{count}} 个文档",
     "exportError": "导出失败",
     "bankWorkbench": {
@@ -1655,7 +1664,9 @@
       "actions": {
         "create": "新增交易",
         "match": "匹配已有交易",
-        "ignore": "忽略重复"
+        "ignore": "忽略重复",
+        "undoCreate": "撤销创建",
+        "unmatch": "取消匹配"
       },
       "emptyPending": "当前没有需要确认的银行流水。",
       "emptyResolved": "暂时还没有自动处理的流水。",
@@ -2074,7 +2085,7 @@
     }
   },
   "reports": {
-    "pageSubtitle": "生成税务报告、检查审计准备情况并导出数据",
+    "pageSubtitle": "生成收支报表、余额汇总和税务表格，并在出表前检查待审核交易",
     "unreviewedWarning": "{{count}} 笔未审核交易已纳入本报告，请检查其准确性。",
     "reviewTransactions": "审核交易",
     "tabs": {
@@ -2479,7 +2490,13 @@
       "undoFailed": "撤销失败，请手动删除。",
       "duplicateUploadReused": "{{name}} 已上传过已复用现有文件。",
       "loanRepayment": "贷款还款",
-      "noAction": "操作配置缺失，请刷新页面。"
+      "noAction": "操作配置缺失，请刷新页面。",
+      "from": "来自",
+      "address": "地址",
+      "item": "项目",
+      "matchType": "匹配类型",
+      "reason": "原因",
+      "taxpayerName": "纳税人"
     },
     "followUp": {
       "header": "我还需要一些信息：",

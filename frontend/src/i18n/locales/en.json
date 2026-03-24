@@ -66,7 +66,12 @@
     "datePicker": "Date picker",
     "name": "Name",
     "saveFailed": "Save failed",
-    "status": "Status"
+    "status": "Status",
+    "date": "Date",
+    "oneClickConfirm": "Confirm all",
+    "bulkConfirmTransactionsTooltip": "Confirm all pending transactions",
+    "bulkConfirmDocumentsTooltip": "Confirm all pending documents",
+    "bulkConfirmSuccess": "Confirmed {{count}} items"
   },
   "quickActions": {
     "title": "Quick Actions",
@@ -383,6 +388,7 @@
     "cancelOverride": "Cancel",
     "userOverride": "User Override",
     "hasDocument": "Has supporting document",
+    "bankReconciled": "Bank reconciled",
     "systemGenerated": "System-generated (automatic depreciation)",
     "needsReview": "Needs Review",
     "aiReviewNotes": "AI Review Notes",
@@ -544,7 +550,9 @@
     },
     "fields": {
       "lohnsteuer": "Lohnsteuer"
-    }
+    },
+    "partiallyDeductible": "Partial",
+    "deductibilityDerivedFromItems": "Derived from line items"
   },
   "properties": {
     "title": "Properties",
@@ -1362,8 +1370,9 @@
       "allYears": "All Years",
       "startDate": "From Date",
       "endDate": "To Date",
-      "needsReview": "Needs Review Only",
-      "clear": "Clear Filters"
+      "needsReview": "Needs Review",
+      "clear": "Clear",
+      "apply": "Apply"
     },
     "groups": {
       "all": "All Documents",
@@ -1934,6 +1943,9 @@
       "noCategory": "No category assigned",
       "applyCategoryToAll": "Apply category to all items",
       "selectCategory": "Select category",
+      "editing": "Editing",
+      "expandDetails": "Expand details",
+      "hideDetails": "Hide details",
       "incomeEditing": "Editing income details",
       "incomeStatus": "Income details",
       "incomeEditingHint": "You can correct item names, quantities, amounts, and VAT details, then save directly.",
@@ -1941,6 +1953,7 @@
       "incomeFooterEditing": "Saving updates the OCR details for this income document and syncs any linked transaction when present.",
       "incomeFooterReadonly": "This area shows the extracted income document details. Enter edit mode if item names, quantities, amounts, or VAT need correction.",
       "saveIncomeDocument": "Save document",
+      "linkedTransactionShort": "Linked transaction",
       "receiptNumber": "Receipt {{number}}",
       "incomeTitle": "Income details",
       "categoryEditHint": "Use the selector above to apply one category to the whole receipt, or adjust each line item below.",
@@ -2030,7 +2043,7 @@
     "reviewActionSuccess": "Document reviewed",
     "reviewActionFailed": "Review failed",
     "confirmReview": "Confirm review?",
-    "exportZip": "Export {{count}} documents as ZIP",
+    "exportZip": "Export ZIP",
     "exportSuccess": "{{count}} documents exported",
     "exportError": "Export failed",
     "bankWorkbench": {
@@ -2058,7 +2071,9 @@
       "actions": {
         "create": "Create transaction",
         "match": "Match existing",
-        "ignore": "Ignore duplicate"
+        "ignore": "Ignore duplicate",
+        "undoCreate": "Undo create",
+        "unmatch": "Unmatch"
       },
       "emptyPending": "No bank statement lines need confirmation right now.",
       "emptyResolved": "No automatically processed statement lines yet.",
@@ -2287,7 +2302,7 @@
     "errorGeneric": "Could not accept disclaimer. Please try again."
   },
   "reports": {
-    "pageSubtitle": "Generate tax reports, check audit readiness, and export your data",
+    "pageSubtitle": "Generate income reports, balance summaries, and tax forms, and review unreviewed transactions before filing",
     "unreviewedWarning": "{{count}} unreviewed transaction(s) are included in this report. Please review them for accuracy.",
     "reviewTransactions": "Review transactions",
     "tabs": {
@@ -2911,7 +2926,13 @@
       "linked": "Document linked to existing record. No duplicate created.",
       "linkExisting": "Duplicate Detected",
       "loanRepayment": "Loan Repayment",
-      "noAction": "Action configuration missing. Please refresh."
+      "noAction": "Action configuration missing. Please refresh.",
+      "from": "From",
+      "address": "Address",
+      "item": "Item",
+      "matchType": "Match type",
+      "reason": "Reason",
+      "taxpayerName": "Taxpayer"
     },
     "followUp": {
       "header": "I need a few more details:",

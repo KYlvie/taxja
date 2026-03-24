@@ -1,26 +1,77 @@
 import { describe, expect, it } from 'vitest';
 
 import de from '../i18n/locales/de.json';
+import deSubscription from '../i18n/locales/de/subscription.json';
 import en from '../i18n/locales/en.json';
+import enSubscription from '../i18n/locales/en/subscription.json';
 import zh from '../i18n/locales/zh.json';
+import zhSubscription from '../i18n/locales/zh/subscription.json';
 import fr from '../i18n/locales/fr.json';
+import frSubscription from '../i18n/locales/fr/subscription.json';
 import ru from '../i18n/locales/ru.json';
+import ruSubscription from '../i18n/locales/ru/subscription.json';
 import hu from '../i18n/locales/hu.json';
+import huSubscription from '../i18n/locales/hu/subscription.json';
 import pl from '../i18n/locales/pl.json';
+import plSubscription from '../i18n/locales/pl/subscription.json';
 import tr from '../i18n/locales/tr.json';
+import trSubscription from '../i18n/locales/tr/subscription.json';
 import bs from '../i18n/locales/bs.json';
+import bsSubscription from '../i18n/locales/bs/subscription.json';
 import { repairMojibakeText, sanitizeLocaleResource } from '../i18n/localeSanitizer';
+import { supportedLanguages } from '../utils/locale';
+
+const mergeLocaleResources = (
+  base: Record<string, unknown>,
+  extra: Record<string, unknown>
+): Record<string, unknown> => {
+  const merged: Record<string, unknown> = { ...base };
+
+  Object.entries(extra).forEach(([key, value]) => {
+    const existing = merged[key];
+    if (
+      existing &&
+      value &&
+      typeof existing === 'object' &&
+      typeof value === 'object' &&
+      !Array.isArray(existing) &&
+      !Array.isArray(value)
+    ) {
+      merged[key] = mergeLocaleResources(
+        existing as Record<string, unknown>,
+        value as Record<string, unknown>
+      );
+      return;
+    }
+
+    merged[key] = value;
+  });
+
+  return merged;
+};
+
+const localeInputs = {
+  de: mergeLocaleResources(de, deSubscription),
+  en: mergeLocaleResources(en, enSubscription),
+  zh: mergeLocaleResources(zh, zhSubscription),
+  fr: mergeLocaleResources(fr, frSubscription),
+  ru: mergeLocaleResources(ru, ruSubscription),
+  hu: mergeLocaleResources(hu, huSubscription),
+  pl: mergeLocaleResources(pl, plSubscription),
+  tr: mergeLocaleResources(tr, trSubscription),
+  bs: mergeLocaleResources(bs, bsSubscription),
+};
 
 const locales = {
-  de: sanitizeLocaleResource('de', de),
-  en: sanitizeLocaleResource('en', en),
-  zh: sanitizeLocaleResource('zh', zh),
-  fr: sanitizeLocaleResource('fr', fr),
-  ru: sanitizeLocaleResource('ru', ru),
-  hu: sanitizeLocaleResource('hu', hu),
-  pl: sanitizeLocaleResource('pl', pl),
-  tr: sanitizeLocaleResource('tr', tr),
-  bs: sanitizeLocaleResource('bs', bs),
+  de: sanitizeLocaleResource('de', localeInputs.de),
+  en: sanitizeLocaleResource('en', localeInputs.en),
+  zh: sanitizeLocaleResource('zh', localeInputs.zh),
+  fr: sanitizeLocaleResource('fr', localeInputs.fr),
+  ru: sanitizeLocaleResource('ru', localeInputs.ru),
+  hu: sanitizeLocaleResource('hu', localeInputs.hu),
+  pl: sanitizeLocaleResource('pl', localeInputs.pl),
+  tr: sanitizeLocaleResource('tr', localeInputs.tr),
+  bs: sanitizeLocaleResource('bs', localeInputs.bs),
 };
 
 const getValue = (value: Record<string, unknown>, key: string): unknown =>
@@ -46,6 +97,16 @@ const collectStringValues = (value: unknown): string[] => {
   }
 
   return [];
+};
+
+const collectLeafKeys = (value: unknown, prefix = ''): string[] => {
+  if (Array.isArray(value) || typeof value !== 'object' || value === null) {
+    return prefix ? [prefix] : [];
+  }
+
+  return Object.entries(value).flatMap(([key, nestedValue]) =>
+    collectLeafKeys(nestedValue, prefix ? `${prefix}.${key}` : key)
+  );
 };
 
 describe('localeSanitizer', () => {
@@ -74,6 +135,38 @@ describe('localeSanitizer', () => {
       'tour.taxTools.audit.message',
       'tour.taxTools.assetReport.title',
       'tour.taxTools.assetReport.message',
+      'documents.reviewAction',
+      'documents.confirmReview',
+      'documents.receiptReview.editing',
+      'documents.receiptReview.expandDetails',
+      'documents.receiptReview.hideDetails',
+      'documents.receiptReview.linkedTransactionShort',
+      'documents.bankWorkbench.mode.import',
+      'documents.bankWorkbench.mode.extracted',
+      'documents.bankWorkbench.fallbackSummaryTitle',
+      'documents.bankWorkbench.localFallbackNotice',
+      'documents.bankWorkbench.fallbackTransactionsTitle',
+      'documents.bankWorkbench.fallbackTransactionsDescription',
+      'documents.bankWorkbench.noExtractedTransactions',
+      'documents.bankWorkbench.accountHolder',
+      'documents.bankWorkbench.taxYear',
+      'documents.bankWorkbench.openingBalance',
+      'documents.bankWorkbench.closingBalance',
+      'documents.bankWorkbench.creditCount',
+      'documents.bankWorkbench.debitCount',
+      'documents.bankWorkbench.direction.label',
+      'documents.bankWorkbench.direction.credit',
+      'documents.bankWorkbench.direction.debit',
+      'documents.bankWorkbench.direction.unknown',
+      'documents.bankWorkbench.actions.undoCreate',
+      'documents.bankWorkbench.actions.unmatch',
+      'documents.bankWorkbench.fallback.createdOne',
+      'documents.bankWorkbench.fallback.createdMany',
+      'documents.bankWorkbench.fallback.alreadyImportedOne',
+      'documents.bankWorkbench.fallback.alreadyImportedMany',
+      'documents.bankWorkbench.fallback.noTransactionsCreated',
+      'common.oneClickConfirm',
+      'common.bulkConfirmSuccess',
       'transactions.exportCsv',
       'transactions.exportPdf',
       'classificationRules.searchPlaceholder',
@@ -105,10 +198,48 @@ describe('localeSanitizer', () => {
       'Les contrats confirm\u00e9s deviennent automatiquement des dettes. Les contrats encore en r\u00e9vision ou avec des champs manquants restent ici jusqu\u2019\u00e0 ce que vous les terminiez dans Documents.'
     );
     expect(getValue(locales.zh, 'tour.taxTools.employer.title')).toBe('\u96c7\u4e3b\u7a0e\u52a1\u8bc1\u660e');
+    expect(getValue(locales.zh, 'documents.bankWorkbench.mode.import')).toBe(
+      '\u5bfc\u5165\u5de5\u4f5c\u53f0'
+    );
+    expect(getValue(locales.zh, 'common.oneClickConfirm')).toBe('\u4e00\u952e\u786e\u8ba4');
+    expect(getValue(locales.zh, 'documents.filters.needsReview')).toBe('\u5f85\u5ba1\u6838');
+    expect(getValue(locales.zh, 'transactions.filters.needsReviewOnly')).toBe('\u4ec5\u770b\u5f85\u5ba1\u6838');
+    expect(getValue(locales.zh, 'documents.bankWorkbench.creditCount')).toBe(
+      '\u6536\u5165\u7b14\u6570'
+    );
+    expect(getValue(locales.de, 'documents.reviewAction')).toBe('Weiter pruefen');
+    expect(getValue(locales.en, 'documents.reviewAction')).toBe('Continue review');
+    expect(getValue(locales.zh, 'documents.confirmReview')).toBe('\u786e\u8ba4\u5b8c\u6210\u5ba1\u6838\uff1f');
+    expect(getValue(locales.fr, 'documents.reviewAction')).toBe('Poursuivre la verification');
+    expect(getValue(locales.ru, 'documents.confirmReview')).toBe(
+      '\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443?'
+    );
+    expect(getValue(locales.hu, 'documents.reviewAction')).toBe('Ellenorzes folytatasa');
     expect(getValue(locales.pl, 'tour.taxTools.audit.title')).toBe('Lista kontrolna audytu');
+    expect(getValue(locales.pl, 'documents.confirmReview')).toBe('Zakonczyc przeglad?');
     expect(getValue(locales.tr, 'transactions.exportCsv')).toBe('CSV olarak disa aktar');
+    expect(getValue(locales.tr, 'documents.reviewAction')).toBe('Incelemeye devam et');
+    expect(getValue(locales.bs, 'documents.confirmReview')).toBe('Zavrsiti pregled?');
     expect(getValue(locales.zh, 'ai.proactive.healthSummaryReminder')).toBe(
       '\u60a8\u6709 {{count}} \u9879\u7a0e\u52a1\u5065\u5eb7\u63d0\u9192\u5f85\u5904\u7406\uff0c\u5f53\u524d\u5065\u5eb7\u5206\u4e3a {{score}} \u5206\u3002'
     );
+  });
+
+  it('keeps the full merged locale tree aligned across all nine supported languages', () => {
+    expect(supportedLanguages).toEqual(['de', 'en', 'zh', 'fr', 'ru', 'hu', 'pl', 'tr', 'bs']);
+
+    const localeEntries = Object.entries(locales);
+    expect(localeEntries).toHaveLength(supportedLanguages.length);
+
+    const [baselineLanguage, baselineLocale] = localeEntries[0];
+    const baselineKeys = new Set(collectLeafKeys(baselineLocale));
+
+    for (const [language, locale] of localeEntries) {
+      const localeKeys = new Set(collectLeafKeys(locale));
+      expect(localeKeys.size, `${language} key count should match ${baselineLanguage}`).toBe(baselineKeys.size);
+      expect([...localeKeys].sort(), `${language} keys should match ${baselineLanguage}`).toEqual(
+        [...baselineKeys].sort()
+      );
+    }
   });
 });

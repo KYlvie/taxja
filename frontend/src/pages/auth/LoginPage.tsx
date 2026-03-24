@@ -5,16 +5,20 @@ import { useAuthStore } from '../../stores/authStore';
 import { authService } from '../../services/authService';
 import { accountService } from '../../services/accountService';
 import { userService } from '../../services/userService';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
 import LanguageSwitcher from '../../components/common/LanguageSwitcher';
 import DeactivatedAccountBanner from '../../components/account/DeactivatedAccountBanner';
+import { isNativeApp } from '../../mobile/runtime';
 import './AuthPages.css';
 
 const LoginPage = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const login = useAuthStore((state) => state.login);
   const updateUser = useAuthStore((state) => state.updateUser);
+  const showGoogleSection = !isNativeApp();
+  const googleLoginEnabled = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()) && showGoogleSection;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +36,22 @@ const LoginPage = () => {
 
   const showDeactivatedSuccess =
     new URLSearchParams(location.search).get('account_deactivated') === '1';
+
+  const completeLogin = async (response: {
+    access_token: string;
+    token_type: string;
+    user: Record<string, any>;
+  }) => {
+    login(response.user as any, response.access_token);
+    navigate('/dashboard');
+
+    try {
+      const fullProfile = await userService.getProfile();
+      updateUser(fullProfile);
+    } catch (profileError) {
+      console.warn('Failed to sync full user profile after login', profileError);
+    }
+  };
 
   const handleReactivate = async () => {
     await accountService.reactivateAccount('');
@@ -72,15 +92,7 @@ const LoginPage = () => {
         two_factor_code: twoFactorCode || undefined,
       });
 
-      login(response.user, response.access_token);
-      navigate('/dashboard');
-
-      try {
-        const fullProfile = await userService.getProfile();
-        updateUser(fullProfile);
-      } catch (profileError) {
-        console.warn('Failed to sync full user profile after login', profileError);
-      }
+      await completeLogin(response);
     } catch (err: any) {
       const status = err.response?.status;
       const data = err.response?.data;
@@ -126,6 +138,76 @@ const LoginPage = () => {
         } else {
           setError(t('auth.loginFailed', 'Login failed. Please check your email and password.'));
         }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = (code: 'google_login_unavailable' | 'google_token_invalid') => {
+    if (code === 'google_login_unavailable') {
+      setError(
+        t(
+          'auth.googleLoginUnavailable',
+          'Google sign-in is not available right now. Please use your email and password.',
+        ),
+      );
+      return;
+    }
+
+    setError(
+      t(
+        'auth.googleLoginFailed',
+        'Google sign-in failed. Please try again or use your email and password.',
+      ),
+    );
+  };
+
+  const handleGoogleCredential = async (credential: string) => {
+    setError('');
+    setDeactivatedInfo(null);
+    setUnverifiedEmail('');
+    setLoading(true);
+
+    try {
+      const response = await authService.loginWithGoogle(credential);
+      await completeLogin(response);
+    } catch (err: any) {
+      const status = err.response?.status;
+      const detail = err.response?.data?.detail;
+
+      if (!err.response) {
+        setError(
+          t(
+            'auth.networkError',
+            'Unable to connect to the server. Please check your internet connection.',
+          ),
+        );
+      } else if (status === 404 && detail === 'google_account_not_registered') {
+        setError(
+          t(
+            'auth.googleAccountNotRegistered',
+            'No Taxja account was found for this Google email yet. Please register first, then use Google sign-in with the same email.',
+          ),
+        );
+      } else if (status === 409 && detail === 'google_login_requires_password') {
+        setError(
+          t(
+            'auth.googleLoginRequiresPassword',
+            'This account has two-factor authentication enabled. Please sign in with your email and password.',
+          ),
+        );
+      } else if (status === 409 && detail === 'google_account_conflict') {
+        setError(
+          t(
+            'auth.googleAccountConflict',
+            'This Taxja account is already linked to a different Google account. Please use your email and password.',
+          ),
+        );
+      } else if (status === 503 && detail === 'google_login_unavailable') {
+        handleGoogleError('google_login_unavailable');
+      } else {
+        handleGoogleError('google_token_invalid');
       }
     } finally {
       setLoading(false);
@@ -238,6 +320,50 @@ const LoginPage = () => {
           </>
         ) : (
           <>
+            {showGoogleSection ? (
+              <>
+                <div className="auth-social-section">
+                  {googleLoginEnabled ? (
+                    <>
+                      <GoogleSignInButton
+                        disabled={loading}
+                        label={t('auth.continueWithGoogle', 'Continue with Google')}
+                        locale={i18n?.resolvedLanguage || i18n?.language || 'en'}
+                        onCredential={handleGoogleCredential}
+                        onError={handleGoogleError}
+                      />
+                      <p className="auth-social-note">
+                        {t(
+                          'auth.googleExistingAccountHint',
+                          'Use the same Google email address as your existing Taxja account.',
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-secondary google-signin-placeholder google-signin-placeholder--visible"
+                        disabled
+                      >
+                        {t('auth.continueWithGoogle', 'Continue with Google')}
+                      </button>
+                      <p className="auth-social-note auth-social-note--warning">
+                        {t(
+                          'auth.googleClientIdMissing',
+                          'Google sign-in code is ready, but this environment still needs a Google Client ID before the button can work.',
+                        )}
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <div className="auth-divider">
+                  <span>{t('auth.orContinueWithEmail', 'Or continue with email')}</span>
+                </div>
+              </>
+            ) : null}
+
             <form onSubmit={handleSubmit} className="auth-form">
               <div className="form-group">
                 <label>{t('auth.email')}</label>

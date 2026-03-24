@@ -285,6 +285,27 @@
   box-shadow: 0 8px 24px rgba(6, 182, 212, 0.15);
 }
 
+[data-theme="cyber"] .btn-success {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.1);
+}
+
+[data-theme="cyber"] .btn-success:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #a7f3d0;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="cyber"] .btn-success:disabled {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.1);
+  color: rgba(16, 185, 129, 0.3);
+}
+
 /* ═══ FORMS — transparent + focus glow ═══ */
 [data-theme="cyber"] .form-group input,
 [data-theme="cyber"] .form-group textarea,
@@ -9091,6 +9112,10 @@
   background: #0e1525 !important;
   border-color: rgba(6, 182, 212, 0.12) !important;
   color: #94a3b8 !important;
+}
+
+[data-theme="cyber"] .chat-recurring-btn.view-doc {
+  color: #22d3ee !important;
 }
 
 [data-theme="cyber"] .chat-recurring-result.confirmed {

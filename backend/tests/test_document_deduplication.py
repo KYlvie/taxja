@@ -5,14 +5,23 @@ from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from fastapi import BackgroundTasks
+import pytest
+from fastapi import BackgroundTasks, HTTPException
 from PIL import Image
 from starlette.datastructures import Headers, UploadFile
 
 from app.api.v1.endpoints import documents as documents_endpoint
+from app.models.bank_statement_import import (
+    BankStatementImport,
+    BankStatementImportSourceType,
+    BankStatementLine,
+    BankStatementLineStatus,
+    BankStatementSuggestedAction,
+)
 from app.models.document import Document, DocumentType
 from app.models.transaction import ExpenseCategory, Transaction, TransactionType
 from app.models.user import User, UserType
+from app.services.storage_service import StorageUnavailableError
 from app.services.ocr_transaction_service import OCRTransactionService
 
 
@@ -60,6 +69,44 @@ def _make_document(
     return document
 
 
+def _make_bank_import_line(
+    db,
+    user: User,
+    *,
+    transaction_id: int | None = None,
+    review_status: BankStatementLineStatus = BankStatementLineStatus.PENDING_REVIEW,
+    suggested_action: BankStatementSuggestedAction = BankStatementSuggestedAction.CREATE_NEW,
+    amount: Decimal = Decimal("100.00"),
+) -> BankStatementLine:
+    statement_import = BankStatementImport(
+        user_id=user.id,
+        source_type=BankStatementImportSourceType.DOCUMENT,
+        tax_year=2026,
+    )
+    db.add(statement_import)
+    db.flush()
+
+    line = BankStatementLine(
+        import_id=statement_import.id,
+        line_date=date(2026, 1, 15),
+        amount=amount,
+        counterparty="Delete cascade counterparty",
+        purpose="Delete cascade purpose",
+        raw_reference="DELETE-CASCADE-REF",
+        normalized_fingerprint=f"delete-cascade-{statement_import.id}-{amount}",
+        review_status=review_status,
+        suggested_action=suggested_action,
+        linked_transaction_id=transaction_id,
+        created_transaction_id=transaction_id if review_status == BankStatementLineStatus.AUTO_CREATED else None,
+        reviewed_at=datetime.utcnow(),
+        reviewed_by=user.id,
+    )
+    db.add(line)
+    db.commit()
+    db.refresh(line)
+    return line
+
+
 def _make_upload_file(
     filename: str,
     content: bytes,
@@ -76,6 +123,12 @@ def _make_image_bytes(color: str) -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (200, 300), color=color).save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _make_request():
+    request = MagicMock()
+    request.headers = {}
+    return request
 
 
 class _DummyDeduction:
@@ -113,7 +166,8 @@ def test_upload_document_reuses_existing_processed_duplicate(db, monkeypatch):
 
     response = asyncio.run(
         documents_endpoint.upload_document(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             file=_make_upload_file("duplicate.pdf", content),
             property_id=None,
             current_user=user,
@@ -152,7 +206,8 @@ def test_batch_upload_deduplicates_within_same_request(db, monkeypatch):
 
     response = asyncio.run(
         documents_endpoint.batch_upload_documents(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             files=[
                 _make_upload_file("first.pdf", content),
                 _make_upload_file("second.pdf", content),
@@ -198,7 +253,8 @@ def test_duplicate_upload_restarts_ocr_only_after_failed_processing(db, monkeypa
 
     response = asyncio.run(
         documents_endpoint.upload_document(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             file=_make_upload_file("retry.pdf", content),
             property_id=None,
             current_user=user,
@@ -208,7 +264,7 @@ def test_duplicate_upload_restarts_ocr_only_after_failed_processing(db, monkeypa
 
     assert response.id == failed_document.id
     assert response.deduplicated is True
-    assert "OCR processing restarted" in response.message
+    assert "processing restarted" in response.message
     assert scheduled == [failed_document.id]
     storage.upload_file.assert_not_called()
 
@@ -240,7 +296,8 @@ def test_duplicate_upload_matches_legacy_document_without_file_hash(db, monkeypa
 
     response = asyncio.run(
         documents_endpoint.upload_document(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             file=_make_upload_file("legacy-reupload.pdf", content),
             property_id=None,
             current_user=user,
@@ -255,6 +312,63 @@ def test_duplicate_upload_matches_legacy_document_without_file_hash(db, monkeypa
     assert db.query(Document).count() == 1
     storage.upload_file.assert_not_called()
     assert scheduled == []
+
+
+def test_upload_document_returns_503_when_storage_service_is_unavailable(db, monkeypatch):
+    """Storage endpoint failures should surface as a fast 503, not an internal error."""
+    user = _make_user(db, email="storage-down@example.com")
+    user.language = "en"
+    db.commit()
+    request = _make_request()
+
+    def _raise_storage_unavailable():
+        raise StorageUnavailableError("storage down")
+
+    monkeypatch.setattr(documents_endpoint, "get_storage_service", _raise_storage_unavailable)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            documents_endpoint.upload_document(
+                request=request,
+                background_tasks=BackgroundTasks(),
+                file=_make_upload_file("storage-down.pdf", b"pdf-content"),
+                property_id=None,
+                current_user=user,
+                db=db,
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Failed to upload file to storage."
+    assert db.query(Document).count() == 0
+
+
+def test_upload_document_returns_503_when_storage_upload_fails(db, monkeypatch):
+    """A failed object-store write should not bubble up as a raw boto exception."""
+    user = _make_user(db, email="storage-write-failed@example.com")
+    user.language = "en"
+    db.commit()
+    request = _make_request()
+
+    storage = MagicMock()
+    storage.upload_file.return_value = False
+    monkeypatch.setattr(documents_endpoint, "get_storage_service", lambda: storage)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            documents_endpoint.upload_document(
+                request=request,
+                background_tasks=BackgroundTasks(),
+                file=_make_upload_file("storage-failed.pdf", b"pdf-content"),
+                property_id=None,
+                current_user=user,
+                db=db,
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Failed to upload file to storage."
+    assert db.query(Document).count() == 0
 
 
 def test_create_transaction_from_suggestion_creates_new_transaction(db):
@@ -329,7 +443,7 @@ def test_create_transaction_from_suggestion_reuses_duplicate_transaction(db):
     assert result.duplicate_of_id == existing_transaction.id
     assert result.duplicate_confidence == 1.0
     assert db.query(Transaction).count() == 1
-    assert document.transaction_id is None
+    assert document.transaction_id == existing_transaction.id
 
 
 def test_create_transaction_from_suggestion_accepts_uppercase_enum_name_category(db):
@@ -382,7 +496,8 @@ def test_upload_image_group_creates_one_pdf_document(db, monkeypatch):
 
     response = asyncio.run(
         documents_endpoint.upload_image_group(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             files=[
                 _make_upload_file("page-1.png", _make_image_bytes("red"), "image/png"),
                 _make_upload_file("page-2.png", _make_image_bytes("blue"), "image/png"),
@@ -424,7 +539,8 @@ def test_upload_image_group_reuses_existing_duplicate_document(db, monkeypatch):
 
     first_response = asyncio.run(
         documents_endpoint.upload_image_group(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             files=[
                 _make_upload_file("page-1.png", _make_image_bytes("green"), "image/png"),
                 _make_upload_file("page-2.png", _make_image_bytes("yellow"), "image/png"),
@@ -437,7 +553,8 @@ def test_upload_image_group_reuses_existing_duplicate_document(db, monkeypatch):
 
     second_response = asyncio.run(
         documents_endpoint.upload_image_group(
-            BackgroundTasks(),
+            request=_make_request(),
+            background_tasks=BackgroundTasks(),
             files=[
                 _make_upload_file("page-1.png", _make_image_bytes("green"), "image/png"),
                 _make_upload_file("page-2.png", _make_image_bytes("yellow"), "image/png"),
@@ -454,3 +571,53 @@ def test_upload_image_group_reuses_existing_duplicate_document(db, monkeypatch):
     assert db.query(Document).count() == 1
     assert storage.upload_file.call_count == 1
     assert scheduled == [first_response.id]
+
+
+def test_delete_document_with_data_resets_auto_created_bank_line(db, monkeypatch):
+    user = _make_user(db, email="delete-cascade@example.com")
+    document = _make_document(
+        db,
+        user.id,
+        file_name="delete-me.pdf",
+    )
+
+    transaction = Transaction(
+        user_id=user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("100.00"),
+        transaction_date=date(2026, 1, 15),
+        description="Cascade delete transaction",
+        expense_category=ExpenseCategory.OTHER,
+        document_id=document.id,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    line = _make_bank_import_line(
+        db,
+        user,
+        transaction_id=transaction.id,
+        review_status=BankStatementLineStatus.AUTO_CREATED,
+        suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+    )
+
+    monkeypatch.setattr(documents_endpoint, "get_storage_service", lambda: MagicMock())
+
+    documents_endpoint.delete_document(
+        request=_make_request(),
+        document_id=document.id,
+        delete_mode="with_data",
+        current_user=user,
+        db=db,
+    )
+
+    db.refresh(line)
+    assert line.review_status == BankStatementLineStatus.PENDING_REVIEW
+    assert line.suggested_action == BankStatementSuggestedAction.CREATE_NEW
+    assert line.linked_transaction_id is None
+    assert line.created_transaction_id is None
+    assert line.reviewed_at is None
+    assert line.reviewed_by is None
+    assert db.query(Transaction).filter(Transaction.id == transaction.id).first() is None
+    assert db.query(Document).filter(Document.id == document.id).first() is None

@@ -66,7 +66,12 @@
     "datePicker": "Datumsauswahl",
     "name": "Name",
     "saveFailed": "Speichern fehlgeschlagen",
-    "status": "Status"
+    "status": "Status",
+    "date": "Datum",
+    "oneClickConfirm": "Alle bestätigen",
+    "bulkConfirmTransactionsTooltip": "Alle offenen Transaktionen bestätigen",
+    "bulkConfirmDocumentsTooltip": "Alle offenen Dokumente bestätigen",
+    "bulkConfirmSuccess": "{{count}} Einträge bestätigt"
   },
   "quickActions": {
     "title": "Schnellaktionen",
@@ -377,6 +382,7 @@
     "cancelOverride": "Abbrechen",
     "userOverride": "Benutzer-Korrektur",
     "hasDocument": "Hat Beleg",
+    "bankReconciled": "Bankabgestimmt",
     "systemGenerated": "Systemgeneriert (automatische AfA)",
     "needsReview": "Überprüfung nötig",
     "aiReviewNotes": "AI-Prüfhinweise",
@@ -538,7 +544,9 @@
     },
     "fields": {
       "lohnsteuer": "Lohnsteuer"
-    }
+    },
+    "partiallyDeductible": "Teilweise",
+    "deductibilityDerivedFromItems": "Abgeleitet aus Einzelposten"
   },
   "properties": {
     "title": "Immobilien",
@@ -1356,8 +1364,9 @@
       "allYears": "Alle Jahre",
       "startDate": "Von Datum",
       "endDate": "Bis Datum",
-      "needsReview": "Nur zu überprüfende",
-      "clear": "Filter zurücksetzen"
+      "needsReview": "Überprüfung nötig",
+      "clear": "Zurücksetzen",
+      "apply": "Anwenden"
     },
     "groups": {
       "all": "Alle Dokumente",
@@ -2024,7 +2033,7 @@
     "reviewActionSuccess": "Dokument geprüft",
     "reviewActionFailed": "Prüfung fehlgeschlagen",
     "confirmReview": "Bestätigen?",
-    "exportZip": "{{count}} Dokumente als ZIP exportieren",
+    "exportZip": "ZIP exportieren",
     "exportSuccess": "{{count}} Dokumente exportiert",
     "exportError": "Export fehlgeschlagen",
     "bankWorkbench": {
@@ -2052,7 +2061,9 @@
       "actions": {
         "create": "Transaktion erstellen",
         "match": "Bestehende zuordnen",
-        "ignore": "Duplikat ignorieren"
+        "ignore": "Duplikat ignorieren",
+        "undoCreate": "Erstellung rueckgaengig",
+        "unmatch": "Zuordnung aufheben"
       },
       "emptyPending": "Aktuell muessen keine Kontozeilen bestaetigt werden.",
       "emptyResolved": "Noch keine automatisch verarbeiteten Zeilen.",
@@ -2281,7 +2292,7 @@
     "errorGeneric": "Haftungsausschluss konnte nicht akzeptiert werden. Bitte versuchen Sie es erneut."
   },
   "reports": {
-    "pageSubtitle": "Steuerberichte erstellen, Prüfungsbereitschaft überprüfen und Daten exportieren",
+    "pageSubtitle": "Einnahmenberichte, Salden und Steuerformulare erstellen und ungeprüfte Transaktionen vorab prüfen",
     "unreviewedWarning": "{{count}} ungeprüfte Transaktion(en) sind in diesem Bericht enthalten. Bitte überprüfen Sie sie auf Richtigkeit.",
     "reviewTransactions": "Transaktionen prüfen",
     "tabs": {
@@ -2905,7 +2916,13 @@
       "linked": "Dokument mit bestehendem Eintrag verknuepft. Kein Duplikat erstellt.",
       "linkExisting": "Duplikat erkannt",
       "loanRepayment": "Darlehensrueckzahlung",
-      "noAction": "Aktionskonfiguration fehlt. Bitte aktualisieren Sie die Seite."
+      "noAction": "Aktionskonfiguration fehlt. Bitte aktualisieren Sie die Seite.",
+      "from": "Von",
+      "address": "Adresse",
+      "item": "Posten",
+      "matchType": "Übereinstimmungstyp",
+      "reason": "Grund",
+      "taxpayerName": "Steuerpflichtiger"
     },
     "followUp": {
       "header": "Ich benötige noch einige Details:",

@@ -78,6 +78,7 @@ export const transactionService = {
       available_years: Array.isArray(data.available_years)
         ? data.available_years.map((year: number | string) => Number(year)).filter((year: number) => Number.isFinite(year))
         : [],
+      needs_review_count: data.needs_review_count ?? 0,
     };
   },
 

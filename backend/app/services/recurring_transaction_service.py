@@ -61,6 +61,8 @@ class RecurringTransactionService:
     ) -> RecurringTransaction:
         """
         Create a recurring transaction for rental income.
+        If an active rental-income recurring already exists for the same property,
+        return the existing one instead of creating a duplicate.
         
         Args:
             user_id: User ID
@@ -71,12 +73,26 @@ class RecurringTransactionService:
             day_of_month: Day of month to generate transaction (1-31)
             
         Returns:
-            Created RecurringTransaction
+            Created or existing RecurringTransaction
         """
         property_obj = self.db.query(Property).filter(Property.id == property_id).first()
         if not property_obj:
             raise ValueError(f"Property {property_id} not found")
-        
+
+        # Dedup: reuse existing active rental-income recurring for same property
+        existing = (
+            self.db.query(RecurringTransaction)
+            .filter(
+                RecurringTransaction.user_id == user_id,
+                RecurringTransaction.property_id == property_id,
+                RecurringTransaction.recurring_type == RecurringTransactionType.RENTAL_INCOME,
+                RecurringTransaction.is_active == True,  # noqa: E712
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
         recurring = RecurringTransaction(
             user_id=user_id,
             recurring_type=RecurringTransactionType.RENTAL_INCOME,

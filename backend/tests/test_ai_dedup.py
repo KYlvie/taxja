@@ -6,6 +6,7 @@ Tests the _check_duplicate_entity pipeline stage and link-existing API.
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 from app.services.document_pipeline_orchestrator import DocumentPipelineOrchestrator
+from app.models.document import DocumentType as DBDocumentType
 
 
 class TestBuildEntitySummaries:
@@ -83,7 +84,7 @@ class TestCheckDuplicateEntity:
         result.extracted_data = {}
         result.audit_log = []
 
-        orch._check_duplicate_entity(doc, MagicMock(), result)
+        orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
         # Should not crash, should not modify ocr_result
         assert "matched_existing" not in (doc.ocr_result or {})
 
@@ -98,7 +99,7 @@ class TestCheckDuplicateEntity:
         result.audit_log = []
 
         with patch.object(orch, '_build_entity_summaries', return_value=""):
-            orch._check_duplicate_entity(doc, MagicMock(), result)
+            orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
         assert "matched_existing" not in (doc.ocr_result or {})
 
     def test_skips_when_llm_unavailable(self):
@@ -108,14 +109,14 @@ class TestCheckDuplicateEntity:
         doc.user_id = 1
         doc.ocr_result = {}
         result = MagicMock()
-        result.extracted_data = {"amount": 100}
+        result.extracted_data = {"amount": 100, "merchant": "Test"}
         result.audit_log = []
 
         with patch.object(orch, '_build_entity_summaries', return_value="Some data"):
             with patch('app.services.llm_service.LLMService') as MockLLM:
                 mock_instance = MockLLM.return_value
                 mock_instance.is_available = False
-                orch._check_duplicate_entity(doc, MagicMock(), result)
+                orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
 
         assert "matched_existing" not in (doc.ocr_result or {})
 
@@ -136,7 +137,7 @@ class TestCheckDuplicateEntity:
                 mock_instance = MockLLM.return_value
                 mock_instance.is_available = True
                 mock_instance.generate_simple.return_value = llm_response
-                orch._check_duplicate_entity(doc, MagicMock(), result)
+                orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
 
         assert doc.ocr_result.get("matched_existing") is not None
         assert doc.ocr_result["matched_existing"]["type"] == "recurring"
@@ -159,7 +160,7 @@ class TestCheckDuplicateEntity:
                 mock_instance = MockLLM.return_value
                 mock_instance.is_available = True
                 mock_instance.generate_simple.return_value = llm_response
-                orch._check_duplicate_entity(doc, MagicMock(), result)
+                orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
 
         assert "matched_existing" not in doc.ocr_result
 
@@ -170,7 +171,7 @@ class TestCheckDuplicateEntity:
         doc.user_id = 1
         doc.ocr_result = {}
         result = MagicMock()
-        result.extracted_data = {"amount": 100}
+        result.extracted_data = {"amount": 100, "merchant": "Test"}
         result.audit_log = []
 
         with patch.object(orch, '_build_entity_summaries', return_value="Some data"):
@@ -178,7 +179,7 @@ class TestCheckDuplicateEntity:
                 mock_instance = MockLLM.return_value
                 mock_instance.is_available = True
                 mock_instance.generate_simple.return_value = "This is not JSON at all"
-                orch._check_duplicate_entity(doc, MagicMock(), result)
+                orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
 
         # Should not crash, should not set matched_existing
         assert "matched_existing" not in doc.ocr_result
@@ -190,7 +191,7 @@ class TestCheckDuplicateEntity:
         doc.user_id = 1
         doc.ocr_result = {}
         result = MagicMock()
-        result.extracted_data = {"amount": 100}
+        result.extracted_data = {"amount": 100, "merchant": "Test"}
         result.audit_log = []
 
         with patch.object(orch, '_build_entity_summaries', return_value="Some data"):
@@ -198,9 +199,61 @@ class TestCheckDuplicateEntity:
                 mock_instance = MockLLM.return_value
                 mock_instance.is_available = True
                 mock_instance.generate_simple.side_effect = Exception("API timeout")
-                orch._check_duplicate_entity(doc, MagicMock(), result)
+                orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
 
         # Should not crash
+        assert "matched_existing" not in doc.ocr_result
+
+    def test_skips_for_non_transaction_documents_before_llm(self):
+        orch = self._make_orchestrator()
+        doc = MagicMock()
+        doc.user_id = 1
+        doc.ocr_result = {}
+        result = MagicMock()
+        result.extracted_data = {
+            "purchase_price": 350000,
+            "property_address": "Taborstr 88, 1020 Wien",
+        }
+        result.audit_log = []
+
+        with patch.object(orch, "_build_entity_summaries") as build_summaries:
+            orch._check_duplicate_entity(doc, DBDocumentType.PURCHASE_CONTRACT, result)
+
+        build_summaries.assert_not_called()
+        assert "matched_existing" not in doc.ocr_result
+
+    def test_skips_for_bank_statement_alias_before_llm(self):
+        orch = self._make_orchestrator()
+        doc = MagicMock()
+        doc.user_id = 1
+        doc.ocr_result = {}
+        result = MagicMock()
+        result.extracted_data = {
+            "amount": 1000,
+            "description": "Kontostand",
+            "date": "2026-03-20",
+        }
+        result.audit_log = []
+
+        with patch.object(orch, "_build_entity_summaries") as build_summaries:
+            orch._check_duplicate_entity(doc, DBDocumentType.KONTOAUSZUG, result)
+
+        build_summaries.assert_not_called()
+        assert "matched_existing" not in doc.ocr_result
+
+    def test_skips_when_too_few_match_fields(self):
+        orch = self._make_orchestrator()
+        doc = MagicMock()
+        doc.user_id = 1
+        doc.ocr_result = {}
+        result = MagicMock()
+        result.extracted_data = {"amount": 100}
+        result.audit_log = []
+
+        with patch.object(orch, "_build_entity_summaries") as build_summaries:
+            orch._check_duplicate_entity(doc, DBDocumentType.RECEIPT, result)
+
+        build_summaries.assert_not_called()
         assert "matched_existing" not in doc.ocr_result
 
 
@@ -238,7 +291,7 @@ class TestStageSuggestWithMatch:
 
         ocr_result = MagicMock()
 
-        orch._stage_suggest(doc, MagicMock(), ocr_result, result)
+        orch._stage_suggest(doc, DBDocumentType.RECEIPT, ocr_result, result)
 
         assert len(result.suggestions) == 1
         assert result.suggestions[0]["type"] == "link_to_existing"

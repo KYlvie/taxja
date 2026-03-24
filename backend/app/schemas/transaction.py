@@ -445,6 +445,16 @@ class TransactionResponse(TransactionBase):
                 self.source_recurring_id = int(match.group(1))
         return self
 
+    @model_validator(mode="after")
+    def repair_deductibility_from_line_items(self):
+        """Read-time repair: derive is_deductible from line items when they exist."""
+        if not self.line_items:
+            return self
+        any_deductible = any(li.is_deductible for li in self.line_items)
+        if any_deductible != self.is_deductible:
+            self.is_deductible = any_deductible
+        return self
+
     class Config:
         from_attributes = True
 
@@ -457,6 +467,7 @@ class TransactionListResponse(BaseModel):
     page_size: int
     total_pages: int
     available_years: list[int] = []
+    needs_review_count: int = 0
 
 
 class TransactionFilterParams(BaseModel):

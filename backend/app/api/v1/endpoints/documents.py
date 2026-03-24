@@ -3,6 +3,7 @@
 import hashlib
 
 import io
+import zipfile
 
 import logging
 
@@ -22,7 +23,7 @@ from fastapi.responses import StreamingResponse
 
 from sqlalchemy.orm import Session
 
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from typing import List, Optional, Dict, Any
 
@@ -82,7 +83,7 @@ from app.schemas.ocr_review import (
 
 from app.schemas.asset_recognition import AssetSuggestionConfirmationRequest
 
-from app.services.storage_service import StorageService
+from app.services.storage_service import StorageService, StorageUnavailableError
 
 from app.tasks.ocr_tasks import process_document_ocr, run_ocr_sync, run_ocr_pipeline
 
@@ -410,7 +411,11 @@ def _backfill_legacy_document_hashes_and_match(
 
     uploaded_binary_hash = _compute_file_hash(uploaded_content)
 
-    storage_service = get_storage_service()
+    try:
+        storage_service = get_storage_service()
+    except StorageUnavailableError as exc:
+        logger.warning("Skipping legacy hash backfill because storage is unavailable: %s", exc)
+        return None
 
     candidates = (
 
@@ -473,6 +478,89 @@ def _document_needs_reprocessing(document: Document) -> bool:
     """Allow duplicate upload to retrigger OCR only if the existing document never produced data."""
 
     return document.processed_at is not None and not bool(document.ocr_result or document.raw_text)
+
+
+def _document_has_confirmed_outcome(document: Document) -> bool:
+
+    """Return True when OCR flow already produced a confirmed or auto-created outcome."""
+
+    if not isinstance(document.ocr_result, dict):
+
+        return False
+
+    if document.ocr_result.get("confirmed") is True:
+
+        return True
+
+    import_suggestion = document.ocr_result.get("import_suggestion")
+
+    if isinstance(import_suggestion, dict) and import_suggestion.get("status") in {"confirmed", "auto_created"}:
+
+        return True
+
+    asset_outcome = document.ocr_result.get("asset_outcome")
+
+    return isinstance(asset_outcome, dict) and asset_outcome.get("status") in {"confirmed", "auto_created"}
+
+
+def _build_document_linked_transaction_count_map(
+    db: Session,
+    *,
+    user_id: int,
+    documents: List[Document],
+) -> Dict[int, int]:
+    from app.models.bank_statement_import import BankStatementImport, BankStatementLine
+    from app.models.transaction import Transaction
+
+    document_ids = [doc.id for doc in documents if getattr(doc, "id", None) is not None]
+    counts: Dict[int, int] = {
+        doc.id: (1 if getattr(doc, "transaction_id", None) else 0)
+        for doc in documents
+        if getattr(doc, "id", None) is not None
+    }
+    if not document_ids:
+        return counts
+
+    direct_rows = (
+        db.query(Transaction.document_id, func.count(Transaction.id))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.document_id.in_(document_ids),
+        )
+        .group_by(Transaction.document_id)
+        .all()
+    )
+    for document_id, count in direct_rows:
+        if document_id is not None:
+            counts[document_id] = counts.get(document_id, 0) + int(count or 0)
+
+    bank_rows = (
+        db.query(BankStatementImport.source_document_id, func.count(BankStatementLine.id))
+        .join(BankStatementLine, BankStatementLine.import_id == BankStatementImport.id)
+        .filter(
+            BankStatementImport.user_id == user_id,
+            BankStatementImport.source_document_id.in_(document_ids),
+            or_(
+                BankStatementLine.created_transaction_id.isnot(None),
+                BankStatementLine.linked_transaction_id.isnot(None),
+            ),
+        )
+        .group_by(BankStatementImport.source_document_id)
+        .all()
+    )
+    for document_id, count in bank_rows:
+        if document_id is not None:
+            counts[document_id] = counts.get(document_id, 0) + int(count or 0)
+
+    return counts
+
+
+def _document_has_any_transaction_links(db: Session, document: Document) -> bool:
+    return _build_document_linked_transaction_count_map(
+        db,
+        user_id=document.user_id,
+        documents=[document],
+    ).get(document.id, 0) > 0
 
 def _store_upload_context(document: Document, property_id: Optional[str], db: Session) -> None:
 
@@ -626,23 +714,27 @@ def _process_uploaded_content(
 
     file_path = f"users/{current_user.id}/documents/{unique_filename}"
 
-    storage_service = get_storage_service()
-
-    success = storage_service.upload_file(
-
-        file_bytes=file_content,
-
-        file_path=file_path,
-
-        content_type=content_type,
-
-    )
+    try:
+        storage_service = get_storage_service()
+        success = storage_service.upload_file(
+            file_bytes=file_content,
+            file_path=file_path,
+            content_type=content_type,
+        )
+    except StorageUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=get_error_message(
+                "failed_upload_storage",
+                _get_lang(request, current_user) if request else "de",
+            ),
+        ) from exc
 
     if not success:
 
         raise HTTPException(
 
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
 
             detail=get_error_message("failed_upload_storage", _get_lang(request, current_user) if request else "de"),
 
@@ -1467,12 +1559,22 @@ def get_documents(
     offset = (page - 1) * page_size
 
     documents = query.order_by(Document.uploaded_at.desc()).offset(offset).limit(page_size).all()
-
-    
+    linked_transaction_counts = _build_document_linked_transaction_count_map(
+        db,
+        user_id=current_user.id,
+        documents=documents,
+    )
 
     return DocumentList(
-
-        documents=[DocumentDetail.from_orm(doc) for doc in documents],
+        documents=[
+            (
+                detail.model_copy(update={"linked_transaction_count": linked_transaction_counts.get(doc.id, 0)})
+                if hasattr(detail, "model_copy")
+                else detail.copy(update={"linked_transaction_count": linked_transaction_counts.get(doc.id, 0)})
+            )
+            for doc in documents
+            for detail in [DocumentDetail.from_orm(doc)]
+        ],
 
         total=total,
 
@@ -1565,6 +1667,72 @@ def get_retention_statistics(
     
 
     return stats
+
+@router.get("/export-zip")
+async def export_documents_zip(
+    request: Request,
+    document_type: Optional[DocumentType] = Query(None),
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    search_text: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Export filtered documents as a ZIP archive.
+    Accepts the same filter params as GET /documents.
+    """
+    query = db.query(Document).filter(
+        Document.user_id == current_user.id,
+        Document.is_archived == False,
+    )
+    if document_type:
+        query = query.filter(Document.document_type == document_type)
+    if start_date:
+        query = query.filter(Document.uploaded_at >= start_date)
+    if end_date:
+        query = query.filter(Document.uploaded_at <= end_date)
+    if search_text:
+        query = query.filter(Document.raw_text.ilike(f"%{search_text}%"))
+    documents = query.order_by(Document.uploaded_at.desc()).all()
+
+    if not documents:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No documents to export",
+        )
+
+    storage_service = get_storage_service()
+    buf = io.BytesIO()
+    seen_names: dict[str, int] = {}
+
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for doc in documents:
+            try:
+                file_bytes = storage_service.download_file(doc.file_path)
+            except Exception:
+                continue
+            if not file_bytes:
+                continue
+            name = doc.file_name or f"document_{doc.id}"
+            if name in seen_names:
+                seen_names[name] += 1
+                stem, _, ext = name.rpartition(".")
+                if ext and stem:
+                    name = f"{stem}_{seen_names[name]}.{ext}"
+                else:
+                    name = f"{name}_{seen_names[name]}"
+            else:
+                seen_names[name] = 0
+            zf.writestr(name, file_bytes)
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="documents.zip"'},
+    )
+
 
 @router.get("/{document_id}")
 
@@ -1824,6 +1992,8 @@ def delete_document(
 
     from app.models.recurring_transaction import RecurringTransaction
 
+    from app.services.bank_import_service import BankImportService
+
     from app.services.property_service import PropertyService
 
     document = (
@@ -1845,6 +2015,8 @@ def delete_document(
             detail=get_error_message("document_not_found", _get_lang(request, current_user)),
 
         )
+
+    bank_import_service = BankImportService(db=db)
 
     if delete_mode == "with_data":
 
@@ -1906,6 +2078,7 @@ def delete_document(
 
                         db.flush()
 
+                        bank_import_service.handle_deleted_transactions([gtxn.id], current_user.id)
                         db.delete(gtxn)
 
                     for rec in recurrings:
@@ -2080,6 +2253,7 @@ def delete_document(
 
                     db.flush()
 
+                    bank_import_service.handle_deleted_transactions([gtxn.id], current_user.id)
                     db.delete(gtxn)
 
                 # Now delete the recurring transactions themselves
@@ -2234,6 +2408,7 @@ def delete_document(
 
                     logger.info(f"Deleting transaction {txn.id} linked to document {document_id}")
 
+                    bank_import_service.handle_deleted_transactions([txn.id], current_user.id)
                     db.delete(txn)
 
     
@@ -4621,7 +4796,22 @@ async def retry_ocr_processing(
 
         )
 
-    
+    # Hard guard: block reprocessing for confirmed or transaction-linked documents
+    if _document_has_any_transaction_links(db, document) or _document_has_confirmed_outcome(document):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot reprocess a document that is already confirmed or linked to a transaction.",
+        )
+
+    # Hard guard: block if pipeline is currently processing
+    if isinstance(document.ocr_result, dict):
+        pipe = document.ocr_result.get("_pipeline") or {}
+        current_state = pipe.get("current_state", "")
+        if current_state.startswith("processing_"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Document is already being processed.",
+            )
 
     existing_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
 
@@ -4849,21 +5039,22 @@ def reprocess_all_documents(
 
     # Find all documents for this user that don't have a linked transaction
 
-    documents = (
+    # Also exclude documents whose OCR result is already confirmed or whose
 
-        db.query(Document)
+    # import_suggestion has been confirmed (contract-type docs that don't write
 
-        .filter(
+    # document.transaction_id, e.g. Kaufvertrag, Mietvertrag, loans, insurance).
 
-            Document.user_id == current_user.id,
+    all_unlinked = db.query(Document).filter(Document.user_id == current_user.id).all()
 
-            Document.transaction_id.is_(None),
+    documents = [
 
-        )
+        doc for doc in all_unlinked
 
-        .all()
+        if not _document_has_confirmed_outcome(doc)
+        and not _document_has_any_transaction_links(db, doc)
 
-    )
+    ]
 
     if not documents:
 
@@ -5520,6 +5711,8 @@ def dismiss_import_suggestion(
         ocr_result["import_suggestion"]["status"] = "dismissed"
 
     document.ocr_result = ocr_result
+
+    from sqlalchemy.orm.attributes import flag_modified
 
     flag_modified(document, "ocr_result")
 
@@ -7070,6 +7263,38 @@ _PHASE_MESSAGES = {
         "bs": "Obrada nije uspjela.",
     },
 }
+
+def _derive_ui_state(current_state: str, suggestion) -> str:
+    """Single source of truth for frontend UI state."""
+    if current_state in ("processing_phase_1", "first_result_available", "finalizing"):
+        return "processing"
+    if current_state == "phase_2_failed":
+        return "error"
+    if not suggestion:
+        return "confirmed"
+    status = suggestion.get("status", "")
+    if status == "confirmed":
+        return "confirmed"
+    if status == "dismissed":
+        return "dismissed"
+    if suggestion.get("follow_up_questions") and len(suggestion["follow_up_questions"]) > 0:
+        return "needs_input"
+    return "ready_to_confirm"
+
+
+def _get_phase_message(current_state: str, lang: str, doc_type=None) -> str:
+    """Get localized phase message for the current processing state."""
+    messages = _PHASE_MESSAGES.get(current_state, _PHASE_MESSAGES["processing_phase_1"])
+    base_msg = messages.get(lang, messages.get("en", "Processing..."))
+    if current_state == "first_result_available" and doc_type:
+        type_prefix = {
+            "de": f"Erkannt als {doc_type}. ",
+            "en": f"Identified as {doc_type}. ",
+            "zh": f"识别为 {doc_type}。",
+        }
+        return type_prefix.get(lang, type_prefix["en"]) + base_msg
+    return base_msg
+
 
 @router.get("/{document_id}/process-status", response_model=ProcessStatusResponse)
 

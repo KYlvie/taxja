@@ -57,6 +57,69 @@ def test_historical_import_custom_values(monkeypatch):
     assert settings.HISTORICAL_IMPORT_ENABLE_AUTO_LINK is False
 
 
+def test_debug_release_value_is_normalized_to_false(monkeypatch):
+    """Legacy DEBUG=release values should remain bootable."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-minimum-32-characters")
+    monkeypatch.setenv("ENCRYPTION_KEY", "test-encryption-key-32-chars")
+    monkeypatch.setenv("POSTGRES_SERVER", "localhost")
+    monkeypatch.setenv("POSTGRES_USER", "test")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test")
+    monkeypatch.setenv("POSTGRES_DB", "test")
+    monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "test")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "test")
+    monkeypatch.setenv("DEBUG", "release")
+
+    from app.core.config import Settings
+
+    settings = Settings()
+
+    assert settings.DEBUG is False
+
+
+def test_local_frontend_uses_dev_safe_cookie_defaults(monkeypatch):
+    """Local frontend URLs should not inherit production cookie defaults."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-minimum-32-characters")
+    monkeypatch.setenv("ENCRYPTION_KEY", "test-encryption-key-32-chars")
+    monkeypatch.setenv("POSTGRES_SERVER", "localhost")
+    monkeypatch.setenv("POSTGRES_USER", "test")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test")
+    monkeypatch.setenv("POSTGRES_DB", "test")
+    monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "test")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "test")
+    monkeypatch.setenv("FRONTEND_URL", "http://localhost:5173")
+
+    from app.core.config import Settings
+
+    settings = Settings()
+
+    assert settings.COOKIE_DOMAIN == ""
+    assert settings.COOKIE_SECURE is False
+
+
+def test_debug_prod_frontend_logs_warning(monkeypatch, caplog):
+    """Warn when a debug/local backend is configured to emit production links."""
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-minimum-32-characters")
+    monkeypatch.setenv("ENCRYPTION_KEY", "test-encryption-key-32-chars")
+    monkeypatch.setenv("POSTGRES_SERVER", "localhost")
+    monkeypatch.setenv("POSTGRES_USER", "test")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test")
+    monkeypatch.setenv("POSTGRES_DB", "test")
+    monkeypatch.setenv("MINIO_ENDPOINT", "localhost:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "test")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "test")
+    monkeypatch.setenv("DEBUG", "true")
+    monkeypatch.setenv("FRONTEND_URL", "https://taxja.at")
+
+    from app.core.config import Settings
+
+    with caplog.at_level("WARNING"):
+        Settings()
+
+    assert any("production FRONTEND_URL" in message for message in caplog.messages)
+
+
 def test_file_size_validation():
     """Test file size validation logic."""
     max_file_size_mb = 50

@@ -66,7 +66,12 @@
     "datePicker": "Datumvalaszto",
     "name": "Név",
     "saveFailed": "Mentés sikertelen",
-    "status": "Állapot"
+    "status": "Állapot",
+    "date": "Dátum",
+    "oneClickConfirm": "Összes megerősítése",
+    "bulkConfirmTransactionsTooltip": "Összes függő tranzakció megerősítése",
+    "bulkConfirmDocumentsTooltip": "Összes függő dokumentum megerősítése",
+    "bulkConfirmSuccess": "{{count}} elem megerősítve"
   },
   "quickActions": {
     "title": "Gyors műveletek",
@@ -383,6 +388,7 @@
     "cancelOverride": "Mégse",
     "userOverride": "Felhasználói felülírás",
     "hasDocument": "Igazoló dokumentummal rendelkezik",
+    "bankReconciled": "Bank egyeztetett",
     "systemGenerated": "Rendszer által generált (automatikus értékcsökkenés)",
     "needsReview": "Felülvizsgálat szükséges",
     "aiReviewNotes": "AI felülvizsgálati megjegyzések",
@@ -544,7 +550,9 @@
     },
     "fields": {
       "lohnsteuer": "Bérjövedelemadó"
-    }
+    },
+    "partiallyDeductible": "Részleges",
+    "deductibilityDerivedFromItems": "A tételekből származtatva"
   },
   "properties": {
     "title": "Ingatlanok",
@@ -1357,7 +1365,7 @@
       "allYears": "Összes év",
       "startDate": "Dátumtól",
       "endDate": "Dátumig",
-      "needsReview": "Csak felülvizsgálatra váró",
+      "needsReview": "Felülvizsgálat szükséges",
       "clear": "Szűrők törlése"
     },
     "groups": {
@@ -2025,7 +2033,7 @@
     "reviewActionSuccess": "Dokumentum ellenőrizve",
     "reviewActionFailed": "Ellenőrzés sikertelen",
     "confirmReview": "Megerősíti?",
-    "exportZip": "{{count}} dokumentum exportálása ZIP-be",
+    "exportZip": "ZIP exportálás",
     "exportSuccess": "{{count}} dokumentum exportálva",
     "exportError": "Exportálás sikertelen",
     "bankWorkbench": {
@@ -2282,7 +2290,7 @@
     "errorGeneric": "Nem sikerült elfogadni a nyilatkozatot. Kérjük, próbálja újra."
   },
   "reports": {
-    "pageSubtitle": "Adójelentések készítése, audit-készültség ellenőrzése és adatok exportálása",
+    "pageSubtitle": "Bevételi jelentések, egyenlegösszesítők és adóűrlapok készítése, valamint az ellenőrizetlen tranzakciók átnézése beküldés előtt",
     "unreviewedWarning": "{{count}} nem ellenőrzött tranzakció szerepel ebben a jelentésben. Kérjük, ellenőrizze a pontosságukat.",
     "reviewTransactions": "Tranzakciók ellenőrzése",
     "tabs": {
@@ -2904,7 +2912,13 @@
       "linked": "Dokumentum meglévő rekordhoz kapcsolva. Duplikátum nem jött létre.",
       "linkExisting": "Duplikátum észlelve",
       "loanRepayment": "Hiteltörlesztés",
-      "noAction": "Művelet-konfiguráció hiányzik. Kérjük, frissítse az oldalt."
+      "noAction": "Művelet-konfiguráció hiányzik. Kérjük, frissítse az oldalt.",
+      "from": "Feladó",
+      "address": "Cím",
+      "item": "Tétel",
+      "matchType": "Egyezés típusa",
+      "reason": "Ok",
+      "taxpayerName": "Adózó"
     },
     "followUp": {
       "header": "Néhány további részletre van szükségem:",

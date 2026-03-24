@@ -85,6 +85,17 @@
   }
 }
 
+/* When AI chat is maximized, auto-collapse sidebar */
+:root.ai-chat-maximized .sidebar {
+  transform: translateX(calc(-100% - 32px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+:root.ai-chat-maximized .main-content {
+  margin-left: 0 !important;
+}
+
 @media (max-width: 768px) {
   .app-layout {
     height: auto;

@@ -196,24 +196,22 @@ class OCREngine:
                         document_type_hint=normalized_hint,
                     )
 
-            # 1. Load and preprocess image (falls back to Tesseract OCR)
-            # For multi-page scanned PDFs, use fast-path for contracts
+            # 1. Scanned PDF or image — prefer VLM (fast API) over Tesseract (slow CPU)
             if image_bytes[:5] == b"%PDF-":
+                # Try VLM first for scanned PDFs — much faster than Tesseract
+                # on low-resource servers (2-5s API call vs 20-30s CPU OCR)
+                vlm_result = self._try_vlm_ocr_for_pdf(image_bytes, start_time)
+                if vlm_result is not None:
+                    return vlm_result
+
+                # VLM unavailable — fall back to Tesseract
                 # Quick OCR: first 2 pages only for classification (~8s vs ~23s)
                 raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=2)
 
-                # VLM fallback: if Tesseract returned nothing (not installed,
-                # crashed, or image-only PDF it cannot read), render the first
-                # page to PNG and try the VLM vision path instead.
                 if not raw_text.strip():
                     logger.warning(
-                        "Tesseract returned empty text for PDF, attempting VLM fallback"
+                        "Tesseract also returned empty text for PDF, no OCR possible"
                     )
-                    vlm_result = self._try_vlm_ocr_for_pdf(
-                        image_bytes, start_time
-                    )
-                    if vlm_result is not None:
-                        return vlm_result
 
                 # Classify from partial text
                 doc_type, classification_confidence = self.classifier.classify(

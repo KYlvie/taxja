@@ -203,38 +203,96 @@
   font-size: 16px;
 }
 
+.deductible-partial {
+  color: #d97706;
+  font-size: 16px;
+}
+
 .deductible-no {
   color: var(--color-text-muted);
   font-size: 16px;
 }
 
-.actions {
+.transaction-row-actions {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.btn-icon {
-  width: 34px;
-  height: 34px;
+.transaction-action-primary,
+.transaction-action-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-action-indicator {
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-muted);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.transaction-action-indicator--warning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.24);
+  color: #d97706;
+}
+
+.transaction-action-indicator--reconciled {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.24);
+  color: #059669;
+}
+
+.transaction-chip.reconciled {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.transaction-action-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   cursor: pointer;
   padding: 0;
-  border-radius: 8px;
-  transition: all var(--transition-fast);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition:
+    transform var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
   color: var(--color-text-muted);
 }
 
-.btn-icon:hover {
+.transaction-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
   background: var(--color-surface-hover);
   color: var(--color-text);
-  border-color: var(--color-border);
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-xs);
 }
 
-.btn-icon.btn-danger:hover {
+.transaction-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.transaction-action-btn--danger:hover:not(:disabled) {
   background: var(--color-danger-light);
   color: var(--color-danger);
 }
@@ -321,6 +379,7 @@
 
 .transaction-card-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   padding-top: 2px;

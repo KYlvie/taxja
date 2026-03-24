@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'add_uat_feedback'
-down_revision = None  # Update this to the latest revision
+down_revision = "001"
 branch_labels = None
 depends_on = None
 

@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "032_add_vat_type"
-down_revision = None  # Adjust to actual head
+down_revision = "001"
 branch_labels = None
 depends_on = None
 

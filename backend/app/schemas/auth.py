@@ -97,6 +97,11 @@ class UserLogin(BaseModel):
     two_factor_code: str | None = None
 
 
+class GoogleLoginRequest(BaseModel):
+    """Google login request carrying the Google Identity credential JWT."""
+    credential: str = Field(..., min_length=10)
+
+
 class TwoFactorVerifyRequest(BaseModel):
     """Request body for 2FA code verification"""
     code: str = Field(..., min_length=6, max_length=6)

@@ -66,7 +66,12 @@
     "datePicker": "Wybor daty",
     "name": "Nazwa",
     "saveFailed": "Zapisywanie nie powiodło się",
-    "status": "Status"
+    "status": "Status",
+    "date": "Data",
+    "oneClickConfirm": "Potwierdź wszystko",
+    "bulkConfirmTransactionsTooltip": "Potwierdź wszystkie oczekujące transakcje",
+    "bulkConfirmDocumentsTooltip": "Potwierdź wszystkie oczekujące dokumenty",
+    "bulkConfirmSuccess": "Potwierdzono {{count}} elementów"
   },
   "quickActions": {
     "title": "Szybkie akcje",
@@ -377,6 +382,7 @@
     "cancelOverride": "Anuluj",
     "userOverride": "Zmiana użytkownika",
     "hasDocument": "Posiada dokument potwierdzający",
+    "bankReconciled": "Uzgodnione z bankiem",
     "systemGenerated": "Wygenerowane przez system (automatyczna amortyzacja)",
     "needsReview": "Wymaga przeglądu",
     "aiReviewNotes": "Notatki z przeglądu AI",
@@ -538,7 +544,9 @@
     },
     "fields": {
       "lohnsteuer": "Podatek od wynagrodzeń"
-    }
+    },
+    "partiallyDeductible": "Częściowo",
+    "deductibilityDerivedFromItems": "Wynikające z pozycji"
   },
   "properties": {
     "title": "Nieruchomości",
@@ -1351,7 +1359,7 @@
       "allYears": "Wszystkie lata",
       "startDate": "Od daty",
       "endDate": "Do daty",
-      "needsReview": "Tylko wymagające przeglądu",
+      "needsReview": "Wymaga przeglądu",
       "clear": "Wyczyść filtry"
     },
     "groups": {
@@ -2019,7 +2027,7 @@
     "reviewActionSuccess": "Dokument sprawdzony",
     "reviewActionFailed": "Przegląd nie powiódł się",
     "confirmReview": "Potwierdzić?",
-    "exportZip": "Eksportuj {{count}} dokumentów jako ZIP",
+    "exportZip": "Eksportuj ZIP",
     "exportSuccess": "Wyeksportowano {{count}} dokumentów",
     "exportError": "Eksport nie powiódł się",
     "bankWorkbench": {
@@ -2276,7 +2284,7 @@
     "errorGeneric": "Nie udało się zaakceptować zastrzeżenia. Proszę spróbować ponownie."
   },
   "reports": {
-    "pageSubtitle": "Generuj raporty podatkowe, sprawdzaj gotowość do audytu i eksportuj swoje dane",
+    "pageSubtitle": "Generuj raporty przychodów, zestawienia sald i formularze podatkowe oraz sprawdzaj niezweryfikowane transakcje przed złożeniem",
     "unreviewedWarning": "{{count}} niesprawdzonych transakcji jest uwzględnionych w tym raporcie. Sprawdź ich poprawność.",
     "reviewTransactions": "Sprawdź transakcje",
     "tabs": {
@@ -2898,7 +2906,13 @@
       "linked": "Dokument powiązany z istniejącym zapisem. Nie utworzono duplikatu.",
       "linkExisting": "Wykryto duplikat",
       "loanRepayment": "Spłata kredytu",
-      "noAction": "Brak konfiguracji akcji. Proszę odświeżyć stronę."
+      "noAction": "Brak konfiguracji akcji. Proszę odświeżyć stronę.",
+      "from": "Od",
+      "address": "Adres",
+      "item": "Pozycja",
+      "matchType": "Typ dopasowania",
+      "reason": "Powód",
+      "taxpayerName": "Podatnik"
     },
     "followUp": {
       "header": "Potrzebuję kilku dodatkowych informacji:",

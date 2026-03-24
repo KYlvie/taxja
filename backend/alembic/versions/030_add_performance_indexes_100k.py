@@ -6,7 +6,7 @@ Revises: None (standalone, safe to run anytime)
 from alembic import op
 
 revision = "030_perf_indexes"
-down_revision = None
+down_revision = "001"
 branch_labels = None
 depends_on = None
 

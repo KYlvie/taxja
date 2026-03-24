@@ -1,11 +1,13 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
+import { CheckCheck } from 'lucide-react';
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Select from '../components/common/Select';
 import DocumentUpload from '../components/documents/DocumentUpload';
 import { translateDeductionReason } from '../utils/translateDeductionReason';
-import DocumentList from '../components/documents/DocumentList';
+import DocumentList, { type DocumentListSummary } from '../components/documents/DocumentList';
 import OCRReview from '../components/documents/OCRReview';
 import BankStatementWorkbench from '../components/documents/BankStatementWorkbench';
 import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
@@ -13,6 +15,7 @@ import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
 import { documentService, type AssetSuggestionConfirmationPayload } from '../services/documentService';
+import { useDocumentStore } from '../stores/documentStore';
 import { transactionService } from '../services/transactionService';
 import { propertyService } from '../services/propertyService';
 import { Document } from '../types/document';
@@ -102,6 +105,16 @@ const normalizeVatRate = (value: unknown): number | null => {
 };
 
 const EMPTY_DISPLAY_VALUE = '-';
+
+const chunkItems = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
 
 const formatCurrencyDisplay = (value: unknown): string => {
   const numeric = toFiniteNumber(value);
@@ -867,8 +880,75 @@ const DocumentsPage = () => {
   const [confirmingAction, setConfirmingAction] = useState<string | null>(null);
   const [confirmResult, setConfirmResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [documentSummary, setDocumentSummary] = useState<DocumentListSummary>({
+    totalCount: 0,
+    reviewCount: 0,
+    confirmableIds: [],
+  });
   const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
   const [docIdList, setDocIdList] = useState<number[]>([]);
+  const [exporting, setExporting] = useState(false);
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+
+  const currentFilters = useDocumentStore((s) => s.filters);
+
+  const handleExportZip = async () => {
+    setExporting(true);
+    try {
+      const blob = await documentService.exportZip(currentFilters);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'documents.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silent
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleBulkConfirmDocuments = async () => {
+    if (bulkConfirming || documentSummary.confirmableIds.length === 0) return;
+
+    setBulkConfirming(true);
+    let successCount = 0;
+    let failed = false;
+
+    try {
+      const ids = Array.from(new Set(documentSummary.confirmableIds));
+
+      for (const batch of chunkItems(ids, 4)) {
+        const results = await Promise.allSettled(
+          batch.map((id) => documentService.confirmOCR(id))
+        );
+
+        results.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            successCount += 1;
+          } else {
+            failed = true;
+          }
+        });
+      }
+
+      if (successCount > 0 && !failed) {
+        aiToast(
+          t('common.bulkConfirmSuccess', {
+            count: successCount,
+            defaultValue: 'Confirmed {{count}} items.',
+          }),
+          'success'
+        );
+      } else if (failed) {
+        aiToast(t('common.saveFailed', 'Save failed'), 'error');
+      }
+    } finally {
+      setBulkConfirming(false);
+      setRefreshKey((k) => k + 1);
+    }
+  };
 
   // Fetch document ID list for prev/next navigation
   useEffect(() => {
@@ -903,6 +983,7 @@ const DocumentsPage = () => {
 
   const [receiptItemDrafts, setReceiptItemDrafts] = useState<Record<number, ReceiptDraftItem[]>>({});
   const [receiptPresentationDrafts, setReceiptPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
+  const [expandedReceiptIndexes, setExpandedReceiptIndexes] = useState<number[]>([]);
   const [editingReceiptIndex, setEditingReceiptIndex] = useState<number | null>(null);
   const [savingReceiptIndex, setSavingReceiptIndex] = useState<number | null>(null);
   const [receiptItemSaveResult, setReceiptItemSaveResult] = useState<{
@@ -910,6 +991,7 @@ const DocumentsPage = () => {
     message: string;
     receiptIndex: number;
   } | null>(null);
+  const previousViewingDocumentIdRef = useRef<number | null>(null);
 
   // Inline OCR scalar field editing
   const [editingOcrField, setEditingOcrField] = useState<string | null>(null);
@@ -1069,6 +1151,37 @@ const DocumentsPage = () => {
       parts.push(categoryLabel);
     }
     return parts.join(' | ');
+  };
+
+  const formatReceiptItemCountLabel = (count: number): string => {
+    if (count <= 0) return '';
+    if ((i18n?.language || '').toLowerCase().startsWith('zh')) {
+      return `${count} 条明细`;
+    }
+    return count === 1 ? '1 line item' : `${count} line items`;
+  };
+
+  const formatReceiptDetailsToggleLabel = (expanded: boolean): string => {
+    if ((i18n?.language || '').toLowerCase().startsWith('zh')) {
+      return expanded ? '收起详情' : '展开详情';
+    }
+    return expanded
+      ? t('documents.receiptReview.hideDetails', 'Hide details')
+      : t('documents.receiptReview.expandDetails', 'Expand details');
+  };
+
+  const formatReceiptLinkedLabel = (): string => {
+    if ((i18n?.language || '').toLowerCase().startsWith('zh')) {
+      return '已关联交易';
+    }
+    return t('documents.receiptReview.linkedTransactionShort', 'Linked transaction');
+  };
+
+  const formatReceiptEditingLabel = (): string => {
+    if ((i18n?.language || '').toLowerCase().startsWith('zh')) {
+      return '编辑中';
+    }
+    return t('documents.receiptReview.editing', 'Editing');
   };
 
   const getReceiptCategoryOptions = (transactionType: 'expense' | 'income' | 'unknown') => {
@@ -1374,20 +1487,41 @@ const DocumentsPage = () => {
     if (!viewingDocument) {
       setReceiptItemDrafts({});
       setReceiptPresentationDrafts({});
+      setExpandedReceiptIndexes([]);
       setEditingReceiptIndex(null);
+      previousViewingDocumentIdRef.current = null;
       return;
     }
 
     const data = normalizeOcrDataForDisplay(viewingDocument.ocr_result);
+    const receiptSections = getAllReceiptsForDisplay(data);
+    const isNewDocument = previousViewingDocumentIdRef.current !== viewingDocument.id;
+    previousViewingDocumentIdRef.current = viewingDocument.id;
     setReceiptItemDrafts(buildReceiptDrafts(data, linkedTransaction));
     setReceiptPresentationDrafts(
       buildReceiptPresentationDrafts(viewingDocument.document_type as string, data)
     );
+    setExpandedReceiptIndexes((current) => {
+      if (receiptSections.length === 0) return [];
+      if (isNewDocument) return receiptSections.length > 1 ? [] : [0];
+      const filtered = current.filter((index) => index >= 0 && index < receiptSections.length);
+      if (filtered.length > 0) return filtered;
+      return receiptSections.length > 1 ? [] : [0];
+    });
     setEditingReceiptIndex(null);
     // Keep dependencies scoped to the receipt payload so unrelated object identity
     // changes do not reset local editing state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingDocument?.id, viewingDocument?.ocr_result, linkedTransaction]);
+
+  useEffect(() => {
+    if (editingReceiptIndex === null) return;
+    setExpandedReceiptIndexes((current) => (
+      current.includes(editingReceiptIndex)
+        ? current
+        : [...current, editingReceiptIndex].sort((left, right) => left - right)
+    ));
+  }, [editingReceiptIndex]);
 
   const handleDocumentSelect = async (document: Document) => {
     // Route: receipt/invoice types -> inline viewer, everything else -> OCRReview
@@ -1723,6 +1857,18 @@ const DocumentsPage = () => {
     }
 
     setReceiptItemSaveResult(null);
+  };
+
+  const toggleReceiptExpansion = (receiptIndex: number) => {
+    if (editingReceiptIndex === receiptIndex) {
+      return;
+    }
+
+    setExpandedReceiptIndexes((current) => (
+      current.includes(receiptIndex)
+        ? current.filter((index) => index !== receiptIndex)
+        : [...current, receiptIndex].sort((left, right) => left - right)
+    ));
   };
 
   // Quick-decide: auto-save when user toggles a pending item in view mode
@@ -2293,6 +2439,7 @@ const DocumentsPage = () => {
                             const receiptItems = receiptItemDrafts[receiptIndex] || [];
                             const receiptPresentationDraft = receiptPresentationDrafts[receiptIndex] || {};
                             const isReceiptEditing = editingReceiptIndex === receiptIndex;
+                            const isReceiptExpanded = expandedReceiptIndexes.includes(receiptIndex);
                             const receiptVatSummary = Array.isArray(receipt.vat_summary) ? receipt.vat_summary : [];
                             const receiptPresentationDocument = {
                               ...viewingDocument,
@@ -2316,6 +2463,13 @@ const DocumentsPage = () => {
                                 : receiptItems.some((item) => String(item.category || '').trim())
                                   ? t('documents.receiptReview.mixedCategories', 'Mixed categories')
                                   : t('documents.receiptReview.noCategory', 'No category assigned');
+                              const linkedReceiptTransaction = receiptIndex === 0 && linkedTransaction
+                                ? { transaction_id: linkedTransaction.id }
+                                : findMatchingReceiptTransaction(
+                                    receiptIndex,
+                                    receiptItems,
+                                    (viewingDocument as any)?.linked_transactions,
+                                  );
                               const deductibleTotal = receiptItems
                                 .filter((item) => item.is_deductible === true)
                                 .reduce((sum, item) => sum + item.amount, 0);
@@ -2326,31 +2480,72 @@ const DocumentsPage = () => {
                             return (
                               <section key={`receipt-${receiptIndex}`} className="receipt-breakdown-card">
                                 <div className="receipt-breakdown-header">
-                                  <div>
-                                    <h4>{t('documents.receiptReview.receiptNumber', { number: receiptIndex + 1 })}</h4>
-                                    <p>
-                                      {[receipt.merchant, receipt.date ? formatOcrFieldValue('date', receipt.date) : null]
-                                        .filter(Boolean)
-                                        .join(' | ') || 'OCR-detected receipt'}
-                                    </p>
+                                  <div className="receipt-breakdown-header-main">
+                                    <div>
+                                      <h4>{t('documents.receiptReview.receiptNumber', { number: receiptIndex + 1 })}</h4>
+                                      <p>
+                                        {[receipt.merchant, receipt.date ? formatOcrFieldValue('date', receipt.date) : null]
+                                          .filter(Boolean)
+                                          .join(' | ') || 'OCR-detected receipt'}
+                                      </p>
+                                    </div>
+                                    <div className="receipt-breakdown-summary">
+                                      {receiptItems.length > 0 && (
+                                        <span className="receipt-breakdown-summary-chip">
+                                          {formatReceiptItemCountLabel(receiptItems.length)}
+                                        </span>
+                                      )}
+                                      {receiptItems.some((item) => String(item.category || '').trim()) && (
+                                        <span className="receipt-breakdown-summary-chip">
+                                          {receiptCategoryLabel}
+                                        </span>
+                                      )}
+                                      {linkedReceiptTransaction && (
+                                        <span className="receipt-breakdown-summary-chip receipt-breakdown-summary-chip--linked">
+                                          {formatReceiptLinkedLabel()}
+                                        </span>
+                                      )}
+                                      {isReceiptEditing && (
+                                        <span className="receipt-breakdown-summary-chip receipt-breakdown-summary-chip--editing">
+                                          {formatReceiptEditingLabel()}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="receipt-breakdown-header-actions">
                                     <div className="receipt-breakdown-amount">{fmtEur(receipt.amount)}</div>
-                                    {!isReceiptEditing && (
+                                    <div className="receipt-breakdown-header-buttons">
                                       <button
                                         type="button"
-                                        className="receipt-review-edit-btn receipt-review-edit-btn--header"
-                                        onClick={() => {
-                                          setEditingReceiptIndex(receiptIndex);
-                                          setReceiptItemSaveResult(null);
-                                        }}
+                                        className={`receipt-breakdown-toggle-btn ${isReceiptExpanded ? 'expanded' : ''}`}
+                                        onClick={() => toggleReceiptExpansion(receiptIndex)}
+                                        aria-expanded={isReceiptExpanded}
+                                        aria-controls={`receipt-panel-${receiptIndex}`}
+                                        disabled={isReceiptEditing}
                                       >
-                                        {t('common.edit', 'Edit')}
+                                        <span>
+                                          {formatReceiptDetailsToggleLabel(isReceiptExpanded)}
+                                        </span>
+                                        <span className="receipt-breakdown-toggle-icon" aria-hidden="true" />
                                       </button>
-                                    )}
+                                      {!isReceiptEditing && (
+                                        <button
+                                          type="button"
+                                          className="receipt-review-edit-btn receipt-review-edit-btn--header"
+                                          onClick={() => {
+                                            setEditingReceiptIndex(receiptIndex);
+                                            setReceiptItemSaveResult(null);
+                                          }}
+                                        >
+                                          {t('common.edit', 'Edit')}
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
+                                {isReceiptExpanded && (
+                                  <div id={`receipt-panel-${receiptIndex}`} className="receipt-breakdown-body">
                                 <div className="receipt-presentation-strip">
                                   <div className="receipt-presentation-fields">
                                     <label className="receipt-presentation-field">
@@ -3013,6 +3208,8 @@ const DocumentsPage = () => {
                                     </div>
                                   </div>
                                 )}
+                                  </div>
+                                )}
                               </section>
                             );
                           })}
@@ -3285,6 +3482,34 @@ const DocumentsPage = () => {
     <div className="documents-page">
       <div className="page-header">
         <h1>{t('documents.title')}</h1>
+        <div className="page-summary" aria-label={t('documents.title')}>
+          <div className="page-summary-pill">
+            <span className="page-summary-pill__value">{documentSummary.totalCount}</span>
+            <span className="page-summary-pill__label">{t('common.total', 'Total')}</span>
+          </div>
+          <div className={`page-summary-pill ${documentSummary.reviewCount > 0 ? 'page-summary-pill--warning' : ''}`}>
+            <span className="page-summary-pill__value">{documentSummary.reviewCount}</span>
+            <span className="page-summary-pill__label">{t('documents.filters.needsReview')}</span>
+          </div>
+          <button
+            className="btn btn-success btn-sm"
+            onClick={() => void handleBulkConfirmDocuments()}
+            disabled={bulkConfirming || documentSummary.confirmableIds.length === 0}
+            title={t('common.bulkConfirmDocumentsTooltip', 'Confirm all pending documents')}
+          >
+            <><CheckCheck size={16} /> {bulkConfirming
+              ? t('common.loading', 'Loading')
+              : t('common.oneClickConfirm', 'One-click confirm')}</>
+          </button>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={handleExportZip}
+            disabled={exporting || documentSummary.totalCount === 0}
+            title={t('documents.exportZip', 'Export ZIP')}
+          >
+            {exporting ? t('common.loading') : t('documents.exportZip', 'Export ZIP')}
+          </button>
+        </div>
       </div>
 
       <div className="upload-section">
@@ -3314,7 +3539,11 @@ const DocumentsPage = () => {
       </div>
 
       <div className="documents-list-section">
-        <DocumentList key={refreshKey} onDocumentSelect={handleDocumentSelect} />
+        <DocumentList
+          key={refreshKey}
+          onDocumentSelect={handleDocumentSelect}
+          onSummaryChange={setDocumentSummary}
+        />
       </div>
     </div>
   );

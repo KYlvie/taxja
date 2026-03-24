@@ -54,6 +54,16 @@ export const bankImportService = {
     const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/ignore`);
     return response.data;
   },
+
+  undoCreateLine: async (lineId: number): Promise<LineActionEnvelope> => {
+    const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/undo-create`);
+    return response.data;
+  },
+
+  unmatchLine: async (lineId: number): Promise<LineActionEnvelope> => {
+    const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/unmatch`);
+    return response.data;
+  },
 };
 
 export default bankImportService;

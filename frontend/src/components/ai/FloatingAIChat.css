@@ -19,7 +19,12 @@
 }
 
 .ai-dock--maximized {
-  height: calc(100vh - 16px) !important;
+  height: calc(100vh - 56px) !important;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
 }
 
 /* Drag handle */

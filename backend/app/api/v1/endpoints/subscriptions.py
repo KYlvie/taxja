@@ -76,9 +76,47 @@ def get_current_subscription(
     Get current user's subscription details.
     Admin users get a virtual Pro subscription (no DB record needed).
     Auto-creates a Free plan subscription for regular users if none exists.
+    Expired/canceled subscriptions are auto-downgraded to Free.
     """
     subscription_service = SubscriptionService(db)
     subscription = subscription_service.get_user_subscription(current_user.id)
+
+    # Auto-downgrade expired/canceled subscriptions to Free
+    if subscription and subscription.status == SubscriptionStatus.CANCELED and subscription.is_expired():
+        free_plan = db.query(Plan).filter(Plan.plan_type == "free").first()
+        if free_plan and subscription.plan_id != free_plan.id:
+            old_plan_type = subscription.plan.plan_type if subscription.plan else "unknown"
+            subscription.plan_id = free_plan.id
+            subscription.status = SubscriptionStatus.ACTIVE
+            subscription.current_period_start = datetime.utcnow()
+            subscription.current_period_end = None  # Free tier has no expiration
+            subscription.cancel_at_period_end = False
+            # Reset credit balance to Free plan level
+            try:
+                from app.models.credit_balance import CreditBalance
+                credit_balance = db.query(CreditBalance).filter(
+                    CreditBalance.user_id == current_user.id
+                ).first()
+                if credit_balance:
+                    credit_balance.plan_balance = free_plan.monthly_credits or 100
+                    credit_balance.overage_credits_used = 0
+                    credit_balance.overage_enabled = False
+                # Invalidate Redis credit cache
+                try:
+                    from app.core.config import settings
+                    import redis as redis_lib
+                    r = redis_lib.from_url(settings.REDIS_URL)
+                    r.delete(f"credit_balance:{current_user.id}")
+                except Exception:
+                    pass
+            except Exception:
+                logger.warning(f"Failed to reset credit balance for user {current_user.id}", exc_info=True)
+            db.commit()
+            db.refresh(subscription)
+            logger.info(
+                f"Auto-downgraded expired subscription for user {current_user.id}: "
+                f"{old_plan_type} -> free"
+            )
 
     if not subscription:
         # Auto-create free subscription for the user (including admin)

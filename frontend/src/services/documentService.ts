@@ -237,6 +237,21 @@ export const documentService = {
     return response.data;
   },
 
+  // Export filtered documents as ZIP
+  exportZip: async (filters?: DocumentFilter): Promise<Blob> => {
+    const params = new URLSearchParams();
+    if (filters?.document_type) params.append('document_type', filters.document_type);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    if (filters?.search) params.append('search_text', filters.search);
+    const qs = params.toString();
+    const response = await api.get(`/documents/export-zip${qs ? '?' + qs : ''}`, {
+      responseType: 'blob',
+      timeout: 120000,
+    });
+    return response.data;
+  },
+
   // Delete document
   deleteDocument: async (id: number, deleteMode: 'document_only' | 'with_data' = 'document_only'): Promise<void> => {
     await api.delete(`/documents/${id}?delete_mode=${deleteMode}`);

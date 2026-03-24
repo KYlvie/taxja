@@ -2351,6 +2351,7 @@ CREATE TABLE public.users (
     id integer NOT NULL,
     email character varying(255) NOT NULL,
     password_hash character varying(255) NOT NULL,
+    google_subject character varying(255),
     name character varying(255) NOT NULL,
     tax_number character varying(500),
     vat_number character varying(500),
@@ -4189,6 +4190,13 @@ CREATE INDEX ix_users_account_status ON public.users USING btree (account_status
 --
 
 CREATE UNIQUE INDEX ix_users_email ON public.users USING btree (email);
+
+
+--
+-- Name: ix_users_google_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_users_google_subject ON public.users USING btree (google_subject);
 
 
 --

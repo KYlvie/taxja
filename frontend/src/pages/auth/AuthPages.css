@@ -119,6 +119,78 @@
   gap: 18px;
 }
 
+.auth-social-section {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.auth-social-note {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.auth-social-note--warning {
+  color: var(--color-warning, #b45309);
+}
+
+.auth-divider {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 18px;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-border), transparent);
+}
+
+.google-signin-shell {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+}
+
+.google-signin-shell.is-disabled {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.google-signin-slot {
+  width: 100%;
+}
+
+.google-signin-slot--hidden {
+  display: none;
+}
+
+.google-signin-placeholder {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 999px;
+}
+
+.google-signin-placeholder--visible {
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .auth-optional-profile-section {
   padding: 18px 18px 16px;
   border-radius: 18px;

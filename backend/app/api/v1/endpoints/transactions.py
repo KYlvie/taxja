@@ -25,6 +25,7 @@ from app.core.security import get_current_user
 from app.core.error_messages import get_error_message
 from app.services.transaction_classifier import TransactionClassifier
 from app.services.deductibility_checker import DeductibilityChecker
+from app.services.bank_import_service import BankImportService
 from app.services.credit_service import CreditService, InsufficientCreditsError
 from app.services.posting_line_utils import (
     derive_parent_deductibility,
@@ -882,6 +883,7 @@ async def create_transaction(
             vat_amount=db_transaction.vat_amount,
             line_items=provided_line_items,
         )
+        _sync_parent_line_item_flags(db_transaction, normalized_line_items)
         _replace_transaction_line_items(db, db_transaction, normalized_line_items)
         explicit_rule_context = get_transaction_rule_context(db_transaction, current_user)
 
@@ -1075,6 +1077,14 @@ def get_transactions(
     
     # Calculate total pages
     total_pages = math.ceil(total / page_size) if total > 0 else 0
+
+    # Count transactions needing review (unfiltered by date, scoped to user)
+    needs_review_count = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == current_user.id)
+        .filter(Transaction.needs_review == True, Transaction.reviewed == False)
+        .count()
+    )
     
     return TransactionListResponse(
         total=total,
@@ -1083,6 +1093,7 @@ def get_transactions(
         page_size=page_size,
         total_pages=total_pages,
         available_years=available_years,
+        needs_review_count=needs_review_count,
     )
 
 
@@ -1540,6 +1551,10 @@ async def batch_delete_transactions(
     deletable_ids = set(safe_ids) | {item["id"] for item in needs_confirmation}
     deleted_ids = []
     affected_rule_contexts = []
+    bank_import_service = BankImportService(db=db)
+
+    if deletable_ids:
+        bank_import_service.handle_deleted_transactions(deletable_ids, current_user.id)
 
     for txn in txns:
         if txn.id not in deletable_ids:
@@ -2116,6 +2131,7 @@ async def delete_transaction(
     # --- proceed with deletion (no association, or force=True) ---
 
     affected_rule_context = get_transaction_rule_context(transaction, current_user)
+    BankImportService(db=db).handle_deleted_transactions([transaction_id], current_user.id)
 
     # Clear document references to this transaction to avoid FK violation
     docs = db.query(Document).filter(Document.transaction_id == transaction_id).all()

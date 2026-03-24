@@ -233,10 +233,17 @@ const FloatingAIChat = () => {
   useEffect(() => {
     if (isMobile) {
       document.documentElement.style.setProperty('--ai-dock-height', '0px');
-      return;
+      document.documentElement.classList.remove('ai-chat-maximized');
+      return () => { document.documentElement.classList.remove('ai-chat-maximized'); };
     }
     const h = panelOpen ? (isMaximized ? MAX_PANEL_H : panelHeight) : 38;
     document.documentElement.style.setProperty('--ai-dock-height', `${h}px`);
+    if (panelOpen && isMaximized) {
+      document.documentElement.classList.add('ai-chat-maximized');
+    } else {
+      document.documentElement.classList.remove('ai-chat-maximized');
+    }
+    return () => { document.documentElement.classList.remove('ai-chat-maximized'); };
   }, [panelOpen, panelHeight, isMaximized, isMobile]);
 
   const dockCreditDisplay =

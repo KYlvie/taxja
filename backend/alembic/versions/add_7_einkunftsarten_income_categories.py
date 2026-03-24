@@ -16,7 +16,7 @@ Create Date: 2026-03-06
 from alembic import op
 
 revision = "add_7_einkunftsarten"
-down_revision = None
+down_revision = "001"
 branch_labels = None
 depends_on = None
 

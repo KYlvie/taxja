@@ -20,6 +20,10 @@ from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
+def _enum_values(enum_cls: type[Enum]) -> list[str]:
+    return [member.value for member in enum_cls]
+
+
 class BankStatementImportSourceType(str, Enum):
     """Source channel for a bank statement import."""
 
@@ -53,7 +57,12 @@ class BankStatementImport(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     source_type = Column(
-        SQLEnum(BankStatementImportSourceType, name="bankstatementimportsourcetype"),
+        SQLEnum(
+            BankStatementImportSourceType,
+            name="bankstatementimportsourcetype",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         index=True,
     )
@@ -100,13 +109,23 @@ class BankStatementLine(Base):
     raw_reference = Column(String(255), nullable=True)
     normalized_fingerprint = Column(String(255), nullable=False, index=True)
     review_status = Column(
-        SQLEnum(BankStatementLineStatus, name="bankstatementlinestatus"),
+        SQLEnum(
+            BankStatementLineStatus,
+            name="bankstatementlinestatus",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         default=BankStatementLineStatus.PENDING_REVIEW,
         index=True,
     )
     suggested_action = Column(
-        SQLEnum(BankStatementSuggestedAction, name="bankstatementsuggestedaction"),
+        SQLEnum(
+            BankStatementSuggestedAction,
+            name="bankstatementsuggestedaction",
+            values_callable=_enum_values,
+            validate_strings=True,
+        ),
         nullable=False,
         default=BankStatementSuggestedAction.CREATE_NEW,
     )

@@ -7,7 +7,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, get_password_hash
-from app.models.bank_statement_import import BankStatementImport, BankStatementLine, BankStatementLineStatus
+from app.models.bank_statement_import import (
+    BankStatementImport,
+    BankStatementImportSourceType,
+    BankStatementLine,
+    BankStatementLineStatus,
+    BankStatementSuggestedAction,
+)
 from app.models.document import Document, DocumentType
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User, UserType
@@ -594,3 +600,221 @@ def test_ignore_line_marks_duplicate_without_creating_transaction(
         .count()
     )
     assert tx_count == 0
+
+
+def test_undo_create_line_deletes_created_transaction_and_resets_line(
+    client: TestClient,
+    db: Session,
+    bank_workbench_user: User,
+    bank_workbench_auth_headers: dict,
+):
+    document = _make_bank_statement_document(db, bank_workbench_user, "undo-create-line.pdf")
+
+    with patch(
+        "app.services.bank_import_service.TransactionClassifier.classify_transaction",
+        return_value=ClassificationResult(category=None, confidence=Decimal("0.00"), method="test"),
+    ):
+        init_response = client.post(
+            f"/api/v1/bank-import/document/{document.id}/initialize",
+            headers=bank_workbench_auth_headers,
+        )
+        assert init_response.status_code == 200
+        import_id = init_response.json()["import"]["id"]
+
+    lines_response = client.get(
+        f"/api/v1/bank-import/imports/{import_id}/lines",
+        headers=bank_workbench_auth_headers,
+    )
+    assert lines_response.status_code == 200
+    line_id = lines_response.json()["lines"][0]["id"]
+
+    create_response = client.post(
+        f"/api/v1/bank-import/lines/{line_id}/confirm-create",
+        headers=bank_workbench_auth_headers,
+    )
+    assert create_response.status_code == 200
+    transaction_id = create_response.json()["transaction"]["id"]
+
+    undo_response = client.post(
+        f"/api/v1/bank-import/lines/{line_id}/undo-create",
+        headers=bank_workbench_auth_headers,
+    )
+    assert undo_response.status_code == 200
+    payload = undo_response.json()
+    assert payload["line"]["review_status"] == "pending_review"
+    assert payload["line"]["created_transaction_id"] is None
+    assert payload["line"]["linked_transaction_id"] is None
+
+    deleted_transaction = (
+        db.query(Transaction)
+        .filter(Transaction.id == transaction_id)
+        .first()
+    )
+    assert deleted_transaction is None
+
+
+def test_unmatch_line_resets_to_pending_and_clears_previous_match_candidate(
+    client: TestClient,
+    db: Session,
+    bank_workbench_user: User,
+    bank_workbench_auth_headers: dict,
+):
+    document = _make_bank_statement_document(db, bank_workbench_user, "unmatch-line.pdf")
+
+    existing_transaction = Transaction(
+        user_id=bank_workbench_user.id,
+        type=TransactionType.INCOME,
+        amount=Decimal("2400.00"),
+        transaction_date=date(2026, 1, 18),
+        description="Rental income January",
+        bank_reconciled=False,
+    )
+    db.add(existing_transaction)
+    db.commit()
+    db.refresh(existing_transaction)
+
+    with patch(
+        "app.services.bank_import_service.TransactionClassifier.classify_transaction",
+        return_value=ClassificationResult(category=None, confidence=Decimal("0.00"), method="test"),
+    ):
+        init_response = client.post(
+            f"/api/v1/bank-import/document/{document.id}/initialize",
+            headers=bank_workbench_auth_headers,
+        )
+        assert init_response.status_code == 200
+        import_id = init_response.json()["import"]["id"]
+
+    lines_response = client.get(
+        f"/api/v1/bank-import/imports/{import_id}/lines",
+        headers=bank_workbench_auth_headers,
+    )
+    assert lines_response.status_code == 200
+    rent_line = next(line for line in lines_response.json()["lines"] if line["amount"] == "2400.00")
+
+    match_response = client.post(
+        f"/api/v1/bank-import/lines/{rent_line['id']}/match-existing",
+        headers=bank_workbench_auth_headers,
+        json={"transaction_id": existing_transaction.id},
+    )
+    assert match_response.status_code == 200
+
+    unmatch_response = client.post(
+        f"/api/v1/bank-import/lines/{rent_line['id']}/unmatch",
+        headers=bank_workbench_auth_headers,
+    )
+    assert unmatch_response.status_code == 200
+    payload = unmatch_response.json()
+    assert payload["line"]["review_status"] == "pending_review"
+    assert payload["line"]["suggested_action"] == "create_new"
+    assert payload["line"]["created_transaction_id"] is None
+    assert payload["line"]["linked_transaction_id"] is None
+
+    db.refresh(existing_transaction)
+    assert existing_transaction.bank_reconciled is False
+    assert existing_transaction.bank_reconciled_at is None
+
+
+def test_get_import_endpoints_repair_orphaned_bank_line_states(
+    client: TestClient,
+    db: Session,
+    bank_workbench_user: User,
+    bank_workbench_auth_headers: dict,
+):
+    statement_import = BankStatementImport(
+        user_id=bank_workbench_user.id,
+        source_type=BankStatementImportSourceType.DOCUMENT,
+        tax_year=2026,
+    )
+    db.add(statement_import)
+    db.flush()
+
+    db.add_all([
+        BankStatementLine(
+            import_id=statement_import.id,
+            line_date=date(2026, 1, 15),
+            amount=Decimal("-62.23"),
+            counterparty="T-Mobile Austria GmbH",
+            purpose="Mobile invoice December",
+            raw_reference="Mobile invoice December",
+            normalized_fingerprint="orphan-auto-created",
+            review_status=BankStatementLineStatus.AUTO_CREATED,
+            suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+            linked_transaction_id=None,
+            created_transaction_id=None,
+            reviewed_at=datetime.utcnow(),
+            reviewed_by=bank_workbench_user.id,
+        ),
+        BankStatementLine(
+            import_id=statement_import.id,
+            line_date=date(2026, 1, 16),
+            amount=Decimal("2400.00"),
+            counterparty="Salary GmbH",
+            purpose="Payroll",
+            raw_reference="Payroll",
+            normalized_fingerprint="orphan-matched-existing",
+            review_status=BankStatementLineStatus.MATCHED_EXISTING,
+            suggested_action=BankStatementSuggestedAction.MATCH_EXISTING,
+            linked_transaction_id=None,
+            created_transaction_id=None,
+            reviewed_at=datetime.utcnow(),
+            reviewed_by=bank_workbench_user.id,
+        ),
+        BankStatementLine(
+            import_id=statement_import.id,
+            line_date=date(2026, 1, 17),
+            amount=Decimal("-18.90"),
+            counterparty="Candidate Merchant",
+            purpose="Suggested match",
+            raw_reference="Suggested match",
+            normalized_fingerprint="orphan-candidate",
+            review_status=BankStatementLineStatus.PENDING_REVIEW,
+            suggested_action=BankStatementSuggestedAction.MATCH_EXISTING,
+            linked_transaction_id=None,
+            created_transaction_id=None,
+            reviewed_at=datetime.utcnow(),
+            reviewed_by=bank_workbench_user.id,
+        ),
+    ])
+    db.commit()
+
+    summary_response = client.get(
+        f"/api/v1/bank-import/imports/{statement_import.id}",
+        headers=bank_workbench_auth_headers,
+    )
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()["import"]
+    assert summary_payload["auto_created_count"] == 0
+    assert summary_payload["matched_existing_count"] == 0
+    assert summary_payload["pending_review_count"] == 3
+
+    lines_response = client.get(
+        f"/api/v1/bank-import/imports/{statement_import.id}/lines",
+        headers=bank_workbench_auth_headers,
+    )
+    assert lines_response.status_code == 200
+    lines_payload = lines_response.json()["lines"]
+
+    assert [line["review_status"] for line in lines_payload] == [
+        "pending_review",
+        "pending_review",
+        "pending_review",
+    ]
+    assert [line["suggested_action"] for line in lines_payload] == [
+        "create_new",
+        "create_new",
+        "create_new",
+    ]
+    assert all(line["linked_transaction_id"] is None for line in lines_payload)
+    assert all(line["created_transaction_id"] is None for line in lines_payload)
+
+    db.expire_all()
+    repaired_lines = (
+        db.query(BankStatementLine)
+        .filter(BankStatementLine.import_id == statement_import.id)
+        .order_by(BankStatementLine.line_date, BankStatementLine.id)
+        .all()
+    )
+    assert all(line.review_status == BankStatementLineStatus.PENDING_REVIEW for line in repaired_lines)
+    assert all(line.suggested_action == BankStatementSuggestedAction.CREATE_NEW for line in repaired_lines)
+    assert all(line.reviewed_at is None for line in repaired_lines)
+    assert all(line.reviewed_by is None for line in repaired_lines)

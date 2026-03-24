@@ -33,7 +33,12 @@ const TransactionDetail = ({
   const navigate = useNavigate();
   const amountTone = getTransactionAmountTone(transaction.type);
   const isExpenseType = isExpenseTransactionType(transaction.type);
-
+  const hasLineItems = Boolean(transaction.line_items && transaction.line_items.length > 0);
+  const deductibleLineItemCount = transaction.line_items?.filter((item) => item.is_deductible).length ?? 0;
+  const totalLineItemCount = transaction.line_items?.length ?? 0;
+  const isPartiallyDeductible = hasLineItems
+    && deductibleLineItemCount > 0
+    && deductibleLineItemCount < totalLineItemCount;
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
@@ -58,6 +63,38 @@ const TransactionDetail = ({
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const renderDeductibleBadge = () => {
+    if (isPartiallyDeductible) {
+      return (
+        <span className="badge badge-warning">
+          ◐ {t('transactions.partiallyDeductible', 'Partial')}
+        </span>
+      );
+    }
+
+    if (hasLineItems) {
+      return deductibleLineItemCount > 0 ? (
+        <span className="badge badge-success">
+          ✓ {t('transactions.deductibleYes')}
+        </span>
+      ) : (
+        <span className="badge badge-secondary">
+          ✗ {t('transactions.notDeductible')}
+        </span>
+      );
+    }
+
+    return transaction.is_deductible ? (
+      <span className="badge badge-success">
+        ✓ {t('transactions.deductibleYes')}
+      </span>
+    ) : (
+      <span className="badge badge-secondary">
+        ✗ {t('transactions.notDeductible')}
+      </span>
+    );
   };
 
   return createPortal(
@@ -113,15 +150,7 @@ const TransactionDetail = ({
 
             <div className="detail-row">
               <span className="detail-label">{t('transactions.deductible')}:</span>
-              {transaction.is_deductible ? (
-                <span className="badge badge-success">
-                  ✓ {t('transactions.deductibleYes')}
-                </span>
-              ) : (
-                <span className="badge badge-secondary">
-                  ✗ {t('transactions.notDeductible')}
-                </span>
-              )}
+              {renderDeductibleBadge()}
               {transaction.locked ? (
                 <span className="badge badge-user-override">🔒 {t('transactions.userOverride')}</span>
               ) : (
@@ -195,28 +224,23 @@ const TransactionDetail = ({
                 <div className="classification-pipeline">
                   {(() => {
                     const method = transaction.classification_method;
-                    // Build pipeline stages based on final method
                     const stages: Array<{ key: string; active: boolean }> = [];
-                    // User rule is always checked first
                     if (method === 'user_rule' || method === 'user_rule_soft') {
                       stages.push({ key: method, active: true });
                     } else {
                       stages.push({ key: 'user_rule', active: false });
                     }
-                    // Rule-based is next
                     if (method === 'rule_based' || method === 'rule') {
                       stages.push({ key: 'rule_based', active: true });
                     } else if (method !== 'user_rule' && method !== 'user_rule_soft' && method !== 'manual' && method !== 'csv') {
                       stages.push({ key: 'rule_based', active: false });
                     }
-                    // ML
                     if (method === 'ml') {
                       stages.push({ key: 'ml', active: true });
                     } else if (method === 'llm' || method === 'llm_verified' || method === 'llm_consensus') {
                       stages.push({ key: 'ml', active: false });
                       stages.push({ key: method, active: true });
                     }
-                    // Manual / CSV
                     if (method === 'manual') {
                       stages.push({ key: 'manual', active: true });
                     }
@@ -238,7 +262,6 @@ const TransactionDetail = ({
           </div>
           )}
 
-          {/* Line Items Section */}
           {transaction.line_items && transaction.line_items.length > 0 && (
             <div className="detail-section">
               <h3>{t('transactions.lineItems.title')}</h3>

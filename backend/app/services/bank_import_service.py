@@ -9,7 +9,8 @@ from difflib import SequenceMatcher
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.models.bank_statement_import import (
     BankStatementImport,
@@ -232,9 +233,183 @@ class BankImportService:
             raise ValueError("Bank statement import not found")
         return statement_import
 
-    def get_lines_for_import(self, import_id: int, user_id: int) -> List[BankStatementLine]:
-        statement_import = self.get_import_for_user(import_id, user_id)
-        return list(statement_import.lines)
+    def get_lines_for_import(
+        self,
+        import_id: int,
+        user_id: int,
+        *,
+        repair_orphans: bool = False,
+    ) -> List[BankStatementLine]:
+        self.get_import_for_user(import_id, user_id)
+
+        if repair_orphans and self.repair_orphaned_lines_for_import(import_id, user_id):
+            self.db.commit()
+
+        return (
+            self.db.query(BankStatementLine)
+            .join(BankStatementImport, BankStatementImport.id == BankStatementLine.import_id)
+            .options(
+                selectinload(BankStatementLine.linked_transaction),
+                selectinload(BankStatementLine.created_transaction),
+            )
+            .filter(
+                BankStatementImport.id == import_id,
+                BankStatementImport.user_id == user_id,
+            )
+            .order_by(BankStatementLine.line_date, BankStatementLine.id)
+            .all()
+        )
+
+    def handle_deleted_transactions(self, transaction_ids: Iterable[int], user_id: int) -> int:
+        """Reset bank statement lines that reference transactions being deleted."""
+        if self.db is None:
+            raise ValueError("Database session is required")
+
+        ids = {int(transaction_id) for transaction_id in transaction_ids if transaction_id is not None}
+        if not ids:
+            return 0
+
+        lines = (
+            self.db.query(BankStatementLine)
+            .join(BankStatementImport, BankStatementImport.id == BankStatementLine.import_id)
+            .filter(
+                BankStatementImport.user_id == user_id,
+                or_(
+                    BankStatementLine.created_transaction_id.in_(ids),
+                    BankStatementLine.linked_transaction_id.in_(ids),
+                ),
+            )
+            .all()
+        )
+
+        changed = 0
+        for line in lines:
+            line_changed = False
+
+            if (
+                line.review_status == BankStatementLineStatus.AUTO_CREATED
+                and (
+                    line.created_transaction_id in ids
+                    or line.linked_transaction_id in ids
+                )
+            ):
+                line.created_transaction_id = None
+                line.linked_transaction_id = None
+                line.review_status = BankStatementLineStatus.PENDING_REVIEW
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                line_changed = True
+            elif (
+                line.review_status == BankStatementLineStatus.MATCHED_EXISTING
+                and line.linked_transaction_id in ids
+            ):
+                line.linked_transaction_id = None
+                line.review_status = BankStatementLineStatus.PENDING_REVIEW
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                line_changed = True
+            elif (
+                line.review_status == BankStatementLineStatus.PENDING_REVIEW
+                and line.suggested_action == BankStatementSuggestedAction.MATCH_EXISTING
+                and line.linked_transaction_id in ids
+            ):
+                line.linked_transaction_id = None
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                line_changed = True
+
+            if line_changed:
+                changed += 1
+
+        if changed:
+            self.db.flush()
+
+        return changed
+
+    def repair_orphaned_lines_for_import(self, import_id: int, user_id: int) -> int:
+        """Normalize stale bank-statement line states left behind by deleted transactions."""
+        if self.db is None:
+            raise ValueError("Database session is required")
+
+        linked_transaction = aliased(Transaction)
+        created_transaction = aliased(Transaction)
+
+        orphaned_lines = (
+            self.db.query(BankStatementLine)
+            .join(BankStatementImport, BankStatementImport.id == BankStatementLine.import_id)
+            .outerjoin(
+                linked_transaction,
+                BankStatementLine.linked_transaction_id == linked_transaction.id,
+            )
+            .outerjoin(
+                created_transaction,
+                BankStatementLine.created_transaction_id == created_transaction.id,
+            )
+            .filter(
+                BankStatementImport.id == import_id,
+                BankStatementImport.user_id == user_id,
+                or_(
+                    and_(
+                        BankStatementLine.review_status == BankStatementLineStatus.AUTO_CREATED,
+                        or_(
+                            BankStatementLine.created_transaction_id.is_(None),
+                            created_transaction.id.is_(None),
+                        ),
+                    ),
+                    and_(
+                        BankStatementLine.review_status == BankStatementLineStatus.MATCHED_EXISTING,
+                        or_(
+                            BankStatementLine.linked_transaction_id.is_(None),
+                            linked_transaction.id.is_(None),
+                        ),
+                    ),
+                    and_(
+                        BankStatementLine.review_status == BankStatementLineStatus.PENDING_REVIEW,
+                        BankStatementLine.suggested_action == BankStatementSuggestedAction.MATCH_EXISTING,
+                        or_(
+                            BankStatementLine.linked_transaction_id.is_(None),
+                            linked_transaction.id.is_(None),
+                        ),
+                    ),
+                ),
+            )
+            .all()
+        )
+
+        changed = 0
+        for line in orphaned_lines:
+            if line.review_status == BankStatementLineStatus.AUTO_CREATED:
+                line.created_transaction_id = None
+                line.linked_transaction_id = None
+                line.review_status = BankStatementLineStatus.PENDING_REVIEW
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                changed += 1
+            elif line.review_status == BankStatementLineStatus.MATCHED_EXISTING:
+                line.linked_transaction_id = None
+                line.review_status = BankStatementLineStatus.PENDING_REVIEW
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                changed += 1
+            elif (
+                line.review_status == BankStatementLineStatus.PENDING_REVIEW
+                and line.suggested_action == BankStatementSuggestedAction.MATCH_EXISTING
+            ):
+                line.linked_transaction_id = None
+                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.reviewed_at = None
+                line.reviewed_by = None
+                changed += 1
+
+        if changed:
+            self.db.flush()
+
+        return changed
 
     def confirm_create_line(self, line_id: int, user: User) -> Tuple[BankStatementLine, Transaction]:
         line = self._get_line_for_user(line_id, user.id)
@@ -297,6 +472,65 @@ class BankImportService:
         line.suggested_action = BankStatementSuggestedAction.IGNORE
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
+        self.db.commit()
+        self.db.refresh(line)
+        return line
+
+    def undo_create_line(self, line_id: int, user: User) -> BankStatementLine:
+        """Undo an auto-created transaction: delete the transaction and reset the line."""
+        line = self._get_line_for_user(line_id, user.id)
+        if line.review_status != BankStatementLineStatus.AUTO_CREATED:
+            raise ValueError("Only auto-created lines can be undone")
+        if line.created_transaction_id is None:
+            raise ValueError("No created transaction to undo")
+
+        transaction = (
+            self.db.query(Transaction)
+            .filter(Transaction.id == line.created_transaction_id, Transaction.user_id == user.id)
+            .first()
+        )
+        if transaction is not None:
+            self.db.delete(transaction)
+
+        line.created_transaction_id = None
+        line.linked_transaction_id = None
+        line.review_status = BankStatementLineStatus.PENDING_REVIEW
+        line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+        line.reviewed_at = None
+        line.reviewed_by = None
+        self.db.commit()
+        self.db.refresh(line)
+        return line
+
+    def unmatch_line(self, line_id: int, user: User) -> BankStatementLine:
+        """Unmatch a line from its linked transaction without deleting the transaction."""
+        line = self._get_line_for_user(line_id, user.id)
+        if line.review_status != BankStatementLineStatus.MATCHED_EXISTING:
+            raise ValueError("Only matched lines can be unmatched")
+
+        # Clear reconciliation flag on the transaction if it still exists
+        if line.linked_transaction_id is not None:
+            transaction = (
+                self.db.query(Transaction)
+                .filter(
+                    Transaction.id == line.linked_transaction_id,
+                    Transaction.user_id == user.id,
+                )
+                .first()
+            )
+            if transaction is not None:
+                transaction.bank_reconciled = False
+                transaction.bank_reconciled_at = None
+
+        # Reset the line to a clean pending state. Once the user explicitly
+        # unmatched it, the line should no longer look like it still has a
+        # suggested bank-match candidate attached.
+        line.created_transaction_id = None
+        line.linked_transaction_id = None
+        line.review_status = BankStatementLineStatus.PENDING_REVIEW
+        line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+        line.reviewed_at = None
+        line.reviewed_by = None
         self.db.commit()
         self.db.refresh(line)
         return line

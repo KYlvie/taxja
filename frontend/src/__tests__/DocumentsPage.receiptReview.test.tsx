@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import DocumentsPage from '../pages/DocumentsPage';
 
 const getDocument = vi.fn();
+const getDocuments = vi.fn();
 const downloadDocument = vi.fn();
 const correctOCR = vi.fn();
 const getById = vi.fn();
@@ -80,6 +81,7 @@ vi.mock('../documents/presentation/featureFlag', () => ({
 
 vi.mock('../services/documentService', () => ({
   documentService: {
+    getDocuments: (...args: any[]) => getDocuments(...args),
     getDocument: (...args: any[]) => getDocument(...args),
     downloadDocument: (...args: any[]) => downloadDocument(...args),
     correctOCR: (...args: any[]) => correctOCR(...args),
@@ -127,6 +129,7 @@ describe('DocumentsPage receipt review flow', () => {
     vi.clearAllMocks();
     global.URL.createObjectURL = vi.fn(() => 'blob:test');
     global.URL.revokeObjectURL = vi.fn();
+    getDocuments.mockResolvedValue([{ id: 101 }]);
 
     const documentDetail = {
       id: 101,
@@ -298,6 +301,90 @@ describe('DocumentsPage receipt review flow', () => {
 
     expect(screen.queryByTestId('ocr-review')).toBeNull();
     expect(container.querySelector('.receipt-breakdown-card')).not.toBeNull();
+  });
+
+  it('lets users expand and collapse individual receipts in multi-receipt documents', async () => {
+    const multiReceiptDocumentDetail = {
+      id: 101,
+      user_id: 1,
+      document_type: 'receipt',
+      file_path: '/tmp/multi-receipt.pdf',
+      file_name: 'multi-receipt.pdf',
+      file_size: 100,
+      mime_type: 'application/pdf',
+      confidence_score: 0.92,
+      needs_review: false,
+      created_at: '2026-03-17T00:00:00Z',
+      updated_at: '2026-03-17T00:00:00Z',
+      ocr_result: {
+        merchant: 'BRUNN',
+        amount: 225.6,
+        date: '2024-07-25',
+        line_items: [
+          {
+            description: 'Primary receipt item',
+            amount: 225.6,
+            quantity: 1,
+            category: 'other',
+            is_deductible: false,
+          },
+        ],
+        _additional_receipts: [
+          {
+            merchant: 'Hornbach',
+            amount: 35.98,
+            date: '2024-11-26',
+            line_items: [
+              {
+                description: 'Second receipt item',
+                amount: 35.98,
+                quantity: 1,
+                category: 'maintenance',
+                is_deductible: true,
+              },
+            ],
+          },
+          {
+            merchant: 'Billa',
+            amount: 12.5,
+            date: '2024-12-10',
+            line_items: [
+              {
+                description: 'Third receipt item',
+                amount: 12.5,
+                quantity: 1,
+                category: 'other',
+                is_deductible: false,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    getDocument.mockReset();
+    getDocument
+      .mockResolvedValueOnce(multiReceiptDocumentDetail)
+      .mockResolvedValueOnce(multiReceiptDocumentDetail);
+    correctOCR.mockResolvedValue(multiReceiptDocumentDetail);
+
+    const { container } = renderDocumentsPage();
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalledWith(101));
+    await waitFor(() => expect(container.querySelectorAll('.receipt-breakdown-card')).toHaveLength(3));
+
+    expect(screen.queryAllByText('Primary receipt item')).toHaveLength(0);
+    expect(screen.queryAllByText('Second receipt item')).toHaveLength(0);
+    expect(screen.queryAllByText('Third receipt item')).toHaveLength(0);
+
+    const toggleButtons = container.querySelectorAll('.receipt-breakdown-toggle-btn');
+    expect(toggleButtons).toHaveLength(3);
+
+    fireEvent.click(toggleButtons[1] as HTMLButtonElement);
+    await waitFor(() => expect(screen.queryAllByText('Second receipt item').length).toBeGreaterThan(0));
+
+    fireEvent.click(toggleButtons[1] as HTMLButtonElement);
+    await waitFor(() => expect(screen.queryAllByText('Second receipt item')).toHaveLength(0));
   });
 
   it('keeps proforma receipts in the workbench while disabling suggestion actions and hiding expense quick actions', async () => {

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Select from '../components/common/Select';
-import { ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { CheckCheck, ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useTransactionStore } from '../stores/transactionStore';
 import { transactionService } from '../services/transactionService';
 import { saveBlobWithNativeShare } from '../mobile/files';
@@ -19,11 +19,22 @@ import './TransactionsPage.css';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'detail';
 
+const chunkItems = <T,>(items: T[], size: number): T[][] => {
+  if (size <= 0) return [items];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+};
+
 const TransactionsPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const transactionIdParam = searchParams.get('transactionId');
+  const needsReviewParam = searchParams.get('needs_review');
   const {
     transactions,
     filters,
@@ -51,20 +62,36 @@ const TransactionsPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [needsReviewCount, setNeedsReviewCount] = useState(0);
+  const [bulkReviewing, setBulkReviewing] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
   const exportDropdownRef = useRef<HTMLDivElement | null>(null);
   const [exportMenuPos, setExportMenuPos] = useState<{ top: number; left: number; minWidth: number }>({ top: 0, left: 0, minWidth: 180 });
+  const lastNeedsReviewParamRef = useRef<string | null>(needsReviewParam);
 
-  const setTransactionQueryParam = (transactionId: number | null) => {
+  const effectiveFilters =
+    needsReviewParam === 'true' && filters.needs_review !== true
+      ? { ...filters, needs_review: true }
+      : filters;
+
+  const setQueryParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
-    if (transactionId == null) {
-      next.delete('transactionId');
+    if (value == null) {
+      next.delete(key);
     } else {
-      next.set('transactionId', String(transactionId));
+      next.set(key, value);
     }
     setSearchParams(next, { replace: true });
+  };
+
+  const setTransactionQueryParam = (transactionId: number | null) => {
+    setQueryParam('transactionId', transactionId == null ? null : String(transactionId));
+  };
+
+  const setNeedsReviewQueryParam = (needsReview: boolean | undefined) => {
+    setQueryParam('needs_review', needsReview ? 'true' : null);
   };
 
   const openTransactionDetail = (transaction: Transaction) => {
@@ -81,7 +108,16 @@ const TransactionsPage = () => {
 
   useEffect(() => {
     void fetchTransactions();
-  }, [filters, pagination.page, pagination.pageSize, sortBy, sortOrder, transactionsVersion]);
+  }, [filters, needsReviewParam, pagination.page, pagination.pageSize, sortBy, sortOrder, transactionsVersion]);
+
+  useEffect(() => {
+    if (lastNeedsReviewParamRef.current === needsReviewParam) {
+      return;
+    }
+
+    lastNeedsReviewParamRef.current = needsReviewParam;
+    setPagination({ page: 1 });
+  }, [needsReviewParam, setPagination]);
 
   useEffect(() => {
     if (!transactionIdParam) {
@@ -162,20 +198,21 @@ const TransactionsPage = () => {
   // Clear selection when filters change (but NOT on page change — keep cross-page selection)
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [filters]);
+  }, [filters, needsReviewParam]);
 
   const fetchTransactions = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await transactionService.getAll(filters, {
+      const response = await transactionService.getAll(effectiveFilters, {
         page: pagination.page,
         page_size: pagination.pageSize,
       });
 
       setTransactions(response.items);
       setAvailableYears(response.available_years || []);
+      setNeedsReviewCount(response.needs_review_count ?? 0);
       setPagination({
         total: response.total,
         page: response.page,
@@ -185,6 +222,85 @@ const TransactionsPage = () => {
       setError(err.response?.data?.detail || t('transactions.fetchError'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchReviewableTransactions = async (): Promise<Transaction[]> => {
+    const reviewable: Transaction[] = [];
+    let nextPage = 1;
+    let totalPages = 1;
+
+    do {
+      const response = await transactionService.getAll(
+        {
+          ...effectiveFilters,
+          needs_review: true,
+        },
+        {
+          page: nextPage,
+          page_size: 100,
+        }
+      );
+
+      reviewable.push(...response.items.filter((transaction) => transaction.needs_review));
+      totalPages = response.total_pages || Math.max(1, Math.ceil(response.total / response.page_size));
+      nextPage += 1;
+    } while (nextPage <= totalPages);
+
+    return reviewable;
+  };
+
+  const handleBulkReview = async () => {
+    if (bulkReviewing || needsReviewCount === 0) return;
+
+    setBulkReviewing(true);
+    setError(null);
+
+    let successCount = 0;
+    let failed = false;
+
+    try {
+      const reviewableTransactions = await fetchReviewableTransactions();
+
+      for (const batch of chunkItems(reviewableTransactions, 8)) {
+        const results = await Promise.allSettled(
+          batch.map((transaction) => transactionService.markReviewed(transaction.id))
+        );
+
+        results.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            const updated = result.value;
+            successCount += 1;
+            updateTransaction(updated.id, updated);
+            if (selectedTransaction?.id === updated.id) {
+              setSelectedTransaction(updated);
+            }
+          } else {
+            failed = true;
+          }
+        });
+      }
+
+      if (successCount > 0 && !failed) {
+        aiToast(
+          t('common.bulkConfirmSuccess', {
+            count: successCount,
+            defaultValue: 'Confirmed {{count}} items.',
+          }),
+          'success'
+        );
+      } else if (failed) {
+        const message = t('common.saveFailed', 'Save failed');
+        setError(message);
+        aiToast(message, 'error');
+      }
+    } catch (err: any) {
+      const message = err.response?.data?.detail || t('common.saveFailed', 'Save failed');
+      setError(message);
+      aiToast(message, 'error');
+    } finally {
+      setBulkReviewing(false);
+      void fetchTransactions();
     }
   };
 
@@ -433,12 +549,30 @@ const TransactionsPage = () => {
       <div className="page-header">
         <div className="transactions-header-copy">
           <h1>{t('transactions.title')}</h1>
-          <p className="transactions-header-subtitle">
-            {t(
-              'classificationRules.transactionsSubtitle',
-              'View transactions, recurring bookings, and the classification memory your corrections teach the system.'
-            )}
-          </p>
+        </div>
+        <div className="page-summary" aria-label={t('transactions.title')}>
+          <div className="page-summary-pill">
+            <span className="page-summary-pill__value">{pagination.total}</span>
+            <span className="page-summary-pill__label">{t('common.total', 'Total')}</span>
+          </div>
+          <div className={`page-summary-pill ${needsReviewCount > 0 ? "page-summary-pill--warning" : ""}`}>
+            <span className="page-summary-pill__value">{needsReviewCount}</span>
+            <span className="page-summary-pill__label">{t('transactions.needsReview')}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-success btn-sm"
+            onClick={() => void handleBulkReview()}
+            disabled={bulkReviewing || needsReviewCount === 0}
+            title={t('common.bulkConfirmTransactionsTooltip', 'Mark all pending transactions as reviewed')}
+          >
+            <CheckCheck size={16} />
+            <span>
+              {bulkReviewing
+                ? t('common.loading', 'Loading')
+                : t('common.oneClickConfirm', 'One-click confirm')}
+            </span>
+          </button>
         </div>
         <div className="header-actions">
           <Link to="/recurring" className="btn btn-secondary">
@@ -508,10 +642,18 @@ const TransactionsPage = () => {
       ) : null}
 
       <TransactionFilters
-        filters={filters}
+        filters={effectiveFilters}
         availableYears={availableYears}
-        onFilterChange={setFilters}
-        onClear={clearFilters}
+        onFilterChange={(f) => {
+          setPagination({ page: 1 });
+          setFilters(f);
+          setNeedsReviewQueryParam(f.needs_review);
+        }}
+        onClear={() => {
+          setPagination({ page: 1 });
+          clearFilters();
+          setNeedsReviewQueryParam(undefined);
+        }}
       />
 
       {isLoading ? (

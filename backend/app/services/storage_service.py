@@ -1,11 +1,20 @@
 """Storage service for document files (MinIO/S3)"""
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from typing import Optional
 import logging
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+_STORAGE_CONNECT_TIMEOUT_SECONDS = 3
+_STORAGE_READ_TIMEOUT_SECONDS = 15
+_STORAGE_MAX_RETRIES = 1
+
+
+class StorageUnavailableError(RuntimeError):
+    """Raised when the configured object storage endpoint is not reachable."""
 
 
 class StorageService:
@@ -33,10 +42,28 @@ class StorageService:
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             region_name=self.region,
+            config=Config(
+                connect_timeout=_STORAGE_CONNECT_TIMEOUT_SECONDS,
+                read_timeout=_STORAGE_READ_TIMEOUT_SECONDS,
+                retries={
+                    "max_attempts": _STORAGE_MAX_RETRIES,
+                    "mode": "standard",
+                },
+            ),
         )
 
         # Ensure bucket exists with encryption
-        self._ensure_bucket_exists()
+        try:
+            self._ensure_bucket_exists()
+        except (BotoCoreError, OSError) as exc:
+            logger.error(
+                "Object storage unavailable during initialization for endpoint %s: %s",
+                self.endpoint_url,
+                exc,
+            )
+            raise StorageUnavailableError(
+                f"Could not connect to storage endpoint {self.endpoint_url}"
+            ) from exc
 
     def _ensure_bucket_exists(self):
         """Create bucket if it doesn't exist and enable AES-256 encryption"""
@@ -93,7 +120,7 @@ class StorageService:
             )
             logger.info(f"Uploaded file with AES-256 encryption: {file_path}")
             return True
-        except ClientError as e:
+        except (ClientError, BotoCoreError, OSError) as e:
             logger.error(f"Failed to upload file {file_path}: {e}")
             return False
 
@@ -112,7 +139,7 @@ class StorageService:
             file_bytes = response["Body"].read()
             logger.info(f"Downloaded file: {file_path}")
             return file_bytes
-        except ClientError as e:
+        except (ClientError, BotoCoreError, OSError) as e:
             logger.error(f"Failed to download file {file_path}: {e}")
             return None
 
@@ -130,7 +157,7 @@ class StorageService:
             self.client.delete_object(Bucket=self.bucket_name, Key=file_path)
             logger.info(f"Deleted file: {file_path}")
             return True
-        except ClientError as e:
+        except (ClientError, BotoCoreError, OSError) as e:
             logger.error(f"Failed to delete file {file_path}: {e}")
             return False
 
@@ -147,7 +174,7 @@ class StorageService:
         try:
             self.client.head_object(Bucket=self.bucket_name, Key=file_path)
             return True
-        except ClientError:
+        except (ClientError, BotoCoreError, OSError):
             return False
 
     def get_file_url(self, file_path: str, expiration: int = 3600) -> Optional[str]:
@@ -168,7 +195,7 @@ class StorageService:
                 ExpiresIn=expiration,
             )
             return url
-        except ClientError as e:
+        except (ClientError, BotoCoreError, OSError) as e:
             logger.error(f"Failed to generate presigned URL for {file_path}: {e}")
             return None
 

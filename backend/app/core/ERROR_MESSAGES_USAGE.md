@@ -8,6 +8,12 @@ The `error_messages.py` module provides comprehensive, localized error messages 
 - **German (de)** - Default language
 - **English (en)**
 - **Chinese (zh)**
+- **French (fr)**
+- **Russian (ru)**
+- **Hungarian (hu)**
+- **Polish (pl)**
+- **Turkish (tr)**
+- **Bosnian / Croatian / Serbian (bs)**
 
 ## Basic Usage
 
@@ -314,7 +320,7 @@ pytest tests/test_error_messages.py -v
 To add a new error message:
 
 1. Add the error key and translations to `ERROR_MESSAGES` dictionary in `error_messages.py`
-2. Ensure all three languages (de, en, zh) are provided
+2. Ensure all nine supported languages (`de`, `en`, `zh`, `fr`, `ru`, `hu`, `pl`, `tr`, `bs`) are provided
 3. Use consistent parameter naming (e.g., `{field_name}`, `{amount}`, `{error}`)
 4. Add test cases to verify the new error message
 5. Document the new error in this usage guide
@@ -329,6 +335,12 @@ ERROR_MESSAGES = {
         "de": "Deutscher Fehlertext mit {parameter}.",
         "en": "English error text with {parameter}.",
         "zh": "中文错误文本与 {parameter}。",
+        "fr": "Texte d'erreur français avec {parameter}.",
+        "ru": "Русское сообщение об ошибке с {parameter}.",
+        "hu": "Magyar hibaüzenet ezzel: {parameter}.",
+        "pl": "Polski komunikat błędu z {parameter}.",
+        "tr": "{parameter} ile Türkçe hata metni.",
+        "bs": "Bosanski tekst greške sa {parameter}.",
     },
 }
 ```

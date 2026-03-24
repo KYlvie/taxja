@@ -77,8 +77,7 @@ def _serialize_line(line: BankStatementLine) -> Dict[str, Any]:
     }
 
 
-def _build_import_summary(statement_import: BankStatementImport) -> Dict[str, int]:
-    lines = list(statement_import.lines)
+def _build_import_summary(lines: list[BankStatementLine]) -> Dict[str, int]:
     return {
         "total_count": len(lines),
         "auto_created_count": sum(1 for line in lines if line.review_status and line.review_status.value == "auto_created"),
@@ -88,8 +87,11 @@ def _build_import_summary(statement_import: BankStatementImport) -> Dict[str, in
     }
 
 
-def _serialize_import(statement_import: BankStatementImport) -> Dict[str, Any]:
-    summary = _build_import_summary(statement_import)
+def _serialize_import(
+    statement_import: BankStatementImport,
+    lines: Optional[list[BankStatementLine]] = None,
+) -> Dict[str, Any]:
+    summary = _build_import_summary(lines if lines is not None else list(statement_import.lines))
     return {
         "id": statement_import.id,
         "source_type": statement_import.source_type.value if statement_import.source_type else None,
@@ -256,13 +258,15 @@ def get_import(
     db: Session = Depends(get_db),
 ):
     try:
-        statement_import = BankImportService(db=db).get_import_for_user(import_id=import_id, user_id=current_user.id)
+        service = BankImportService(db=db)
+        lines = service.get_lines_for_import(import_id=import_id, user_id=current_user.id, repair_orphans=True)
+        statement_import = service.get_import_for_user(import_id=import_id, user_id=current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
     return {
         "success": True,
-        "import": _serialize_import(statement_import),
+        "import": _serialize_import(statement_import, lines=lines),
     }
 
 
@@ -273,7 +277,11 @@ def get_import_lines(
     db: Session = Depends(get_db),
 ):
     try:
-        lines = BankImportService(db=db).get_lines_for_import(import_id=import_id, user_id=current_user.id)
+        lines = BankImportService(db=db).get_lines_for_import(
+            import_id=import_id,
+            user_id=current_user.id,
+            repair_orphans=True,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -332,6 +340,40 @@ def ignore_line(
 ):
     try:
         line = BankImportService(db=db).ignore_line(line_id=line_id, user=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "line": _serialize_line(line),
+    }
+
+
+@router.post("/lines/{line_id}/undo-create", summary="Undo an auto-created transaction from a bank line")
+def undo_create_line(
+    line_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        line = BankImportService(db=db).undo_create_line(line_id=line_id, user=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "line": _serialize_line(line),
+    }
+
+
+@router.post("/lines/{line_id}/unmatch", summary="Unmatch a bank line from its linked transaction")
+def unmatch_line(
+    line_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        line = BankImportService(db=db).unmatch_line(line_id=line_id, user=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

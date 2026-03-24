@@ -11,13 +11,18 @@ export type BankStatementSuggestedAction =
   | 'match_existing'
   | 'ignore';
 
+export interface BankStatementPeriod {
+  start?: string | null;
+  end?: string | null;
+}
+
 export interface BankStatementImportSummary {
   id: number;
   source_type: BankStatementImportSourceType;
   source_document_id?: number | null;
   bank_name?: string | null;
   iban?: string | null;
-  statement_period?: string | null;
+  statement_period?: string | BankStatementPeriod | null;
   tax_year?: number | null;
   created_at?: string | null;
   updated_at?: string | null;

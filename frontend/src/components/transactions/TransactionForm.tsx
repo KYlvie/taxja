@@ -248,6 +248,10 @@ const TransactionForm = ({
           ...li,
           sort_order: idx,
         }));
+      // Derive transaction-level is_deductible from line items
+      const validItems = submitData.line_items;
+      const anyDeductible = validItems.some((li: any) => li.is_deductible);
+      submitData.is_deductible = anyDeductible;
     } else if (!isExpenseType && transaction?.line_items?.length) {
       submitData.line_items = [];
     }
@@ -420,7 +424,7 @@ const TransactionForm = ({
       )}
 
       {/* Deductibility Override Section — only for expenses */}
-      {transaction && hasAiDecision && isExpenseType && (
+      {transaction && hasAiDecision && isExpenseType && !hasLineItems && (
         <div className="deductibility-override-section">
           <div className="deductibility-current">
             <span className="deductibility-label">{t('transactions.deductible')}:</span>
@@ -492,6 +496,25 @@ const TransactionForm = ({
               </span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Deductibility summary derived from line items — read-only */}
+      {transaction && isExpenseType && hasLineItems && (
+        <div className="deductibility-override-section">
+          <div className="deductibility-current">
+            <span className="deductibility-label">{t('transactions.deductible')}:</span>
+            {(() => {
+              const deductCount = lineItems.filter(li => li.is_deductible).length;
+              const total = lineItems.length;
+              if (deductCount === total) return <span className="badge badge-success">✓ {t('transactions.deductibleYes')}</span>;
+              if (deductCount === 0) return <span className="badge badge-secondary">✗ {t('transactions.notDeductible')}</span>;
+              return <span className="badge badge-warning">◐ {t('transactions.partiallyDeductible', 'Partial')} ({deductCount}/{total})</span>;
+            })()}
+            <span className="ai-hint-text" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+              {t('transactions.deductibilityDerivedFromItems', '由明细条目决定')}
+            </span>
+          </div>
         </div>
       )}
 

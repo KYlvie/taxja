@@ -34,6 +34,16 @@ from app.services.ocr_engine import OCREngine, OCRResult
 # Helpers
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def clear_orchestrator_llm_cache():
+    cache = getattr(DocumentPipelineOrchestrator, "_llm_classification_cache", None)
+    if cache is not None:
+        cache.clear()
+    yield
+    cache = getattr(DocumentPipelineOrchestrator, "_llm_classification_cache", None)
+    if cache is not None:
+        cache.clear()
+
 def _make_ocr_result(
     doc_type=OCRDocumentType.INVOICE,
     confidence=0.85,
@@ -194,6 +204,8 @@ def test_stage_ocr_passes_document_provider_override_to_engine(mock_storage_clas
         b"fake-image",
         mime_type=document.mime_type,
         vision_provider_preference="anthropic",
+        reprocess_mode=None,
+        document_type_hint=document.document_type,
     )
 
 
@@ -290,6 +302,56 @@ class TestClassification:
         assert result.classification.method == "llm"
         mock_llm.assert_called_once()
 
+    @patch("app.services.document_pipeline_orchestrator.DocumentPipelineOrchestrator._try_llm_classification")
+    def test_receipt_like_docs_skip_llm_when_confidence_is_good_enough(self, mock_llm):
+        db = MagicMock()
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = db
+
+        document = _make_document(file_name="scan.pdf")
+        ocr_result = _make_ocr_result(
+            doc_type=OCRDocumentType.INVOICE,
+            confidence=0.70,
+            raw_text=(
+                "RECHNUNG Nr 2026-001 Lieferant Muster GmbH Summe EUR 42.50 "
+                "UID ATU12345678 Zahlungsziel 31.03.2026 Danke fuer Ihren Einkauf"
+            ),
+        )
+        result = PipelineResult(document_id=1)
+
+        db_type = orchestrator._stage_classify(document, ocr_result, result)
+
+        assert db_type == DBDocumentType.INVOICE
+        assert result.classification.method == "regex"
+        mock_llm.assert_not_called()
+
+    @patch("app.services.document_pipeline_orchestrator.DocumentPipelineOrchestrator._try_llm_classification")
+    def test_route_sensitive_docs_keep_llm_arbitration_when_confidence_is_low(self, mock_llm):
+        from app.models.document import DocumentType as DBDocumentType
+
+        mock_llm.return_value = DBDocumentType.PURCHASE_CONTRACT
+
+        db = MagicMock()
+        orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+        orchestrator.db = db
+
+        document = _make_document(file_name="scan.pdf")
+        ocr_result = _make_ocr_result(
+            doc_type=OCRDocumentType.KAUFVERTRAG,
+            confidence=0.70,
+            raw_text=(
+                "Kaufvertrag ueber eine Eigentumswohnung in Wien. Kaufpreis EUR 350000. "
+                "Kaeufer Max Mustermann, Verkaeufer Erika Beispiel, Grundbuchseinlage 123."
+            ),
+        )
+        result = PipelineResult(document_id=1)
+
+        db_type = orchestrator._stage_classify(document, ocr_result, result)
+
+        assert db_type == DBDocumentType.PURCHASE_CONTRACT
+        assert result.classification.method == "regex+llm"
+        mock_llm.assert_called_once()
+
     def test_keyword_override_when_loan_terms_present(self):
         """Loan-specific OCR text should promote OTHER to LOAN_CONTRACT."""
         db = MagicMock()
@@ -321,6 +383,57 @@ class TestClassification:
         assert OCR_TO_DB_TYPE_MAP[OCRDocumentType.MIETVERTRAG] == DBDocumentType.RENTAL_CONTRACT
         assert OCR_TO_DB_TYPE_MAP[OCRDocumentType.E1_FORM] == DBDocumentType.E1_FORM
         assert OCR_TO_DB_TYPE_MAP[OCRDocumentType.UNKNOWN] == DBDocumentType.OTHER
+
+
+@patch("app.services.llm_extractor.get_llm_extractor")
+def test_try_llm_classification_uses_versioned_memory_cache(mock_get_llm_extractor):
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    extractor = MagicMock()
+    extractor.is_available = True
+    extractor.classify_document.return_value = "invoice"
+    extractor.llm = MagicMock()
+    extractor.llm.model = "gpt-4o-mini"
+    extractor.llm.anthropic_model = "claude-opus"
+    extractor.llm.groq_model = "llama-3.3"
+    extractor.llm.gpt_oss_model = "gpt-oss-120b"
+    mock_get_llm_extractor.return_value = extractor
+
+    first = orchestrator._try_llm_classification("BILLA   SUMME EUR 23,45")
+    second = orchestrator._try_llm_classification("billa summe eur 23,45")
+
+    assert first == DBDocumentType.INVOICE
+    assert second == DBDocumentType.INVOICE
+    assert extractor.classify_document.call_count == 1
+
+
+def test_llm_cache_key_changes_when_provider_fingerprint_changes():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    extractor_a = MagicMock()
+    extractor_a.llm = MagicMock()
+    extractor_a.llm.model = "gpt-4o-mini"
+    extractor_a.llm.anthropic_model = "claude-opus"
+    extractor_a.llm.groq_model = None
+    extractor_a.llm.gpt_oss_model = None
+
+    extractor_b = MagicMock()
+    extractor_b.llm = MagicMock()
+    extractor_b.llm.model = "gpt-4.1-mini"
+    extractor_b.llm.anthropic_model = "claude-opus"
+    extractor_b.llm.groq_model = None
+    extractor_b.llm.gpt_oss_model = None
+
+    key_a = orchestrator._build_llm_classification_cache_key(
+        "BILLA SUMME EUR 23,45", extractor_a
+    )
+    key_b = orchestrator._build_llm_classification_cache_key(
+        "BILLA SUMME EUR 23,45", extractor_b
+    )
+
+    assert key_a != key_b
 
 
 # ---------------------------------------------------------------------------
@@ -1285,8 +1398,8 @@ class TestKreditvertragSuggestion:
         assert suggestion["data"]["matched_property_address"] == "Argentinierstrasse 21, 1234 Wien"
         assert suggestion["data"]["no_property_match"] is False
 
-    def test_invalid_ocr_result_returns_none(self):
-        """Non-dict ocr_result returns None suggestion."""
+    def test_invalid_ocr_result_still_returns_needs_input_suggestion(self):
+        """Non-dict ocr_result now degrades to a visible needs-input suggestion."""
         from app.tasks.ocr_tasks import _build_kreditvertrag_suggestion
 
         db = MagicMock()
@@ -1296,7 +1409,11 @@ class TestKreditvertragSuggestion:
         result = PipelineResult(document_id=1)
 
         out = _build_kreditvertrag_suggestion(db, doc, result)
-        assert out["import_suggestion"] is None
+        suggestion = out["import_suggestion"]
+        assert suggestion is not None
+        assert suggestion["status"] == "needs_input"
+        assert suggestion["type"] == "create_loan_repayment"
+        assert set(suggestion["data"]["missing_fields"]) == {"loan_amount", "interest_rate"}
 
 
 class TestKreditvertragStageDispatch:

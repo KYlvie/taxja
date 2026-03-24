@@ -55,7 +55,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const lang = i18n.language?.slice(0, 2) || 'en';
-  const [loadingAction, setLoadingAction] = useState<'primary' | 'secondary' | null>(null);
+  const [loadingAction, setLoadingAction] = useState<'primary' | 'secondary' | 'dismiss' | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -173,6 +173,28 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
     }
   };
 
+  const handlePermanentDismiss = async () => {
+    setLoadingAction('dismiss');
+    setResult(null);
+    try {
+      if (message.serverId) {
+        await dashboardService.acknowledgeProactiveReminder(message.serverId);
+        dismissMessage(message.id);
+        setResult({
+          type: 'success',
+          text: t('ai.proactive.dismissed', 'No longer reminding you about this item.'),
+        });
+      }
+    } catch (err: any) {
+      setResult({
+        type: 'error',
+        text: err?.response?.data?.detail || err?.message || t('ai.proactive.actionFailed', 'Action failed'),
+      });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   const labels = getBucketLabels(message, t);
   const confirmLabel =
     message.bucket === 'terminal_action' && message.action?.confirmLabel
@@ -255,9 +277,13 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                     'decision', 'quality_gate_decision',
                     'category', 'action_label_key', 'action label key',
                     'bucket', 'priority', 'source', 'trigger',
+                    'file_name',
                   ]);
                   if (internalKeys.has(key)) return false;
                   if (key.startsWith('suggestion_') || key.startsWith('_')) return false;
+                  // Hide complex array/object values (e.g. transactions, line_items)
+                  if (Array.isArray(value)) return false;
+                  if (typeof value === 'object' && value !== null) return false;
                   // Hide values that look like i18n keys
                   if (typeof value === 'string' && value.includes('.') && !value.includes(' ') && value.length > 15) return false;
                   return true;
@@ -279,18 +305,25 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                     'potential savings': t('ai.proactive.potentialSavings', 'Potential savings'),
                     estimated_refund: t('ai.proactive.estimatedRefund', 'Estimated refund'),
                     tax_saving: t('ai.proactive.taxSaving', 'Tax saving'),
+                    iban: 'IBAN',
+                    bank_name: t('documents.suggestion.fields.bank_name', 'Bank'),
+                    tax_year: t('documents.suggestion.taxYear', 'Tax year'),
+                    taxpayer_name: t('ai.suggestion.taxpayerName', 'Taxpayer'),
                   };
                   const label = labelMap[key] || key.replace(/_/g, ' ');
+                  // Don't format year-like numbers as currency
+                  const yearKeys = new Set(['tax_year', 'year', 'fiscal_year']);
+                  const displayValue = typeof value === 'number'
+                    ? (yearKeys.has(key) ? String(value) : `€ ${value.toLocaleString(getLocaleForLanguage(i18n.language), {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`)
+                    : String(value);
                   return (
                   <div key={key} className="chat-recurring-row">
                     <span>{label}</span>
                     <span className="chat-recurring-value">
-                      {typeof value === 'number'
-                        ? `€ ${value.toLocaleString(getLocaleForLanguage(i18n.language), {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}`
-                        : String(value)}
+                      {displayValue}
                     </span>
                   </div>
                   );
@@ -315,23 +348,31 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
               {loadingAction === 'secondary' ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}{' '}
               {dismissLabel}
             </button>
+            {message.bucket && message.bucket !== 'terminal_action' && message.serverId
+              && !(message.kind === 'deadline_reminder'
+                || (message.severity === 'high' && message.actionData?.category === 'threshold_warning')) && (
+              <button
+                className="chat-recurring-btn dismiss"
+                onClick={handlePermanentDismiss}
+                disabled={loadingAction !== null}
+                style={{ opacity: 0.7, fontSize: '0.85em' }}
+              >
+                {loadingAction === 'dismiss' ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}{' '}
+                {t('ai.proactive.dontRemindAgain', 'Do not remind again')}
+              </button>
+            )}
+            {visibleLinkActions.map((action) => (
+              <button
+                key={`${message.id}-${action.href}`}
+                type="button"
+                className="chat-recurring-btn view-doc"
+                onClick={() => navigate(action.href)}
+              >
+                <ArrowRight size={14} />
+                <span>{action.label}</span>
+              </button>
+            ))}
           </div>
-
-          {visibleLinkActions.length > 0 && (
-            <div className="chat-inline-link-actions">
-              {visibleLinkActions.map((action) => (
-                <button
-                  key={`${message.id}-${action.href}`}
-                  type="button"
-                  className="chat-recurring-btn dismiss chat-inline-link-btn"
-                  onClick={() => navigate(action.href)}
-                >
-                  <ArrowRight size={14} />
-                  <span>{action.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

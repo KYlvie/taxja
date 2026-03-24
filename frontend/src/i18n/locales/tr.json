@@ -66,7 +66,12 @@
     "datePicker": "Tarih secici",
     "name": "Ad",
     "saveFailed": "Kaydetme başarısız",
-    "status": "Durum"
+    "status": "Durum",
+    "date": "Tarih",
+    "oneClickConfirm": "Tümünü onayla",
+    "bulkConfirmTransactionsTooltip": "Bekleyen tüm işlemleri onayla",
+    "bulkConfirmDocumentsTooltip": "Bekleyen tüm belgeleri onayla",
+    "bulkConfirmSuccess": "{{count}} öğe onaylandı"
   },
   "quickActions": {
     "title": "Hizli Islemler",
@@ -377,6 +382,7 @@
     "cancelOverride": "Iptal",
     "userOverride": "Kullanici Gecersiz Kilma",
     "hasDocument": "Destekleyici belgesi var",
+    "bankReconciled": "Banka mutabakati yapildi",
     "systemGenerated": "Sistem tarafindan olusturuldu (otomatik amortisman)",
     "needsReview": "Inceleme Gerekiyor",
     "aiReviewNotes": "Yapay Zeka Inceleme Notlari",
@@ -538,7 +544,9 @@
     },
     "fields": {
       "lohnsteuer": "Ücret vergisi"
-    }
+    },
+    "partiallyDeductible": "Kısmi",
+    "deductibilityDerivedFromItems": "Kalemlerden türetildi"
   },
   "properties": {
     "title": "Mulkler",
@@ -1351,7 +1359,7 @@
       "allYears": "Tum Yillar",
       "startDate": "Baslangic Tarihi",
       "endDate": "Bitis Tarihi",
-      "needsReview": "Yalnizca Inceleme Gerektirenler",
+      "needsReview": "İnceleme Gerekiyor",
       "clear": "Filtreleri Temizle"
     },
     "groups": {
@@ -2019,7 +2027,7 @@
     "reviewActionSuccess": "Belge incelendi",
     "reviewActionFailed": "İnceleme başarısız",
     "confirmReview": "Onayla?",
-    "exportZip": "{{count}} belgeyi ZIP olarak dışa aktar",
+    "exportZip": "ZIP dışa aktar",
     "exportSuccess": "{{count}} belge dışa aktarıldı",
     "exportError": "Dışa aktarma başarısız",
     "bankWorkbench": {
@@ -2276,7 +2284,7 @@
     "errorGeneric": "Uyari kabul edilemedi. Lutfen tekrar deneyin."
   },
   "reports": {
-    "pageSubtitle": "Vergi raporlari olusturun, denetim hazirligini kontrol edin ve verilerinizi disa aktarin",
+    "pageSubtitle": "Gelir raporlari, bakiye ozetleri ve vergi formlari olusturun; gondermeden once incelenmemis islemleri kontrol edin",
     "unreviewedWarning": "Bu raporda {{count}} incelenmemis islem bulunmaktadir. Lutfen dogruluklarini kontrol edin.",
     "reviewTransactions": "Islemleri incele",
     "tabs": {
@@ -2898,7 +2906,13 @@
       "linked": "Belge mevcut kayda baglandi. Tekrarlanan kayit olusturulmadi.",
       "linkExisting": "Tekrarlanan Kayit Tespit Edildi",
       "loanRepayment": "Kredi Geri Odemesi",
-      "noAction": "Islem yapilandirmasi eksik. Lutfen sayfayi yenileyin."
+      "noAction": "Islem yapilandirmasi eksik. Lutfen sayfayi yenileyin.",
+      "from": "Kimden",
+      "address": "Adres",
+      "item": "Kalem",
+      "matchType": "Eşleşme türü",
+      "reason": "Neden",
+      "taxpayerName": "Vergi mükellefi"
     },
     "followUp": {
       "header": "Birkac detaya daha ihtiyacim var:",

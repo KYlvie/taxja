@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   Bot,
+  Landmark,
   Paperclip,
   Pause,
   Pencil,
@@ -18,6 +19,18 @@ import {
 } from '../../types/transaction';
 import { getLocaleForLanguage } from '../../utils/locale';
 import './TransactionList.css';
+
+type DeductStatus = 'full' | 'partial' | 'none' | 'na';
+
+function getDeductStatus(t: Transaction): DeductStatus {
+  if (!isExpenseTransactionType(t.type)) return 'na';
+  const items = t.line_items;
+  if (!items || items.length === 0) return t.is_deductible ? 'full' : 'none';
+  const deductCount = items.filter((li) => li.is_deductible).length;
+  if (deductCount === items.length) return 'full';
+  if (deductCount === 0) return 'none';
+  return 'partial';
+}
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -68,81 +81,121 @@ const TransactionList = ({
       ? t('recurring.status.paused')
       : t(`recurring.frequency.${transaction.recurring_frequency || 'monthly'}`);
 
-  const renderActionButtons = (transaction: Transaction) => (
-    <>
-      {transaction.is_recurring && transaction.recurring_is_active && onPause ? (
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPause(transaction.id);
-          }}
-          title={t('recurring.actions.pause')}
-          aria-label={t('recurring.actions.pause')}
-        >
-          <Pause size={16} />
-        </button>
-      ) : null}
+  const renderActionButtons = (transaction: Transaction) => {
+    const hasIndicators = Boolean(transaction.document_id || transaction.bank_reconciled || (transaction.needs_review && !transaction.reviewed));
 
-      {transaction.is_recurring && !transaction.recurring_is_active && onResume ? (
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={(event) => {
-            event.stopPropagation();
-            onResume(transaction.id);
-          }}
-          title={t('recurring.actions.resume')}
-          aria-label={t('recurring.actions.resume')}
-        >
-          <Play size={16} />
-        </button>
-      ) : null}
+    return (
+      <>
+        <span className="transaction-action-primary">
+          {transaction.is_recurring && transaction.recurring_is_active && onPause ? (
+            <button
+              type="button"
+              className="transaction-action-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onPause(transaction.id);
+              }}
+              title={t('recurring.actions.pause')}
+              aria-label={t('recurring.actions.pause')}
+            >
+              <Pause size={16} />
+            </button>
+          ) : null}
 
-      {(transaction.source_recurring_id || transaction.parent_recurring_id) &&
-      onEditRecurring ? (
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={(event) => {
-            event.stopPropagation();
-            onEditRecurring((transaction.source_recurring_id || transaction.parent_recurring_id)!);
-          }}
-          title={t('recurring.edit.title')}
-          aria-label={t('recurring.edit.title')}
-        >
-          <RefreshCw size={16} />
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="btn-icon"
-          onClick={(event) => {
-            event.stopPropagation();
-            onEdit(transaction);
-          }}
-          title={t('common.edit')}
-          aria-label={t('common.edit')}
-        >
-          <Pencil size={16} />
-        </button>
-      )}
+          {transaction.is_recurring && !transaction.recurring_is_active && onResume ? (
+            <button
+              type="button"
+              className="transaction-action-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onResume(transaction.id);
+              }}
+              title={t('recurring.actions.resume')}
+              aria-label={t('recurring.actions.resume')}
+            >
+              <Play size={16} />
+            </button>
+          ) : null}
 
-      <button
-        type="button"
-        className="btn-icon btn-danger"
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete(transaction.id);
-        }}
-        title={t('common.delete')}
-        aria-label={t('common.delete')}
-      >
-        <Trash2 size={16} />
-      </button>
-    </>
-  );
+          {(transaction.source_recurring_id || transaction.parent_recurring_id) &&
+          onEditRecurring ? (
+            <button
+              type="button"
+              className="transaction-action-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEditRecurring((transaction.source_recurring_id || transaction.parent_recurring_id)!);
+              }}
+              title={t('recurring.edit.title')}
+              aria-label={t('recurring.edit.title')}
+            >
+              <RefreshCw size={16} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="transaction-action-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdit(transaction);
+              }}
+              title={t('common.edit')}
+              aria-label={t('common.edit')}
+            >
+              <Pencil size={16} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="transaction-action-btn transaction-action-btn--danger"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(transaction.id);
+            }}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
+          >
+            <Trash2 size={16} />
+          </button>
+        </span>
+
+        {hasIndicators ? (
+          <span className="transaction-action-secondary">
+            {transaction.document_id ? (
+              <span
+                className="transaction-action-indicator"
+                title={t('transactions.hasDocument')}
+                aria-label={t('transactions.hasDocument')}
+              >
+                <Paperclip size={16} />
+              </span>
+            ) : null}
+
+            {transaction.bank_reconciled ? (
+              <span
+                className="transaction-action-indicator transaction-action-indicator--reconciled"
+                title={t('transactions.bankReconciled')}
+                aria-label={t('transactions.bankReconciled')}
+              >
+                <Landmark size={16} />
+              </span>
+            ) : null}
+
+            {transaction.needs_review && !transaction.reviewed ? (
+              <span
+                className="transaction-action-indicator transaction-action-indicator--warning"
+                title={t('transactions.markReviewed')}
+                aria-label={t('transactions.markReviewed')}
+              >
+                <AlertTriangle size={16} />
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+      </>
+    );
+  };
 
   if (transactions.length === 0) {
     return (
@@ -205,15 +258,6 @@ const TransactionList = ({
                 <td className="description">
                   <span className="description-text">{transaction.description}</span>
                   <span className="transaction-inline-flags">
-                    {transaction.needs_review && !transaction.reviewed ? (
-                      <span
-                        className="inline-flag needs-review-badge"
-                        title={t('transactions.needsReview')}
-                      >
-                        <AlertTriangle size={13} />
-                      </span>
-                    ) : null}
-
                     {transaction.is_recurring ? (
                       <span
                         className={`inline-flag recurring-badge ${
@@ -231,12 +275,6 @@ const TransactionList = ({
                         title={t('transactions.systemGenerated')}
                       >
                         <Bot size={13} />
-                      </span>
-                    ) : null}
-
-                    {transaction.document_id ? (
-                      <span className="inline-flag has-document" title={t('transactions.hasDocument')}>
-                        <Paperclip size={13} />
                       </span>
                     ) : null}
                   </span>
@@ -259,17 +297,15 @@ const TransactionList = ({
                   </span>
                 </td>
                 <td>
-                  {isExpenseTransactionType(transaction.type) ? (
-                    transaction.is_deductible ? (
-                      <span className="deductible-yes">✓</span>
-                    ) : (
-                      <span className="deductible-no">✕</span>
-                    )
-                  ) : (
-                    <span className="deductible-na">-</span>
-                  )}
+                  {(() => {
+                    const ds = getDeductStatus(transaction);
+                    if (ds === 'na') return <span className="deductible-na">-</span>;
+                    if (ds === 'full') return <span className="deductible-yes">✓</span>;
+                    if (ds === 'partial') return <span className="deductible-partial">◐</span>;
+                    return <span className="deductible-no">✕</span>;
+                  })()}
                 </td>
-                <td className="actions">{renderActionButtons(transaction)}</td>
+                <td className="transaction-row-actions">{renderActionButtons(transaction)}</td>
               </tr>
             ))}
           </tbody>
@@ -303,9 +339,13 @@ const TransactionList = ({
               </span>
               {isExpenseTransactionType(transaction.type) ? (
                 <span
-                  className={`transaction-chip ${transaction.is_deductible ? 'positive' : 'neutral'}`}
+                  className={`transaction-chip ${getDeductStatus(transaction) === 'full' ? 'positive' : getDeductStatus(transaction) === 'partial' ? 'warning' : 'neutral'}`}
                 >
-                  {t('transactions.deductible')}: {transaction.is_deductible ? t('common.yes', 'Yes') : t('common.no', 'No')}
+                  {t('transactions.deductible')}: {
+                    getDeductStatus(transaction) === 'full' ? t('common.yes', 'Yes')
+                    : getDeductStatus(transaction) === 'partial' ? t('transactions.partiallyDeductible', 'Partial')
+                    : t('common.no', 'No')
+                  }
                 </span>
               ) : null}
 
@@ -338,6 +378,13 @@ const TransactionList = ({
                 <span className="transaction-chip neutral">
                   <Paperclip size={12} />
                   <span>{t('transactions.hasDocument')}</span>
+                </span>
+              ) : null}
+
+              {transaction.bank_reconciled ? (
+                <span className="transaction-chip reconciled">
+                  <Landmark size={12} />
+                  <span>{t('transactions.bankReconciled')}</span>
                 </span>
               ) : null}
             </div>

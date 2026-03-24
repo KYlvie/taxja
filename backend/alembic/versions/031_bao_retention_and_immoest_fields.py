@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "031_bao_retention"
-down_revision = None  # Adjust to actual head
+down_revision = "001"
 branch_labels = None
 depends_on = None
 

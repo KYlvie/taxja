@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import JSZip from 'jszip';
 import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -15,8 +14,15 @@ import DateInput from '../common/DateInput';
 import DeleteDocumentDialog from './DeleteDocumentDialog';
 import './DocumentList.css';
 
+export interface DocumentListSummary {
+  totalCount: number;
+  reviewCount: number;
+  confirmableIds: number[];
+}
+
 interface DocumentListProps {
   onDocumentSelect?: (document: Document) => void;
+  onSummaryChange?: (summary: DocumentListSummary) => void;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -142,6 +148,32 @@ const RetryIcon = () => (
     <path d="M20 12a8 8 0 0 1-14.93 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     <path d="M18.5 4.5V8H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M5.5 19.5V16H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const ReviewIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M12 3.5L21 19H3L12 3.5Z"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+    <path d="M12 9V13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <circle cx="12" cy="16.5" r="1" fill="currentColor" />
+  </svg>
+);
+
+const ConfirmReviewIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path
+      d="M7 12.5L10.2 15.7L17.5 8.5"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
   </svg>
 );
 
@@ -288,7 +320,7 @@ const groupDocumentsByYear = (items: Document[]): Array<{ year: number; document
     .map(([year, documents]) => ({ year, documents }));
 };
 
-const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummaryChange }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { documents, total, loading, filters, setDocuments, setLoading, setFilters } =
@@ -305,7 +337,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [confirmStage, setConfirmStage] = useState<'idle' | 'confirming'>('idle');
-  const [exporting, setExporting] = useState(false);
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   const loadDocuments = useCallback(async () => {
@@ -462,32 +494,6 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     }
   };
 
-  const handleExportFiltered = async () => {
-    if (exporting || yearFilteredDocuments.length === 0) return;
-    setExporting(true);
-    try {
-      const zip = new JSZip();
-      for (const doc of yearFilteredDocuments) {
-        try {
-          const blob = await documentService.downloadDocument(doc.id);
-          zip.file(doc.file_name, blob);
-        } catch {
-          // skip failed downloads
-        }
-      }
-      const content = await zip.generateAsync({ type: 'blob' });
-      const groupLabel = activeGroup === 'all' ? 'all' : activeGroup;
-      const yearLabel = activeYear ? `_${activeYear}` : '';
-      const fileName = `taxja-documents_${groupLabel}${yearLabel}.zip`;
-      await saveBlobWithNativeShare(content, fileName, t('common.export'));
-      aiToast(t('documents.exportSuccess', { count: yearFilteredDocuments.length }), 'success');
-    } catch {
-      aiToast(t('documents.exportError'), 'error');
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     if (!dateString) return '—';
     const d = new Date(dateString);
@@ -598,10 +604,22 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       : t(`documents.groups.${activeGroup}`);
 
   const reviewCount = yearFilteredDocuments.filter((document) => isPendingReview(document)).length;
-  const totalPages = Math.ceil(total / pageSize);
-  const hasActiveFilters = Boolean(
-    filters.search || filters.start_date || filters.end_date || filters.needs_review
+  const confirmableIds = React.useMemo(
+    () => yearFilteredDocuments
+      .filter((document) => needsConfirmation(document))
+      .map((document) => document.id),
+    [yearFilteredDocuments]
   );
+  const confirmableIdSignature = confirmableIds.join(',');
+  const totalPages = Math.ceil(total / pageSize);
+
+  useEffect(() => {
+    onSummaryChange?.({
+      totalCount: yearFilteredDocuments.length,
+      reviewCount,
+      confirmableIds,
+    });
+  }, [confirmableIdSignature, onSummaryChange, reviewCount, yearFilteredDocuments.length]);
 
   const renderGridItem = (document: Document) => (
     <div
@@ -611,21 +629,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     >
       <div className="document-card-top">
         <div className="document-card-icon">{getDocumentIconLabel(document)}</div>
-        {needsConfirmation(document) ? (
-          <button
-            type="button"
-            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
-            onClick={(event) => handleReviewClick(document, event)}
-          >
-            {confirmingId === document.id && confirmStage === 'confirming'
-              ? t('documents.confirmReview', 'Confirm review?')
-              : t('documents.status.pendingReview', 'Pending review')}
-          </button>
-        ) : (
-          <span className={`document-status-badge ${getStatusTone(document)}`}>
-            {getStatusLabel(document)}
-          </span>
-        )}
+        <span className={`document-status-badge ${getStatusTone(document)}`}>
+          {getStatusLabel(document)}
+        </span>
       </div>
 
       <div className="document-card-body">
@@ -676,6 +682,23 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
               <RetryIcon />
             </button>
           )}
+          {needsConfirmation(document) && (
+            <button
+              type="button"
+              className={`review-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+              onClick={(event) => handleReviewClick(document, event)}
+              title={confirmingId === document.id && confirmStage === 'confirming'
+                ? t('documents.confirmReview', 'Confirm review?')
+                : t('documents.reviewAction', 'Review')}
+              aria-label={confirmingId === document.id && confirmStage === 'confirming'
+                ? t('documents.confirmReview', 'Confirm review?')
+                : t('documents.reviewAction', 'Review')}
+            >
+              {confirmingId === document.id && confirmStage === 'confirming'
+                ? <ConfirmReviewIcon />
+                : <ReviewIcon />}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -713,21 +736,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       </div>
 
       <div className="document-col document-col-status">
-        {needsConfirmation(document) ? (
-          <button
-            type="button"
-            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
-            onClick={(event) => handleReviewClick(document, event)}
-          >
-            {confirmingId === document.id && confirmStage === 'confirming'
-              ? t('documents.confirmReview', 'Confirm review?')
-              : t('documents.status.pendingReview', 'Pending review')}
-          </button>
-        ) : (
-          <span className={`document-status-badge ${getStatusTone(document)}`}>
-            {getStatusLabel(document)}
-          </span>
-        )}
+        <span className={`document-status-badge ${getStatusTone(document)}`}>
+          {getStatusLabel(document)}
+        </span>
       </div>
 
       <div className="document-row-actions">
@@ -763,6 +774,23 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
               <RetryIcon />
             </button>
           )}
+          {needsConfirmation(document) && (
+            <button
+              type="button"
+              className={`review-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+              onClick={(event) => handleReviewClick(document, event)}
+              title={confirmingId === document.id && confirmStage === 'confirming'
+                ? t('documents.confirmReview', 'Confirm review?')
+                : t('documents.reviewAction', 'Review')}
+              aria-label={confirmingId === document.id && confirmStage === 'confirming'
+                ? t('documents.confirmReview', 'Confirm review?')
+                : t('documents.reviewAction', 'Review')}
+            >
+              {confirmingId === document.id && confirmStage === 'confirming'
+                ? <ConfirmReviewIcon />
+                : <ReviewIcon />}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -773,18 +801,6 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     <div className="document-list">
       <div className="document-toolbar card">
         <div className="list-header">
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder={t('documents.search.placeholder')}
-              value={filters.search || ''}
-              onChange={(event) => handleSearch(event.target.value)}
-            />
-            <span className="search-icon" aria-hidden="true">
-              <SearchIcon />
-            </span>
-          </div>
-
           <div className="view-toggle">
             <button
               type="button"
@@ -857,46 +873,106 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
             ))}
           </div>
 
-          <div className="date-and-review-filters">
-            <DateInput
-              value={filters.start_date || ''}
-              onChange={(val) => handleFilterChange('start_date', val)}
-              placeholder={t('documents.filters.startDate')}
-              locale={getLocaleForLanguage(i18n.language)}
-              todayLabel={String(t('common.today', 'Today'))}
-            />
-
-            <DateInput
-              value={filters.end_date || ''}
-              onChange={(val) => handleFilterChange('end_date', val)}
-              placeholder={t('documents.filters.endDate')}
-              locale={getLocaleForLanguage(i18n.language)}
-              todayLabel={String(t('common.today', 'Today'))}
-            />
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={filters.needs_review || false}
-                onChange={(event) =>
-                  handleFilterChange('needs_review', event.target.checked || undefined)
-                }
+          <div className="document-filters-grid">
+            <div className="filter-group">
+              <label>{t('documents.filters.startDate')}</label>
+              <DateInput
+                value={filters.start_date || ''}
+                onChange={(val) => handleFilterChange('start_date', val)}
+                locale={getLocaleForLanguage(i18n.language)}
+                todayLabel={String(t('common.today', 'Today'))}
               />
-              {t('documents.filters.needsReview')}
-            </label>
+            </div>
 
-            {hasActiveFilters && (
-              <button
-                type="button"
-                className="btn-link"
-                onClick={() => {
-                  setFilters({});
-                  setPage(1);
-                }}
-              >
-                {t('documents.filters.clear')}
-              </button>
-            )}
+            <div className="filter-group">
+              <label>{t('documents.filters.endDate')}</label>
+              <DateInput
+                value={filters.end_date || ''}
+                onChange={(val) => handleFilterChange('end_date', val)}
+                locale={getLocaleForLanguage(i18n.language)}
+                todayLabel={String(t('common.today', 'Today'))}
+              />
+            </div>
+
+            <div className="filter-group">
+              <label>{t('transactions.type')}</label>
+              <Select
+                value={filters.document_type || ''}
+                onChange={(v) => handleFilterChange('document_type', v || undefined)}
+                placeholder={t('documents.filters.allTypes')}
+                size="sm"
+                options={Object.values(DocumentType)
+                  .filter((v) => v !== DocumentType.UNKNOWN)
+                  .map((v) => ({ value: v, label: t(`documents.types.${v}`) }))}
+              />
+            </div>
+
+            <div className="filter-group">
+              <label>{t('transactions.deductible', '可抵扣')}</label>
+              <Select
+                value={filters.is_deductible === undefined ? '' : String(filters.is_deductible)}
+                onChange={(v) => handleFilterChange('is_deductible', v === '' ? undefined : v === 'true')}
+                placeholder={t('transactions.filters.all')}
+                size="sm"
+                options={[
+                  { value: 'true', label: t('transactions.filters.deductibleOnly') },
+                  { value: 'false', label: t('transactions.filters.nonDeductible') },
+                ]}
+              />
+            </div>
+
+            <div className="filter-group">
+              <label>{t('transactions.filters.recurring', '定期交易')}</label>
+              <Select
+                value={filters.is_recurring === undefined ? '' : String(filters.is_recurring)}
+                onChange={(v) => handleFilterChange('is_recurring', v === '' ? undefined : v === 'true')}
+                placeholder={t('transactions.filters.all')}
+                size="sm"
+                options={[
+                  { value: 'true', label: t('transactions.filters.recurringOnly') },
+                  { value: 'false', label: t('transactions.filters.oneTimeOnly') },
+                ]}
+              />
+            </div>
+
+            <div className="filter-group">
+              <label>{t('documents.needsReview', '待审核')}</label>
+              <Select
+                value={filters.needs_review === undefined ? '' : String(filters.needs_review)}
+                onChange={(v) => handleFilterChange('needs_review', v === '' ? undefined : v === 'true')}
+                placeholder={t('transactions.filters.all')}
+                size="sm"
+                options={[
+                  { value: 'true', label: t('transactions.filters.needsReviewOnly') },
+                ]}
+              />
+            </div>
+          </div>
+
+          <div className="document-search-row">
+            <div className="filter-group filter-group--full">
+              <label>{t('common.search', '搜索')}</label>
+              <div className="search-bar">
+                <input
+                  type="text"
+                  placeholder={t('documents.search.placeholder')}
+                  value={filters.search || ''}
+                  onChange={(event) => handleSearch(event.target.value)}
+                />
+                <span className="search-icon" aria-hidden="true">
+                  <SearchIcon />
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="document-filter-actions">
+            <button className="btn btn-secondary" onClick={() => { setFilters({}); setPage(1); }}>
+              {t('documents.filters.clear', '清除')}
+            </button>
+            <button className="btn btn-primary" onClick={() => loadDocuments()}>
+              {t('documents.filters.apply', '应用')}
+            </button>
           </div>
         </div>
       </div>
@@ -923,42 +999,33 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                 <h3>{activeGroupLabel}</h3>
               </div>
               <div className="document-table-meta">
-                <span className="document-table-badge">{yearFilteredDocuments.length}</span>
-                {reviewCount > 0 && (
-                  <span className="document-table-badge warning">
-                    {t('documents.filters.needsReview')}: {reviewCount}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="download-btn export-zip-btn"
-                  onClick={handleExportFiltered}
-                  disabled={exporting || yearFilteredDocuments.length === 0}
-                  title={t('documents.exportZip', { count: yearFilteredDocuments.length })}
-                  aria-label={t('documents.exportZip', { count: yearFilteredDocuments.length })}
-                >
-                  {exporting ? (
-                    <span className="icon-svg spinner-inline" />
-                  ) : (
-                    <DownloadIcon />
-                  )}
-                  <span>{t('common.export')}</span>
-                  <span className="export-zip-btn__format" aria-hidden="true">ZIP</span>
-                </button>
                 <Select value={String(pageSize)} onChange={v => { setPageSize(Number(v)); setPage(1); }}
                   aria-label={t('documents.pageSize')} size="sm"
                   options={PAGE_SIZE_OPTIONS.map(s => ({ value: String(s), label: `${s} ${t('documents.perPage')}` }))} />
               </div>
             </div>
 
-            {groupDocumentsByYear(yearFilteredDocuments).map((yearGroup) => (
+            {groupDocumentsByYear(yearFilteredDocuments).map((yearGroup) => {
+              const isCollapsed = !expandedYears.has(yearGroup.year);
+              return (
               <div key={yearGroup.year} className="document-year-group">
-                <div className="document-year-header">
+                <button
+                  type="button"
+                  className="document-year-header document-year-header--toggle"
+                  onClick={() => setExpandedYears(prev => {
+                    const next = new Set(prev);
+                    if (next.has(yearGroup.year)) next.delete(yearGroup.year);
+                    else next.add(yearGroup.year);
+                    return next;
+                  })}
+                  aria-expanded={!isCollapsed}
+                >
+                  <span className={`document-year-chevron ${isCollapsed ? "" : "document-year-chevron--open"}`}>&#9654;</span>
                   <h4>{yearGroup.year}</h4>
                   <span className="document-year-count">{yearGroup.documents.length}</span>
-                </div>
+                </button>
 
-                {viewMode === 'list' ? (
+                {!isCollapsed && (viewMode === 'list' ? (
                   <>
                     <div className="document-table-head">
                       <span>{t('documents.list.name')}</span>
@@ -973,9 +1040,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                   </>
                 ) : (
                   <div className="documents-grid">{yearGroup.documents.map(renderGridItem)}</div>
-                )}
+                ))}
               </div>
-            ))}
+              );
+            })}
           </section>
 
           {totalPages > 1 && (

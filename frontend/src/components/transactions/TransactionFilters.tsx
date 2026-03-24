@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TransactionFilters as Filters, TransactionType } from '../../types/transaction';
 import Select from '../common/Select';
@@ -21,6 +21,10 @@ const TransactionFilters = ({
 }: TransactionFiltersProps) => {
   const { t, i18n } = useTranslation();
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
+
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
 
   // Derive active year from date filters
   const activeYear = (() => {

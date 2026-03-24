@@ -16,6 +16,8 @@ from app.core.error_messages import (
     ERROR_MESSAGES,
 )
 
+SUPPORTED_ERROR_MESSAGE_LANGUAGES = ["de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"]
+
 
 class TestGetErrorMessage:
     """Test get_error_message function."""
@@ -42,7 +44,7 @@ class TestGetErrorMessage:
 
     def test_get_error_message_invalid_language(self):
         """Test that invalid language falls back to German."""
-        message = get_error_message("duplicate_transaction", "fr")
+        message = get_error_message("duplicate_transaction", "es")
         assert message == "Diese Transaktion wurde bereits importiert. Duplikat verhindert."
 
     def test_get_error_message_with_parameters(self):
@@ -76,7 +78,7 @@ class TestParameterSubstitution:
 
     def test_extraction_low_confidence_parameters(self):
         """Test extraction_low_confidence with confidence parameter."""
-        for lang in ["de", "en", "zh"]:
+        for lang in SUPPORTED_ERROR_MESSAGE_LANGUAGES:
             message = get_error_message("extraction_low_confidence", lang, confidence=72)
             assert "72" in message
 
@@ -119,12 +121,12 @@ class TestParameterSubstitution:
 class TestAllErrorKeys:
     """Test that all error keys are properly defined."""
 
-    def test_all_error_keys_have_three_languages(self):
-        """Test that all error messages have de, en, zh translations."""
+    def test_all_error_keys_have_all_supported_languages(self):
+        """Test that all error messages have all nine supported translations."""
         for key, translations in ERROR_MESSAGES.items():
-            assert "de" in translations, f"Missing German translation for {key}"
-            assert "en" in translations, f"Missing English translation for {key}"
-            assert "zh" in translations, f"Missing Chinese translation for {key}"
+            assert set(translations.keys()) == set(SUPPORTED_ERROR_MESSAGE_LANGUAGES), (
+                f"Unexpected language coverage for {key}: {sorted(translations.keys())}"
+            )
 
     def test_all_error_keys_non_empty(self):
         """Test that all error messages are non-empty strings."""
@@ -152,9 +154,7 @@ class TestGetErrorDict:
         """Test retrieving error dict for valid key."""
         error_dict = get_error_dict("duplicate_transaction")
         assert error_dict is not None
-        assert "de" in error_dict
-        assert "en" in error_dict
-        assert "zh" in error_dict
+        assert all(lang in error_dict for lang in SUPPORTED_ERROR_MESSAGE_LANGUAGES)
 
     def test_get_error_dict_invalid_key(self):
         """Test retrieving error dict for invalid key."""
@@ -164,8 +164,8 @@ class TestGetErrorDict:
     def test_get_error_dict_returns_all_languages(self):
         """Test that get_error_dict returns all language translations."""
         error_dict = get_error_dict("extraction_low_confidence")
-        assert len(error_dict) == 3
-        assert all(lang in error_dict for lang in ["de", "en", "zh"])
+        assert len(error_dict) == len(SUPPORTED_ERROR_MESSAGE_LANGUAGES)
+        assert all(lang in error_dict for lang in SUPPORTED_ERROR_MESSAGE_LANGUAGES)
 
 
 class TestErrorMessageCategories:
@@ -335,14 +335,14 @@ class TestErrorMessageConsistency:
                 placeholders_by_lang[lang] = placeholders
 
             # Check that all languages have the same placeholders
-            de_placeholders = placeholders_by_lang.get("de", set())
-            en_placeholders = placeholders_by_lang.get("en", set())
-            zh_placeholders = placeholders_by_lang.get("zh", set())
+            baseline_lang = SUPPORTED_ERROR_MESSAGE_LANGUAGES[0]
+            baseline_placeholders = placeholders_by_lang.get(baseline_lang, set())
 
-            assert de_placeholders == en_placeholders == zh_placeholders, (
-                f"Inconsistent placeholders for {key}: "
-                f"de={de_placeholders}, en={en_placeholders}, zh={zh_placeholders}"
-            )
+            for lang in SUPPORTED_ERROR_MESSAGE_LANGUAGES[1:]:
+                assert placeholders_by_lang.get(lang, set()) == baseline_placeholders, (
+                    f"Inconsistent placeholders for {key}: "
+                    f"{baseline_lang}={baseline_placeholders}, {lang}={placeholders_by_lang.get(lang, set())}"
+                )
 
 
 class TestRealWorldUsage:
@@ -357,8 +357,8 @@ class TestRealWorldUsage:
 
         # OCR failed
         msg = get_error_message("ocr_failed", "en")
-        assert "OCR" in msg
-        assert "failed" in msg.lower()
+        assert "Document processing failed" in msg
+        assert "could not be read" in msg
 
         # Missing required field
         msg = get_error_message("missing_required_field", "zh", field_name="purchase_price")

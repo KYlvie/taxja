@@ -623,6 +623,13 @@ class OCRTransactionService:
                 suggestion.get("document_id"),
                 matching_transaction.id,
             )
+            # Back-fill document.transaction_id so the document is linked even on duplicate-reuse
+            doc_id = suggestion.get("document_id")
+            if doc_id:
+                doc = self.db.query(Document).filter(Document.id == doc_id).first()
+                if doc and not doc.transaction_id:
+                    doc.transaction_id = matching_transaction.id
+                    self.db.commit()
             return OCRTransactionCreationResult(
                 transaction=matching_transaction,
                 created=False,

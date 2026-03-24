@@ -7,6 +7,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.models.credit_balance import CreditBalance
 from app.models.credit_cost_config import CreditCostConfig
+from app.models.bank_statement_import import (
+    BankStatementImport,
+    BankStatementImportSourceType,
+    BankStatementLine,
+    BankStatementLineStatus,
+    BankStatementSuggestedAction,
+)
 from app.models.recurring_transaction import RecurringTransaction, RecurringTransactionType
 from app.models.transaction_line_item import (
     LineItemAllocationSource,
@@ -68,6 +75,42 @@ def auth_headers(test_user: User) -> dict:
     """Create authentication headers with JWT token"""
     access_token = create_access_token(data={"sub": test_user.email})
     return {"Authorization": f"Bearer {access_token}"}
+
+
+def _make_bank_import_line(
+    db: Session,
+    user: User,
+    *,
+    transaction_id: int | None = None,
+    review_status: BankStatementLineStatus = BankStatementLineStatus.PENDING_REVIEW,
+    suggested_action: BankStatementSuggestedAction = BankStatementSuggestedAction.CREATE_NEW,
+    amount: Decimal = Decimal("100.00"),
+) -> BankStatementLine:
+    statement_import = BankStatementImport(
+        user_id=user.id,
+        source_type=BankStatementImportSourceType.CSV,
+        tax_year=2026,
+    )
+    db.add(statement_import)
+    db.flush()
+
+    line = BankStatementLine(
+        import_id=statement_import.id,
+        line_date=date(2026, 1, 15),
+        amount=amount,
+        counterparty="Test counterparty",
+        purpose="Test purpose",
+        raw_reference="REF-123",
+        normalized_fingerprint=f"fp-{statement_import.id}-{amount}",
+        review_status=review_status,
+        suggested_action=suggested_action,
+        linked_transaction_id=transaction_id,
+        created_transaction_id=transaction_id if review_status == BankStatementLineStatus.AUTO_CREATED else None,
+    )
+    db.add(line)
+    db.commit()
+    db.refresh(line)
+    return line
 
 def test_create_income_transaction(client: TestClient, auth_headers: dict, db: Session):
     """Test creating an income transaction"""
@@ -726,6 +769,118 @@ def test_delete_transaction(client: TestClient, auth_headers: dict, test_user: U
     # Verify transaction is deleted
     deleted_txn = db.query(Transaction).filter(Transaction.id == transaction.id).first()
     assert deleted_txn is None
+
+
+def test_delete_transaction_resets_auto_created_bank_line(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("100.00"),
+        transaction_date=date(2026, 1, 15),
+        description="Bank import created expense",
+        expense_category=ExpenseCategory.OTHER,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    line = _make_bank_import_line(
+        db,
+        test_user,
+        transaction_id=transaction.id,
+        review_status=BankStatementLineStatus.AUTO_CREATED,
+    )
+
+    response = client.delete(f"/api/v1/transactions/{transaction.id}", headers=auth_headers)
+
+    assert response.status_code == 204
+
+    db.refresh(line)
+    assert line.review_status == BankStatementLineStatus.PENDING_REVIEW
+    assert line.suggested_action == BankStatementSuggestedAction.CREATE_NEW
+    assert line.linked_transaction_id is None
+    assert line.created_transaction_id is None
+    assert line.reviewed_at is None
+    assert line.reviewed_by is None
+
+
+def test_batch_delete_transactions_resets_bank_statement_lines(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    matched_transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.INCOME,
+        amount=Decimal("2400.00"),
+        transaction_date=date(2026, 1, 18),
+        description="Matched rent",
+        income_category=IncomeCategory.EMPLOYMENT,
+    )
+    candidate_transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("55.10"),
+        transaction_date=date(2026, 1, 19),
+        description="Suggested candidate",
+        expense_category=ExpenseCategory.OTHER,
+    )
+    db.add_all([matched_transaction, candidate_transaction])
+    db.commit()
+    db.refresh(matched_transaction)
+    db.refresh(candidate_transaction)
+
+    matched_line = _make_bank_import_line(
+        db,
+        test_user,
+        transaction_id=matched_transaction.id,
+        review_status=BankStatementLineStatus.MATCHED_EXISTING,
+        suggested_action=BankStatementSuggestedAction.MATCH_EXISTING,
+        amount=Decimal("2400.00"),
+    )
+    candidate_line = _make_bank_import_line(
+        db,
+        test_user,
+        transaction_id=candidate_transaction.id,
+        review_status=BankStatementLineStatus.PENDING_REVIEW,
+        suggested_action=BankStatementSuggestedAction.MATCH_EXISTING,
+        amount=Decimal("55.10"),
+    )
+
+    precheck = client.post(
+        "/api/v1/transactions/batch-delete",
+        json={"ids": [matched_transaction.id, candidate_transaction.id]},
+        headers=auth_headers,
+    )
+    assert precheck.status_code == 200
+
+    response = client.post(
+        "/api/v1/transactions/batch-delete",
+        json={"ids": [matched_transaction.id, candidate_transaction.id], "force": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert set(response.json()["deleted"]) == {matched_transaction.id, candidate_transaction.id}
+
+    db.refresh(matched_line)
+    db.refresh(candidate_line)
+
+    assert matched_line.review_status == BankStatementLineStatus.PENDING_REVIEW
+    assert matched_line.suggested_action == BankStatementSuggestedAction.CREATE_NEW
+    assert matched_line.linked_transaction_id is None
+    assert matched_line.created_transaction_id is None
+
+    assert candidate_line.review_status == BankStatementLineStatus.PENDING_REVIEW
+    assert candidate_line.suggested_action == BankStatementSuggestedAction.CREATE_NEW
+    assert candidate_line.linked_transaction_id is None
+    assert candidate_line.created_transaction_id is None
 
 
 def test_unauthorized_access(client: TestClient):

@@ -2,10 +2,26 @@
 import logging
 import secrets
 from typing import List
-from pydantic import AnyHttpUrl, field_validator
+from urllib.parse import urlparse
+from pydantic import AnyHttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def _frontend_host(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _is_local_frontend(url: str) -> bool:
+    return _frontend_host(url) in {"localhost", "127.0.0.1", "0.0.0.0"}
+
+
+def _is_production_frontend(url: str) -> bool:
+    return _frontend_host(url) in {"taxja.at", "www.taxja.at"}
 
 
 class Settings(BaseSettings):
@@ -25,6 +41,9 @@ class Settings(BaseSettings):
     
     # Frontend URL (used in verification emails, password reset links)
     FRONTEND_URL: str = "http://localhost:5173"
+
+    # Google Sign-In (web client ID used by Google Identity Services)
+    GOOGLE_CLIENT_ID: str = ""
 
     # Security
     SECRET_KEY: str = ""
@@ -76,6 +95,17 @@ class Settings(BaseSettings):
                 "Set CSRF_SECRET_KEY in .env for production."
             )
             return generated
+        return v
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def normalize_debug_value(cls, v):
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
         return v
 
     @property
@@ -200,6 +230,33 @@ class Settings(BaseSettings):
             )
             return "legacy"
         return mode
+
+    @model_validator(mode="after")
+    def apply_environment_safety_defaults(self):
+        is_local_frontend = _is_local_frontend(self.FRONTEND_URL)
+
+        # Local development should not inherit production cookie defaults unless
+        # they were intentionally overridden in the environment.
+        if is_local_frontend:
+            if "COOKIE_DOMAIN" not in self.model_fields_set and self.COOKIE_DOMAIN == ".taxja.at":
+                self.COOKIE_DOMAIN = ""
+            if "COOKIE_SECURE" not in self.model_fields_set and self.COOKIE_SECURE is True:
+                self.COOKIE_SECURE = False
+
+        if self.DEBUG and _is_production_frontend(self.FRONTEND_URL):
+            logger.warning(
+                "DEBUG/local backend is configured with production FRONTEND_URL '%s'. "
+                "Verification and reset links will point to production.",
+                self.FRONTEND_URL,
+            )
+
+        if self.DEBUG and self.ENABLE_EMAIL_NOTIFICATIONS and _is_production_frontend(self.FRONTEND_URL):
+            logger.warning(
+                "Email notifications are enabled while DEBUG is on and FRONTEND_URL points to production. "
+                "Local registrations may send production links.",
+            )
+
+        return self
 
     # Stripe
     STRIPE_SECRET_KEY: str = ""

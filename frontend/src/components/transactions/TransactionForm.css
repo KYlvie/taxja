@@ -65,6 +65,11 @@
   color: var(--color-success);
 }
 
+.badge-warning {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
 .badge-secondary {
   background: var(--color-border-light);
   color: var(--color-text-secondary);
@@ -358,6 +363,8 @@
   color: #16a34a;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-add-line-item:hover {

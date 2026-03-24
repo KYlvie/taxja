@@ -1,6 +1,7 @@
 """Authentication endpoints"""
 import base64
 import io
+import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -26,15 +27,31 @@ from app.core.token_blacklist import (
 )
 from app.core.encryption import get_encryption
 from app.models.user import User
-from app.schemas.auth import UserRegister, UserLogin, Token, UserResponse, ForgotPasswordRequest, ResetPasswordRequest, TwoFactorVerifyRequest
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    GoogleLoginRequest,
+    ResetPasswordRequest,
+    Token,
+    TwoFactorVerifyRequest,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+)
 from app.services.email_service import generate_verification_token, send_verification_email, send_password_reset_email
+from app.services.google_identity_service import (
+    GoogleIdentityConfigurationError,
+    GoogleIdentityValidationError,
+    verify_google_identity_token,
+)
 from app.core.error_messages import get_error_message
 from app.services.trial_service import TrialService
 from app.core.rate_limiter import rate_limit
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 EMPLOYER_MODES = {"none", "occasional", "regular"}
+SUPPORTED_LANGUAGES = ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs")
 
 
 def _enum_value(value):
@@ -81,6 +98,60 @@ def _serialize_auth_user(user: User) -> dict:
         "two_factor_enabled": user.two_factor_enabled,
         "is_admin": user.is_admin or False,
         "onboarding_completed": (user.onboarding_dismiss_count or 0) >= 8,
+    }
+
+
+def _get_request_language(request: Request) -> str:
+    language = request.headers.get("Accept-Language", "de").split(",")[0].strip()[:2]
+    if language not in SUPPORTED_LANGUAGES:
+        return "de"
+    return language
+
+
+def _ensure_account_can_login(user: User) -> None:
+    """Reject logins for users whose account status forbids access."""
+    if user.account_status == "deactivated":
+        cooling_off_days_remaining = 0
+        if user.scheduled_deletion_at:
+            scheduled = user.scheduled_deletion_at
+            now = datetime.now(timezone.utc)
+            if scheduled.tzinfo is None:
+                scheduled = scheduled.replace(tzinfo=timezone.utc)
+            delta = scheduled - now
+            cooling_off_days_remaining = max(0, delta.days)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "detail": "Account is deactivated",
+                "account_status": "deactivated",
+                "cooling_off_days_remaining": cooling_off_days_remaining,
+                "message": "Your account has been deactivated. You can reactivate it during the cooling-off period.",
+            },
+        )
+
+    if user.account_status == "deletion_pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "detail": "Account is scheduled for deletion",
+                "account_status": "deletion_pending",
+                "message": "Your account has been scheduled for permanent deletion.",
+            },
+        )
+
+
+def _issue_login_response(response: Response, user: User) -> dict:
+    """Create auth cookies + token payload for a successfully authenticated user."""
+    access_token = create_access_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(data={"sub": user.email})
+
+    csrf_token = _set_auth_cookies(response, access_token, refresh_token)
+    response.headers["X-CSRF-Token"] = csrf_token
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": _serialize_auth_user(user),
     }
 
 
@@ -158,9 +229,7 @@ def _clear_auth_cookies(response: Response) -> None:
 @router.post("/register", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit(max_requests=3, window_seconds=60))])
 def register(user_data: UserRegister, request: Request, db: Session = Depends(get_db)):
     """Register a new user and send verification email."""
-    language = request.headers.get("Accept-Language", "de").split(",")[0].strip()[:2]
-    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
-        language = "de"
+    language = _get_request_language(request)
 
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
@@ -243,17 +312,9 @@ def verify_email(token: str, response: Response, db: Session = Depends(get_db)):
         pass  # Don't block verification if trial activation fails
 
     # Auto-login after verification
-    access_token = create_access_token(data={"sub": user.email})
-    refresh_token = create_refresh_token(data={"sub": user.email})
-
-    csrf_token = _set_auth_cookies(response, access_token, refresh_token)
-    response.headers["X-CSRF-Token"] = csrf_token
-
     return {
         "message": "email_verified",
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": _serialize_auth_user(user),
+        **_issue_login_response(response, user),
     }
 
 
@@ -289,9 +350,7 @@ def resend_verification(email: str, db: Session = Depends(get_db)):
 @router.post("/login", dependencies=[Depends(rate_limit(max_requests=5, window_seconds=60))])
 def login(credentials: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     """Login user with email and password."""
-    language = request.headers.get("Accept-Language", "de").split(",")[0].strip()[:2]
-    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
-        language = "de"
+    language = _get_request_language(request)
 
     user = db.query(User).filter(User.email == credentials.email).first()
     if not user or not verify_password(credentials.password, user.password_hash):
@@ -301,35 +360,7 @@ def login(credentials: UserLogin, request: Request, response: Response, db: Sess
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Check account status
-    if user.account_status == "deactivated":
-        cooling_off_days_remaining = 0
-        if user.scheduled_deletion_at:
-            scheduled = user.scheduled_deletion_at
-            now = datetime.now(timezone.utc)
-            if scheduled.tzinfo is None:
-                scheduled = scheduled.replace(tzinfo=timezone.utc)
-            delta = scheduled - now
-            cooling_off_days_remaining = max(0, delta.days)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "detail": "Account is deactivated",
-                "account_status": "deactivated",
-                "cooling_off_days_remaining": cooling_off_days_remaining,
-                "message": "Your account has been deactivated. You can reactivate it during the cooling-off period.",
-            },
-        )
-
-    if user.account_status == "deletion_pending":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "detail": "Account is scheduled for deletion",
-                "account_status": "deletion_pending",
-                "message": "Your account has been scheduled for permanent deletion.",
-            },
-        )
+    _ensure_account_can_login(user)
 
     # Block unverified users
     if not user.email_verified:
@@ -362,17 +393,75 @@ def login(credentials: UserLogin, request: Request, response: Response, db: Sess
                 detail=get_error_message("invalid_2fa_code", language),
             )
 
-    access_token = create_access_token(data={"sub": user.email})
-    refresh_token = create_refresh_token(data={"sub": user.email})
+    return _issue_login_response(response, user)
 
-    csrf_token = _set_auth_cookies(response, access_token, refresh_token)
-    response.headers["X-CSRF-Token"] = csrf_token
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": _serialize_auth_user(user),
-    }
+@router.post("/google", dependencies=[Depends(rate_limit(max_requests=5, window_seconds=60))])
+def login_with_google(
+    payload: GoogleLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Log a user in with a verified Google ID token.
+
+    This flow is intentionally scoped to existing accounts. On first successful
+    login, the Google subject is linked to the existing Taxja user matched by
+    email so future Google logins remain stable even if the Google email
+    presentation changes later.
+    """
+    try:
+        google_identity = verify_google_identity_token(payload.credential)
+    except GoogleIdentityConfigurationError as exc:
+        logger.warning("Google login requested but backend is not configured: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="google_login_unavailable",
+        ) from exc
+    except GoogleIdentityValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="google_token_invalid",
+        ) from exc
+
+    user = db.query(User).filter(User.google_subject == google_identity.subject).first()
+    if user is None:
+        user = db.query(User).filter(User.email == google_identity.email).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="google_account_not_registered",
+            )
+        if user.google_subject and user.google_subject != google_identity.subject:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="google_account_conflict",
+            )
+        user.google_subject = google_identity.subject
+
+    _ensure_account_can_login(user)
+
+    if user.two_factor_enabled and user.two_factor_secret:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="google_login_requires_password",
+        )
+
+    was_unverified = not user.email_verified
+    if was_unverified:
+        user.email_verified = True
+        user.email_verification_token = None
+        user.email_verification_sent_at = None
+
+    db.commit()
+    db.refresh(user)
+
+    if was_unverified:
+        try:
+            TrialService(db).activate_trial(user.id)
+        except Exception:
+            logger.exception("Failed to activate trial during Google login for user %s", user.id)
+
+    return _issue_login_response(response, user)
 
 
 @router.post("/forgot-password", dependencies=[Depends(rate_limit(max_requests=3, window_seconds=60))])
@@ -591,9 +680,7 @@ def verify_2fa(
     db: Session = Depends(get_db),
 ):
     """Verify TOTP code and enable 2FA for the user."""
-    language = request.headers.get("Accept-Language", "de").split(",")[0].strip()[:2]
-    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
-        language = "de"
+    language = _get_request_language(request)
 
     if not current_user.two_factor_secret:
         raise HTTPException(

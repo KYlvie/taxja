@@ -224,4 +224,5 @@ export interface PaginatedResponse<T> {
   page_size: number;
   total_pages: number;
   available_years?: number[];
+  needs_review_count?: number;
 }

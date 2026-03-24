@@ -511,8 +511,42 @@ class ProactiveReminderService:
         )
 
         if state.status == "resolved":
-            state.status = "active"
-            state.resolved_at = None
+            # Deadline-critical reminders re-activate when deadline is near
+            if reminder.get("kind") == "deadline_reminder":
+                # Deadline date is in params.date (from health check) or next_due_at
+                deadline_str = (
+                    (reminder.get("params") or {}).get("date")
+                    or reminder.get("next_due_at")
+                )
+                if deadline_str:
+                    try:
+                        deadline = datetime.fromisoformat(str(deadline_str))
+                        if (deadline - now).days <= 14:
+                            state.status = "active"
+                            state.resolved_at = None
+                        else:
+                            return None
+                    except (ValueError, TypeError):
+                        return None
+                else:
+                    return None
+
+            # VAT/income threshold warnings (high severity) — re-activate after 30 days
+            # These indicate the user is approaching a legal threshold (e.g. €35k
+            # Kleinunternehmer limit) and must not be silenced indefinitely.
+            elif (
+                reminder.get("severity") == "high"
+                and (reminder.get("action_data") or {}).get("category") == "threshold_warning"
+            ):
+                if state.resolved_at and (now - state.resolved_at).days >= 30:
+                    state.status = "active"
+                    state.resolved_at = None
+                else:
+                    return None
+
+            else:
+                # Non-critical resolved reminders stay hidden permanently
+                return None
 
         if state.status == "snoozed" and state.snoozed_until and state.snoozed_until > now:
             return None

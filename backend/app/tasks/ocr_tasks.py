@@ -1642,6 +1642,28 @@ def create_property_from_suggestion(db, document, suggestion_data: dict) -> dict
 
     _enforce_contract_role_gate(db, document, expected_role="buyer", flow_label="Property creation")
 
+    # Same-document dedup: if a property was already created from this document, return it
+    from app.models.property import Property as _PropModel
+    existing_from_doc = (
+        db.query(_PropModel)
+        .filter(_PropModel.kaufvertrag_document_id == int(document.id))
+        .first()
+    )
+    if existing_from_doc:
+        logger.info(
+            "Property %s already created from document %s — skipping duplicate creation",
+            existing_from_doc.id, document.id,
+        )
+        # Mark suggestion as confirmed so batch reprocess-all won't re-queue
+        import json as _json_kauf
+        _ocr = _json_kauf.loads(_json_kauf.dumps(document.ocr_result)) if document.ocr_result else {}
+        if _ocr.get("import_suggestion"):
+            _ocr["import_suggestion"]["status"] = "confirmed"
+            _ocr["import_suggestion"]["property_id"] = str(existing_from_doc.id)
+            document.ocr_result = _ocr
+            db.commit()
+        return {"property_id": str(existing_from_doc.id), "reused": True}
+
     data = suggestion_data
     user_id = int(document.user_id)
     
@@ -3863,6 +3885,28 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
         expected_role="landlord",
         flow_label="Recurring income creation",
     )
+
+    # Same-document dedup: if a recurring was already created from this document, return it
+    from app.models.recurring_transaction import RecurringTransaction as _RT
+    existing_from_doc = (
+        db.query(_RT)
+        .filter(_RT.source_document_id == int(document.id))
+        .first()
+    )
+    if existing_from_doc:
+        logger.info(
+            "Recurring %s already created from document %s — skipping duplicate creation",
+            existing_from_doc.id, document.id,
+        )
+        # Mark suggestion as confirmed so batch reprocess-all won't re-queue
+        import json as _json_miet
+        _ocr = _json_miet.loads(_json_miet.dumps(document.ocr_result)) if document.ocr_result else {}
+        if _ocr.get("import_suggestion"):
+            _ocr["import_suggestion"]["status"] = "confirmed"
+            _ocr["import_suggestion"]["recurring_id"] = existing_from_doc.id
+            document.ocr_result = _ocr
+            db.commit()
+        return {"recurring_id": existing_from_doc.id, "reused": True}
 
     data = suggestion_data
     monthly_rent = Decimal(str(data["monthly_rent"]))

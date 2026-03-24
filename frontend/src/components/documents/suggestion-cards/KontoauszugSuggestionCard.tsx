@@ -11,6 +11,18 @@ type StatementTransaction = {
   is_duplicate?: boolean;
 };
 
+const formatStatementPeriod = (value: unknown): string => {
+  if (!value) return '';
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const start = typeof record.start === 'string' ? record.start.trim() : '';
+    const end = typeof record.end === 'string' ? record.end.trim() : '';
+    if (start && end) return `${start} - ${end}`;
+    return start || end || '';
+  }
+  return String(value);
+};
+
 const KontoauszugSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
   const { t } = useTranslation();
   const data = props.suggestion.data || {};
@@ -49,7 +61,7 @@ const KontoauszugSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
       {data.statement_period && (
         <Row
           label={t('documents.suggestion.fields.statement_period', 'Statement period')}
-          value={String(data.statement_period)}
+          value={formatStatementPeriod(data.statement_period)}
         />
       )}
       <Row

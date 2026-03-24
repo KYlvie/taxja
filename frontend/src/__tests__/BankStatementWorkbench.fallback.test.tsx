@@ -11,7 +11,13 @@ const getDocument = vi.fn();
 const initializeFromDocument = vi.fn();
 const getLines = vi.fn();
 const getImport = vi.fn();
+const confirmCreateLine = vi.fn();
+const matchExistingLine = vi.fn();
+const ignoreLine = vi.fn();
+const undoCreateLine = vi.fn();
+const unmatchLine = vi.fn();
 const aiToast = vi.fn();
+const navigate = vi.fn();
 const translationApi = {
   t: (
     key: string,
@@ -86,11 +92,29 @@ const makeFallbackDocument = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const createDeferred = <T,>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>();
   return {
     ...actual,
     useTranslation: () => translationApi,
+  };
+});
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => navigate,
   };
 });
 
@@ -111,6 +135,11 @@ vi.mock('../services/bankImportService', () => ({
     initializeFromDocument: (...args: any[]) => initializeFromDocument(...args),
     getLines: (...args: any[]) => getLines(...args),
     getImport: (...args: any[]) => getImport(...args),
+    confirmCreateLine: (...args: any[]) => confirmCreateLine(...args),
+    matchExistingLine: (...args: any[]) => matchExistingLine(...args),
+    ignoreLine: (...args: any[]) => ignoreLine(...args),
+    undoCreateLine: (...args: any[]) => undoCreateLine(...args),
+    unmatchLine: (...args: any[]) => unmatchLine(...args),
   },
 }));
 
@@ -138,6 +167,18 @@ describe('BankStatementWorkbench local fallback', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    confirmBankTransactions.mockReset();
+    downloadDocument.mockReset();
+    getDocument.mockReset();
+    initializeFromDocument.mockReset();
+    getLines.mockReset();
+    getImport.mockReset();
+    confirmCreateLine.mockReset();
+    matchExistingLine.mockReset();
+    ignoreLine.mockReset();
+    undoCreateLine.mockReset();
+    unmatchLine.mockReset();
+    navigate.mockReset();
     global.URL.createObjectURL = vi.fn(() => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==');
     global.URL.revokeObjectURL = vi.fn();
 
@@ -374,5 +415,404 @@ describe('BankStatementWorkbench local fallback', () => {
     await waitFor(() => expect(getDocument).toHaveBeenCalledWith(326));
     expect(aiToast).toHaveBeenCalledWith('Created 2 transactions.', 'success');
     expect(screen.getAllByText('Auto-created').length).toBeGreaterThan(0);
+  });
+
+  it('renders object-based statement periods from the remote workbench summary without crashing', async () => {
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([]);
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    expect(screen.getByText('01/07/2024 - 31/12/2024')).toBeInTheDocument();
+  });
+
+  it('loads the remote import summary without waiting for the preview download to finish', async () => {
+    const previewGate = createDeferred<Blob>();
+    downloadDocument.mockImplementation(() => previewGate.promise);
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Fast Bank',
+      iban: 'AT009999999999999999',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 7,
+      auto_created_count: 5,
+      matched_existing_count: 1,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([]);
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Fast Bank')).toBeInTheDocument());
+    expect(screen.getByText('Loading preview...')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+
+    previewGate.resolve(new Blob(['statement'], { type: 'image/png' }));
+
+    await waitFor(() => expect(global.URL.createObjectURL).toHaveBeenCalled());
+  });
+
+  it('shows a view transaction action for auto-created remote lines', async () => {
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 1,
+      matched_existing_count: 0,
+      pending_review_count: 0,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([
+      {
+        id: 88,
+        line_date: '2024-12-18',
+        amount: '-62.23',
+        counterparty: 'T-Mobile Austria GmbH',
+        purpose: 'Mobile invoice December',
+        raw_reference: 'Mobile invoice December',
+        normalized_fingerprint: 'fp-1',
+        review_status: 'auto_created',
+        suggested_action: 'create_new',
+        confidence_score: '0.90',
+        linked_transaction_id: 1621,
+        created_transaction_id: 1621,
+        linked_transaction: {
+          id: 1621,
+          amount: '62.23',
+          transaction_date: '2024-12-18',
+          description: 'T-Mobile Austria GmbH',
+        },
+        created_transaction: {
+          id: 1621,
+          amount: '62.23',
+          transaction_date: '2024-12-18',
+          description: 'T-Mobile Austria GmbH',
+        },
+      },
+    ]);
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'View transaction' })[0]);
+
+    expect(navigate).toHaveBeenCalledWith('/transactions?transactionId=1621');
+  });
+
+  it('normalizes orphaned remote line states back to pending review in the UI', async () => {
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([
+      {
+        id: 188,
+        line_date: '2024-12-18',
+        amount: '-62.23',
+        counterparty: 'T-Mobile Austria GmbH',
+        purpose: 'Mobile invoice December',
+        raw_reference: 'Mobile invoice December',
+        normalized_fingerprint: 'stale-fp-1',
+        review_status: 'auto_created',
+        suggested_action: 'create_new',
+        confidence_score: '0.90',
+        linked_transaction_id: null,
+        created_transaction_id: null,
+        linked_transaction: null,
+        created_transaction: null,
+      },
+    ]);
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    expect(screen.getAllByText('Pending review').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'View transaction' })).not.toBeInTheDocument();
+  });
+
+  it('undoes an auto-created remote line back to pending review', async () => {
+    const autoCreatedLine = {
+      id: 88,
+      line_date: '2024-12-18',
+      amount: '-62.23',
+      counterparty: 'T-Mobile Austria GmbH',
+      purpose: 'Mobile invoice December',
+      raw_reference: 'Mobile invoice December',
+      normalized_fingerprint: 'fp-1',
+      review_status: 'auto_created',
+      suggested_action: 'create_new',
+      confidence_score: '0.90',
+      linked_transaction_id: 1621,
+      created_transaction_id: 1621,
+      linked_transaction: {
+        id: 1621,
+        amount: '62.23',
+        transaction_date: '2024-12-18',
+        description: 'T-Mobile Austria GmbH',
+      },
+      created_transaction: {
+        id: 1621,
+        amount: '62.23',
+        transaction_date: '2024-12-18',
+        description: 'T-Mobile Austria GmbH',
+      },
+    };
+    const pendingLine = {
+      ...autoCreatedLine,
+      review_status: 'pending_review',
+      linked_transaction_id: null,
+      created_transaction_id: null,
+      linked_transaction: null,
+      created_transaction: null,
+    };
+
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 1,
+      matched_existing_count: 0,
+      pending_review_count: 0,
+      ignored_count: 0,
+    });
+    getLines
+      .mockResolvedValueOnce([autoCreatedLine])
+      .mockResolvedValueOnce([pendingLine]);
+    getImport.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:05Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    undoCreateLine.mockResolvedValue({
+      success: true,
+      line: pendingLine,
+    });
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Undo create' })[0]);
+
+    await waitFor(() => expect(undoCreateLine).toHaveBeenCalledWith(88));
+    await waitFor(() => expect(getImport).toHaveBeenCalledWith(12));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0));
+  });
+
+  it('shows pending match suggestions as action hints without treating them as linked transactions', async () => {
+    const pendingSuggestedMatchLine = {
+      id: 87,
+      line_date: '2024-12-21',
+      amount: '1200.00',
+      counterparty: 'Salary GmbH',
+      purpose: 'Payroll',
+      raw_reference: 'Payroll',
+      normalized_fingerprint: 'fp-suggested-match',
+      review_status: 'pending_review',
+      suggested_action: 'match_existing',
+      confidence_score: '0.82',
+      linked_transaction_id: 2001,
+      created_transaction_id: null,
+      linked_transaction: {
+        id: 2001,
+        amount: '1200.00',
+        transaction_date: '2024-12-22',
+        description: 'Suggested salary match',
+      },
+      created_transaction: null,
+    };
+
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([pendingSuggestedMatchLine]);
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    expect(screen.getAllByText('Suggested match').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Suggested salary match').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Match existing' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'View transaction' })).not.toBeInTheDocument();
+  });
+
+  it('unmatches a remote line back to pending review and clears the previous match candidate', async () => {
+    const matchedLine = {
+      id: 89,
+      line_date: '2024-12-22',
+      amount: '1200.00',
+      counterparty: 'Salary GmbH',
+      purpose: 'Payroll',
+      raw_reference: 'Payroll',
+      normalized_fingerprint: 'fp-2',
+      review_status: 'matched_existing',
+      suggested_action: 'match_existing',
+      confidence_score: '0.82',
+      linked_transaction_id: 2001,
+      created_transaction_id: null,
+      linked_transaction: {
+        id: 2001,
+        amount: '1200.00',
+        transaction_date: '2024-12-22',
+        description: 'Salary GmbH',
+      },
+      created_transaction: null,
+    };
+    const pendingLine = {
+      ...matchedLine,
+      review_status: 'pending_review',
+      suggested_action: 'create_new',
+      linked_transaction_id: null,
+      linked_transaction: null,
+    };
+
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:04Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 1,
+      pending_review_count: 0,
+      ignored_count: 0,
+    });
+    getLines
+      .mockResolvedValueOnce([matchedLine])
+      .mockResolvedValueOnce([pendingLine]);
+    getImport.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: {
+        start: '2024-07-01',
+        end: '2024-12-31',
+      },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:04Z',
+      updated_at: '2026-03-24T00:00:05Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    unmatchLine.mockResolvedValue({
+      success: true,
+      line: pendingLine,
+    });
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Unmatch' })[0]);
+
+    await waitFor(() => expect(unmatchLine).toHaveBeenCalledWith(89));
+    await waitFor(() => expect(getImport).toHaveBeenCalledWith(12));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: 'Match existing' })).not.toBeInTheDocument();
   });
 });

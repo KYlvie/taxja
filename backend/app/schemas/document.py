@@ -121,6 +121,7 @@ class DocumentDetail(BaseModel):
     confidence_score: Optional[float] = None
     needs_review: bool = False
     transaction_id: Optional[int] = None
+    linked_transaction_count: int = 0
     uploaded_at: datetime
     processed_at: Optional[datetime] = None
 

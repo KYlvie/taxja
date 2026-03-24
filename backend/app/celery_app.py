@@ -39,6 +39,10 @@ celery_app.conf.update(
     task_acks_late=True,  # Acknowledge tasks after completion
     task_reject_on_worker_lost=True,  # Reject tasks if worker crashes
     worker_prefetch_multiplier=1,  # Fetch one task at a time for long-running tasks
+    # Queue routing — default queue must match worker -Q flag
+    task_default_queue="default",
+    task_default_exchange="default",
+    task_default_routing_key="default",
 )
 
 # Celery Beat schedule configuration

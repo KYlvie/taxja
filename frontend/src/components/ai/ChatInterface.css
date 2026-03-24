@@ -503,20 +503,22 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .chat-recurring-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 14px;
+  gap: 4px;
+  padding: 6px 10px;
   border-radius: 12px;
   border: 1px solid transparent;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
   transition: all 0.16s ease;
+  white-space: nowrap;
 }
 
 .chat-recurring-btn.confirm {
@@ -539,6 +541,18 @@
 .chat-recurring-btn.dismiss:hover:not(:disabled) {
   background: #fff;
   color: var(--color-text);
+}
+
+.chat-recurring-btn.view-doc {
+  background: none;
+  color: var(--color-primary, #6c5ce7);
+  border-color: transparent;
+  padding: 6px 8px;
+  font-weight: 500;
+}
+
+.chat-recurring-btn.view-doc:hover:not(:disabled) {
+  text-decoration: underline;
 }
 
 .chat-recurring-btn:disabled {

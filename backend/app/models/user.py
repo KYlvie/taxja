@@ -79,6 +79,7 @@ class User(Base):
     # Authentication
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
+    google_subject = Column(String(255), unique=True, nullable=True, index=True)
     
     # Basic information
     name = Column(String(255), nullable=False)

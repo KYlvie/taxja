@@ -124,6 +124,14 @@ export interface Document {
   message?: string;
   deduplicated?: boolean;
   duplicate_of_document_id?: number | null;
+  linked_transaction_count?: number;
+  linked_transactions?: Array<{
+    transaction_id: number;
+    description?: string;
+    amount?: number;
+    date?: string | null;
+    has_line_items?: boolean;
+  }>;
 }
 
 export interface UploadProgress {
@@ -149,4 +157,6 @@ export interface DocumentFilter {
   end_date?: string;
   search?: string;
   needs_review?: boolean;
+  is_deductible?: boolean;
+  is_recurring?: boolean;
 }

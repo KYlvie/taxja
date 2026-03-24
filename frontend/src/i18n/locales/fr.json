@@ -66,7 +66,12 @@
     "datePicker": "Selecteur de date",
     "name": "Nom",
     "saveFailed": "Échec de la sauvegarde",
-    "status": "Statut"
+    "status": "Statut",
+    "date": "Date",
+    "oneClickConfirm": "Tout confirmer",
+    "bulkConfirmTransactionsTooltip": "Confirmer toutes les transactions en attente",
+    "bulkConfirmDocumentsTooltip": "Confirmer tous les documents en attente",
+    "bulkConfirmSuccess": "{{count}} éléments confirmés"
   },
   "quickActions": {
     "title": "Actions rapides",
@@ -377,6 +382,7 @@
     "cancelOverride": "Annuler",
     "userOverride": "Modification par l'utilisateur",
     "hasDocument": "Justificatif disponible",
+    "bankReconciled": "Rapproche bancaire",
     "systemGenerated": "Genere par le systeme (amortissement automatique)",
     "needsReview": "A verifier",
     "aiReviewNotes": "Notes de verification IA",
@@ -538,7 +544,9 @@
     },
     "fields": {
       "lohnsteuer": "Impôt sur les salaires"
-    }
+    },
+    "partiallyDeductible": "Partiel",
+    "deductibilityDerivedFromItems": "Dérivé des postes"
   },
   "properties": {
     "title": "Biens immobiliers",
@@ -1351,7 +1359,7 @@
       "allYears": "Toutes les années",
       "startDate": "À partir du",
       "endDate": "Jusqu'au",
-      "needsReview": "Vérification nécessaire uniquement",
+      "needsReview": "Vérification nécessaire",
       "clear": "Effacer les filtres"
     },
     "groups": {
@@ -2019,7 +2027,7 @@
     "reviewActionSuccess": "Document vérifié",
     "reviewActionFailed": "Vérification échouée",
     "confirmReview": "Confirmer?",
-    "exportZip": "Exporter {{count}} documents en ZIP",
+    "exportZip": "Exporter ZIP",
     "exportSuccess": "{{count}} documents exportés",
     "exportError": "Erreur d'exportation",
     "bankWorkbench": {
@@ -2276,7 +2284,7 @@
     "errorGeneric": "Impossible d'accepter l'avertissement. Veuillez réessayer."
   },
   "reports": {
-    "pageSubtitle": "Générez des rapports fiscaux, vérifiez la conformité d'audit et exportez vos données",
+    "pageSubtitle": "Générez les rapports de revenus, les soldes et les formulaires fiscaux, puis vérifiez les transactions non revues avant validation",
     "unreviewedWarning": "{{count}} transaction(s) non vérifiée(s) sont incluses dans ce rapport. Veuillez les vérifier.",
     "reviewTransactions": "Vérifier les transactions",
     "tabs": {
@@ -2898,7 +2906,13 @@
       "linked": "Document lié à un enregistrement existant. Aucun doublon créé.",
       "linkExisting": "Doublon détecté",
       "loanRepayment": "Remboursement de prêt",
-      "noAction": "Configuration de l'action manquante. Veuillez actualiser."
+      "noAction": "Configuration de l'action manquante. Veuillez actualiser.",
+      "from": "De",
+      "address": "Adresse",
+      "item": "Élément",
+      "matchType": "Type de correspondance",
+      "reason": "Raison",
+      "taxpayerName": "Contribuable"
     },
     "followUp": {
       "header": "J'ai besoin de quelques détails supplémentaires :",

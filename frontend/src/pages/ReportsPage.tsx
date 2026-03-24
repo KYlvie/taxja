@@ -44,7 +44,6 @@ const ReportsPage = () => {
     <div className="reports-page">
       <div className="page-header">
         <h1>{t('nav.reports')}</h1>
-        <p className="page-subtitle">{t('reports.pageSubtitle')}</p>
       </div>
 
       <div className="tabs">

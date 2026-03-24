@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import DocumentsPage from '../pages/DocumentsPage';
 
 const getDocument = vi.fn();
+const getDocuments = vi.fn();
 const downloadDocument = vi.fn();
 const getById = vi.fn();
 
@@ -44,6 +45,7 @@ vi.mock('../components/documents/SuggestionCardFactory', () => ({ default: () =>
 
 vi.mock('../services/documentService', () => ({
   documentService: {
+    getDocuments: (...args: any[]) => getDocuments(...args),
     getDocument: (...args: any[]) => getDocument(...args),
     downloadDocument: (...args: any[]) => downloadDocument(...args),
   },
@@ -80,6 +82,7 @@ describe('DocumentsPage linked transaction entry', () => {
     vi.clearAllMocks();
     global.URL.createObjectURL = vi.fn(() => 'blob:test');
     global.URL.revokeObjectURL = vi.fn();
+    getDocuments.mockResolvedValue([{ id: 118 }]);
 
     getDocument.mockResolvedValue({
       id: 118,

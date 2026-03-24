@@ -57,37 +57,75 @@ const typeIcons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> 
   link_to_existing: { icon: Banknote, tone: 'amber' },
 };
 
+/** Safely convert any value to a display string — prevents [object Object] */
+function safeStr(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) return v.map(safeStr).filter(Boolean).join(', ');
+  if (typeof v === 'object') {
+    // Try common i18n-style objects {de: "...", en: "..."}
+    const rec = v as Record<string, unknown>;
+    const lang = i18nInstance.language?.slice(0, 2) || 'en';
+    if (typeof rec[lang] === 'string') return rec[lang] as string;
+    if (typeof rec.en === 'string') return rec.en as string;
+    // Fallback: first string value
+    const first = Object.values(rec).find((x) => typeof x === 'string');
+    if (first) return first as string;
+    return '';
+  }
+  return String(v);
+}
+
+const fmtAmount = (v: number) =>
+  `€ ${v.toLocaleString(getLocaleForLanguage(i18nInstance.language), { minimumFractionDigits: 2 })}`;
+
 /** Extract key display fields from extracted data */
-function getDisplayRows(data: Record<string, any>, _suggestionType: string): Array<{ label: string; value: string }> {
+function getDisplayRows(data: Record<string, any>, suggestionType: string, t: any): Array<{ label: string; value: string }> {
   const rows: Array<{ label: string; value: string }> = [];
 
-  if (data.amount || data.purchase_price || data.monthly_rent) {
-    const amount = data.amount || data.purchase_price || data.monthly_rent;
-    rows.push({ label: 'Amount', value: `€ ${Number(amount).toLocaleString(getLocaleForLanguage(i18nInstance.language), { minimumFractionDigits: 2 })}` });
+  // Bank statement — show summary instead of raw fields
+  if (suggestionType === 'import_bank_statement') {
+    if (data.iban) rows.push({ label: 'IBAN', value: safeStr(data.iban) });
+    if (data.bank_name) rows.push({ label: t('documents.suggestion.fields.bank_name', 'Bank'), value: safeStr(data.bank_name) });
+    const txs = Array.isArray(data.transactions) ? data.transactions : [];
+    if (txs.length > 0) rows.push({ label: t('documents.bankWorkbench.totalCount', 'Transactions'), value: String(txs.length) });
+    if (data.tax_year) rows.push({ label: t('documents.suggestion.taxYear', 'Tax year'), value: String(data.tax_year) });
+    return rows.slice(0, 5);
   }
 
-  if (data.vendor || data.seller || data.landlord || data.employer) {
-    rows.push({ label: 'From', value: data.vendor || data.seller || data.landlord || data.employer });
+  if (data.amount || data.purchase_price || data.monthly_rent || data.praemie) {
+    const amount = data.amount || data.purchase_price || data.monthly_rent || data.praemie;
+    rows.push({ label: t('common.amount', 'Amount'), value: fmtAmount(Number(amount)) });
   }
 
-  if (data.date || data.purchase_date || data.contract_date) {
-    rows.push({ label: 'Date', value: data.date || data.purchase_date || data.contract_date });
+  const from = data.vendor || data.seller || data.landlord || data.employer || data.employer_name || data.insurer_name || data.versicherer;
+  if (from) {
+    rows.push({ label: t('ai.suggestion.from', 'From'), value: safeStr(from) });
+  }
+
+  if (data.date || data.purchase_date || data.contract_date || data.start_date) {
+    rows.push({ label: t('common.date', 'Date'), value: safeStr(data.date || data.purchase_date || data.contract_date || data.start_date) });
   }
 
   if (data.address || data.property_address) {
-    rows.push({ label: 'Address', value: data.address || data.property_address });
+    rows.push({ label: t('ai.suggestion.address', 'Address'), value: safeStr(data.address || data.property_address) });
   }
 
-  if (data.asset_name || data.description || data.item) {
-    rows.push({ label: 'Item', value: data.asset_name || data.description || data.item });
+  if (data.asset_name || data.description || data.item || data.insurance_type || data.versicherungsart) {
+    rows.push({ label: t('ai.suggestion.item', 'Item'), value: safeStr(data.asset_name || data.description || data.item || data.insurance_type || data.versicherungsart) });
+  }
+
+  if (data.tax_year) {
+    rows.push({ label: t('documents.suggestion.taxYear', 'Tax year'), value: String(data.tax_year) });
   }
 
   // For link_to_existing: show match reason
   if (data.matched_type) {
-    rows.push({ label: 'Match Type', value: data.matched_type });
+    rows.push({ label: t('ai.suggestion.matchType', 'Match Type'), value: safeStr(data.matched_type) });
   }
   if (data.reason) {
-    rows.push({ label: 'Reason', value: data.reason });
+    rows.push({ label: t('ai.suggestion.reason', 'Reason'), value: safeStr(data.reason) });
   }
 
   return rows.slice(0, 5); // Max 5 rows
@@ -136,7 +174,7 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
   const navigate = useNavigate();
   const iconMeta = typeIcons[message.suggestionType] || { icon: ClipboardList, tone: 'slate' as FuturisticIconTone };
   const typeName = getTypeName(message.suggestionType, t);
-  const rows = getDisplayRows(message.extractedData, message.suggestionType);
+  const rows = getDisplayRows(message.extractedData, message.suggestionType, t);
   const lang = i18n.language?.slice(0, 2) || 'en';
 
   // Get button labels from ActionDescriptor or fallback to generic
@@ -266,18 +304,7 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
             ))}
           </div>
 
-          {/* View document link */}
-          {message.documentId && (
-            <button
-              className="chat-suggestion-view-doc"
-              onClick={() => navigate(`/documents/${message.documentId}`)}
-              type="button"
-            >
-              <Eye size={13} /> {t('ai.suggestion.viewDocument', 'View document')}
-            </button>
-          )}
-
-          {/* Action buttons — only when actionable */}
+          {/* Action buttons — all on one row */}
           {isActionable && !result && (
             <div className="chat-recurring-actions">
               <button
@@ -295,6 +322,15 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
               >
                 <X size={14} /> {dismissLabel}
               </button>
+              {message.documentId && (
+                <button
+                  className="chat-recurring-btn view-doc"
+                  onClick={() => navigate(`/documents/${message.documentId}`)}
+                  type="button"
+                >
+                  <Eye size={13} /> {t('ai.suggestion.viewDocument', 'View document')}
+                </button>
+              )}
             </div>
           )}
 
@@ -333,6 +369,17 @@ export default function ChatSuggestionCard({ message }: ChatSuggestionCardProps)
             <div className="chat-dismissed-note">
               {t('ai.suggestion.dismissed', 'Dismissed')}
             </div>
+          )}
+
+          {/* View document link when not actionable (buttons already include it when actionable) */}
+          {!isActionable && message.documentId && (
+            <button
+              className="chat-suggestion-view-doc"
+              onClick={() => navigate(`/documents/${message.documentId}`)}
+              type="button"
+            >
+              <Eye size={13} /> {t('ai.suggestion.viewDocument', 'View document')}
+            </button>
           )}
         </div>
 

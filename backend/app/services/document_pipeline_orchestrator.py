@@ -12,8 +12,11 @@ Design principles — "傻瓜操作" (zero-friction for the user):
   - Only flag needs_review when data is truly unusable (no amount, no OCR text)
   - All decisions logged with confidence scores for auditability
 """
+import hashlib
 import json
 import logging
+import time
+from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
@@ -37,6 +40,32 @@ from app.services.processing_decision_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+_LLM_CLASSIFICATION_CACHE_VERSION = "orchestrator-llm-classify-v1"
+_LLM_CLASSIFICATION_CACHE_TTL_SECONDS = 24 * 60 * 60
+_LLM_CLASSIFICATION_CACHE_MAX_SIZE = 512
+_LLM_CLASSIFICATION_TEXT_WINDOW = 4000
+
+_DEDUP_MATCH_FIELDS = (
+    "amount",
+    "merchant",
+    "date",
+    "description",
+    "address",
+    "property_address",
+    "monthly_rent",
+    "purchase_price",
+    "insurer_name",
+    "praemie",
+    "polizze",
+    "versicherungsart",
+    "insurance_type",
+    "lender_name",
+    "loan_amount",
+    "employer",
+    "employer_name",
+    "gross_income",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +316,148 @@ class DocumentPipelineOrchestrator:
             self.document_metering_service = DocumentMeteringService()
         return self.document_metering_service
 
+    def _build_phase_two_decision(self, db_type: DBDocumentType):
+        return self._get_processing_decision_service().build_phase_two_decision(
+            db_type,
+            tax_form_types=set(self.TAX_FORM_DB_TYPES),
+        )
+
+    def _decision_has_transaction_suggestions(self, decision) -> bool:
+        transaction_action = ProcessingAction.TRANSACTION_SUGGESTIONS
+        actions = [*decision.primary_actions, *decision.secondary_actions]
+        return any(
+            action == transaction_action or action == transaction_action.value
+            for action in actions
+        )
+
+    def _get_llm_classification_cache(self) -> "OrderedDict[str, Tuple[float, str]]":
+        cache = getattr(self.__class__, "_llm_classification_cache", None)
+        if cache is None:
+            cache = OrderedDict()
+            setattr(self.__class__, "_llm_classification_cache", cache)
+        return cache
+
+    def _get_llm_classification_provider_fingerprint(self, extractor) -> str:
+        try:
+            llm = extractor.llm
+        except Exception:
+            return "llm-unavailable"
+
+        model_parts = []
+        for attr_name in ("model", "anthropic_model", "groq_model", "gpt_oss_model"):
+            attr_value = getattr(llm, attr_name, None)
+            if attr_value:
+                model_parts.append(f"{attr_name}={attr_value}")
+        return "|".join(model_parts) or "default-provider-chain"
+
+    def _build_llm_classification_cache_key(self, raw_text: str, extractor) -> str:
+        normalized_text = " ".join(
+            raw_text[:_LLM_CLASSIFICATION_TEXT_WINDOW].lower().split()
+        )
+        text_hash = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+        provider_fingerprint = self._get_llm_classification_provider_fingerprint(extractor)
+        return (
+            f"{_LLM_CLASSIFICATION_CACHE_VERSION}:"
+            f"{provider_fingerprint}:{text_hash}"
+        )
+
+    def _get_cached_llm_classification(
+        self, cache_key: str
+    ) -> Optional[DBDocumentType]:
+        cache = self._get_llm_classification_cache()
+        self._last_llm_classification_cache_hit = False
+
+        cached_entry = cache.get(cache_key)
+        if not cached_entry:
+            return None
+
+        expires_at, cached_value = cached_entry
+        if expires_at <= time.time():
+            cache.pop(cache_key, None)
+            return None
+
+        cache.move_to_end(cache_key)
+        self._last_llm_classification_cache_hit = True
+        try:
+            return DBDocumentType(cached_value)
+        except ValueError:
+            cache.pop(cache_key, None)
+            return None
+
+    def _set_cached_llm_classification(
+        self, cache_key: str, db_type: DBDocumentType
+    ) -> None:
+        cache = self._get_llm_classification_cache()
+        cache[cache_key] = (
+            time.time() + _LLM_CLASSIFICATION_CACHE_TTL_SECONDS,
+            db_type.value,
+        )
+        cache.move_to_end(cache_key)
+
+        while len(cache) > _LLM_CLASSIFICATION_CACHE_MAX_SIZE:
+            cache.popitem(last=False)
+
+    def _get_llm_arbitration_threshold(
+        self, db_type: DBDocumentType, method: str
+    ) -> float:
+        if db_type in {DBDocumentType.RECEIPT, DBDocumentType.INVOICE}:
+            return 0.62 if method == "regex" else 0.72
+
+        if db_type in {
+            DBDocumentType.PURCHASE_CONTRACT,
+            DBDocumentType.RENTAL_CONTRACT,
+            DBDocumentType.LOAN_CONTRACT,
+            DBDocumentType.BANK_STATEMENT,
+            DBDocumentType.KONTOAUSZUG,
+            DBDocumentType.LOHNZETTEL,
+            DBDocumentType.EINKOMMENSTEUERBESCHEID,
+            DBDocumentType.SVS_NOTICE,
+            DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+        } or db_type in self.TAX_FORM_DB_TYPES:
+            return 0.75
+
+        return 0.70
+
+    def _build_dedup_extracted_summary(
+        self, extracted: Dict[str, Any], db_type: DBDocumentType
+    ) -> Dict[str, Any]:
+        extracted_summary = {
+            key: value
+            for key, value in extracted.items()
+            if key in _DEDUP_MATCH_FIELDS and value is not None
+        }
+        extracted_summary["document_type"] = (
+            db_type.value if hasattr(db_type, "value") else str(db_type)
+        )
+        return extracted_summary
+
+    def _should_run_duplicate_entity_check(
+        self,
+        db_type: DBDocumentType,
+        result: "PipelineResult",
+        decision=None,
+    ) -> Tuple[bool, str]:
+        extracted = result.extracted_data or {}
+        if not extracted:
+            return False, "no_extracted_data"
+
+        if db_type in {DBDocumentType.BANK_STATEMENT, DBDocumentType.KONTOAUSZUG}:
+            return False, "bank_statement_import"
+
+        decision = decision or self._build_phase_two_decision(db_type)
+        if not self._decision_has_transaction_suggestions(decision):
+            return False, "non_transaction_document"
+
+        extracted_summary = self._build_dedup_extracted_summary(extracted, db_type)
+        summary_fields = [
+            key for key in extracted_summary.keys()
+            if key != "document_type"
+        ]
+        if len(summary_fields) < 2:
+            return False, "insufficient_match_fields"
+
+        return True, "eligible"
+
     # ---- Main entry point ----
 
     def process_document(self, document_id: int) -> PipelineResult:
@@ -359,6 +530,9 @@ class DocumentPipelineOrchestrator:
                     f"{list(validation.corrected_fields.keys())}"
                 )
 
+            decision = self._build_phase_two_decision(db_type)
+            result.processing_decision = decision.model_dump(mode="json")
+
             result.phase_checkpoints.append(
                 metering_service.complete_phase(
                     phase_1_checkpoint,
@@ -371,6 +545,7 @@ class DocumentPipelineOrchestrator:
                         "extracted_field_count": len(result.extracted_data or {}),
                         "validation_error_count": validation.error_count,
                         "validation_warning_count": validation.warning_count,
+                        "processing_decision": result.processing_decision,
                     },
                 )
             )
@@ -381,17 +556,20 @@ class DocumentPipelineOrchestrator:
                 phase=ProcessingPhase.PHASE_2,
                 checkpoint=PhaseCheckpointType.FINALIZATION,
                 entry_stage=PipelineStage.SUGGEST.value,
-                metadata={"document_type": db_type.value},
+                metadata={
+                    "document_type": db_type.value,
+                    "processing_decision": result.processing_decision,
+                },
             )
             result.phase_checkpoints.append(phase_2_checkpoint.model_dump(mode="json"))
             result.current_state = "finalizing"
             self._persist_checkpoint_state(document, result, commit=True)
 
             # Stage 4.5: AI-driven duplicate entity check
-            self._check_duplicate_entity(document, db_type, result)
+            self._check_duplicate_entity(document, db_type, result, decision=decision)
 
             # Stage 5: Build suggestions AND auto-create
-            self._stage_suggest(document, db_type, ocr_result, result)
+            self._stage_suggest(document, db_type, ocr_result, result, decision=decision)
 
             result.phase_checkpoints.append(
                 metering_service.complete_phase(
@@ -531,24 +709,31 @@ class DocumentPipelineOrchestrator:
                 classification.method = "keyword"
                 classification.confidence = max(classification.confidence, 0.62)
 
-        # Signal 3: LLM arbitration — now triggers for ANY low-confidence result, not just OTHER
-        # Previously only called when db_type == OTHER, missing all misclassified documents
+        # Signal 3: LLM arbitration for ambiguous results.
+        # Keep stricter thresholds for route-sensitive families than for routine receipts/invoices.
+        llm_threshold = self._get_llm_arbitration_threshold(
+            db_type, classification.method
+        )
         should_try_llm = (
             ocr_result.raw_text
             and len(ocr_result.raw_text.strip()) > 50
             and (
                 db_type == DBDocumentType.OTHER
-                or classification.confidence < 0.75
+                or classification.confidence < llm_threshold
             )
         )
         if should_try_llm:
             llm_type = self._try_llm_classification(ocr_result.raw_text)
+            cache_hint = ""
+            if getattr(self, "_last_llm_classification_cache_hit", False):
+                cache_hint = " (cache hit)"
             if llm_type and llm_type != DBDocumentType.OTHER:
                 if db_type == DBDocumentType.OTHER:
                     # LLM found a type when regex couldn't — use it
                     self._log_audit(
                         result, "classify",
-                        f"LLM classification (regex failed): OTHER → {llm_type.value}"
+                        f"LLM classification{cache_hint} (regex failed): "
+                        f"OTHER → {llm_type.value}"
                     )
                     db_type = llm_type
                     classification.method = "llm"
@@ -557,7 +742,9 @@ class DocumentPipelineOrchestrator:
                     # LLM disagrees with regex — LLM wins when regex confidence is low
                     self._log_audit(
                         result, "classify",
-                        f"LLM override (low confidence {classification.confidence:.2f}): "
+                        f"LLM override{cache_hint} "
+                        f"(low confidence {classification.confidence:.2f}, "
+                        f"threshold {llm_threshold:.2f}): "
                         f"{db_type.value} → {llm_type.value}"
                     )
                     db_type = llm_type
@@ -567,7 +754,8 @@ class DocumentPipelineOrchestrator:
                     # LLM agrees with regex — boost confidence
                     self._log_audit(
                         result, "classify",
-                        f"LLM confirmed regex classification: {db_type.value} (confidence boosted)"
+                        f"LLM confirmed regex classification{cache_hint}: "
+                        f"{db_type.value} (confidence boosted)"
                     )
                     classification.method = "regex+llm"
                     classification.confidence = min(classification.confidence + 0.15, 0.95)
@@ -671,8 +859,14 @@ class DocumentPipelineOrchestrator:
         try:
             from app.services.llm_extractor import get_llm_extractor
             extractor = get_llm_extractor()
+            self._last_llm_classification_cache_hit = False
             if not extractor.is_available:
                 return None
+
+            cache_key = self._build_llm_classification_cache_key(raw_text, extractor)
+            cached_type = self._get_cached_llm_classification(cache_key)
+            if cached_type is not None:
+                return cached_type
 
             llm_type_str = extractor.classify_document(raw_text)
             if not llm_type_str:
@@ -719,7 +913,10 @@ class DocumentPipelineOrchestrator:
                 "other": DBDocumentType.OTHER,
             }
             # Case-insensitive lookup
-            return llm_type_map.get(llm_type_str.lower().strip())
+            resolved_type = llm_type_map.get(llm_type_str.lower().strip())
+            if resolved_type is not None:
+                self._set_cached_llm_classification(cache_key, resolved_type)
+            return resolved_type
 
         except Exception as e:
             logger.warning(f"LLM classification failed: {e}")
@@ -1192,26 +1389,19 @@ class DocumentPipelineOrchestrator:
 
     def _stage_suggest(
         self, document: Document, db_type: DBDocumentType,
-        ocr_result: OCRResult, result: PipelineResult,
+        ocr_result: OCRResult, result: PipelineResult, decision=None,
     ):
         """Execute explicit Phase-2 actions for the classified document."""
         result.stage_reached = PipelineStage.SUGGEST
 
-        decision = self._get_processing_decision_service().build_phase_two_decision(
-            db_type,
-            tax_form_types=set(self.TAX_FORM_DB_TYPES),
-        )
+        decision = decision or self._build_phase_two_decision(db_type)
         result.processing_decision = decision.model_dump(mode="json")
 
         # Check if AI dedup found a match — if so, create link_to_existing suggestion
         # instead of normal transaction-create suggestions.
         ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
         matched = ocr_json.get("matched_existing")
-        transaction_actions = {ProcessingAction.TRANSACTION_SUGGESTIONS}
-        has_transaction_action = any(
-            action in transaction_actions
-            for action in [*decision.primary_actions, *decision.secondary_actions]
-        )
+        has_transaction_action = self._decision_has_transaction_suggestions(decision)
         if matched and matched.get("type") != "none" and has_transaction_action:
             result.suggestions.append({
                 "type": "link_to_existing",
@@ -1245,7 +1435,11 @@ class DocumentPipelineOrchestrator:
     # ---- AI-Driven Duplicate Entity Check ----
 
     def _check_duplicate_entity(
-        self, document: Document, db_type: DBDocumentType, result: "PipelineResult"
+        self,
+        document: Document,
+        db_type: DBDocumentType,
+        result: "PipelineResult",
+        decision=None,
     ):
         """Use LLM to check if the new document matches an existing entity.
 
@@ -1257,15 +1451,25 @@ class DocumentPipelineOrchestrator:
         suggestion builders can change behavior (link instead of create).
         """
         try:
+            should_run, skip_reason = self._should_run_duplicate_entity_check(
+                db_type, result, decision=decision
+            )
+            if not should_run:
+                self._log_audit(
+                    result,
+                    "dedup",
+                    f"Skipping dedup check: {skip_reason}",
+                )
+                return
+
             extracted = result.extracted_data or {}
-            if not extracted:
-                return  # Nothing to match against
 
             user_id = document.user_id
 
             # Build compact summaries of existing entities
             summaries = self._build_entity_summaries(user_id)
             if not summaries:
+                self._log_audit(result, "dedup", "Skipping dedup check: no_existing_entities")
                 return  # New user, nothing to match
 
             # Call LLM for dedup check
@@ -1276,16 +1480,7 @@ class DocumentPipelineOrchestrator:
                 return
 
             # Build compact extracted data summary (avoid sending entire blob)
-            extracted_summary = {
-                k: v for k, v in extracted.items()
-                if k in ("amount", "merchant", "date", "description", "address",
-                         "property_address", "monthly_rent", "purchase_price",
-                         "insurer_name", "praemie", "polizze", "versicherungsart",
-                         "insurance_type", "lender_name", "loan_amount",
-                         "employer", "employer_name", "gross_income")
-                and v is not None
-            }
-            extracted_summary["document_type"] = db_type.value
+            extracted_summary = self._build_dedup_extracted_summary(extracted, db_type)
 
             prompt = f"""Du bist ein Duplikat-Erkennungsassistent für österreichische Steuerdokumente.
 Prüfe, ob das neue Dokument zu einer bereits existierenden Entität des Benutzers gehört.

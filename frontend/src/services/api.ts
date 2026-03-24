@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { getApiBaseUrl, isNativeApp } from '../mobile/runtime';
 import { normalizeLanguage } from '../utils/locale';
+import { isSelfHandledAuthRequest } from './authRequestPolicy';
 
 // ---------------------------------------------------------------------------
 // CSRF token — kept in-memory only (not localStorage)
@@ -158,10 +159,8 @@ api.interceptors.response.use(
         error.response.status === 401 &&
         originalRequest &&
         !originalRequest._retry &&
-        // Don't try to refresh if the refresh call itself failed
-        !originalRequest.url?.includes('/auth/refresh') &&
-        !originalRequest.url?.includes('/auth/login') &&
-        !originalRequest.url?.includes('/auth/2fa/')
+        // Let login/signup/password reset/Google auth flows handle their own errors.
+        !isSelfHandledAuthRequest(originalRequest.url)
       ) {
         originalRequest._retry = true;
 
@@ -231,7 +230,7 @@ api.interceptors.response.use(
           // If we reach here, refresh already failed or was skipped
           // Don't force-redirect for login/auth requests — let the component handle the error
           const reqUrl = originalRequest?.url || '';
-          if (!reqUrl.includes('/auth/login') && !reqUrl.includes('/auth/register') && !reqUrl.includes('/auth/2fa/')) {
+          if (!isSelfHandledAuthRequest(reqUrl)) {
             useAuthStore.getState().logout();
             window.location.href = '/login';
           }
