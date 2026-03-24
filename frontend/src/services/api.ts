@@ -30,6 +30,19 @@ function onRefreshed(newToken: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Debounced credit balance refresh — collapses rapid-fire header triggers
+// ---------------------------------------------------------------------------
+let _creditRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedCreditRefresh() {
+  if (_creditRefreshTimer) return;           // already scheduled
+  _creditRefreshTimer = setTimeout(() => {
+    _creditRefreshTimer = null;
+    void useSubscriptionStore.getState().fetchCreditBalance();
+  }, 500);
+}
+
+// ---------------------------------------------------------------------------
 // Axios instance
 // ---------------------------------------------------------------------------
 const api = axios.create({
@@ -119,8 +132,15 @@ api.interceptors.response.use(
       setCsrfToken(newCsrf);
     }
 
-    if (response.headers['x-credits-remaining'] !== undefined) {
-      void useSubscriptionStore.getState().fetchCreditBalance();
+    // Update credit display when a credit-consuming endpoint responds.
+    // Skip /credits/ URLs to avoid a fetch→response→fetch infinite loop,
+    // and debounce so rapid-fire responses don't flood the balance endpoint.
+    const reqUrl = response.config.url || '';
+    if (
+      response.headers['x-credits-remaining'] !== undefined &&
+      !reqUrl.includes('/credits/')
+    ) {
+      debouncedCreditRefresh();
     }
     return response;
   },
