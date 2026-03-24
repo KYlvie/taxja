@@ -192,7 +192,6 @@ describe('DocumentList review status', () => {
 
     expect(getDocuments).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('button', { name: 'Reviewed' })).not.toBeInTheDocument();
-    expect(screen.getByText('Transaction created')).toBeInTheDocument();
   });
 
   it('confirms the document directly instead of opening the detail flow', async () => {

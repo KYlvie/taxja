@@ -31,14 +31,12 @@ const PeriodensaldenlisteReport = () => {
       setReport(data);
       setCollapsedGroups(new Set());
     } catch (err: any) {
-      (() => {
-        const detail = err.response?.data?.detail;
-        if (detail && typeof detail === 'object' && (detail.error === 'feature_not_available' || detail.error === 'insufficient_plan')) {
-          setError(t('subscription.featureRequiresPlan', { plan: (detail.required_plan || 'Pro').toUpperCase() }));
-        } else {
-          setError(typeof detail === 'string' ? detail : t('reports.generationError'));
-        }
-      })();
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('reports.generationError')));
+      }
     } finally {
       setLoading(false);
     }
@@ -77,14 +75,12 @@ const PeriodensaldenlisteReport = () => {
         orientation: 'landscape',
       });
     } catch (err: any) {
-      (() => {
-        const detail = err.response?.data?.detail;
-        if (detail && typeof detail === 'object' && (detail.error === 'feature_not_available' || detail.error === 'insufficient_plan')) {
-          setError(t('subscription.featureRequiresPlan', { plan: (detail.required_plan || 'Pro').toUpperCase() }));
-        } else {
-          setError(typeof detail === 'string' ? detail : t('reports.generationError'));
-        }
-      })();
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('reports.generationError')));
+      }
     }
   };
 

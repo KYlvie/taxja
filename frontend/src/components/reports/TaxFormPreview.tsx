@@ -135,14 +135,12 @@ const TaxFormPreview = () => {
       const data = await generateFormByType(selectedFormType, taxYear);
       setFormData(data);
     } catch (err: any) {
-      (() => {
-        const detail = err.response?.data?.detail;
-        if (detail && typeof detail === 'object' && (detail.error === 'feature_not_available' || detail.error === 'insufficient_plan')) {
-          setError(t('subscription.featureRequiresPlan', { plan: (detail.required_plan || 'Pro').toUpperCase() }));
-        } else {
-          setError(typeof detail === 'string' ? detail : t('reports.generationError'));
-        }
-      })();
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('reports.generationError')));
+      }
     } finally {
       setLoading(false);
     }
@@ -317,14 +315,12 @@ const TaxFormPreview = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      (() => {
-        const detail = err.response?.data?.detail;
-        if (detail && typeof detail === 'object' && (detail.error === 'feature_not_available' || detail.error === 'insufficient_plan')) {
-          setError(t('subscription.featureRequiresPlan', { plan: (detail.required_plan || 'Pro').toUpperCase() }));
-        } else {
-          setError(typeof detail === 'string' ? detail : t('taxFormPreview.pdfDownloadFailed'));
-        }
-      })();
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('taxFormPreview.pdfDownloadFailed')));
+      }
     }
   };
 

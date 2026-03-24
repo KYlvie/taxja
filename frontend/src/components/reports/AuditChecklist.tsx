@@ -25,14 +25,12 @@ const AuditChecklist = ({ taxYear }: AuditChecklistProps) => {
       const data = await reportService.getAuditChecklist(taxYear);
       setChecklist(data);
     } catch (err: any) {
-      (() => {
-        const detail = err.response?.data?.detail;
-        if (detail && typeof detail === 'object' && (detail.error === 'feature_not_available' || detail.error === 'insufficient_plan')) {
-          setError(t('subscription.featureRequiresPlan', { plan: (detail.required_plan || 'Pro').toUpperCase() }));
-        } else {
-          setError(typeof detail === 'string' ? detail : t('reports.audit.loadError'));
-        }
-      })();
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('reports.audit.loadError')));
+      }
     } finally {
       setLoading(false);
     }
