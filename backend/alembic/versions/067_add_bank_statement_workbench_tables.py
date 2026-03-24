@@ -16,16 +16,50 @@ branch_labels = None
 depends_on = None
 
 
+def _column_exists(table, column):
+    """Check if a column already exists in a table."""
+    from alembic import op as _op
+    conn = _op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = :table AND column_name = :column"
+        ),
+        {"table": table, "column": column},
+    )
+    return result.fetchone() is not None
+
+
+def _table_exists(table):
+    """Check if a table already exists."""
+    from alembic import op as _op
+    conn = _op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_name = :table"
+        ),
+        {"table": table},
+    )
+    return result.fetchone() is not None
+
+
 def upgrade() -> None:
-    op.add_column(
-        "transactions",
-        sa.Column("bank_reconciled", sa.Boolean(), nullable=False, server_default=sa.false()),
-    )
-    op.add_column(
-        "transactions",
-        sa.Column("bank_reconciled_at", sa.DateTime(), nullable=True),
-    )
-    op.alter_column("transactions", "bank_reconciled", server_default=None)
+    if not _column_exists("transactions", "bank_reconciled"):
+        op.add_column(
+            "transactions",
+            sa.Column("bank_reconciled", sa.Boolean(), nullable=False, server_default=sa.false()),
+        )
+        op.alter_column("transactions", "bank_reconciled", server_default=None)
+
+    if not _column_exists("transactions", "bank_reconciled_at"):
+        op.add_column(
+            "transactions",
+            sa.Column("bank_reconciled_at", sa.DateTime(), nullable=True),
+        )
+
+    if _table_exists("bank_statement_imports"):
+        return  # Tables already created, skip
 
     op.create_table(
         "bank_statement_imports",
