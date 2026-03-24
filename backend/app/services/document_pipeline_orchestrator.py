@@ -1433,6 +1433,7 @@ Antworte NUR mit JSON:
                 parts.append("Letzte Transaktionen (90 Tage):\n" + "\n".join(txn_lines))
 
         except Exception as e:
+            self.db.rollback()
             logger.warning(f"Failed to build entity summaries: {e}")
 
         return "\n\n".join(parts) if parts else ""
@@ -1938,12 +1939,14 @@ Antworte NUR mit JSON:
                         s["duplicate_confidence"] = creation_result.duplicate_confidence
                 except Exception as e:
                     logger.warning(f"Auto-create transaction failed for doc {document.id}: {e}")
+                    self.db.rollback()
                     s["status"] = "pending"
 
             return suggestions
 
         except Exception as e:
             logger.warning(f"Transaction suggestion failed for doc {document.id}: {e}")
+            self.db.rollback()
             return []
 
     def _create_multi_receipt_transactions(

@@ -286,8 +286,12 @@ const INTERMEDIATE_PIPELINE_STATES = new Set([
 
 const getPipelineCurrentState = (
   ocrResult: unknown,
-  processedAt?: string | null
+  processedAt?: string | null,
+  ocrStatus?: string | null
 ): PipelineCurrentState | null => {
+  if (ocrStatus === 'failed') {
+    return 'phase_2_failed';
+  }
   const parsed = parseOcrData(ocrResult);
   const state = parsed?._pipeline?.current_state;
   // If document is fully processed, don't show intermediate state banners
@@ -1965,7 +1969,8 @@ const DocumentsPage = () => {
     const assetOutcome = getAssetOutcome(viewingDocument.ocr_result);
     const pipelineCurrentState = getPipelineCurrentState(
       viewingDocument.ocr_result,
-      viewingDocument.processed_at
+      viewingDocument.processed_at,
+      viewingDocument.ocr_status
     );
     const pipelineStatePresentation = getPipelineStatePresentation(t, pipelineCurrentState);
     const linkedTransactionSummary = linkedTransaction

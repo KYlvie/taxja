@@ -1,8 +1,88 @@
 """Document schemas for API validation"""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from app.models.document import DocumentType
+
+
+_PROCESSING_PIPELINE_STATES = {
+    "processing_phase_1",
+    "first_result_available",
+    "finalizing",
+}
+_STALE_PROCESSING_TIMEOUT = timedelta(minutes=5)
+
+
+def _parse_pipeline_timestamp(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _get_pipeline_last_activity(ocr_result: Any, uploaded_at: Optional[datetime]) -> Optional[datetime]:
+    if not isinstance(ocr_result, dict):
+        return uploaded_at
+
+    pipeline = ocr_result.get("_pipeline")
+    if not isinstance(pipeline, dict):
+        return uploaded_at
+
+    checkpoints = pipeline.get("phase_checkpoints")
+    if isinstance(checkpoints, list):
+        for checkpoint in reversed(checkpoints):
+            if not isinstance(checkpoint, dict):
+                continue
+            for key in ("completed_at", "started_at"):
+                parsed = _parse_pipeline_timestamp(checkpoint.get(key))
+                if parsed is not None:
+                    return parsed
+
+    for key in ("failed_at", "reprocess_requested_at"):
+        parsed = _parse_pipeline_timestamp(pipeline.get(key))
+        if parsed is not None:
+            return parsed
+
+    return uploaded_at
+
+
+def derive_document_ocr_status(obj: Any) -> str:
+    processed_at = getattr(obj, "processed_at", None)
+    if processed_at:
+        return "completed"
+
+    ocr_result = getattr(obj, "ocr_result", None)
+    pipeline = ocr_result.get("_pipeline") if isinstance(ocr_result, dict) else {}
+    current_state = pipeline.get("current_state") if isinstance(pipeline, dict) else None
+
+    if current_state == "phase_2_failed":
+        return "failed"
+
+    if current_state in _PROCESSING_PIPELINE_STATES:
+        last_activity = _get_pipeline_last_activity(
+            ocr_result,
+            getattr(obj, "uploaded_at", None),
+        )
+        if last_activity and datetime.utcnow() - last_activity > _STALE_PROCESSING_TIMEOUT:
+            return "failed"
+        return "processing"
+
+    if getattr(obj, "raw_text", None) or ocr_result:
+        return "completed" if processed_at else "processing"
+
+    return "processing"
 
 
 class DocumentBase(BaseModel):
@@ -36,6 +116,7 @@ class DocumentDetail(BaseModel):
     mime_type: str
     file_path: str
     ocr_result: Optional[Dict[str, Any]] = None
+    ocr_status: Optional[str] = None
     raw_text: Optional[str] = None
     confidence_score: Optional[float] = None
     needs_review: bool = False
@@ -50,6 +131,7 @@ class DocumentDetail(BaseModel):
     def from_orm(cls, obj):
         """Override to compute needs_review from confidence_score"""
         instance = super().from_orm(obj)
+        instance.ocr_status = derive_document_ocr_status(obj)
         if not hasattr(obj, 'needs_review') or obj.needs_review is None:
             instance.needs_review = (instance.confidence_score or 0) < 0.6
         return instance

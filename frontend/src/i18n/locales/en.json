@@ -1610,7 +1610,7 @@
       "importJahresabschluss": "Import Annual Financial Statement?",
       "importSvs": "Import SVS Social Insurance data?",
       "importGrundsteuer": "Import Property Tax data?",
-      "importBankStatement": "Import Bank Statement transactions?",
+      "importBankStatement": "Review bank statement",
       "confirmTaxData": "Confirm Import",
       "taxDataConfirmed": "Tax data imported successfully",
       "taxYear": "Tax Year",
@@ -1827,7 +1827,9 @@
       "loanMissingFieldsStandalone": "Some OCR fields are still missing ({{fields}}). That's okay for now because we won't create bookkeeping entries until a property is linked.",
       "loanRepaymentPromoted": "Loan linked to a property. We created the deductible interest schedule.",
       "loanRepaymentStandaloneHint": "No property is linked yet. Confirming keeps this loan contract on file without creating an expense or recurring schedule. Link it to a property later to activate the deductible interest flow.",
-      "reviewLoanFieldsFirst": "Review the extracted loan fields first. We can only create the recurring schedule after the missing OCR values are filled in."
+      "reviewLoanFieldsFirst": "Review the extracted loan fields first. We can only create the recurring schedule after the missing OCR values are filled in.",
+      "openBankWorkbench": "Open workbench",
+      "bankWorkbenchHint": "Open the bank statement workbench to review low-confidence items, match existing transactions, and confirm new transactions."
     },
     "itemChecker": {
       "title": "Receipt Items - Deductibility Check",
@@ -2030,7 +2032,52 @@
     "confirmReview": "Confirm review?",
     "exportZip": "Export {{count}} documents as ZIP",
     "exportSuccess": "{{count}} documents exported",
-    "exportError": "Export failed"
+    "exportError": "Export failed",
+    "bankWorkbench": {
+      "title": "Bank statement workbench",
+      "initializing": "Preparing the bank statement workbench...",
+      "loadingLines": "Loading statement lines...",
+      "loadFailed": "Failed to load bank statement workbench.",
+      "actionFailed": "The bank statement action could not be completed.",
+      "summaryTitle": "Import summary",
+      "importedAt": "Imported",
+      "totalCount": "Total lines",
+      "autoProcessed": "Auto processed",
+      "pendingReview": "Pending review",
+      "ignoredCount": "Ignored",
+      "confidence": "Confidence",
+      "linkedTransaction": "Transaction",
+      "noCounterparty": "Unknown counterparty",
+      "noPurpose": "No payment purpose available.",
+      "status": {
+        "autoCreated": "Auto-created",
+        "matchedExisting": "Matched existing",
+        "ignoredDuplicate": "Ignored duplicate",
+        "pendingReview": "Pending review"
+      },
+      "actions": {
+        "create": "Create transaction",
+        "match": "Match existing",
+        "ignore": "Ignore duplicate"
+      },
+      "emptyPending": "No bank statement lines need confirmation right now.",
+      "emptyResolved": "No automatically processed statement lines yet.",
+      "emptyIgnored": "No ignored duplicate lines yet.",
+      "groups": {
+        "pending": {
+          "title": "Pending review",
+          "description": "Low-confidence items stay here until you confirm how they should be handled."
+        },
+        "resolved": {
+          "title": "Automatically processed",
+          "description": "These lines were auto-created or matched to an existing transaction."
+        },
+        "ignored": {
+          "title": "Ignored duplicates",
+          "description": "These lines were ignored as duplicates and will not create transactions."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Basic Information",

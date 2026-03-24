@@ -97,6 +97,8 @@ const isTaxReviewDocumentType = (documentType?: string) =>
 const isProcessingPipelineState = (document: OCRReviewData['document'] | null) => {
   // If the document has been fully processed (has processed_at), it's not processing
   if (document?.processed_at) return false;
+  if (document?.ocr_status === 'failed' || document?.ocr_status === 'completed') return false;
+  if (document?.ocr_status === 'processing') return true;
   const currentState = document?.ocr_result?._pipeline?.current_state;
   return typeof currentState === 'string' && OCR_PROCESSING_STATES.has(currentState);
 };

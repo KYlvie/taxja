@@ -149,6 +149,43 @@ const requiredTaxImportKeys = [
   'documents.e1.confidence',
 ] as const;
 
+const requiredBankWorkbenchKeys = [
+  'documents.bankWorkbench.title',
+  'documents.bankWorkbench.initializing',
+  'documents.bankWorkbench.loadingLines',
+  'documents.bankWorkbench.loadFailed',
+  'documents.bankWorkbench.actionFailed',
+  'documents.bankWorkbench.summaryTitle',
+  'documents.bankWorkbench.importedAt',
+  'documents.bankWorkbench.totalCount',
+  'documents.bankWorkbench.autoProcessed',
+  'documents.bankWorkbench.pendingReview',
+  'documents.bankWorkbench.ignoredCount',
+  'documents.bankWorkbench.confidence',
+  'documents.bankWorkbench.linkedTransaction',
+  'documents.bankWorkbench.noCounterparty',
+  'documents.bankWorkbench.noPurpose',
+  'documents.bankWorkbench.status.autoCreated',
+  'documents.bankWorkbench.status.matchedExisting',
+  'documents.bankWorkbench.status.ignoredDuplicate',
+  'documents.bankWorkbench.status.pendingReview',
+  'documents.bankWorkbench.actions.create',
+  'documents.bankWorkbench.actions.match',
+  'documents.bankWorkbench.actions.ignore',
+  'documents.bankWorkbench.emptyPending',
+  'documents.bankWorkbench.emptyResolved',
+  'documents.bankWorkbench.emptyIgnored',
+  'documents.bankWorkbench.groups.pending.title',
+  'documents.bankWorkbench.groups.pending.description',
+  'documents.bankWorkbench.groups.resolved.title',
+  'documents.bankWorkbench.groups.resolved.description',
+  'documents.bankWorkbench.groups.ignored.title',
+  'documents.bankWorkbench.groups.ignored.description',
+  'documents.suggestion.importBankStatement',
+  'documents.suggestion.openBankWorkbench',
+  'documents.suggestion.bankWorkbenchHint',
+] as const;
+
 const getNestedValue = (source: unknown, path: string): string | undefined =>
   path.split('.').reduce<unknown>((current, segment) => {
     if (current && typeof current === 'object' && segment in (current as Record<string, unknown>)) {
@@ -198,6 +235,16 @@ describe('locale coverage for liabilities and document field labels', () => {
   it('includes translated tax-import strings for every supported locale', () => {
     for (const [language, locale] of Object.entries(locales)) {
       for (const key of requiredTaxImportKeys) {
+        const value = getNestedValue(locale, key);
+        expect(value, `${language}:${key}`).toBeTruthy();
+        expect(value, `${language}:${key}`).not.toContain('?');
+      }
+    }
+  });
+
+  it('includes translated bank statement workbench strings for every supported locale', () => {
+    for (const [language, locale] of Object.entries(locales)) {
+      for (const key of requiredBankWorkbenchKeys) {
         const value = getNestedValue(locale, key);
         expect(value, `${language}:${key}`).toBeTruthy();
         expect(value, `${language}:${key}`).not.toContain('?');

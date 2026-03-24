@@ -60,7 +60,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 178.104.73.139 >> ~/.ssh/known_hosts
 
-      - name: Deploy backend (git pull + rebuild)
+      - name: Deploy backend (git pull + rebuild + migrate)
         run: |
           ssh root@178.104.73.139 << 'EOF'
             set -e
@@ -70,6 +70,9 @@ jobs:
             docker compose -f docker-compose.server.yml build backend
             docker compose -f docker-compose.server.yml up -d backend
             sleep 8
+            # Run database migrations
+            docker compose -f docker-compose.server.yml exec -T backend alembic upgrade head
+            sleep 3
             curl -sf http://localhost:8000/api/v1/health | grep -q healthy && echo "Backend OK" || (echo "Backend health check failed" && exit 1)
           EOF
 

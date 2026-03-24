@@ -37,6 +37,40 @@ const shouldEnableEmployerDetection = (
       EMPLOYER_ELIGIBLE_USER_TYPES.has(user.user_type)
   );
 
+const parseDocumentOcrResult = (document: Partial<Document> | null | undefined) => {
+  if (!document?.ocr_result) return null;
+  if (typeof document.ocr_result === 'string') {
+    try {
+      return JSON.parse(document.ocr_result) as Record<string, any>;
+    } catch {
+      return null;
+    }
+  }
+  return document.ocr_result as Record<string, any>;
+};
+
+const getDocumentPollingState = (document: Partial<Document> | null | undefined) => {
+  const ocrData = parseDocumentOcrResult(document);
+  const pipelineState = ocrData?._pipeline?.current_state;
+  const ocrStatus = document?.ocr_status;
+  const isTerminal = Boolean(
+    document?.processed_at
+      || ocrStatus === 'completed'
+      || ocrStatus === 'failed'
+      || pipelineState === 'completed'
+      || pipelineState === 'phase_2_failed'
+  );
+  const hasSnapshot = Boolean(
+    ocrData
+      || (document?.confidence_score ?? 0) > 0
+      || ocrStatus
+      || pipelineState
+      || document?.processed_at
+  );
+
+  return { ocrData, isTerminal, hasSnapshot };
+};
+
 interface StagedFile {
   id: string;
   file: File;
@@ -143,6 +177,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
 
   const pollForProcessing = useCallback(
     async (documentId: number, uploadIndex: number, fallbackDocument: any) => {
+      let latestDocument = fallbackDocument;
+
       // Task 14: Push processing indicator to chat panel
       pushProcessingMessage({
         idempotencyKey: `${documentId}:none:processing_phase_1`,
@@ -166,26 +202,27 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
                 message: fallbackDocument.message,
               }
             : updatedDocument;
-          const ocrDone =
-            updatedDocument.ocr_result ||
-            updatedDocument.confidence_score > 0 ||
-            (updatedDocument as any).processed_at;
+          latestDocument = resolvedDocument;
+          const { ocrData, isTerminal, hasSnapshot } = getDocumentPollingState(updatedDocument);
 
-          if (ocrDone) {
+          if (hasSnapshot) {
             setUploads((previous) =>
               previous.map((upload, index) =>
                 index === uploadIndex
-                  ? { ...upload, status: 'completed', document: resolvedDocument }
+                  ? {
+                      ...upload,
+                      status: isTerminal ? 'completed' : 'processing',
+                      document: resolvedDocument,
+                    }
                   : upload
               )
             );
             addDocument(resolvedDocument);
+          }
 
+          if (isTerminal) {
             // Proactive AI notification
             const fileName = resolvedDocument.file_name || `#${documentId}`;
-            const ocrData = typeof resolvedDocument.ocr_result === 'string'
-              ? (() => { try { return JSON.parse(resolvedDocument.ocr_result as string); } catch { return null; } })()
-              : resolvedDocument.ocr_result;
             const suggestion = ocrData?.import_suggestion;
             let handledPrimaryNotification = Boolean(resolvedDocument.deduplicated);
             let employerMonthPrompted = false;
@@ -565,10 +602,20 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
 
       setUploads((previous) =>
         previous.map((upload, index) =>
-          index === uploadIndex ? { ...upload, status: 'completed', document: fallbackDocument } : upload
+          index === uploadIndex
+            ? {
+                ...upload,
+                status: 'error',
+                document: latestDocument,
+                error: t(
+                  'documents.reprocessTimeout',
+                  'Reprocessing is taking too long. Please try again later.'
+                ),
+              }
+            : upload
         )
       );
-      addDocument(fallbackDocument);
+      addDocument(latestDocument);
     },
     [addDocument, currentUser, pushAIMessage, pushSuggestionMessage, pushFollowUpMessage, pushProcessingMessage, removeProcessingMessage, t]
   );

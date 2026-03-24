@@ -1598,7 +1598,7 @@
       "importJahresabschluss": "Éves beszámoló importálása?",
       "importSvs": "SVS társadalombiztosítási adatok importálása?",
       "importGrundsteuer": "Ingatlanadó adatok importálása?",
-      "importBankStatement": "Bankszámlakivonat tranzakciók importálása?",
+      "importBankStatement": "Bankszamlakivonat ellenorzese",
       "confirmTaxData": "Importálás megerősítése",
       "taxDataConfirmed": "Adóadatok sikeresen importálva",
       "taxYear": "Adóév",
@@ -1815,7 +1815,9 @@
       "loanMissingFieldsStandalone": "Néhány OCR mező még hiányzik ({{fields}}). Ez egyelőre rendben van, mert nem hozunk létre könyvelési bejegyzéseket, amíg nincs ingatlan csatolva.",
       "loanRepaymentPromoted": "Hitel ingatlanhoz kapcsolva. Létrehoztuk a levonható kamatütemezést.",
       "loanRepaymentStandaloneHint": "Még nincs ingatlan csatolva. A megerősítés megtartja ezt a hitelszerződést anélkül, hogy kiadást vagy ismétlődő ütemezést hozna létre. Kapcsolja később egy ingatlanhoz a levonható kamatfolyam aktiválásához.",
-      "reviewLoanFieldsFirst": "Először ellenőrizze a kinyert hitelmezőket. Az ismétlődő ütemezést csak a hiányzó OCR értékek kitöltése után tudjuk létrehozni."
+      "reviewLoanFieldsFirst": "Először ellenőrizze a kinyert hitelmezőket. Az ismétlődő ütemezést csak a hiányzó OCR értékek kitöltése után tudjuk létrehozni.",
+      "openBankWorkbench": "Munkafelulet megnyitasa",
+      "bankWorkbenchHint": "Nyissa meg a bankszamlakivonat munkafeluletet az alacsony megbizhatosagu elemek ellenorzesehez, a meglevo tranzakciok parositasahoz es az uj tranzakciok megerositesehez."
     },
     "itemChecker": {
       "title": "Nyugtatételek - Levonhatósági ellenőrzés",
@@ -2025,7 +2027,52 @@
     "confirmReview": "Megerősíti?",
     "exportZip": "{{count}} dokumentum exportálása ZIP-be",
     "exportSuccess": "{{count}} dokumentum exportálva",
-    "exportError": "Exportálás sikertelen"
+    "exportError": "Exportálás sikertelen",
+    "bankWorkbench": {
+      "title": "Bankszamlakivonat munkafelulet",
+      "initializing": "A bankszamlakivonat munkafelulet elokeszitese folyamatban...",
+      "loadingLines": "A kivonat sorainak betoltese...",
+      "loadFailed": "Nem sikerult betolteni a bankszamlakivonat munkafeluletet.",
+      "actionFailed": "A bankszamlakivonat muveletet nem sikerult befejezni.",
+      "summaryTitle": "Import osszegzes",
+      "importedAt": "Importalva",
+      "totalCount": "Sorok osszesen",
+      "autoProcessed": "Automatikusan feldolgozva",
+      "pendingReview": "Megerositesre var",
+      "ignoredCount": "Figyelmen kivul hagyva",
+      "confidence": "Biztonsag",
+      "linkedTransaction": "Tranzakcio",
+      "noCounterparty": "Ismeretlen ellenoldal",
+      "noPurpose": "Nincs elerheto kozlemeny.",
+      "status": {
+        "autoCreated": "Automatikusan letrehozva",
+        "matchedExisting": "Meglevo tranzakciohoz parositva",
+        "ignoredDuplicate": "Duplikatumkent figyelmen kivul hagyva",
+        "pendingReview": "Megerositesre var"
+      },
+      "actions": {
+        "create": "Tranzakcio letrehozasa",
+        "match": "Meglevohoz parositas",
+        "ignore": "Duplikatum kihagyasa"
+      },
+      "emptyPending": "Jelenleg nincs megerositesre varo bankszamlakivonat-sor.",
+      "emptyResolved": "Meg nincsenek automatikusan feldolgozott kivonatsorok.",
+      "emptyIgnored": "Meg nincsenek figyelmen kivul hagyott duplikalt sorok.",
+      "groups": {
+        "pending": {
+          "title": "Megerositesre var",
+          "description": "Az alacsony megbizhatosagu elemek itt maradnak, amig meg nem erositi a megfelelo kezelest."
+        },
+        "resolved": {
+          "title": "Automatikusan feldolgozva",
+          "description": "Ezek a sorok automatikusan tranzakciokent jottek letre, vagy meglevo tranzakciohoz lettek parositva."
+        },
+        "ignored": {
+          "title": "Figyelmen kivul hagyott duplikatumok",
+          "description": "Ezeket a sorokat duplikatumkent figyelmen kivul hagytuk, es nem hoznak letre uj tranzakciot."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Alapinformációk",

@@ -1592,7 +1592,7 @@
       "importJahresabschluss": "Yillik Mali Tablo aktarilsin mi?",
       "importSvs": "SVS Sosyal Sigorta verileri aktarilsin mi?",
       "importGrundsteuer": "Emlak Vergisi verileri aktarilsin mi?",
-      "importBankStatement": "Banka Ekstresi islemleri aktarilsin mi?",
+      "importBankStatement": "Banka hesap ozetini incele",
       "confirmTaxData": "Aktarimi Onayla",
       "taxDataConfirmed": "Vergi verileri basariyla aktarildi",
       "taxYear": "Vergi Yili",
@@ -1809,7 +1809,9 @@
       "loanMissingFieldsStandalone": "Bazı OCR alanları hâlâ eksik ({{fields}}). Şimdilik sorun değil çünkü bir mülk bağlanana kadar muhasebe kayıtları oluşturmayacağız.",
       "loanRepaymentPromoted": "Kredi bir mülke bağlandı. İndirilebilir faiz planını oluşturduk.",
       "loanRepaymentStandaloneHint": "Henüz bir mülk bağlı değil. Onaylama bu kredi sözleşmesini gider veya tekrar eden plan oluşturmadan dosyada tutar. Daha sonra bir mülke bağlayarak indirilebilir faiz akışını etkinleştirin.",
-      "reviewLoanFieldsFirst": "Önce çıkarılan kredi alanlarını inceleyin. Tekrar eden planı yalnızca eksik OCR değerleri doldurulduktan sonra oluşturabiliriz."
+      "reviewLoanFieldsFirst": "Önce çıkarılan kredi alanlarını inceleyin. Tekrar eden planı yalnızca eksik OCR değerleri doldurulduktan sonra oluşturabiliriz.",
+      "openBankWorkbench": "Calisma alanini ac",
+      "bankWorkbenchHint": "Dusuk guvenli ogeleri incelemek, mevcut islemleri eslestirmek ve yeni islemleri onaylamak icin banka hesap ozeti calisma alanini acin."
     },
     "itemChecker": {
       "title": "Makbuz Kalemleri - Indirilebilirlik Kontrolu",
@@ -2019,7 +2021,52 @@
     "confirmReview": "Onayla?",
     "exportZip": "{{count}} belgeyi ZIP olarak dışa aktar",
     "exportSuccess": "{{count}} belge dışa aktarıldı",
-    "exportError": "Dışa aktarma başarısız"
+    "exportError": "Dışa aktarma başarısız",
+    "bankWorkbench": {
+      "title": "Banka hesap ozeti calisma alani",
+      "initializing": "Banka hesap ozeti calisma alani hazirlaniyor...",
+      "loadingLines": "Hesap ozeti satirlari yukleniyor...",
+      "loadFailed": "Banka hesap ozeti calisma alani yuklenemedi.",
+      "actionFailed": "Banka hesap ozeti islemi tamamlanamadi.",
+      "summaryTitle": "Ice aktarma ozeti",
+      "importedAt": "Ice aktarma tarihi",
+      "totalCount": "Toplam satir",
+      "autoProcessed": "Otomatik islenen",
+      "pendingReview": "Onay bekleyen",
+      "ignoredCount": "Yoksayilan",
+      "confidence": "Guven",
+      "linkedTransaction": "Islem",
+      "noCounterparty": "Bilinmeyen karsi taraf",
+      "noPurpose": "Odeme aciklamasi yok.",
+      "status": {
+        "autoCreated": "Otomatik olusturuldu",
+        "matchedExisting": "Mevcut islemle eslesti",
+        "ignoredDuplicate": "Cift kayit olarak yoksayildi",
+        "pendingReview": "Onay bekleyen"
+      },
+      "actions": {
+        "create": "Islem olustur",
+        "match": "Mevcut islemle eslestir",
+        "ignore": "Cift kaydi yoksay"
+      },
+      "emptyPending": "Su anda onay bekleyen banka hesap ozeti satiri yok.",
+      "emptyResolved": "Henuz otomatik islenmis hesap ozeti satiri yok.",
+      "emptyIgnored": "Henuz yoksayilmis cift kayit yok.",
+      "groups": {
+        "pending": {
+          "title": "Onay bekleyen",
+          "description": "Dusuk guvenli ogeler, nasil isleneceklerini onaylayana kadar burada kalir."
+        },
+        "resolved": {
+          "title": "Otomatik islenen",
+          "description": "Bu satirlar otomatik olarak islem olarak olusturuldu veya mevcut bir islemle eslestirildi."
+        },
+        "ignored": {
+          "title": "Yoksayilan cift kayitlar",
+          "description": "Bu satirlar cift kayit olarak yoksayildi ve yeni islem olusturmayacak."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Temel Bilgiler",

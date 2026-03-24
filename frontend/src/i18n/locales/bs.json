@@ -1598,7 +1598,7 @@
       "importJahresabschluss": "Uvezi godisnji financijski izvjestaj?",
       "importSvs": "Uvezi SVS podatke o socijalnom osiguranju?",
       "importGrundsteuer": "Uvezi podatke o porezu na imovinu?",
-      "importBankStatement": "Uvezi transakcije iz izvoda iz banke?",
+      "importBankStatement": "Pregledaj bankovni izvod",
       "confirmTaxData": "Potvrdi uvoz",
       "taxDataConfirmed": "Poreski podaci uspjesno uvezeni",
       "taxYear": "Poreska godina",
@@ -1815,7 +1815,9 @@
       "loanMissingFieldsStandalone": "Neki OCR polja još nedostaju ({{fields}}). To je za sada u redu jer nećemo kreirati knjigovodstvene stavke dok se ne poveže nekretnina.",
       "loanRepaymentPromoted": "Kredit povezan s nekretninom. Kreirali smo raspored porezno priznatih kamata.",
       "loanRepaymentStandaloneHint": "Nekretnina još nije povezana. Potvrđivanje čuva ovaj ugovor o kreditu bez kreiranja rashoda ili ponavljajućeg rasporeda. Povežite ga s nekretninom kasnije da aktivirate tok porezno priznatih kamata.",
-      "reviewLoanFieldsFirst": "Prvo pregledajte izdvojena polja kredita. Ponavljajući raspored možemo kreirati tek nakon što se popune nedostajuće OCR vrijednosti."
+      "reviewLoanFieldsFirst": "Prvo pregledajte izdvojena polja kredita. Ponavljajući raspored možemo kreirati tek nakon što se popune nedostajuće OCR vrijednosti.",
+      "openBankWorkbench": "Otvori radni prostor",
+      "bankWorkbenchHint": "Otvorite radni prostor bankovnog izvoda da pregledate stavke sa niskom pouzdanoscu, povezete postojece transakcije i potvrdite nove transakcije."
     },
     "itemChecker": {
       "title": "Stavke racuna - Provjera odbitnosti",
@@ -2025,7 +2027,52 @@
     "confirmReview": "Potvrditi?",
     "exportZip": "Izvezi {{count}} dokumenata kao ZIP",
     "exportSuccess": "{{count}} dokumenata izvezeno",
-    "exportError": "Izvoz nije uspio"
+    "exportError": "Izvoz nije uspio",
+    "bankWorkbench": {
+      "title": "Radni prostor bankovnog izvoda",
+      "initializing": "Priprema se radni prostor bankovnog izvoda...",
+      "loadingLines": "Ucitavaju se stavke izvoda...",
+      "loadFailed": "Nije bilo moguce ucitati radni prostor bankovnog izvoda.",
+      "actionFailed": "Radnja za bankovni izvod nije mogla biti dovrsena.",
+      "summaryTitle": "Pregled importa",
+      "importedAt": "Uvezeno",
+      "totalCount": "Ukupno stavki",
+      "autoProcessed": "Automatski obradeno",
+      "pendingReview": "Ceka potvrdu",
+      "ignoredCount": "Ignorisano",
+      "confidence": "Pouzdanost",
+      "linkedTransaction": "Transakcija",
+      "noCounterparty": "Nepoznata druga strana",
+      "noPurpose": "Nema dostupne svrhe placanja.",
+      "status": {
+        "autoCreated": "Automatski kreirano",
+        "matchedExisting": "Povezano s postojecom transakcijom",
+        "ignoredDuplicate": "Ignorisano kao duplikat",
+        "pendingReview": "Ceka potvrdu"
+      },
+      "actions": {
+        "create": "Kreiraj transakciju",
+        "match": "Povezi s postojecom",
+        "ignore": "Ignorisi duplikat"
+      },
+      "emptyPending": "Trenutno nema stavki bankovnog izvoda koje cekaju potvrdu.",
+      "emptyResolved": "Jos nema automatski obradenih stavki izvoda.",
+      "emptyIgnored": "Jos nema ignorisanih duplikata.",
+      "groups": {
+        "pending": {
+          "title": "Ceka potvrdu",
+          "description": "Stavke sa nizom pouzdanoscu ostaju ovdje dok ne potvrdite kako ih treba obraditi."
+        },
+        "resolved": {
+          "title": "Automatski obradeno",
+          "description": "Ove stavke su automatski kreirane kao transakcije ili povezane s postojecom transakcijom."
+        },
+        "ignored": {
+          "title": "Ignorisani duplikati",
+          "description": "Ove stavke su ignorisane kao duplikati i nece kreirati nove transakcije."
+        }
+      }
+    }
   },
   "profile": {
     "taxNumber": "Poreski broj",

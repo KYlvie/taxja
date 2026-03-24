@@ -1203,7 +1203,7 @@
       "importJahresabschluss": "导入年度财务报表数据？",
       "importSvs": "导入 SVS 社保数据？",
       "importGrundsteuer": "导入房产税数据？",
-      "importBankStatement": "导入银行对账单交易？",
+      "importBankStatement": "查看银行流水",
       "confirmTaxData": "确认导入",
       "taxDataConfirmed": "税务数据导入成功",
       "taxYear": "税务年度",
@@ -1420,7 +1420,9 @@
       "loanMissingFieldsStandalone": "部分OCR字段仍然缺失（{{fields}}）。目前没关系，因为在关联房产之前不会创建记账条目。",
       "loanRepaymentPromoted": "贷款已关联到房产。我们已创建可扣除利息计划。",
       "loanRepaymentStandaloneHint": "尚未关联房产。确认后将保留此贷款合同但不会创建支出或定期计划。稍后将其关联到房产以激活可扣除利息流程。",
-      "reviewLoanFieldsFirst": "请先检查提取的贷款字段。只有在缺失的OCR值填入后，我们才能创建定期计划。"
+      "reviewLoanFieldsFirst": "请先检查提取的贷款字段。只有在缺失的OCR值填入后，我们才能创建定期计划。",
+      "openBankWorkbench": "打开工作台",
+      "bankWorkbenchHint": "打开银行流水工作台，复核低置信度项目、匹配已有交易，并确认需要新增的交易。"
     },
     "multiReceipt": {
       "badge": "包含 {{count}} 份文档",
@@ -1627,7 +1629,52 @@
     "confirmReview": "确认审核？",
     "exportZip": "导出 {{count}} 个文档为 ZIP",
     "exportSuccess": "已导出 {{count}} 个文档",
-    "exportError": "导出失败"
+    "exportError": "导出失败",
+    "bankWorkbench": {
+      "title": "银行流水工作台",
+      "initializing": "正在准备银行流水工作台...",
+      "loadingLines": "正在加载流水明细...",
+      "loadFailed": "银行流水工作台加载失败。",
+      "actionFailed": "银行流水操作未能完成。",
+      "summaryTitle": "导入摘要",
+      "importedAt": "导入时间",
+      "totalCount": "总条数",
+      "autoProcessed": "自动处理",
+      "pendingReview": "待确认",
+      "ignoredCount": "已忽略",
+      "confidence": "置信度",
+      "linkedTransaction": "关联交易",
+      "noCounterparty": "未知对手方",
+      "noPurpose": "暂无付款说明。",
+      "status": {
+        "autoCreated": "已自动创建",
+        "matchedExisting": "已匹配现有交易",
+        "ignoredDuplicate": "已忽略重复",
+        "pendingReview": "待确认"
+      },
+      "actions": {
+        "create": "新增交易",
+        "match": "匹配已有交易",
+        "ignore": "忽略重复"
+      },
+      "emptyPending": "当前没有需要确认的银行流水。",
+      "emptyResolved": "暂时还没有自动处理的流水。",
+      "emptyIgnored": "暂时还没有被忽略的重复流水。",
+      "groups": {
+        "pending": {
+          "title": "待确认",
+          "description": "低置信度项目会先保留在这里，等待您确认处理方式。"
+        },
+        "resolved": {
+          "title": "已自动处理",
+          "description": "这些流水已经自动创建交易，或已匹配到现有交易。"
+        },
+        "ignored": {
+          "title": "已忽略重复项",
+          "description": "这些流水已作为重复项忽略，不会再生成交易。"
+        }
+      }
+    }
   },
   "properties": {
     "title": "资产",

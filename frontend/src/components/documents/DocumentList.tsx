@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import JSZip from 'jszip';
@@ -308,11 +308,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const [exporting, setExporting] = useState(false);
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
-  useEffect(() => {
-    loadDocuments();
-  }, [filters, page]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       setLoading(true);
       const result = await documentService.getDocuments(filters, page, pageSize);
@@ -322,7 +318,25 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, page, pageSize, setDocuments, setLoading]);
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  const hasProcessingDocuments = documents.some(
+    (doc) => doc.ocr_status === 'processing' || (!doc.processed_at && doc.ocr_status !== 'failed')
+  );
+
+  useEffect(() => {
+    if (!hasProcessingDocuments) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      void loadDocuments();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasProcessingDocuments, loadDocuments]);
 
   const handleFilterChange = (key: string, value: string | boolean | undefined) => {
     setFilters({ ...filters, [key]: value });

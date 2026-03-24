@@ -1592,7 +1592,7 @@
       "importJahresabschluss": "Zaimportować roczne sprawozdanie finansowe?",
       "importSvs": "Zaimportować dane ubezpieczenia społecznego SVS?",
       "importGrundsteuer": "Zaimportować dane podatku od nieruchomości?",
-      "importBankStatement": "Zaimportować transakcje z wyciągu bankowego?",
+      "importBankStatement": "Sprawdz wyciag bankowy",
       "confirmTaxData": "Potwierdź import",
       "taxDataConfirmed": "Dane podatkowe zaimportowane pomyślnie",
       "taxYear": "Rok podatkowy",
@@ -1809,7 +1809,9 @@
       "loanMissingFieldsStandalone": "Niektóre pola OCR nadal brakują ({{fields}}). Na razie to w porządku, ponieważ nie utworzymy wpisów księgowych, dopóki nie zostanie powiązana nieruchomość.",
       "loanRepaymentPromoted": "Kredyt powiązany z nieruchomością. Utworzyliśmy harmonogram odliczalnych odsetek.",
       "loanRepaymentStandaloneHint": "Nieruchomość nie jest jeszcze powiązana. Potwierdzenie zachowuje tę umowę kredytową bez tworzenia wydatku lub harmonogramu cyklicznego. Połącz ją z nieruchomością później, aby aktywować przepływ odliczalnych odsetek.",
-      "reviewLoanFieldsFirst": "Najpierw sprawdź wyodrębnione pola kredytu. Harmonogram cykliczny możemy utworzyć dopiero po uzupełnieniu brakujących wartości OCR."
+      "reviewLoanFieldsFirst": "Najpierw sprawdź wyodrębnione pola kredytu. Harmonogram cykliczny możemy utworzyć dopiero po uzupełnieniu brakujących wartości OCR.",
+      "openBankWorkbench": "Otworz panel",
+      "bankWorkbenchHint": "Otworz panel wyciagu bankowego, aby sprawdzic pozycje o niskiej pewnosci, dopasowac istniejace transakcje i potwierdzic nowe transakcje."
     },
     "itemChecker": {
       "title": "Pozycje paragonu  sprawdzenie odliczalności",
@@ -2019,7 +2021,52 @@
     "confirmReview": "Potwierdzić?",
     "exportZip": "Eksportuj {{count}} dokumentów jako ZIP",
     "exportSuccess": "Wyeksportowano {{count}} dokumentów",
-    "exportError": "Eksport nie powiódł się"
+    "exportError": "Eksport nie powiódł się",
+    "bankWorkbench": {
+      "title": "Panel wyciagu bankowego",
+      "initializing": "Przygotowywanie panelu wyciagu bankowego...",
+      "loadingLines": "Ladowanie pozycji wyciagu...",
+      "loadFailed": "Nie udalo sie zaladowac panelu wyciagu bankowego.",
+      "actionFailed": "Nie udalo sie wykonac operacji dla wyciagu bankowego.",
+      "summaryTitle": "Podsumowanie importu",
+      "importedAt": "Zaimportowano",
+      "totalCount": "Laczna liczba pozycji",
+      "autoProcessed": "Przetworzono automatycznie",
+      "pendingReview": "Do potwierdzenia",
+      "ignoredCount": "Zignorowano",
+      "confidence": "Pewnosc",
+      "linkedTransaction": "Transakcja",
+      "noCounterparty": "Nieznany kontrahent",
+      "noPurpose": "Brak opisu platnosci.",
+      "status": {
+        "autoCreated": "Utworzono automatycznie",
+        "matchedExisting": "Powiazano z istniejaca transakcja",
+        "ignoredDuplicate": "Zignorowano jako duplikat",
+        "pendingReview": "Do potwierdzenia"
+      },
+      "actions": {
+        "create": "Utworz transakcje",
+        "match": "Dopasuj do istniejacej",
+        "ignore": "Ignoruj duplikat"
+      },
+      "emptyPending": "Obecnie nie ma pozycji wyciagu wymagajacych potwierdzenia.",
+      "emptyResolved": "Nie ma jeszcze automatycznie przetworzonych pozycji wyciagu.",
+      "emptyIgnored": "Nie ma jeszcze zignorowanych duplikatow.",
+      "groups": {
+        "pending": {
+          "title": "Do potwierdzenia",
+          "description": "Pozycje o niskiej pewnosci pozostaja tutaj, dopoki nie potwierdzisz sposobu ich obslugi."
+        },
+        "resolved": {
+          "title": "Przetworzono automatycznie",
+          "description": "Te pozycje zostaly automatycznie utworzone jako transakcje lub dopasowane do istniejacej transakcji."
+        },
+        "ignored": {
+          "title": "Zignorowane duplikaty",
+          "description": "Te pozycje zostaly zignorowane jako duplikaty i nie utworza nowych transakcji."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Podstawowe informacje",

@@ -1592,7 +1592,7 @@
       "importJahresabschluss": "Importer le bilan annuel (Jahresabschluss) ?",
       "importSvs": "Importer les données d'assurance sociale SVS ?",
       "importGrundsteuer": "Importer les données de la taxe foncière ?",
-      "importBankStatement": "Importer les transactions du relevé bancaire ?",
+      "importBankStatement": "Verifier le releve bancaire",
       "confirmTaxData": "Confirmer l'importation",
       "taxDataConfirmed": "Données fiscales importées avec succès",
       "taxYear": "Année fiscale",
@@ -1809,7 +1809,9 @@
       "loanMissingFieldsStandalone": "Certains champs OCR sont encore manquants ({{fields}}). Ce n'est pas grave pour l'instant car nous ne créerons pas d'écritures comptables tant qu'un bien n'est pas lié.",
       "loanRepaymentPromoted": "Prêt lié à un bien. Nous avons créé le calendrier d'intérêts déductibles.",
       "loanRepaymentStandaloneHint": "Aucun bien n'est encore lié. La confirmation conserve ce contrat de prêt sans créer de dépense ni de calendrier récurrent. Liez-le à un bien plus tard pour activer le flux d'intérêts déductibles.",
-      "reviewLoanFieldsFirst": "Vérifiez d'abord les champs de prêt extraits. Nous ne pouvons créer le calendrier récurrent qu'après le remplissage des valeurs OCR manquantes."
+      "reviewLoanFieldsFirst": "Vérifiez d'abord les champs de prêt extraits. Nous ne pouvons créer le calendrier récurrent qu'après le remplissage des valeurs OCR manquantes.",
+      "openBankWorkbench": "Ouvrir l espace",
+      "bankWorkbenchHint": "Ouvrez l espace de traitement du releve bancaire pour verifier les elements a faible confiance, rapprocher les transactions existantes et confirmer les nouvelles transactions."
     },
     "itemChecker": {
       "title": "Articles du reçu - Vérification de déductibilité",
@@ -2019,7 +2021,52 @@
     "confirmReview": "Confirmer?",
     "exportZip": "Exporter {{count}} documents en ZIP",
     "exportSuccess": "{{count}} documents exportés",
-    "exportError": "Erreur d'exportation"
+    "exportError": "Erreur d'exportation",
+    "bankWorkbench": {
+      "title": "Espace de traitement du releve bancaire",
+      "initializing": "Preparation de l espace de traitement du releve bancaire...",
+      "loadingLines": "Chargement des lignes du releve...",
+      "loadFailed": "Impossible de charger l espace de traitement du releve bancaire.",
+      "actionFailed": "L action sur le releve bancaire n a pas pu etre effectuee.",
+      "summaryTitle": "Resume de l import",
+      "importedAt": "Importe le",
+      "totalCount": "Nombre total de lignes",
+      "autoProcessed": "Traite automatiquement",
+      "pendingReview": "A confirmer",
+      "ignoredCount": "Ignore",
+      "confidence": "Confiance",
+      "linkedTransaction": "Transaction",
+      "noCounterparty": "Contrepartie inconnue",
+      "noPurpose": "Aucun libelle de paiement disponible.",
+      "status": {
+        "autoCreated": "Cree automatiquement",
+        "matchedExisting": "Rapproche avec une transaction existante",
+        "ignoredDuplicate": "Doublon ignore",
+        "pendingReview": "A confirmer"
+      },
+      "actions": {
+        "create": "Creer la transaction",
+        "match": "Associer a l existant",
+        "ignore": "Ignorer le doublon"
+      },
+      "emptyPending": "Aucune ligne de releve bancaire ne necessite de confirmation pour le moment.",
+      "emptyResolved": "Aucune ligne traitee automatiquement pour le moment.",
+      "emptyIgnored": "Aucun doublon ignore pour le moment.",
+      "groups": {
+        "pending": {
+          "title": "A confirmer",
+          "description": "Les elements a faible confiance restent ici jusqu a ce que vous confirmiez le traitement approprie."
+        },
+        "resolved": {
+          "title": "Traitement automatique",
+          "description": "Ces lignes ont ete creees automatiquement ou rapprochees avec une transaction existante."
+        },
+        "ignored": {
+          "title": "Doublons ignores",
+          "description": "Ces lignes ont ete ignorees comme doublons et ne creeront pas de transactions."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Informations de base",

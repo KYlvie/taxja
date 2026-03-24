@@ -1604,7 +1604,7 @@
       "importJahresabschluss": "Jahresabschluss Daten importieren?",
       "importSvs": "SVS-Sozialversicherung Daten importieren?",
       "importGrundsteuer": "Grundsteuerbescheid Daten importieren?",
-      "importBankStatement": "Kontoauszug-Transaktionen importieren?",
+      "importBankStatement": "Kontoauszug pruefen",
       "confirmTaxData": "Import bestätigen",
       "taxDataConfirmed": "Steuerdaten erfolgreich importiert",
       "taxYear": "Steuerjahr",
@@ -1821,7 +1821,9 @@
       "loanMissingFieldsStandalone": "Einige OCR-Felder fehlen noch ({{fields}}). Das ist vorerst in Ordnung, da wir keine Buchungseinträge erstellen, bis eine Immobilie verknüpft ist.",
       "loanRepaymentPromoted": "Darlehen mit einer Immobilie verknüpft. Wir haben den Zinsabzugsplan erstellt.",
       "loanRepaymentStandaloneHint": "Es ist noch keine Immobilie verknüpft. Die Bestätigung speichert diesen Darlehensvertrag, ohne eine Ausgabe oder einen wiederkehrenden Plan zu erstellen. Verknüpfen Sie ihn später mit einer Immobilie, um den Zinsabzug zu aktivieren.",
-      "reviewLoanFieldsFirst": "Überprüfen Sie zuerst die extrahierten Darlehensfelder. Wir können den wiederkehrenden Plan erst erstellen, wenn die fehlenden OCR-Werte ausgefüllt sind."
+      "reviewLoanFieldsFirst": "Überprüfen Sie zuerst die extrahierten Darlehensfelder. Wir können den wiederkehrenden Plan erst erstellen, wenn die fehlenden OCR-Werte ausgefüllt sind.",
+      "openBankWorkbench": "Arbeitsbereich oeffnen",
+      "bankWorkbenchHint": "Oeffnen Sie den Kontoauszugs-Arbeitsbereich, um Eintraege mit niedriger Konfidenz zu pruefen, bestehende Transaktionen zuzuordnen und neue Transaktionen zu bestaetigen."
     },
     "itemChecker": {
       "title": "Belegpositionen - Abzugsfähigkeitsprüfung",
@@ -2024,7 +2026,52 @@
     "confirmReview": "Bestätigen?",
     "exportZip": "{{count}} Dokumente als ZIP exportieren",
     "exportSuccess": "{{count}} Dokumente exportiert",
-    "exportError": "Export fehlgeschlagen"
+    "exportError": "Export fehlgeschlagen",
+    "bankWorkbench": {
+      "title": "Kontoauszugs-Arbeitsbereich",
+      "initializing": "Kontoauszugs-Arbeitsbereich wird vorbereitet...",
+      "loadingLines": "Buchungszeilen werden geladen...",
+      "loadFailed": "Der Kontoauszugs-Arbeitsbereich konnte nicht geladen werden.",
+      "actionFailed": "Die Aktion fuer den Kontoauszug konnte nicht abgeschlossen werden.",
+      "summaryTitle": "Importuebersicht",
+      "importedAt": "Importiert am",
+      "totalCount": "Gesamtzeilen",
+      "autoProcessed": "Automatisch verarbeitet",
+      "pendingReview": "Zur Bestaetigung",
+      "ignoredCount": "Ignoriert",
+      "confidence": "Konfidenz",
+      "linkedTransaction": "Transaktion",
+      "noCounterparty": "Unbekannte Gegenpartei",
+      "noPurpose": "Kein Verwendungszweck verfuegbar.",
+      "status": {
+        "autoCreated": "Automatisch erstellt",
+        "matchedExisting": "Mit bestehender Transaktion abgeglichen",
+        "ignoredDuplicate": "Als Duplikat ignoriert",
+        "pendingReview": "Zur Bestaetigung"
+      },
+      "actions": {
+        "create": "Transaktion erstellen",
+        "match": "Bestehende zuordnen",
+        "ignore": "Duplikat ignorieren"
+      },
+      "emptyPending": "Aktuell muessen keine Kontozeilen bestaetigt werden.",
+      "emptyResolved": "Noch keine automatisch verarbeiteten Zeilen.",
+      "emptyIgnored": "Noch keine ignorierten Duplikate.",
+      "groups": {
+        "pending": {
+          "title": "Zur Bestaetigung",
+          "description": "Positionen mit niedriger Konfidenz bleiben hier, bis Sie die passende Verarbeitung bestaetigen."
+        },
+        "resolved": {
+          "title": "Automatisch verarbeitet",
+          "description": "Diese Zeilen wurden automatisch als Transaktion angelegt oder mit einer bestehenden Transaktion abgeglichen."
+        },
+        "ignored": {
+          "title": "Ignorierte Duplikate",
+          "description": "Diese Zeilen wurden als Duplikate ignoriert und erzeugen keine neuen Transaktionen."
+        }
+      }
+    }
   },
   "profile": {
     "basicInfo": "Grundinformationen",
