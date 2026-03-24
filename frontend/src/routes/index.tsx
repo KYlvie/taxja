@@ -98,6 +98,10 @@ export const router = createBrowserRouter([
     element: <PricingPage />,
   },
   {
+    path: '/checkout/success',
+    element: <CheckoutSuccess />,
+  },
+  {
     path: '/2fa-setup',
     element: (
       <ProtectedRoute>
@@ -179,10 +183,6 @@ export const router = createBrowserRouter([
       {
         path: 'profile',
         element: <ProfilePage />,
-      },
-      {
-        path: 'checkout/success',
-        element: <CheckoutSuccess />,
       },
       {
         path: 'admin/tax-configs',

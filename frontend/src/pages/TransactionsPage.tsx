@@ -15,6 +15,8 @@ import { Transaction, TransactionFormData } from '../types/transaction';
 import { useRefreshStore } from '../stores/refreshStore';
 import { aiToast } from '../stores/aiToastStore';
 import { useAIConfirmation } from '../hooks/useAIConfirmation';
+import { getApiErrorMessage, getLineItemReconciliationError } from '../utils/apiError';
+import { formatCurrency } from '../utils/locale';
 import './TransactionsPage.css';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'detail';
@@ -30,7 +32,7 @@ const chunkItems = <T,>(items: T[], size: number): T[][] => {
 };
 
 const TransactionsPage = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const transactionIdParam = searchParams.get('transactionId');
@@ -61,6 +63,20 @@ const TransactionsPage = () => {
   const [sortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
+
+  const formatMutationErrorMessage = (err: any, fallback: string) => {
+    const reconciliation = getLineItemReconciliationError(err);
+    if (reconciliation?.expected != null && reconciliation.reconstructed != null) {
+      return t('receiptReview.syncAmountMismatch', {
+        expected: formatCurrency(reconciliation.expected, i18n.language),
+        reconstructed: formatCurrency(reconciliation.reconstructed, i18n.language),
+        defaultValue:
+          'The invoice total {{expected}} does not match the reconstructed line-item total {{reconstructed}}. Check the line-item amounts or VAT on this invoice, then save again.',
+      });
+    }
+
+    return getApiErrorMessage(err, fallback);
+  };
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [needsReviewCount, setNeedsReviewCount] = useState(0);
   const [bulkReviewing, setBulkReviewing] = useState(false);
@@ -311,7 +327,7 @@ const TransactionsPage = () => {
       setViewMode('list');
       aiToast(t('transactions.createSuccess', 'Transaction created'), 'success');
     } catch (err: any) {
-      const msg = err.response?.data?.detail || t('transactions.createError');
+      const msg = formatMutationErrorMessage(err, t('transactions.createError'));
       setError(msg);
       aiToast(msg, 'error');
       throw err;
@@ -329,7 +345,7 @@ const TransactionsPage = () => {
       setTransactionQueryParam(null);
       aiToast(t('transactions.updateSuccess', 'Transaction updated'), 'success');
     } catch (err: any) {
-      const msg = err.response?.data?.detail || t('transactions.updateError');
+      const msg = formatMutationErrorMessage(err, t('transactions.updateError'));
       setError(msg);
       aiToast(msg, 'error');
       throw err;

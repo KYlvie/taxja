@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from app.api.v1.endpoints import subscriptions as subscriptions_endpoint
+from app.core.config import settings
 from app.models.plan import BillingCycle, Plan, PlanType
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.services.stripe_payment_service import StripePaymentService
@@ -113,6 +114,32 @@ def test_upgrade_subscription_rejects_local_change_for_stripe_backed_subscriptio
 
     assert response.status_code == 400
     assert "Stripe" in response.json()["detail"]
+
+
+def test_customer_portal_defaults_to_configured_frontend_pricing_url(
+    authenticated_client, db, test_user, monkeypatch
+):
+    plus_plan = _create_plan(db, PlanType.PLUS, "4.90", "49.00")
+    _create_stripe_backed_subscription(db, test_user["id"], plus_plan.id)
+
+    monkeypatch.setattr(subscriptions_endpoint, "_is_stripe_configured", lambda: True)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://taxja.at")
+
+    def fake_create_customer_portal_session(self, user_id: int, return_url: str):
+        assert user_id == test_user["id"]
+        assert return_url == "https://taxja.at/pricing"
+        return {"url": "https://billing.stripe.com/session/test"}
+
+    monkeypatch.setattr(
+        StripePaymentService,
+        "create_customer_portal_session",
+        fake_create_customer_portal_session,
+    )
+
+    response = authenticated_client.post("/api/v1/subscriptions/customer-portal")
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://billing.stripe.com/session/test"
 
 
 def test_subscription_updated_webhook_syncs_plan_and_billing_cycle(db, test_user, monkeypatch):

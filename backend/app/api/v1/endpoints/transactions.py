@@ -259,6 +259,14 @@ def _unique_rule_contexts(contexts):
     return ordered
 
 
+def _raise_line_item_payload_error(exc: ValueError) -> None:
+    """Convert reconciliation/value issues into a user-correctable 400 response."""
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=str(exc),
+    ) from exc
+
+
 def _expense_category_value(transaction: Transaction) -> Optional[str]:
     category = getattr(transaction, "expense_category", None)
     normalized = coerce_expense_category(getattr(category, "value", category))
@@ -871,21 +879,24 @@ async def create_transaction(
 
     explicit_rule_context = None
     if provided_line_items is not None:
-        normalized_line_items = normalize_line_item_payloads(
-            transaction_type=db_transaction.type,
-            transaction_amount=db_transaction.amount,
-            description=db_transaction.description,
-            income_category=db_transaction.income_category,
-            expense_category=db_transaction.expense_category,
-            is_deductible=bool(transaction_data.is_deductible),
-            deduction_reason=transaction_data.deduction_reason,
-            vat_rate=db_transaction.vat_rate,
-            vat_amount=db_transaction.vat_amount,
-            line_items=provided_line_items,
-        )
-        _sync_parent_line_item_flags(db_transaction, normalized_line_items)
-        _replace_transaction_line_items(db, db_transaction, normalized_line_items)
-        explicit_rule_context = get_transaction_rule_context(db_transaction, current_user)
+        try:
+            normalized_line_items = normalize_line_item_payloads(
+                transaction_type=db_transaction.type,
+                transaction_amount=db_transaction.amount,
+                description=db_transaction.description,
+                income_category=db_transaction.income_category,
+                expense_category=db_transaction.expense_category,
+                is_deductible=bool(transaction_data.is_deductible),
+                deduction_reason=transaction_data.deduction_reason,
+                vat_rate=db_transaction.vat_rate,
+                vat_amount=db_transaction.vat_amount,
+                line_items=provided_line_items,
+            )
+            _sync_parent_line_item_flags(db_transaction, normalized_line_items)
+            _replace_transaction_line_items(db, db_transaction, normalized_line_items)
+            explicit_rule_context = get_transaction_rule_context(db_transaction, current_user)
+        except ValueError as exc:
+            _raise_line_item_payload_error(exc)
 
     # Sync line items from linked document OCR data (if document has multi-item receipt)
     if transaction_data.document_id and provided_line_items is None:
@@ -1813,54 +1824,57 @@ async def update_transaction(
             if transaction.type == TransactionType.EXPENSE
             else None
         )
-        normalized_line_items = normalize_line_item_payloads(
-            transaction_type=transaction.type,
-            transaction_amount=transaction.amount,
-            description=transaction.description,
-            income_category=transaction.income_category,
-            expense_category=transaction.expense_category,
-            is_deductible=bool(transaction.is_deductible),
-            deduction_reason=transaction.deduction_reason,
-            vat_rate=transaction.vat_rate,
-            vat_amount=transaction.vat_amount,
-            line_items=line_items_data,
-        )
-        _cascade_parent_category_to_line_items(
-            transaction.type,
-            normalized_line_items,
-            previous_parent_category,
-            current_parent_category,
-        )
-        derived_parent_category = _derive_parent_category_from_line_items(
-            transaction.type,
-            normalized_line_items,
-            current_parent_category,
-        )
-        if transaction.type == TransactionType.EXPENSE:
-            coerced_expense_category = coerce_expense_category(
-                derived_parent_category,
-                default=transaction.expense_category,
+        try:
+            normalized_line_items = normalize_line_item_payloads(
+                transaction_type=transaction.type,
+                transaction_amount=transaction.amount,
+                description=transaction.description,
+                income_category=transaction.income_category,
+                expense_category=transaction.expense_category,
+                is_deductible=bool(transaction.is_deductible),
+                deduction_reason=transaction.deduction_reason,
+                vat_rate=transaction.vat_rate,
+                vat_amount=transaction.vat_amount,
+                line_items=line_items_data,
             )
-            if coerced_expense_category is not None:
-                transaction.expense_category = coerced_expense_category
-            transaction.income_category = None
-        elif transaction.type == TransactionType.INCOME:
-            coerced_income_category = coerce_income_category(
-                derived_parent_category,
-                default=transaction.income_category,
-            )
-            if coerced_income_category is not None:
-                transaction.income_category = coerced_income_category
-            transaction.expense_category = None
-        _sync_parent_line_item_flags(transaction, normalized_line_items)
-        _replace_transaction_line_items(db, transaction, normalized_line_items)
-        if not suppress_rule_learning:
-            _learn_line_item_deductibility_overrides(
-                db,
-                transaction,
-                current_user.id,
+            _cascade_parent_category_to_line_items(
+                transaction.type,
                 normalized_line_items,
+                previous_parent_category,
+                current_parent_category,
             )
+            derived_parent_category = _derive_parent_category_from_line_items(
+                transaction.type,
+                normalized_line_items,
+                current_parent_category,
+            )
+            if transaction.type == TransactionType.EXPENSE:
+                coerced_expense_category = coerce_expense_category(
+                    derived_parent_category,
+                    default=transaction.expense_category,
+                )
+                if coerced_expense_category is not None:
+                    transaction.expense_category = coerced_expense_category
+                transaction.income_category = None
+            elif transaction.type == TransactionType.INCOME:
+                coerced_income_category = coerce_income_category(
+                    derived_parent_category,
+                    default=transaction.income_category,
+                )
+                if coerced_income_category is not None:
+                    transaction.income_category = coerced_income_category
+                transaction.expense_category = None
+            _sync_parent_line_item_flags(transaction, normalized_line_items)
+            _replace_transaction_line_items(db, transaction, normalized_line_items)
+            if not suppress_rule_learning:
+                _learn_line_item_deductibility_overrides(
+                    db,
+                    transaction,
+                    current_user.id,
+                    normalized_line_items,
+                )
+        except ValueError as exc:
+            _raise_line_item_payload_error(exc)
     elif _transaction_can_refresh_auto_rules(transaction):
         auto_line_items, pending_rule_context = build_auto_materialized_line_items(
             transaction,

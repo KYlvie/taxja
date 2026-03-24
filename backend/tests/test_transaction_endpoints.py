@@ -463,6 +463,53 @@ def test_update_transaction(client: TestClient, auth_headers: dict, test_user: U
     assert data["needs_review"] is False
 
 
+def test_update_transaction_returns_400_for_line_item_reconciliation_mismatch(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """Line-item totals that do not match the parent amount should be a 400, not a 500."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("225.60"),
+        transaction_date=date(2026, 1, 15),
+        description="BRUNN",
+        expense_category=ExpenseCategory.PROFESSIONAL_SERVICES,
+        is_deductible=True,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={
+            "line_items": [
+                {
+                    "description": "Original item",
+                    "amount": 225.60,
+                    "quantity": 1,
+                    "category": "professional_services",
+                    "is_deductible": True,
+                },
+                {
+                    "description": "Added item",
+                    "amount": 111.00,
+                    "quantity": 1,
+                    "category": "professional_services",
+                    "is_deductible": False,
+                },
+            ],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "Line items do not reconcile with the parent amount" in response.json()["detail"]
+
+
 def test_update_transaction_category_change_with_line_items_locks_and_cascades(
     client: TestClient,
     auth_headers: dict,

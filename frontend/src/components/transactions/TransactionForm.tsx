@@ -16,6 +16,7 @@ import {
 import { usePropertyStore } from '../../stores/propertyStore';
 import { suggestCategory } from '../../utils/categoryMatcher';
 import { formatTransactionCategoryLabel } from '../../utils/formatTransactionCategoryLabel';
+import { formatCurrency } from '../../utils/locale';
 import './TransactionForm.css';
 
 const transactionSchema = z.object({
@@ -56,7 +57,7 @@ const TransactionForm = ({
   onSubmit,
   onCancel,
 }: TransactionFormProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { properties, fetchProperties } = usePropertyStore();
   
   const {
@@ -100,6 +101,7 @@ const TransactionForm = ({
   const category = watch('category');
   const isRecurring = watch('is_recurring');
   const isDeductible = watch('is_deductible');
+  const amountValue = watch('amount');
   const requiresCategory = transactionTypeRequiresCategory(transactionType);
   const isExpenseType = isExpenseTransactionType(transactionType);
 
@@ -107,6 +109,7 @@ const TransactionForm = ({
   const [isOverriding, setIsOverriding] = useState(false);
   const aiDecision = transaction?.is_deductible;
   const hasAiDecision = transaction?.is_deductible !== undefined;
+  const [lineItemSaveError, setLineItemSaveError] = useState<string | null>(null);
 
   // Line items state
   const [lineItems, setLineItems] = useState<LineItem[]>(
@@ -115,6 +118,37 @@ const TransactionForm = ({
       : []
   );
   const hasLineItems = lineItems.length > 0;
+  const parsedTransactionAmount = Number.parseFloat(String(amountValue || '0'));
+  const normalizedTransactionAmount = Number.isFinite(parsedTransactionAmount)
+    ? parsedTransactionAmount
+    : 0;
+  const validLineItems = lineItems.filter(
+    (lineItem) => lineItem.description.trim() !== '' && Number(lineItem.amount) > 0
+  );
+  const lineItemsTotal = Number(
+    validLineItems
+      .reduce(
+        (sum, lineItem) => sum + (Number(lineItem.amount) || 0) * (Number(lineItem.quantity ?? 1) || 1),
+        0
+      )
+      .toFixed(2)
+  );
+  const lineItemsDelta = Number((normalizedTransactionAmount - lineItemsTotal).toFixed(2));
+  const hasLineItemMismatch = (
+    isExpenseType
+    && hasLineItems
+    && validLineItems.length > 0
+    && Math.abs(lineItemsDelta) > 0.01
+  );
+  const lineItemsParentAmountLabel = formatCurrency(normalizedTransactionAmount, i18n.language);
+  const lineItemsTotalLabel = formatCurrency(lineItemsTotal, i18n.language);
+  const lineItemsDeltaLabel = formatCurrency(Math.abs(lineItemsDelta), i18n.language);
+
+  useEffect(() => {
+    if (lineItemSaveError) {
+      setLineItemSaveError(null);
+    }
+  }, [amountValue, lineItems, lineItemSaveError]);
 
   // Fetch properties on mount
   useEffect(() => {
@@ -248,6 +282,27 @@ const TransactionForm = ({
           ...li,
           sort_order: idx,
         }));
+      const reconciledTotal = Number(
+        submitData.line_items
+          .reduce(
+            (sum: number, lineItem: any) =>
+              sum + (Number(lineItem.amount) || 0) * (Number(lineItem.quantity ?? 1) || 1),
+            0
+          )
+          .toFixed(2)
+      );
+      const expectedTotal = Number(Number(data.amount || 0).toFixed(2));
+      if (submitData.line_items.length > 0 && Math.abs(expectedTotal - reconciledTotal) > 0.01) {
+        setLineItemSaveError(
+          t('receiptReview.syncAmountMismatch', {
+            expected: formatCurrency(expectedTotal, i18n.language),
+            reconstructed: formatCurrency(reconciledTotal, i18n.language),
+            defaultValue:
+              'The invoice total {{expected}} does not match the reconstructed line-item total {{reconstructed}}. Check the line-item amounts or VAT on this invoice, then save again.',
+          })
+        );
+        return;
+      }
       // Derive transaction-level is_deductible from line items
       const validItems = submitData.line_items;
       const anyDeductible = validItems.some((li: any) => li.is_deductible);
@@ -532,6 +587,32 @@ const TransactionForm = ({
 
           {hasLineItems && (
             <div className="line-items-edit-list">
+              <div
+                className={`line-items-balance-summary${hasLineItemMismatch ? ' line-items-balance-summary-error' : ''}`}
+              >
+                <span>
+                  {t('transactions.amount')}:
+                  <strong>{lineItemsParentAmountLabel}</strong>
+                </span>
+                <span>
+                  {t('transactions.lineItems.title')} {t('common.total')}:
+                  <strong>{lineItemsTotalLabel}</strong>
+                </span>
+                <span>
+                  {t('dashboard.remaining')}:
+                  <strong>{lineItemsDeltaLabel}</strong>
+                </span>
+              </div>
+              {hasLineItemMismatch ? (
+                <span className="error line-items-balance-error">
+                  {lineItemSaveError || t('receiptReview.syncAmountMismatch', {
+                    expected: lineItemsParentAmountLabel,
+                    reconstructed: lineItemsTotalLabel,
+                    defaultValue:
+                      'The invoice total {{expected}} does not match the reconstructed line-item total {{reconstructed}}. Check the line-item amounts or VAT on this invoice, then save again.',
+                  })}
+                </span>
+              ) : null}
               {lineItems.map((item, idx) => (
                 <div key={idx} className="line-item-edit-row">
                   <div className="line-item-edit-main">
@@ -606,7 +687,7 @@ const TransactionForm = ({
         >
           {t('common.cancel')}
         </button>
-        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+        <button type="submit" className="btn btn-primary" disabled={isSubmitting || hasLineItemMismatch}>
           {isSubmitting ? t('common.saving') : t('common.save')}
         </button>
       </div>

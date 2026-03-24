@@ -255,7 +255,7 @@ def create_checkout_session(
 
 @router.post("/customer-portal")
 def create_customer_portal_session(
-    return_url: str = "http://localhost:5173/pricing",
+    return_url: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -270,12 +270,14 @@ def create_customer_portal_session(
         )
 
     from app.services.stripe_payment_service import StripePaymentService
+    from app.core.config import settings
 
     stripe_service = StripePaymentService(db)
+    effective_return_url = return_url or f"{settings.FRONTEND_URL.rstrip('/')}/pricing"
     try:
         result = stripe_service.create_customer_portal_session(
             user_id=current_user.id,
-            return_url=return_url,
+            return_url=effective_return_url,
         )
         return result
     except ValueError as e:
