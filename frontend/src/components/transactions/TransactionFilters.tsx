@@ -119,13 +119,14 @@ const TransactionFilters = ({
         </div>
 
         <div className="filter-group">
-          <label>{t('transactions.filters.search')}</label>
-          <input
-            type="text"
-            placeholder={t('transactions.filters.searchPlaceholder')}
-            value={localFilters.search || ''}
-            onChange={(e) => handleChange('search', e.target.value)}
-          />
+          <label>{t('transactions.needsReview')}</label>
+          <Select
+            value={localFilters.needs_review === undefined ? '' : localFilters.needs_review.toString()}
+            onChange={v => handleChange('needs_review', v === '' ? undefined : v === 'true')}
+            placeholder={t('transactions.filters.all')} size="sm"
+            options={[
+              { value: 'true', label: t('transactions.filters.needsReviewOnly') },
+            ]} />
         </div>
 
         <div className="filter-group">
@@ -153,14 +154,13 @@ const TransactionFilters = ({
         </div>
 
         <div className="filter-group">
-          <label>{t('transactions.needsReview')}</label>
-          <Select
-            value={localFilters.needs_review === undefined ? '' : localFilters.needs_review.toString()}
-            onChange={v => handleChange('needs_review', v === '' ? undefined : v === 'true')}
-            placeholder={t('transactions.filters.all')} size="sm"
-            options={[
-              { value: 'true', label: t('transactions.filters.needsReviewOnly') },
-            ]} />
+          <label>{t('transactions.filters.search')}</label>
+          <input
+            type="text"
+            placeholder={t('transactions.filters.searchPlaceholder')}
+            value={localFilters.search || ''}
+            onChange={(e) => handleChange('search', e.target.value)}
+          />
         </div>
       </div>
 
