@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../../hooks/useConfirm';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { FileText } from 'lucide-react';
 import { translateDeductionReason } from '../../utils/translateDeductionReason';
 import { getLocaleForLanguage } from '../../utils/locale';
 import { formatTransactionCategoryLabel } from '../../utils/formatTransactionCategoryLabel';
@@ -333,12 +334,12 @@ const TransactionDetail = ({
             <div className="detail-section">
               <h3>{t('transactions.linkedDocument')}</h3>
               <div className="document-info">
-                <span className="document-icon">📎</span>
                 <button
                   className="document-link"
                   onClick={() => navigate(`/documents/${transaction.document_id}`)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', textDecoration: 'underline', padding: 0, font: 'inherit' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', padding: 0, font: 'inherit' }}
                 >
+                  <FileText size={16} />
                   {t('transactions.viewDocument')}
                 </button>
               </div>

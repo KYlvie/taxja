@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import { FileText } from 'lucide-react';
 import Select from '../common/Select';
 import {
   isExpenseTransactionType,
@@ -670,7 +671,7 @@ const TransactionForm = ({
       {transaction?.document_id && (
         <div className="form-info">
           <div className="document-link">
-            <span>📎 {t('transactions.linkedDocument')}</span>
+            <FileText size={16} />
             <a href={`/documents/${transaction.document_id}`}>
               {t('transactions.viewDocument')}
             </a>

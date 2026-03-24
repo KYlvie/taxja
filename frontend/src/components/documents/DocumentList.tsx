@@ -164,19 +164,6 @@ const ReviewIcon = () => (
   </svg>
 );
 
-const ConfirmReviewIcon = () => (
-  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M7 12.5L10.2 15.7L17.5 8.5"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-  </svg>
-);
-
 const documentGroups: Array<{
   id: Exclude<DocumentGroupId, 'all'>;
   types: DocumentType[];
@@ -336,7 +323,6 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [confirmStage, setConfirmStage] = useState<'idle' | 'confirming'>('idle');
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
@@ -452,6 +438,23 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
     }
   };
 
+  const handleReviewClick = async (document: Document, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (confirmingId === document.id) return;
+
+    setConfirmingId(document.id);
+    try {
+      await documentService.confirmOCR(document.id);
+      aiToast(t('documents.review.confirmedSuccess', 'Document confirmed'), 'success');
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to confirm document review:', error);
+      aiToast(t('documents.reviewActionFailed', 'Review failed'), 'error');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
   const isPendingReview = (doc: Document): boolean => {
     const ocr = (doc.ocr_result || {}) as Record<string, any>;
     if (doc.ocr_status === 'failed' || doc.ocr_status === 'processing' || !doc.processed_at) {
@@ -464,34 +467,6 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const needsConfirmation = (doc: Document): boolean => {
     const ocr = (doc.ocr_result || {}) as Record<string, any>;
     return Boolean(isPendingReview(doc) && doc.ocr_result && !ocr.confirmed);
-  };
-
-  const handleReviewClick = async (doc: Document, event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (confirmStage === 'idle' || confirmingId !== doc.id) {
-      // First click: show "confirm?" state
-      setConfirmingId(doc.id);
-      setConfirmStage('confirming');
-      // Auto-reset after 3 seconds if user doesn't click again
-      setTimeout(() => {
-        setConfirmStage((prev) => {
-          if (prev === 'confirming') { setConfirmingId(null); return 'idle'; }
-          return prev;
-        });
-      }, 3000);
-    } else {
-      // Second click: actually confirm
-      setConfirmStage('idle');
-      try {
-        await documentService.confirmOCR(doc.id);
-        aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
-        loadDocuments();
-      } catch {
-        aiToast(t('documents.reviewActionFailed', 'Review failed'), 'error');
-      } finally {
-        setConfirmingId(null);
-      }
-    }
   };
 
   const formatDate = (dateString: string) => {
@@ -685,18 +660,13 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
           {needsConfirmation(document) && (
             <button
               type="button"
-              className={`review-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+              className="review-btn"
               onClick={(event) => handleReviewClick(document, event)}
-              title={confirmingId === document.id && confirmStage === 'confirming'
-                ? t('documents.confirmReview', 'Confirm review?')
-                : t('documents.reviewAction', 'Review')}
-              aria-label={confirmingId === document.id && confirmStage === 'confirming'
-                ? t('documents.confirmReview', 'Confirm review?')
-                : t('documents.reviewAction', 'Review')}
+              disabled={confirmingId === document.id}
+              title={t('documents.review.confirmed', 'Reviewed')}
+              aria-label={t('documents.review.confirmed', 'Reviewed')}
             >
-              {confirmingId === document.id && confirmStage === 'confirming'
-                ? <ConfirmReviewIcon />
-                : <ReviewIcon />}
+              <ReviewIcon />
             </button>
           )}
         </div>
@@ -777,18 +747,13 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
           {needsConfirmation(document) && (
             <button
               type="button"
-              className={`review-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+              className="review-btn"
               onClick={(event) => handleReviewClick(document, event)}
-              title={confirmingId === document.id && confirmStage === 'confirming'
-                ? t('documents.confirmReview', 'Confirm review?')
-                : t('documents.reviewAction', 'Review')}
-              aria-label={confirmingId === document.id && confirmStage === 'confirming'
-                ? t('documents.confirmReview', 'Confirm review?')
-                : t('documents.reviewAction', 'Review')}
+              disabled={confirmingId === document.id}
+              title={t('documents.review.confirmed', 'Reviewed')}
+              aria-label={t('documents.review.confirmed', 'Reviewed')}
             >
-              {confirmingId === document.id && confirmStage === 'confirming'
-                ? <ConfirmReviewIcon />
-                : <ReviewIcon />}
+              <ReviewIcon />
             </button>
           )}
         </div>

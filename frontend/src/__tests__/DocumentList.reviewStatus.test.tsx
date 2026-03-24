@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DocumentList from '../components/documents/DocumentList';
@@ -9,6 +9,10 @@ import { DocumentType } from '../types/document';
 
 const { getDocuments } = vi.hoisted(() => ({
   getDocuments: vi.fn(),
+}));
+
+const { confirmOCR } = vi.hoisted(() => ({
+  confirmOCR: vi.fn(),
 }));
 
 const translations: Record<string, string> = {
@@ -27,6 +31,9 @@ const translations: Record<string, string> = {
   'documents.types.receipt': 'Receipt',
   'documents.title': 'Documents',
   'documents.filters.needsReview': 'Needs review',
+  'documents.review.confirmed': 'Reviewed',
+  'documents.review.confirmedSuccess': 'Document confirmed',
+  'documents.reviewActionFailed': 'Review failed',
   'documents.pageSize': 'Page size',
   'documents.perPage': 'per page',
   'common.export': 'Export',
@@ -57,7 +64,7 @@ vi.mock('../services/documentService', () => ({
     getDocuments,
     deleteDocument: vi.fn(),
     downloadDocument: vi.fn(),
-    confirmOCR: vi.fn(),
+    confirmOCR,
   },
 }));
 
@@ -130,5 +137,115 @@ describe('DocumentList review status', () => {
 
     expect(screen.getAllByText('All documents').length).toBeGreaterThan(0);
     expect(screen.queryByText('ZIP')).not.toBeInTheDocument();
+  });
+
+  it('confirms a pending-review document directly from the list action', async () => {
+    const pendingReviewDocument = {
+      id: 301,
+      user_id: 7,
+      document_type: DocumentType.RECEIPT,
+      file_path: 'users/7/documents/tmobile.pdf',
+      file_name: 'T-Mobile.pdf',
+      file_size: 240000,
+      mime_type: 'application/pdf',
+      confidence_score: 0.66,
+      needs_review: true,
+      transaction_id: null,
+      ocr_result: { confirmed: false },
+      ocr_status: 'completed',
+      created_at: '2026-03-24T10:00:00.000Z',
+      updated_at: '2026-03-24T10:00:00.000Z',
+      processed_at: '2026-03-24T10:00:00.000Z',
+    };
+
+    getDocuments
+      .mockResolvedValueOnce({
+        documents: [pendingReviewDocument],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        documents: [{ ...pendingReviewDocument, transaction_id: 998, ocr_result: { confirmed: true } }],
+        total: 1,
+      });
+
+    render(
+      <MemoryRouter>
+        <DocumentList />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(getDocuments).toHaveBeenCalled();
+    });
+
+    const yearToggle = screen.getByRole('button', { expanded: false });
+    fireEvent.click(yearToggle);
+
+    confirmOCR.mockResolvedValue(undefined);
+
+    const reviewButton = await screen.findByRole('button', { name: 'Reviewed' });
+    fireEvent.click(reviewButton);
+
+    await waitFor(() => {
+      expect(confirmOCR).toHaveBeenCalledWith(301);
+    });
+
+    expect(getDocuments).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Reviewed' })).not.toBeInTheDocument();
+    expect(screen.getByText('Transaction created')).toBeInTheDocument();
+  });
+
+  it('confirms the document directly instead of opening the detail flow', async () => {
+    const onDocumentSelect = vi.fn();
+    const pendingReviewDocument = {
+      id: 401,
+      user_id: 7,
+      document_type: DocumentType.RECEIPT,
+      file_path: 'users/7/documents/versicherung.pdf',
+      file_name: 'Versicherung.pdf',
+      file_size: 240000,
+      mime_type: 'application/pdf',
+      confidence_score: 0.8,
+      needs_review: true,
+      transaction_id: null,
+      ocr_result: { confirmed: false },
+      ocr_status: 'completed',
+      created_at: '2026-03-24T10:00:00.000Z',
+      updated_at: '2026-03-24T10:00:00.000Z',
+      processed_at: '2026-03-24T10:00:00.000Z',
+    };
+
+    getDocuments
+      .mockResolvedValueOnce({
+        documents: [pendingReviewDocument],
+        total: 1,
+      })
+      .mockResolvedValueOnce({
+        documents: [{ ...pendingReviewDocument, transaction_id: 18, ocr_result: { confirmed: true } }],
+        total: 1,
+      });
+    confirmOCR.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter>
+        <DocumentList onDocumentSelect={onDocumentSelect} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(getDocuments).toHaveBeenCalled();
+    });
+
+    const yearToggle = screen.getByRole('button', { expanded: false });
+    fireEvent.click(yearToggle);
+
+    const reviewButton = await screen.findByRole('button', { name: 'Reviewed' });
+    fireEvent.click(reviewButton);
+
+    await waitFor(() => {
+      expect(confirmOCR).toHaveBeenCalledWith(401);
+    });
+
+    expect(onDocumentSelect).not.toHaveBeenCalled();
   });
 });
