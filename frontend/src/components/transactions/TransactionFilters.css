@@ -54,6 +54,10 @@
   gap: 6px;
 }
 
+.filter-group--full-row {
+  grid-column: 1 / -1;
+}
+
 .filter-group label {
   font-size: 13px;
   font-weight: 600;

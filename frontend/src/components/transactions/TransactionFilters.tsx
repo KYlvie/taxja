@@ -153,7 +153,7 @@ const TransactionFilters = ({
             ]} />
         </div>
 
-        <div className="filter-group">
+        <div className="filter-group filter-group--full-row">
           <label>{t('transactions.filters.search')}</label>
           <input
             type="text"
