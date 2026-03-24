@@ -31,6 +31,10 @@ export const resolveTemplate = ({
     return 'contract_review';
   }
 
+  if (normalizedType === 'bank_statement') {
+    return 'bank_statement_review';
+  }
+
   return 'generic_review';
 };
 

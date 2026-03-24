@@ -14,6 +14,7 @@ import { useAIAdvisorStore, type ActionDescriptor, type ProactiveMessage } from 
 import { useAuthStore } from '../../stores/authStore';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { dashboardService, type ProactiveReminderDto } from '../../services/dashboardService';
+import { translateReminderContent } from '../../utils/proactiveReminderI18n';
 import './FloatingAIChat.css';
 
 const PANEL_HEIGHT_KEY = 'taxja_ai_panel_height';
@@ -122,7 +123,7 @@ const mapReminderToMessage = (
   serverId: reminder.id,
   messageOrigin: 'server',
   type: toProactiveMessageType(reminder.legacy_type),
-  content: t(reminder.body_key, reminder.params || {}),
+  content: translateReminderContent(reminder.body_key, reminder.params, t),
   timestamp: new Date(),
   read: false,
   dismissed: false,

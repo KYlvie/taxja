@@ -78,6 +78,7 @@ describe('localeSanitizer', () => {
       'transactions.exportPdf',
       'classificationRules.searchPlaceholder',
       'classificationRules.searchDeductPlaceholder',
+      'ai.proactive.healthSummaryReminder',
     ];
 
     for (const locale of Object.values(locales)) {
@@ -106,5 +107,8 @@ describe('localeSanitizer', () => {
     expect(getValue(locales.zh, 'tour.taxTools.employer.title')).toBe('\u96c7\u4e3b\u7a0e\u52a1\u8bc1\u660e');
     expect(getValue(locales.pl, 'tour.taxTools.audit.title')).toBe('Lista kontrolna audytu');
     expect(getValue(locales.tr, 'transactions.exportCsv')).toBe('CSV olarak disa aktar');
+    expect(getValue(locales.zh, 'ai.proactive.healthSummaryReminder')).toBe(
+      '\u60a8\u6709 {{count}} \u9879\u7a0e\u52a1\u5065\u5eb7\u63d0\u9192\u5f85\u5904\u7406\uff0c\u5f53\u524d\u5065\u5eb7\u5206\u4e3a {{score}} \u5206\u3002'
+    );
   });
 });

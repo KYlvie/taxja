@@ -114,7 +114,7 @@ const AppLayout = () => {
           isPageTour={isPageTour}
         />
       )}
-      {showDisclaimer && (!user || user.onboarding_completed !== false) && (
+      {showDisclaimer && isAuthenticated && (
         <DisclaimerModal isOpen={showDisclaimer} onAccept={handleDisclaimerAccept} />
       )}
     </div>

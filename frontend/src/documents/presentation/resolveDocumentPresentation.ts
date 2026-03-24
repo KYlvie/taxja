@@ -30,6 +30,10 @@ const buildReason = (decision: DocumentPresentationDecision): string => {
     return 'Contract and proof documents use the contract review template.';
   }
 
+  if (decision.template === 'bank_statement_review') {
+    return 'Bank statements use the dedicated bank statement review template.';
+  }
+
   return 'Fell back to the generic review template.';
 };
 

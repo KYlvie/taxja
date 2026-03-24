@@ -12,6 +12,7 @@ export type PresentationDocumentKind =
 export type DocumentPresentationTemplate =
   | 'receipt_workbench'
   | 'contract_review'
+  | 'bank_statement_review'
   | 'tax_import'
   | 'generic_review';
 

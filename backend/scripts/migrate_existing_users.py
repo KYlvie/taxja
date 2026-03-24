@@ -26,7 +26,7 @@ def migrate_users():
         # Get Free plan
         free_plan = db.query(Plan).filter(Plan.plan_type == PlanType.FREE).first()
         if not free_plan:
-            print("❌ Free plan not found. Run seed_plans_sql.py first.")
+            print("❌ Free plan not found. Run docker/init-db/init.sql first.")
             return False
         
         print(f"\n✓ Free plan found (ID: {free_plan.id})")

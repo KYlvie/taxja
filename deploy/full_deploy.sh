@@ -12,7 +12,7 @@
 #   5. Flushes Redis cache
 #
 # Prerequisites:
-#   - backend/db_schema.sql and backend/db_seed.sql must exist
+#   - docker/init-db/init.sql must exist (schema + seed data)
 #   - docker-compose.server.yml must exist
 #   - .env.prod must exist
 # =============================================================================
@@ -46,27 +46,21 @@ docker exec $DB_CONTAINER psql -U $DB_USER -d postgres -c "DROP DATABASE IF EXIS
 docker exec $DB_CONTAINER psql -U $DB_USER -d postgres -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
 echo "  Database recreated."
 
-# 3. Import schema
+# 3. Import schema + seed data (single init.sql)
 echo ""
-echo "[3/6] Importing schema..."
-docker exec -i $DB_CONTAINER psql -U $DB_USER -d $DB_NAME < backend/db_schema.sql
-echo "  Schema imported."
+echo "[3/6] Importing schema and seed data..."
+docker exec -i $DB_CONTAINER psql -U $DB_USER -d $DB_NAME < docker/init-db/init.sql
+echo "  Schema and seed data imported."
 
-# 4. Import seed data
+# 4. Flush Redis
 echo ""
-echo "[4/6] Importing seed data..."
-docker exec -i $DB_CONTAINER psql -U $DB_USER -d $DB_NAME < backend/db_seed.sql
-echo "  Seed data imported."
-
-# 5. Flush Redis
-echo ""
-echo "[5/6] Flushing Redis cache..."
+echo "[4/6] Flushing Redis cache..."
 docker exec $REDIS_CONTAINER redis-cli FLUSHALL
 echo "  Redis flushed."
 
-# 6. Rebuild and restart
+# 5. Rebuild and restart
 echo ""
-echo "[6/6] Rebuilding and restarting all services..."
+echo "[5/6] Rebuilding and restarting all services..."
 docker compose -f $COMPOSE_FILE up -d --build backend
 docker compose -f $COMPOSE_FILE restart nginx
 

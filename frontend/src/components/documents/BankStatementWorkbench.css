@@ -135,53 +135,89 @@
   background: rgba(255, 255, 255, 0.6);
 }
 
-.bank-workbench-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.bank-workbench-table-shell {
+  width: 100%;
+  overflow-x: auto;
 }
 
-.bank-workbench-line {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.9);
+.bank-workbench-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--color-border-light, #e8edf7);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.bank-workbench-line__summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+.bank-workbench-table thead {
+  background: rgba(96, 114, 255, 0.06);
 }
 
-.bank-workbench-line__amount {
-  font-size: 1rem;
+.bank-workbench-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: var(--color-text);
-}
-
-.bank-workbench-line__meta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--color-text-secondary);
-  font-size: 0.88rem;
+  border-bottom: 1px solid var(--color-border-light, #e8edf7);
 }
 
-.bank-workbench-line__purpose {
-  color: var(--color-text);
-  line-height: 1.5;
+.bank-workbench-table td {
+  padding: 14px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(232, 237, 247, 0.9);
 }
 
-.bank-workbench-line__status-row {
+.bank-workbench-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.bank-workbench-table__actions {
+  width: 240px;
+}
+
+.bank-workbench-table__static-action {
+  color: var(--color-text-secondary);
+}
+
+.bank-workbench-cell {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bank-workbench-cell__primary {
+  color: var(--color-text);
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.bank-workbench-cell__secondary {
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.bank-workbench-amount {
+  display: inline-flex;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bank-workbench-amount--credit {
+  color: var(--color-success, #15803d);
+}
+
+.bank-workbench-amount--debit {
+  color: var(--color-danger, #dc2626);
+}
+
+.bank-workbench-amount--neutral {
+  color: var(--color-text);
 }
 
 .bank-workbench-line__status {
@@ -209,10 +245,19 @@
   color: var(--color-text-secondary);
 }
 
-.bank-workbench-line__confidence,
-.bank-workbench-line__linked {
+.bank-workbench-line__status--fallback-credit {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--color-success, #15803d);
+}
+
+.bank-workbench-line__status--fallback-debit {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--color-danger, #dc2626);
+}
+
+.bank-workbench-line__status--fallback-unknown {
+  background: rgba(148, 163, 184, 0.14);
   color: var(--color-text-secondary);
-  font-size: 0.84rem;
 }
 
 .bank-workbench-line__actions {
@@ -221,8 +266,62 @@
   flex-wrap: wrap;
 }
 
+.bank-workbench-mobile-list {
+  display: none;
+}
+
+.bank-workbench-mobile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--color-border-light, #e8edf7);
+}
+
+.bank-workbench-mobile-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.bank-workbench-mobile-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.bank-workbench-mobile-card__meta-item {
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+}
+
+.bank-workbench-line__actions--mobile .btn {
+  flex: 1 1 140px;
+}
+
 @media (max-width: 960px) {
   .bank-workbench-summary__stats {
     grid-template-columns: 1fr;
+  }
+
+  .bank-workbench-table th,
+  .bank-workbench-table td {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .bank-workbench-table-shell {
+    display: none;
+  }
+
+  .bank-workbench-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 }

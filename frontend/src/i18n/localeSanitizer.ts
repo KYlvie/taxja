@@ -210,6 +210,14 @@ const buildBankWorkbenchHotfix = (config: {
   },
 });
 
+const buildProactiveReminderHotfix = (healthSummaryReminder: string): LocaleObject => ({
+  ai: {
+    proactive: {
+      healthSummaryReminder,
+    },
+  },
+});
+
 const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
   de: {
     ...buildExportAndSearchHotfix(
@@ -254,6 +262,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Kontoauszugs-Arbeitsbereich oeffnen',
       bankWorkbenchHint: 'Oeffnen Sie den Kontoauszugs-Arbeitsbereich, um Eintraege mit niedriger Konfidenz zu pruefen, bestehende Transaktionen zuzuordnen und neue Transaktionen zu bestaetigen.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Sie haben {{count}} Punkte in Ihrem Steuer-Check zu pruefen. Ihr aktueller Wert liegt bei {{score}}.'
+    ),
     tour: {
       taxTools: {
         employer: {
@@ -301,6 +312,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Open bank statement workbench',
       bankWorkbenchHint: 'Open the bank statement workbench to review low-confidence items, match existing transactions, and confirm new transactions.',
     }),
+    ...buildProactiveReminderHotfix(
+      'You have {{count}} tax health items to review. Your current health score is {{score}}.'
+    ),
     tour: {
       taxTools: {
         assetReport: {
@@ -354,6 +368,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: '\u6253\u5f00\u94f6\u884c\u6d41\u6c34\u5de5\u4f5c\u53f0',
       bankWorkbenchHint: '\u6253\u5f00\u94f6\u884c\u6d41\u6c34\u5de5\u4f5c\u53f0\uff0c\u590d\u6838\u4f4e\u7f6e\u4fe1\u5ea6\u9879\u76ee\uff0c\u5339\u914d\u5df2\u6709\u4ea4\u6613\uff0c\u5e76\u786e\u8ba4\u9700\u8981\u65b0\u589e\u7684\u4ea4\u6613\u3002',
     }),
+    ...buildProactiveReminderHotfix(
+      '\u60a8\u6709 {{count}} \u9879\u7a0e\u52a1\u5065\u5eb7\u63d0\u9192\u5f85\u5904\u7406\uff0c\u5f53\u524d\u5065\u5eb7\u5206\u4e3a {{score}} \u5206\u3002'
+    ),
     tour: {
       taxTools: {
         employer: {
@@ -406,6 +423,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Ouvrir l espace de traitement',
       bankWorkbenchHint: 'Ouvrez l espace de traitement du releve bancaire pour verifier les elements a faible confiance, rapprocher les transactions existantes et confirmer les nouvelles transactions.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Vous avez {{count}} points de sante fiscale a verifier. Votre score actuel est de {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Documents d\u2019actifs en attente',
@@ -482,6 +502,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0443\u044e \u043e\u0431\u043b\u0430\u0441\u0442\u044c',
       bankWorkbenchHint: '\u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u0440\u0430\u0431\u043e\u0447\u0443\u044e \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u043e\u0439 \u0432\u044b\u043f\u0438\u0441\u043a\u0438, \u0447\u0442\u043e\u0431\u044b \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0441 \u043d\u0438\u0437\u043a\u043e\u0439 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c\u044e, \u0441\u043e\u043f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0435 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0438 \u0438 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043d\u043e\u0432\u044b\u0435 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0438.',
     }),
+    ...buildProactiveReminderHotfix(
+      '\u0423 \u0432\u0430\u0441 {{count}} \u043f\u0443\u043d\u043a\u0442\u043e\u0432 \u043d\u0430\u043b\u043e\u0433\u043e\u0432\u043e\u0439 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430. \u0422\u0435\u043a\u0443\u0449\u0438\u0439 \u0431\u0430\u043b\u043b: {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: '\u041e\u0436\u0438\u0434\u0430\u044e\u0449\u0438\u0435 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b \u043f\u043e \u0430\u043a\u0442\u0438\u0432\u0430\u043c',
@@ -553,6 +576,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Munkafelulet megnyitasa',
       bankWorkbenchHint: 'Nyissa meg a bankszamlakivonat munkafeluletet az alacsony megbizhatosagu elemek ellenorzesehez, a meglevo tranzakciok parositasahoz es az uj tranzakciok megerositesehez.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Onnek {{count}} adoegeszsegi tetelt kell atneznie. A jelenlegi pontszam {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: 'F\u00fcgg\u0151 eszk\u00f6zdokumentumok',
@@ -630,6 +656,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Otworz panel wyciagu bankowego',
       bankWorkbenchHint: 'Otworz panel wyciagu bankowego, aby sprawdzic pozycje o niskiej pewnosci, dopasowac istniejace transakcje i potwierdzic nowe transakcje.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Masz {{count}} pozycji zdrowia podatkowego do sprawdzenia. Twoj obecny wynik to {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Oczekuj\u0105ce dokumenty aktyw\u00f3w',
@@ -712,6 +741,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Calisma alanini ac',
       bankWorkbenchHint: 'Dusuk guvenli ogeleri incelemek, mevcut islemleri eslestirmek ve yeni islemleri onaylamak icin banka hesap ozeti calisma alanini acin.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Gozden gecirmeniz gereken {{count}} vergi sagligi maddesi var. Mevcut puaniniz {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Bekleyen varl\u0131k belgeleri',
@@ -788,6 +820,9 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Otvori radni prostor',
       bankWorkbenchHint: 'Otvorite radni prostor bankovnog izvoda da pregledate stavke sa niskom pouzdanoscu, povezete postojece transakcije i potvrdite nove transakcije.',
     }),
+    ...buildProactiveReminderHotfix(
+      'Imate {{count}} stavki poreskog zdravlja za pregled. Vas trenutni rezultat je {{score}}.'
+    ),
     properties: {
       pendingDocuments: {
         title: 'Dokumenti imovine na \u010dekanju',

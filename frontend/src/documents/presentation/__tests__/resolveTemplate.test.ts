@@ -31,13 +31,13 @@ describe('resolveTemplate', () => {
     ).toBe('contract_review');
   });
 
-  it('keeps bank statements in generic review', () => {
+  it('routes bank statements into the dedicated bank statement review template', () => {
     expect(
       resolveTemplate({
         doc: presentationFixtures.kontoauszug,
         normalizedType: 'bank_statement',
       })
-    ).toBe('generic_review');
+    ).toBe('bank_statement_review');
   });
 
   it('does not let needs_review affect the selected template', () => {

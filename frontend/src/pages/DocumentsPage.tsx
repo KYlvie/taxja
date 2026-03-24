@@ -1630,23 +1630,25 @@ const DocumentsPage = () => {
     }
   };
 
+  const renderBankStatementReview = useCallback((document: Document) => (
+    <BankStatementWorkbench
+      document={document}
+      onDocumentUpdated={handleWorkbenchDocumentUpdated}
+      onCancel={handleReviewCancel}
+      onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+      onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+      hasPrevDocument={hasPrevDoc}
+      hasNextDocument={hasNextDoc}
+    />
+  ), [
+    handleReviewCancel,
+    handleWorkbenchDocumentUpdated,
+    hasNextDoc,
+    hasPrevDoc,
+    navigateToDocument,
+  ]);
+
   const renderGenericDocumentReview = useCallback((document: Document) => {
-    const normalizedType = normalizeDocumentType(document.document_type as string, document);
-
-    if (normalizedType === 'bank_statement') {
-      return (
-        <BankStatementWorkbench
-          document={document}
-          onDocumentUpdated={handleWorkbenchDocumentUpdated}
-          onCancel={handleReviewCancel}
-          onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-          onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-          hasPrevDocument={hasPrevDoc}
-          hasNextDocument={hasNextDoc}
-        />
-      );
-    }
-
     return (
       <OCRReview
         documentId={Number(document.id)}
@@ -1662,7 +1664,6 @@ const DocumentsPage = () => {
   }, [
     handleReviewCancel,
     handleReviewComplete,
-    handleWorkbenchDocumentUpdated,
     hasNextDoc,
     hasPrevDoc,
     navigateToDocument,
@@ -1881,6 +1882,9 @@ const DocumentsPage = () => {
                 hasNextDocument={hasNextDoc}
               />
             )}
+            renderBankStatementReview={() => (
+              renderBankStatementReview(reviewingDocument)
+            )}
             renderGenericReview={() => (
               renderGenericDocumentReview(reviewingDocument)
             )}
@@ -1904,7 +1908,9 @@ const DocumentsPage = () => {
 
     return (
       <div className="documents-page">
-        {renderGenericDocumentReview(reviewingDocument)}
+        {normalizeDocumentType(reviewingDocument.document_type as string, reviewingDocument) === 'bank_statement'
+          ? renderBankStatementReview(reviewingDocument)
+          : renderGenericDocumentReview(reviewingDocument)}
       </div>
     );
   }
@@ -1934,6 +1940,9 @@ const DocumentsPage = () => {
                 hasNextDocument={hasNextDoc}
               />
             )}
+            renderBankStatementReview={() => (
+              renderBankStatementReview(viewingDocument)
+            )}
             renderGenericReview={() => (
               renderGenericDocumentReview(viewingDocument)
             )}
@@ -1958,7 +1967,7 @@ const DocumentsPage = () => {
     if (normalizeDocumentType(viewingDocument.document_type as string, viewingDocument) === 'bank_statement') {
       return (
         <div className="documents-page">
-          {renderGenericDocumentReview(viewingDocument)}
+          {renderBankStatementReview(viewingDocument)}
         </div>
       );
     }

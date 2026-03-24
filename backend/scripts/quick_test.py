@@ -42,7 +42,7 @@ def test_plans_exist():
         # Query directly with SQL to avoid enum issues
         result = db.execute(text("SELECT COUNT(*) FROM plans")).scalar()
         if result == 0:
-            print("   ⚠️  No plans found. Run: python scripts/seed_plans_sql.py")
+            print("   ⚠️  No plans found. Run: psql -f docker/init-db/init.sql")
             return False
         
         print(f"   ✅ Found {result} plans")

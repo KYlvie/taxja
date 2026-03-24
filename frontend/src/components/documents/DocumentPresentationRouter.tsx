@@ -16,6 +16,7 @@ interface DocumentPresentationRouterProps {
   decision?: DocumentPresentationDecision;
   renderReceiptWorkbench: (context: RenderContext) => React.ReactNode;
   renderContractReview: (context: RenderContext) => React.ReactNode;
+  renderBankStatementReview?: (context: RenderContext) => React.ReactNode;
   renderGenericReview: (context: RenderContext) => React.ReactNode;
   renderTaxImport?: (context: RenderContext) => React.ReactNode;
   onFallback?: (error: unknown) => React.ReactNode;
@@ -69,6 +70,7 @@ const DocumentPresentationRouter: React.FC<DocumentPresentationRouterProps> = ({
   decision,
   renderReceiptWorkbench,
   renderContractReview,
+  renderBankStatementReview,
   renderGenericReview,
   renderTaxImport,
   onFallback,
@@ -108,6 +110,9 @@ const DocumentPresentationRouter: React.FC<DocumentPresentationRouterProps> = ({
         return <>{renderReceiptWorkbench(context)}</>;
       case 'contract_review':
         return <>{renderContractReview(context)}</>;
+      case 'bank_statement_review':
+        if (renderBankStatementReview) return <>{renderBankStatementReview(context)}</>;
+        return <>{renderGenericReview(context)}</>;
       case 'generic_review':
       default:
         return <>{renderGenericReview(context)}</>;

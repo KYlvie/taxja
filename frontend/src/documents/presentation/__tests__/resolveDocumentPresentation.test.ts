@@ -29,6 +29,14 @@ describe('resolveDocumentPresentation', () => {
     expect(decision.source?.taxImportMatched).toBe(true);
   });
 
+  it('routes bank statements into the dedicated bank statement review template', () => {
+    const decision = resolveDocumentPresentation(presentationFixtures.kontoauszug);
+
+    expect(decision.normalizedType).toBe('bank_statement');
+    expect(decision.template).toBe('bank_statement_review');
+    expect(decision.reason).toContain('bank statement review');
+  });
+
   it('emits non-postable badges and helpers for proforma invoices', () => {
     const decision = resolveDocumentPresentation(presentationFixtures.proformaInvoice);
 
