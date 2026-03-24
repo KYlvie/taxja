@@ -14,6 +14,7 @@ import json
 import logging
 from typing import Optional
 from enum import Enum
+from sqlalchemy.orm import Session
 
 from app.core.transaction_enum_coercion import coerce_enum_member
 
@@ -308,6 +309,15 @@ class DeductibilityChecker:
     2. LLM analysis for ambiguous cases (NEEDS_AI) — with caching
     """
 
+    def __init__(self, db: Optional[Session] = None):
+        self.db = db
+        if db is not None:
+            from app.services.user_deductibility_service import UserDeductibilityService
+
+            self._user_svc = UserDeductibilityService(db)
+        else:
+            self._user_svc = None
+
     def check(
         self,
         expense_category: str,
@@ -316,6 +326,7 @@ class DeductibilityChecker:
         description: str = "",
         business_type: Optional[str] = None,
         business_industry: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> DeductibilityResult:
         """
         Check deductibility. For ambiguous cases, if ocr_data is provided,
@@ -342,6 +353,14 @@ class DeductibilityChecker:
             return DeductibilityResult(
                 False, f"Unknown category: {expense_category}", requires_review=True
             )
+
+        user_override = self._try_user_override(
+            user_id=user_id,
+            description=description,
+            expense_category=cat.value,
+        )
+        if user_override is not None:
+            return user_override
 
         # Check business-type-specific overrides first (self-employed / mixed)
         if (business_type or business_industry) and ut in (UserType.SELF_EMPLOYED, UserType.MIXED):
@@ -398,6 +417,31 @@ class DeductibilityChecker:
                 requires_review=True,
             )
         return DeductibilityResult(False, "Not deductible (default)", requires_review=True)
+
+    def _try_user_override(
+        self,
+        *,
+        user_id: Optional[int],
+        description: str,
+        expense_category: str,
+    ) -> Optional[DeductibilityResult]:
+        user_service = getattr(self, "_user_svc", None)
+        if user_service is None or not user_id or not description:
+            return None
+
+        rule = user_service.lookup(
+            user_id=user_id,
+            description=description,
+            expense_category=expense_category,
+        )
+        if rule is None:
+            return None
+
+        user_service.record_hit(rule)
+        return DeductibilityResult(
+            is_deductible=bool(getattr(rule, "is_deductible", False)),
+            reason=getattr(rule, "reason", None) or "Learned from your previous correction",
+        )
 
     def _check_business_type_override(
         self,

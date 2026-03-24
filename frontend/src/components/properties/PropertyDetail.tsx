@@ -1,7 +1,24 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../../hooks/useConfirm';
 import { Link } from 'react-router-dom';
+import {
+  AlertCircle,
+  AlertTriangle,
+  Archive,
+  ArrowLeft,
+  CalendarDays,
+  FileSearch,
+  FileText,
+  Files,
+  Info,
+  PencilLine,
+  Plus,
+  ReceiptText,
+  ScrollText,
+  Trash2,
+} from 'lucide-react';
+import FuturisticIcon from '../common/FuturisticIcon';
 import { Property, PropertyType, PropertyStatus, RentalContract } from '../../types/property';
 import { Transaction, TransactionType } from '../../types/transaction';
 import { propertyService } from '../../services/propertyService';
@@ -9,8 +26,11 @@ import { recurringService } from '../../services/recurringService';
 import {
   formatCurrency as formatCurrencyForLanguage,
   formatDate as formatDateForLanguage,
+  getLocaleForLanguage,
   normalizeLanguage,
+  type SupportedLanguage,
 } from '../../utils/locale';
+import DateInput from '../common/DateInput';
 import './PropertyDetail.css';
 
 interface PropertyDetailProps {
@@ -63,19 +83,37 @@ const transactionSectionCopy = {
   zh: {
     title: '这套房产的收入与支出',
     description:
-      '这里只展示已经归到这套房产名下的收支记录。如果归属不对，请到交易记录里修改那一笔。',
+      '这里只展示已经关联到这套房产名下的收支记录。如果归属不对，请到交易记录里修改那一笔。',
     manageLinkLabel: '去交易记录查看',
-    emptyTitle: '还没有这套房产的收支记录',
+    emptyTitle: '这套房产还没有收支记录',
     emptyDescription:
-      '你在交易记录里把租金收入或房产相关支出选到这套房产后，这里会自动显示。',
+      '当你在交易记录里把租金收入或房产相关支出关联到这套房产后，这里会自动显示。',
+  },
+  fr: {
+    title: 'Revenus et dépenses de ce bien',
+    description:
+      'Cette section affiche les écritures déjà associées à ce bien. Pour corriger une attribution, modifiez l\'écriture dans la liste des transactions.',
+    manageLinkLabel: 'Ouvrir les transactions',
+    emptyTitle: 'Aucun revenu ou dépense enregistré',
+    emptyDescription:
+      'Les revenus locatifs et les charges associés à ce bien apparaîtront ici automatiquement une fois attribués dans la liste des transactions.',
+  },
+  ru: {
+    title: 'Доходы и расходы по этому объекту',
+    description:
+      'Здесь отображаются записи, уже привязанные к этому объекту. Для исправления отредактируйте запись в списке транзакций.',
+    manageLinkLabel: 'Открыть транзакции',
+    emptyTitle: 'Доходы и расходы ещё не записаны',
+    emptyDescription:
+      'Арендный доход и расходы по объекту появятся здесь автоматически после привязки в списке транзакций.',
   },
 } as const;
 
 const assetTransactionSectionCopy = {
   de: {
-    title: 'Verknüpfte Buchungen dieses Wirtschaftsguts',
+    title: 'Verknuepfte Buchungen dieses Wirtschaftsguts',
     description:
-      'Hier sehen Sie bereits verknüpfte Buchungen und Abschreibungen dieses Assets. Anpassungen nehmen Sie in der Transaktionsliste vor.',
+      'Hier sehen Sie bereits verknuepfte Buchungen und Abschreibungen dieses Assets. Anpassungen nehmen Sie in der Transaktionsliste vor.',
     manageLinkLabel: 'Zur Transaktionsliste',
     emptyTitle: 'Noch keine Buchungen zu diesem Asset',
     emptyDescription:
@@ -99,7 +137,33 @@ const assetTransactionSectionCopy = {
     emptyDescription:
       '当购置、折旧或后续成本关联到这项资产后，这里会自动显示。',
   },
+  fr: {
+    title: 'Écritures liées à cet actif',
+    description:
+      'Cette section affiche les transactions et amortissements déjà liés à cet actif. Modifiez-les depuis la liste des transactions si nécessaire.',
+    manageLinkLabel: 'Ouvrir les transactions',
+    emptyTitle: 'Aucune écriture liée à cet actif',
+    emptyDescription:
+      'Les acquisitions, amortissements et coûts de suivi liés à cet actif apparaîtront ici automatiquement.',
+  },
+  ru: {
+    title: 'Связанные записи по этому активу',
+    description:
+      'Здесь отображаются транзакции и амортизация, уже привязанные к этому активу. При необходимости отредактируйте их в списке транзакций.',
+    manageLinkLabel: 'Открыть транзакции',
+    emptyTitle: 'Нет записей по этому активу',
+    emptyDescription:
+      'Приобретения, амортизация и последующие расходы по этому активу появятся здесь автоматически.',
+  },
 } as const;
+
+type PropertySectionCopy = {
+  title: string;
+  description: string;
+  manageLinkLabel: string;
+  emptyTitle: string;
+  emptyDescription: string;
+};
 
 const PropertyDetail = ({
   property,
@@ -110,6 +174,9 @@ const PropertyDetail = ({
   const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
   const language = normalizeLanguage(i18n.language);
+  const localizedText = <T extends string>(
+    values: Partial<Record<SupportedLanguage, T>> & { de: T; en: T; zh: T }
+  ) => values[language] ?? values.en;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [warnings, setWarnings] = useState<PropertyWarning[]>([]);
@@ -125,13 +192,15 @@ const PropertyDetail = ({
     is_active: boolean;
   }>({ amount: '', start_date: '', end_date: '', is_active: true });
   const isRealEstate = !property.asset_type || property.asset_type === 'real_estate';
-  const sectionCopy = (isRealEstate ? transactionSectionCopy : assetTransactionSectionCopy)[language];
+  const sectionCopySource: Partial<Record<SupportedLanguage, PropertySectionCopy>> =
+    isRealEstate ? transactionSectionCopy : assetTransactionSectionCopy;
+  const sectionCopy = sectionCopySource[language] ?? sectionCopySource.en!;
   const displayName = isRealEstate
     ? property.address
     : property.name || t(`properties.assetTypes.${property.asset_type}`, property.asset_type || 'Asset');
   const assetTypeLabel = property.asset_type
     ? t(`properties.assetTypes.${property.asset_type}`, property.asset_type)
-    : t('properties.assetDetails.asset', '资产');
+    : t('properties.assetDetails.asset', localizedText({ de: 'Asset', en: 'Asset', zh: '资产' }));
 
   useEffect(() => {
     loadTransactions();
@@ -277,12 +346,16 @@ const PropertyDetail = ({
     return warning.message_en;
   };
 
-  const getWarningIcon = (level: string): string => {
+  const getWarningIcon = (level: string) => {
     switch (level) {
-      case 'error': return '🚨';
-      case 'warning': return '⚠️';
-      case 'info': return 'ℹ️';
-      default: return 'ℹ️';
+      case 'error':
+        return { icon: AlertCircle, tone: 'rose' as const };
+      case 'warning':
+        return { icon: AlertTriangle, tone: 'amber' as const };
+      case 'info':
+        return { icon: Info, tone: 'cyan' as const };
+      default:
+        return { icon: Info, tone: 'cyan' as const };
     }
   };
 
@@ -303,7 +376,7 @@ const PropertyDetail = ({
   };
 
   const formatAssetTaxValue = (group: string, value?: string | null) => {
-    if (!value) return '—';
+    if (!value) return '-';
     return t(`properties.assetDetails.${group}.${value}`, value);
   };
 
@@ -400,14 +473,36 @@ const PropertyDetail = ({
   const assetAnnualDepreciation = property.annual_depreciation ?? (property.building_value * property.depreciation_rate);
   const assetUsageLabel = property.business_use_percentage != null
     ? `${Number(property.business_use_percentage).toFixed(0)}%`
-    : '—';
+    : '-';
+  const openEndedLabel = localizedText({
+    de: 'Unbefristet',
+    en: 'Open-ended',
+    zh: '长期',
+  });
+
+  const purchaseDocumentUploadLink = `/documents?property_id=${property.id}&type=purchase_contract`;
+  const documentsHubLink = `/documents?property_id=${property.id}`;
+  const linkedPurchaseDocumentLabel = isRealEstate
+    ? t('properties.documents.viewPurchaseContract', '\u67e5\u770b\u8d2d\u623f\u5408\u540c')
+    : t('properties.documents.viewSourceDocument', '\u67e5\u770b\u8d2d\u7f6e\u6587\u4ef6');
+  const uploadPurchaseDocumentLabel = isRealEstate
+    ? t('properties.documents.uploadPurchaseContract', '\u4e0a\u4f20\u8d2d\u623f\u5408\u540c')
+    : t('properties.documents.uploadSourceDocument', '\u4e0a\u4f20\u8d2d\u7f6e\u6587\u4ef6');
+  const showRentalDocumentAction = isRealEstate && (isRental || Boolean(property.mietvertrag_document_id));
+  const rentalDocumentLabel = property.mietvertrag_document_id
+    ? t('properties.documents.viewRentalContract', '\u67e5\u770b\u79df\u8d41\u5408\u540c')
+    : t('properties.documents.addRentalContract', '\u6dfb\u52a0\u5408\u540c');
+  const rentalDocumentLink = property.mietvertrag_document_id
+    ? `/documents/${property.mietvertrag_document_id}`
+    : `/documents?property_id=${property.id}&type=rental_contract`;
 
   return (
     <div className="property-detail">
       {/* Breadcrumb Navigation */}
       <div className="breadcrumb">
         <button className="breadcrumb-link" onClick={onBack}>
-          ← {t('properties.title')}
+          <FuturisticIcon icon={ArrowLeft} tone="slate" size="xs" />
+          <span>{t('properties.title')}</span>
         </button>
         <span className="breadcrumb-separator">/</span>
         <span className="breadcrumb-current">{displayName}</span>
@@ -433,20 +528,69 @@ const PropertyDetail = ({
           </div>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary" onClick={() => onEdit(property)}>
-            ✏️ {t('common.edit')}
+          <div className="header-action-group">
+            {property.kaufvertrag_document_id ? (
+              <Link className="btn btn-secondary btn-icon" to={`/documents/${property.kaufvertrag_document_id}`}>
+                <FuturisticIcon icon={FileSearch} tone="cyan" size="xs" />
+                <span>{linkedPurchaseDocumentLabel}</span>
+              </Link>
+            ) : (
+              <Link className="btn btn-primary btn-icon" to={purchaseDocumentUploadLink}>
+                <FuturisticIcon icon={ReceiptText} tone="violet" size="xs" />
+                <span>{uploadPurchaseDocumentLabel}</span>
+              </Link>
+            )}
+
+            {showRentalDocumentAction ? (
+              <Link className="btn btn-secondary btn-icon" to={rentalDocumentLink}>
+                <FuturisticIcon
+                  icon={property.mietvertrag_document_id ? ScrollText : Files}
+                  tone={property.mietvertrag_document_id ? 'emerald' : 'slate'}
+                  size="xs"
+                />
+                <span>{rentalDocumentLabel}</span>
+              </Link>
+            ) : !isRealEstate ? (
+              <Link className="btn btn-secondary btn-icon" to={documentsHubLink}>
+                <FuturisticIcon icon={Files} tone="slate" size="xs" />
+                <span>{t('properties.documents.manageFiles', '\u7ba1\u7406\u5173\u8054\u6587\u4ef6')}</span>
+              </Link>
+            ) : null}
+          </div>
+          <button className="btn btn-secondary btn-icon" onClick={() => onEdit(property)}>
+            <FuturisticIcon icon={PencilLine} tone="slate" size="xs" />
+            <span>{t('common.edit')}</span>
           </button>
           {property.status === PropertyStatus.ACTIVE && (
-            <button className="btn btn-secondary" onClick={handleArchiveClick}>
-              📦 {t('properties.archive')}
+            <button className="btn btn-secondary btn-icon" onClick={handleArchiveClick}>
+              <FuturisticIcon icon={Archive} tone="slate" size="xs" />
+              <span>{isRealEstate ? t('properties.sellProperty') : t('properties.disposeAsset')}</span>
             </button>
           )}
         </div>
       </div>
 
+      {/* Placeholder property warning */}
+      {property.purchase_price <= 0.01 && (
+        <div className="warning-banner" style={{ margin: '0 0 16px', padding: '12px 16px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', fontSize: '0.9rem', color: '#92400e', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+          <span>⚠️</span>
+          <div>
+            <strong>{t('properties.placeholderWarning.title', 'Incomplete data')}</strong>
+            <p style={{ margin: '4px 0 0' }}>{t('properties.placeholderWarning.message', 'This property was auto-created from a rental contract with placeholder values. Please upload the purchase contract or edit the property to add the real purchase price, building value, and construction year for accurate depreciation calculations.')}</p>
+          </div>
+        </div>
+      )}
+
       {/* Property Information Grid */}
       <div className="property-info-section">
-        <h2>{isRealEstate ? t('properties.propertyDetails') : t('properties.assetDetails.title', '资产详情')}</h2>
+        <h2>
+          {isRealEstate
+            ? t('properties.propertyDetails')
+            : t(
+                'properties.assetDetails.title',
+                localizedText({ de: 'Asset-Details', en: 'Asset details', zh: '资产详情' })
+              )}
+        </h2>
         
         <div className="info-grid">
           {isRealEstate ? (
@@ -494,17 +638,6 @@ const PropertyDetail = ({
                     <div className="info-row">
                       <span className="label">{t('properties.constructionYear')}</span>
                       <span className="value">{property.construction_year}</span>
-                    </div>
-                  )}
-                  {!property.kaufvertrag_document_id && (
-                    <div className="info-row" style={{ borderTop: '1px dashed #e5e7eb', paddingTop: '8px', marginTop: '4px' }}>
-                      <span className="label" />
-                      <Link
-                        to={`/documents?property_id=${property.id}&type=purchase_contract`}
-                        style={{ fontSize: '0.85rem', color: '#4f46e5', textDecoration: 'none' }}
-                      >
-                        📄 {t('properties.uploadPurchaseContract', '上传购房合同')}
-                      </Link>
                     </div>
                   )}
                 </div>
@@ -575,21 +708,21 @@ const PropertyDetail = ({
           ) : (
             <>
               <div className="info-card">
-                <h3>{t('properties.assetDetails.acquisition', '购置信息')}</h3>
+                <h3>{t('properties.assetDetails.acquisition', localizedText({ de: 'Anschaffung', en: 'Acquisition', zh: '购置信息' }))}</h3>
                 <div className="info-rows">
                   <div className="info-row">
-                    <span className="label">{t('properties.assetDetails.assetType', '资产类型')}</span>
+                    <span className="label">{t('properties.assetDetails.assetType', localizedText({ de: 'Assettyp', en: 'Asset type', zh: '资产类型' }))}</span>
                     <span className="value">{assetTypeLabel}</span>
                   </div>
                   {property.sub_category && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.subCategory', '子类型')}</span>
+                      <span className="label">{t('properties.assetDetails.subCategory', localizedText({ de: 'Unterkategorie', en: 'Sub-category', zh: '子类型' }))}</span>
                       <span className="value">{property.sub_category}</span>
                     </div>
                   )}
                   {property.supplier && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.supplier', '供应商')}</span>
+                      <span className="label">{t('properties.assetDetails.supplier', localizedText({ de: 'Lieferant', en: 'Supplier', zh: '供应商' }))}</span>
                       <span className="value">{property.supplier}</span>
                     </div>
                   )}
@@ -603,13 +736,13 @@ const PropertyDetail = ({
                   </div>
                   {property.put_into_use_date && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.putIntoUseDate', '投入使用日期')}</span>
+                      <span className="label">{t('properties.assetDetails.putIntoUseDate', localizedText({ de: 'Inbetriebnahme', en: 'Put into use', zh: '投入使用日期' }))}</span>
                       <span className="value">{formatDate(property.put_into_use_date)}</span>
                     </div>
                   )}
                   {property.acquisition_kind && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.acquisitionKind', '取得方式')}</span>
+                      <span className="label">{t('properties.assetDetails.acquisitionKind', localizedText({ de: 'Erwerbsart', en: 'Acquisition kind', zh: '取得方式' }))}</span>
                       <span className="value">{formatAssetTaxValue('acquisitionKinds', property.acquisition_kind)}</span>
                     </div>
                   )}
@@ -617,41 +750,41 @@ const PropertyDetail = ({
               </div>
 
               <div className="info-card">
-                <h3>{t('properties.assetDetails.taxHandling', '税务处理')}</h3>
+                <h3>{t('properties.assetDetails.taxHandling', localizedText({ de: 'Steuerliche Behandlung', en: 'Tax handling', zh: '税务处理' }))}</h3>
                 <div className="info-rows">
                   <div className="info-row">
-                    <span className="label">{t('properties.assetDetails.businessUse', '业务使用比例')}</span>
+                    <span className="label">{t('properties.assetDetails.businessUse', localizedText({ de: 'Betriebliche Nutzung', en: 'Business use', zh: '业务使用比例' }))}</span>
                     <span className="value">{assetUsageLabel}</span>
                   </div>
                   {property.comparison_basis && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.comparisonBasis', 'GWG 比较基数')}</span>
+                      <span className="label">{t('properties.assetDetails.comparisonBasis', localizedText({ de: 'GWG-Vergleichsbasis', en: 'GWG comparison basis', zh: 'GWG 比较基数' }))}</span>
                       <span className="value">{formatAssetTaxValue('comparisonBasisOptions', property.comparison_basis)}</span>
                     </div>
                   )}
                   {property.comparison_amount != null && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.comparisonAmount', '比较金额')}</span>
+                      <span className="label">{t('properties.assetDetails.comparisonAmount', localizedText({ de: 'Vergleichsbetrag', en: 'Comparison amount', zh: '比较金额' }))}</span>
                       <span className="value">{formatCurrency(property.comparison_amount)}</span>
                     </div>
                   )}
                   <div className="info-row">
-                    <span className="label">{t('properties.assetDetails.depreciationMethod', '折旧方式')}</span>
+                    <span className="label">{t('properties.assetDetails.depreciationMethod', localizedText({ de: 'Abschreibungsmethode', en: 'Depreciation method', zh: '折旧方式' }))}</span>
                     <span className="value">
                       {property.gwg_elected
-                        ? t('properties.assetDetails.gwg', 'GWG 一次性费用化')
+                        ? t('properties.assetDetails.gwg', localizedText({ de: 'GWG Sofortaufwand', en: 'GWG immediate expense', zh: 'GWG 一次性费用化' }))
                           : formatAssetTaxValue('depreciationMethods', property.depreciation_method)}
                     </span>
                   </div>
                   {property.degressive_afa_rate != null && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.degressiveRate', '递减折旧比例')}</span>
+                      <span className="label">{t('properties.assetDetails.degressiveRate', localizedText({ de: 'Degressive AfA', en: 'Declining-balance rate', zh: '递减折旧比例' }))}</span>
                       <span className="value">{formatPercentage(property.degressive_afa_rate)}</span>
                     </div>
                   )}
                   {property.vat_recoverable_status && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.vatStatus', '进项税预判')}</span>
+                      <span className="label">{t('properties.assetDetails.vatStatus', localizedText({ de: 'Vorsteuerstatus', en: 'VAT recovery status', zh: '进项税预判' }))}</span>
                       <span className="value">{formatAssetTaxValue('vatStatuses', property.vat_recoverable_status)}</span>
                     </div>
                   )}
@@ -661,13 +794,13 @@ const PropertyDetail = ({
                       {property.ifb_candidate
                         ? property.ifb_rate != null
                           ? `${property.ifb_rate}%`
-                          : t('properties.assetDetails.ifbCandidate', '候选')
-                        : t('properties.assetDetails.ifbNotEligible', '当前不适用')}
+                          : t('properties.assetDetails.ifbCandidate', localizedText({ de: 'Kandidat', en: 'Candidate', zh: '候选' }))
+                        : t('properties.assetDetails.ifbNotEligible', localizedText({ de: 'Aktuell nicht anwendbar', en: 'Not applicable right now', zh: '当前不适用' }))}
                     </span>
                   </div>
                   {property.income_tax_cost_cap != null && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.incomeTaxCap', '所得税可计提上限')}</span>
+                      <span className="label">{t('properties.assetDetails.incomeTaxCap', localizedText({ de: 'ESt-Kostenobergrenze', en: 'Income tax cap', zh: '所得税可计提上限' }))}</span>
                       <span className="value">{formatCurrency(property.income_tax_cost_cap)}</span>
                     </div>
                   )}
@@ -675,12 +808,12 @@ const PropertyDetail = ({
               </div>
 
               <div className="info-card">
-                <h3>{t('properties.assetDetails.depreciation', '折旧摘要')}</h3>
+                <h3>{t('properties.assetDetails.depreciation', localizedText({ de: 'Abschreibungsuebersicht', en: 'Depreciation summary', zh: '折旧摘要' }))}</h3>
                 <div className="info-rows">
                   {property.useful_life_years != null && (
                     <div className="info-row">
-                      <span className="label">{t('properties.assetDetails.usefulLife', '使用年限')}</span>
-                      <span className="value">{property.useful_life_years} {t('properties.assetDetails.years', '年')}</span>
+                      <span className="label">{t('properties.assetDetails.usefulLife', localizedText({ de: 'Nutzungsdauer', en: 'Useful life', zh: '使用年限' }))}</span>
+                      <span className="value">{property.useful_life_years} {t('properties.assetDetails.years', localizedText({ de: 'Jahre', en: 'years', zh: '年' }))}</span>
                     </div>
                   )}
                   <div className="info-row highlight">
@@ -692,7 +825,7 @@ const PropertyDetail = ({
                     <span className="value">{formatCurrency(assetRemaining)}</span>
                   </div>
                   <div className="info-row highlight">
-                    <span className="label">{t('properties.assetDetails.annualDepreciation', '年度折旧')}</span>
+                    <span className="label">{t('properties.assetDetails.annualDepreciation', localizedText({ de: 'Jaehrliche Abschreibung', en: 'Annual depreciation', zh: '年度折旧' }))}</span>
                     <span className="value">{formatCurrency(assetAnnualDepreciation)}</span>
                   </div>
                 </div>
@@ -703,7 +836,18 @@ const PropertyDetail = ({
 
         {property.sale_date && (
           <div className="sale-notice">
-            📅 {t('properties.soldOn', { date: formatDate(property.sale_date) })}
+            <FuturisticIcon icon={CalendarDays} tone="amber" size="xs" />
+            <span>{t('properties.soldOn', { date: formatDate(property.sale_date) })}</span>
+            {property.sale_price != null && (
+              <span style={{ marginLeft: 8 }}>({t('properties.salePrice', 'Sale price')}: {formatCurrency(property.sale_price)})</span>
+            )}
+          </div>
+        )}
+
+        {property.disposal_reason && (
+          <div className="sale-notice">
+            <FuturisticIcon icon={Info} tone="slate" size="xs" />
+            <span>{t(`properties.disposalReasons.${property.disposal_reason}`, property.disposal_reason)}</span>
           </div>
         )}
       </div>
@@ -713,22 +857,27 @@ const PropertyDetail = ({
         <div className="warnings-section">
           <h2>{t('properties.warnings.title')}</h2>
           <div className="warnings-list">
-            {warnings.map((warning, index) => (
-              <div key={index} className={`warning-card warning-${warning.level}`}>
-                <div className="warning-header">
-                  <span className="warning-icon">{getWarningIcon(warning.level)}</span>
-                  <span className="warning-level">
-                    {t(`properties.warnings.level.${warning.level}`)}
-                  </span>
-                  <span className="warning-year">
-                    {warning.year}
-                  </span>
+            {warnings.map((warning, index) => {
+              const warningIcon = getWarningIcon(warning.level);
+              return (
+                <div key={index} className={`warning-card warning-${warning.level}`}>
+                  <div className="warning-header">
+                    <span className="warning-icon">
+                      <FuturisticIcon icon={warningIcon.icon} tone={warningIcon.tone} size="xs" />
+                    </span>
+                    <span className="warning-level">
+                      {t(`properties.warnings.level.${warning.level}`)}
+                    </span>
+                    <span className="warning-year">
+                      {warning.year}
+                    </span>
+                  </div>
+                  <div className="warning-message">
+                    {getWarningMessage(warning)}
+                  </div>
                 </div>
-                <div className="warning-message">
-                  {getWarningMessage(warning)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -741,10 +890,11 @@ const PropertyDetail = ({
           <div style={{ display: 'flex', gap: '8px' }}>
             <Link
               to={`/documents?property_id=${property.id}&type=rental_contract`}
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm btn-icon"
               style={{ textDecoration: 'none' }}
             >
-              ➕ {t('properties.rentalContracts.addContract')}
+              <FuturisticIcon icon={Plus} tone="violet" size="xs" />
+              <span>{t('properties.rentalContracts.addContract')}</span>
             </Link>
           </div>
         </div>
@@ -756,10 +906,13 @@ const PropertyDetail = ({
           </div>
         ) : rentalContracts.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📋</div>
-            <p>{t('properties.rentalContracts.emptyUploadHint', '暂无租赁合同，请上传租赁合同文件，系统将自动识别并创建。')}</p>
-            <Link to={`/documents?property_id=${property.id}&type=rental_contract`} className="btn btn-primary btn-sm" style={{ marginTop: '8px', textDecoration: 'none' }}>
-              📄 {t('properties.rentalContracts.uploadContract', '上传租赁合同')}
+            <div className="empty-icon">
+              <FuturisticIcon icon={ScrollText} tone="slate" size="lg" />
+            </div>
+            <p>{t('properties.rentalContracts.emptyUploadHint', localizedText({ de: 'Noch kein Mietvertrag vorhanden. Laden Sie den Vertrag hoch, damit Taxja ihn automatisch erkennt und anlegt.', en: 'No rental contract yet. Upload the contract and Taxja will detect and create it automatically.', zh: '暂时没有租赁合同。请上传租赁合同文件，系统会自动识别并创建。' }))}</p>
+            <Link to={`/documents?property_id=${property.id}&type=rental_contract`} className="btn btn-primary btn-sm btn-icon" style={{ marginTop: '8px', textDecoration: 'none' }}>
+              <FuturisticIcon icon={ReceiptText} tone="violet" size="xs" />
+              <span>{t('properties.rentalContracts.uploadContract', localizedText({ de: 'Mietvertrag hochladen', en: 'Upload rental contract', zh: '上传租赁合同' }))}</span>
             </Link>
           </div>
         ) : (
@@ -768,7 +921,10 @@ const PropertyDetail = ({
               (c) => !c.is_active || (c.end_date && new Date(c.end_date) < new Date())
             ) && (
               <div className="warning-banner" style={{ marginBottom: '12px', padding: '10px 14px', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', fontSize: '0.9rem', color: '#92400e' }}>
-                ⚠️ {t('properties.rentalContracts.allExpiredWarning', '所有租赁合同已过期，该房产已自动转为自用状态。如需继续出租，请添加新的租赁合同。')}
+                <span className="warning-banner-icon">
+                  <FuturisticIcon icon={AlertTriangle} tone="amber" size="xs" />
+                </span>
+                {t('properties.rentalContracts.allExpiredWarning', localizedText({ de: 'Alle Mietvertraege sind abgelaufen. Diese Immobilie wurde automatisch auf Eigennutzung umgestellt. Wenn Sie weiter vermieten, fuegen Sie bitte einen neuen Mietvertrag hinzu.', en: 'All rental contracts have expired. This property has been switched back to owner-occupied status automatically. Add a new rental contract if you want to keep renting it out.', zh: '所有租赁合同都已过期，该房产已自动切换为自住状态。如需继续出租，请添加新的租赁合同。' }))}
               </div>
             )}
             <div className="rental-contracts-list">
@@ -788,27 +944,31 @@ const PropertyDetail = ({
                             {contract.source_document_id ? (
                               <Link
                                 to={`/documents/${contract.source_document_id}`}
-                                className="btn btn-secondary btn-sm"
+                                className="btn btn-secondary btn-sm btn-icon"
                                 style={{ padding: '2px 8px', fontSize: '0.75rem', textDecoration: 'none' }}
-                                title={t('properties.rentalContracts.viewLinkedDocument', '查看关联合同')}
+                                title={t('properties.rentalContracts.viewLinkedDocument', localizedText({ de: 'Verknuepften Vertrag ansehen', en: 'View linked contract', zh: '查看关联合同' }))}
                               >
-                                📄
+                                <FuturisticIcon icon={FileSearch} tone="cyan" size="xs" />
                               </Link>
                             ) : (
                               <button
-                                className="btn btn-secondary btn-sm"
+                                className="btn btn-secondary btn-sm btn-icon"
                                 style={{ padding: '2px 8px', fontSize: '0.75rem' }}
                                 onClick={() => startEditContract(contract)}
+                                title={t('common.edit')}
+                                aria-label={t('common.edit')}
                               >
-                                ✏️
+                                <FuturisticIcon icon={PencilLine} tone="slate" size="xs" />
                               </button>
                             )}
                             <button
-                              className="btn btn-secondary btn-sm"
+                              className="btn btn-secondary btn-sm btn-icon"
                               style={{ padding: '2px 8px', fontSize: '0.75rem' }}
                               onClick={() => handleDeleteContract(contract.id)}
+                              title={t('common.delete')}
+                              aria-label={t('common.delete')}
                             >
-                              🗑️
+                              <FuturisticIcon icon={Trash2} tone="rose" size="xs" />
                             </button>
                           </>
                         )}
@@ -831,23 +991,23 @@ const PropertyDetail = ({
                           </div>
                           <div className="contract-detail-row">
                             <span className="label">{t('properties.rentalContracts.startDate')}</span>
-                            <input
-                              type="date"
+                            <DateInput
                               className="unit-percentage-input"
-                              style={{ width: '160px' }}
                               value={editingContractData.start_date}
-                              onChange={(e) => setEditingContractData((p) => ({ ...p, start_date: e.target.value }))}
+                              onChange={(val) => setEditingContractData((p) => ({ ...p, start_date: val }))}
+                              locale={getLocaleForLanguage(i18n.language)}
+                              todayLabel={String(t('common.today', 'Today'))}
                             />
                           </div>
                           <div className="contract-detail-row">
                             <span className="label">{t('properties.rentalContracts.endDate')}</span>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <input
-                                type="date"
+                              <DateInput
                                 className="unit-percentage-input"
-                                style={{ width: '160px' }}
                                 value={editingContractData.end_date}
-                                onChange={(e) => setEditingContractData((p) => ({ ...p, end_date: e.target.value }))}
+                                onChange={(val) => setEditingContractData((p) => ({ ...p, end_date: val }))}
+                                locale={getLocaleForLanguage(i18n.language)}
+                                todayLabel={String(t('common.today', 'Today'))}
                               />
                               {editingContractData.end_date && (
                                 <button
@@ -896,9 +1056,9 @@ const PropertyDetail = ({
                           <div className="contract-detail-row">
                             <span className="label">{t('properties.rentalContracts.period')}</span>
                             <span className="value">
-                              {contract.start_date ? formatDate(contract.start_date) : '—'}
-                              {' → '}
-                              {contract.end_date ? formatDate(contract.end_date) : '∞'}
+                              {contract.start_date ? formatDate(contract.start_date) : '-'}
+                              {' -> '}
+                              {contract.end_date ? formatDate(contract.end_date) : openEndedLabel}
                             </span>
                           </div>
                           {contract.source_document_id && (
@@ -908,7 +1068,10 @@ const PropertyDetail = ({
                                 to={`/documents/${contract.source_document_id}`}
                                 style={{ fontSize: '0.8rem', color: '#4f46e5', textDecoration: 'none' }}
                               >
-                                📄 {t('properties.rentalContracts.editFromDocument', '如需修改请前往关联合同')}
+                                <span className="inline-link-icon">
+                                  <FuturisticIcon icon={FileText} tone="cyan" size="xs" />
+                                </span>
+                                {t('properties.rentalContracts.editFromDocument', localizedText({ de: 'Bei Aenderungen zum verknuepften Vertrag wechseln', en: 'Open the linked contract to make changes', zh: '如需修改，请前往关联合同' }))}
                               </Link>
                             </div>
                           )}
@@ -938,7 +1101,10 @@ const PropertyDetail = ({
                             </div>
                             {contract.unit_percentage == null && (
                               <div className="percentage-hint">
-                                ⚠️ {t('properties.rentalContracts.setPercentageHint')}
+                                <span className="inline-link-icon">
+                                  <FuturisticIcon icon={AlertTriangle} tone="amber" size="xs" />
+                                </span>
+                                {t('properties.rentalContracts.setPercentageHint')}
                               </div>
                             )}
                           </div>
@@ -977,7 +1143,9 @@ const PropertyDetail = ({
           </div>
         ) : transactions.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📋</div>
+            <div className="empty-icon">
+              <FuturisticIcon icon={Files} tone="slate" size="lg" />
+            </div>
             <h3>{sectionCopy.emptyTitle}</h3>
             <p>{sectionCopy.emptyDescription}</p>
           </div>

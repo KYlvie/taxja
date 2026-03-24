@@ -57,14 +57,22 @@
 
 .checkbox-group label {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 10px;
   cursor: pointer;
 }
 
 .checkbox-group input[type="checkbox"] {
   width: auto;
-  margin-right: 10px;
+  margin-right: 0;
+  margin-top: 2px;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-group label span {
+  display: block;
+  line-height: 1.45;
 }
 
 .security-info {
@@ -172,6 +180,11 @@
 
 .role-checkbox-label input[type="checkbox"] {
   accent-color: var(--color-primary);
+}
+
+.field-required-marker {
+  color: var(--color-danger, #ef4444);
+  font-weight: 700;
 }
 
 /* Privacy & Data Export section (outside form) */

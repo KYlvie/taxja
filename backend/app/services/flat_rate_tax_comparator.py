@@ -14,12 +14,14 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User, UserType
 from app.models.transaction import Transaction, TransactionType
+from app.models.transaction_line_item import LineItemPostingType
+from app.services.posting_line_utils import sum_postings
 from app.services.tax_calculation_engine import TaxCalculationEngine
 class FlatRateType(str, Enum):
     """Flat-rate tax types"""
 
     BASIC_6 = "basic_6"  # 6% of turnover
-    BASIC_13_5 = "basic_13_5"  # 13.5% of turnover (2025+)
+    BASIC_13_5 = "basic_13_5"  # 12% of turnover (§17 EStG; enum value kept for API compat)
     NOT_ELIGIBLE = "not_eligible"
 
 
@@ -27,12 +29,11 @@ class FlatRateTaxComparator:
     """Compares actual accounting vs flat-rate tax system"""
 
     # Flat-rate thresholds and rates
-    PROFIT_THRESHOLD = Decimal("33000.00")  # €33,000 profit limit
-    TURNOVER_THRESHOLD = Decimal("320000.00")  # €320,000 turnover limit for Basispauschalierung
+    TURNOVER_THRESHOLD = Decimal("220000.00")  # €220,000 turnover limit for Basispauschalierung (§17 EStG)
     BASIC_EXEMPTION_RATE = Decimal("0.15")  # 15% basic exemption
     MAX_BASIC_EXEMPTION = Decimal("4950.00")  # Max €4,950
     FLAT_RATE_6_PERCENT = Decimal("0.06")
-    FLAT_RATE_13_5_PERCENT = Decimal("0.135")
+    FLAT_RATE_13_5_PERCENT = Decimal("0.12")  # §17 EStG: 12% (historical name kept for API compat)
     CENTS = Decimal("0.01")
 
     def __init__(self, db: Session):
@@ -108,18 +109,12 @@ class FlatRateTaxComparator:
         turnover, deductible_expenses = self._get_income_and_expenses(user_id, tax_year)
         profit = turnover - deductible_expenses
 
-        # Check turnover threshold for Basispauschalierung
+        # Check turnover threshold for Basispauschalierung (§17 EStG)
+        # Note: Only turnover matters for eligibility — there is NO profit threshold.
         if turnover > self.TURNOVER_THRESHOLD:
             return {
                 "eligible": False,
                 "reason": f"Turnover (€{turnover:.2f}) exceeds €{self.TURNOVER_THRESHOLD:.2f} threshold for Basispauschalierung",
-            }
-
-        # Check profit threshold
-        if profit > self.PROFIT_THRESHOLD:
-            return {
-                "eligible": False,
-                "reason": f"Profit (€{profit:.2f}) exceeds €{self.PROFIT_THRESHOLD:.2f} threshold",
             }
 
         return {"eligible": True, "profit": float(profit)}
@@ -158,7 +153,7 @@ class FlatRateTaxComparator:
             rate_label = "6%"
         else:
             flat_rate = self.FLAT_RATE_13_5_PERCENT
-            rate_label = "13.5%"
+            rate_label = "12%"
 
         # Calculate deemed expenses
         deemed_expenses = turnover * flat_rate
@@ -204,22 +199,25 @@ class FlatRateTaxComparator:
         self, user_id: int, tax_year: int
     ) -> tuple[Decimal, Decimal]:
         """Aggregate annual turnover and deductible expenses from transactions."""
-        turnover = self.db.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
-            Transaction.user_id == user_id,
-            Transaction.type == TransactionType.INCOME,
-            extract("year", Transaction.transaction_date) == tax_year,
-        ).scalar()
-
-        deductible_expenses = self.db.query(
-            func.coalesce(func.sum(Transaction.amount), 0)
-        ).filter(
-            Transaction.user_id == user_id,
-            Transaction.type == TransactionType.EXPENSE,
-            Transaction.is_deductible.is_(True),
-            extract("year", Transaction.transaction_date) == tax_year,
-        ).scalar()
-
-        return Decimal(str(turnover or 0)), Decimal(str(deductible_expenses or 0))
+        transactions = (
+            self.db.query(Transaction)
+            .filter(
+                Transaction.user_id == user_id,
+                extract("year", Transaction.transaction_date) == tax_year,
+            )
+            .all()
+        )
+        turnover = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.INCOME},
+        )
+        deductible_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            deductible_only=True,
+            include_private_use=False,
+        )
+        return turnover, deductible_expenses
 
     def _determine_best_method(
         self,
@@ -274,7 +272,7 @@ class FlatRateTaxComparator:
             )
         else:
             return (
-                f"13.5% flat-rate system is recommended. "
+                f"12% flat-rate system is recommended. "
                 f"You would save €{savings:.2f} compared to actual accounting. "
                 f"Deemed expenses (€{best['deemed_expenses']:.2f}) exceed your "
                 f"actual expenses (€{actual['total_expenses']:.2f})."

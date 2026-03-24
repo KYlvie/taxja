@@ -3,7 +3,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Property, PropertyType, PropertyFormData, ASSET_USEFUL_LIFE } from '../../types/property';
+import Select from '../common/Select';
 import './PropertyForm.css';
 
 const ASSET_TYPE_OPTIONS = [
@@ -199,24 +201,36 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
         {property ? t('properties.editProperty') : t('properties.addProperty')}
       </h2>
 
+      {!property && (
+        <div className="property-doc-callout">
+          <div>
+            <strong>{t('properties.form.documentHint.title', 'Upload a supporting document')}</strong>
+            <p>{t('properties.form.documentHint.message', 'Upload a purchase contract or supporting file to keep the asset record complete.')}</p>
+          </div>
+          <Link className="btn btn-secondary btn-sm" to="/documents">
+            {t('properties.form.uploadDocument', 'Upload document')}
+          </Link>
+        </div>
+      )}
+
       {/* Asset category selector — only for new assets */}
       {!property && (
         <div className="form-group">
-          <label>{t('properties.assetCategory', '资产大类')}</label>
+          <label>{t('properties.assetCategory.label', 'Asset Category')}</label>
           <div className="asset-category-toggle">
             <button
               type="button"
               className={`toggle-btn ${assetCategory === 'real_estate' ? 'active' : ''}`}
               onClick={() => setValue('asset_category', 'real_estate' as any)}
             >
-              🏠 {t('properties.realEstate', '不动产')}
+              🏠 {t('properties.realEstate', 'Real Estate')}
             </button>
             <button
               type="button"
               className={`toggle-btn ${assetCategory === 'other' ? 'active' : ''}`}
               onClick={() => setValue('asset_category', 'other' as any)}
             >
-              📦 {t('properties.otherAsset', '其他资产')}
+              📦 {t('properties.otherAsset', 'Other Asset')}
             </button>
           </div>
         </div>
@@ -229,11 +243,12 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
             <label htmlFor="property_type">
               {t('properties.propertyType')} <span className="required">*</span>
             </label>
-            <select id="property_type" {...register('property_type')}>
-              <option value={PropertyType.RENTAL}>{t('properties.types.rental')}</option>
-              <option value={PropertyType.OWNER_OCCUPIED}>{t('properties.types.ownerOccupied')}</option>
-              <option value={PropertyType.MIXED_USE}>{t('properties.types.mixedUse')}</option>
-            </select>
+            <Select id="property_type" {...register('property_type')} value={watch('property_type') || ''}
+              options={[
+                { value: PropertyType.RENTAL, label: t('properties.types.rental') },
+                { value: PropertyType.OWNER_OCCUPIED, label: t('properties.types.ownerOccupied') },
+                { value: PropertyType.MIXED_USE, label: t('properties.types.mixedUse') },
+              ]} />
           </div>
 
           {propertyType === PropertyType.MIXED_USE && (
@@ -339,27 +354,25 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
         /* ========== NON-REAL-ESTATE ASSET FORM ========== */
         <>
           <div className="form-group">
-            <label htmlFor="asset_type">{t('properties.assetType', '资产类型')} <span className="required">*</span></label>
-            <select id="asset_type" {...register('asset_type')}>
-              <option value="">{t('properties.selectAssetType', '请选择资产类型')}</option>
-              {ASSET_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.icon} {t(`properties.assetTypes.${opt.value}`, opt.value)}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="asset_type">{t('properties.assetType', 'Asset Type')} <span className="required">*</span></label>
+            <Select id="asset_type" {...register('asset_type')} value={watch('asset_type') || ''}
+              placeholder={t('properties.selectAssetType', 'Select asset type')}
+              options={ASSET_TYPE_OPTIONS.map((opt) => ({
+                value: opt.value,
+                label: `${opt.icon} ${t(`properties.assetTypes.${opt.value}`, opt.value)}`,
+              }))} />
             {errors.asset_type && <span className="error">{errors.asset_type.message}</span>}
           </div>
 
           <div className="form-group">
-            <label htmlFor="asset_name">{t('properties.assetName', '资产名称')} <span className="required">*</span></label>
-            <input id="asset_name" type="text" placeholder={t('properties.assetNamePlaceholder', '例如：VW Golf 2024, MacBook Pro 16')} {...register('asset_name')} />
+            <label htmlFor="asset_name">{t('properties.assetName', 'Asset Name')} <span className="required">*</span></label>
+            <input id="asset_name" type="text" placeholder={t('properties.assetNamePlaceholder', 'e.g. VW Golf 2024, MacBook Pro 16')} {...register('asset_name')} />
             {errors.asset_name && <span className="error">{errors.asset_name.message}</span>}
           </div>
 
           <div className="form-group">
-            <label htmlFor="sub_category">{t('properties.subCategory', '子类别')}</label>
-            <input id="sub_category" type="text" placeholder={t('properties.subCategoryPlaceholder', '例如：PKW, Laptop, CNC-Maschine')} {...register('sub_category')} />
+            <label htmlFor="sub_category">{t('properties.subCategory', 'Sub-category')}</label>
+            <input id="sub_category" type="text" placeholder={t('properties.subCategoryPlaceholder', 'e.g. PKW, Laptop, CNC Machine')} {...register('sub_category')} />
           </div>
 
           <div className="form-section">
@@ -377,20 +390,20 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="supplier">{t('properties.supplier', '供应商')}</label>
-            <input id="supplier" type="text" placeholder={t('properties.supplierPlaceholder', '例如：MediaMarkt, Autohaus')} {...register('supplier')} />
+            <label htmlFor="supplier">{t('properties.supplier', 'Supplier')}</label>
+            <input id="supplier" type="text" placeholder={t('properties.supplierPlaceholder', 'e.g. MediaMarkt, Car Dealer')} {...register('supplier')} />
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="business_use_percentage">{t('properties.businessUse', '业务使用比例 (%)')}</label>
+              <label htmlFor="business_use_percentage">{t('properties.businessUse', 'Business Use (%)')}</label>
               <input id="business_use_percentage" type="number" step="0.01" min="0" max="100" placeholder="100" {...register('business_use_percentage')} />
-              <span className="field-hint">{t('properties.businessUseHint', '用于业务的百分比（影响折旧抵扣）')}</span>
+              <span className="field-hint">{t('properties.businessUseHint', 'Percentage used for business (affects depreciation deduction)')}</span>
             </div>
             <div className="form-group">
-              <label htmlFor="useful_life_years">{t('properties.usefulLife', '使用年限')}</label>
+              <label htmlFor="useful_life_years">{t('properties.usefulLife', 'Useful Life (years)')}</label>
               <input id="useful_life_years" type="number" min="1" max="50" {...register('useful_life_years')} />
-              <span className="field-hint">{t('properties.usefulLifeHint', '根据资产类型自动确定，可手动调整')}</span>
+              <span className="field-hint">{t('properties.usefulLifeHint', 'Auto-determined from asset type, can be adjusted manually')}</span>
             </div>
           </div>
         </>

@@ -47,6 +47,7 @@ class NotificationService:
                 message_en=f"Tax configuration for year {tax_year} has been updated. "
                           f"Please review your calculations.",
                 message_zh=f"{tax_year} 年税率配置已更新。请检查您的计算。",
+                # message_fr/message_ru require DB migration to add columns
                 data={
                     'tax_year': tax_year,
                     'updated_by': admin_user.email,

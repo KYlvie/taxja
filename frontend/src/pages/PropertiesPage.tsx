@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../hooks/useConfirm';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { usePropertyStore } from '../stores/propertyStore';
 import { propertyService } from '../services/propertyService';
+import { documentService } from '../services/documentService';
 import PropertyList from '../components/properties/PropertyList';
 import PropertyForm from '../components/properties/PropertyForm';
 import PropertyDetail from '../components/properties/PropertyDetail';
-import { Property, PropertyFormData } from '../types/property';
+import DisposalDialog from '../components/properties/DisposalDialog';
+import { Property, PropertyFormData, DisposalRequest } from '../types/property';
+import { Document, DocumentType } from '../types/document';
 import { useRefreshStore } from '../stores/refreshStore';
+import { formatDocumentFieldList } from '../utils/documentFieldLabel';
+import { BarChart3 } from 'lucide-react';
 import './PropertiesPage.css';
 
 const PropertiesPage = () => {
@@ -18,6 +23,11 @@ const PropertiesPage = () => {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | undefined>(undefined);
+  const [otherAssets, setOtherAssets] = useState<any[]>([]);
+  const [disposalTarget, setDisposalTarget] = useState<Property | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [assetDocuments, setAssetDocuments] = useState<Document[]>([]);
+  const [loadingAssetDocuments, setLoadingAssetDocuments] = useState(false);
 
   const {
     properties,
@@ -28,15 +38,72 @@ const PropertiesPage = () => {
     fetchProperty,
     createProperty,
     updateProperty,
-    archiveProperty,
+    disposeProperty,
     deleteProperty,
     clearError,
   } = usePropertyStore();
 
   const propertiesVersion = useRefreshStore((s) => s.propertiesVersion);
 
+  const pendingAssetDocuments = useMemo(() => {
+    const linkedDocumentIds = new Set(
+      [...properties, ...otherAssets]
+        .map((p: any) => p.kaufvertrag_document_id)
+        .filter((v): v is number => typeof v === 'number'),
+    );
+
+    return assetDocuments.filter((doc) => {
+      if (linkedDocumentIds.has(doc.id)) return false;
+      const ocrResult = doc.ocr_result as any;
+      const suggestion = ocrResult?.import_suggestion;
+      // Match any document whose import_suggestion is a pending asset creation
+      if (suggestion?.type !== 'create_asset') return false;
+      const status = suggestion?.status;
+      return status === 'pending' || status === 'needs_input';
+    });
+  }, [properties, otherAssets, assetDocuments]);
+
+  const refreshAssetDocuments = async () => {
+    setLoadingAssetDocuments(true);
+    try {
+      // Fetch document types that can produce assets: purchase contracts, invoices, receipts
+      const [contracts, invoices, receipts] = await Promise.all([
+        documentService.getDocuments({ document_type: DocumentType.PURCHASE_CONTRACT }, 1, 50),
+        documentService.getDocuments({ document_type: DocumentType.INVOICE }, 1, 50),
+        documentService.getDocuments({ document_type: DocumentType.RECEIPT }, 1, 50),
+      ]);
+      setAssetDocuments([...contracts.documents, ...invoices.documents, ...receipts.documents]);
+    } catch (error) {
+      console.error('Failed to load asset documents', error);
+    } finally {
+      setLoadingAssetDocuments(false);
+    }
+  };
+
+  const getPendingAssetDocumentStatus = (doc: Document) => {
+    const ocrResult = doc.ocr_result as any;
+    const suggestion = ocrResult?.import_suggestion;
+    if (suggestion?.status === 'needs_input') {
+      return t('properties.pendingDocuments.needsInput', 'Needs input');
+    }
+    const missingFields = suggestion?.data?.missing_fields;
+    if (Array.isArray(missingFields) && missingFields.length > 0) {
+      return t('properties.pendingDocuments.missingFields', {
+        defaultValue: 'Missing: {{fields}}',
+        fields: formatDocumentFieldList(missingFields, t),
+      });
+    }
+    return t('properties.pendingDocuments.awaitingConfirmation', 'Awaiting confirmation');
+  };
+
+  const refreshAll = (archived = showArchived) => {
+    fetchProperties(archived);
+    propertyService.getAssets(archived).then(r => setOtherAssets(r.assets || [])).catch(() => {});
+  };
+
   useEffect(() => {
-    fetchProperties();
+    refreshAll();
+    void refreshAssetDocuments();
   }, [fetchProperties, propertiesVersion]);
 
   useEffect(() => {
@@ -48,7 +115,7 @@ const PropertiesPage = () => {
   const handleCreateProperty = async (data: PropertyFormData) => {
     try {
       if (data.asset_category === 'other') {
-        // Non-real-estate asset — use /assets endpoint
+        // Non-real-estate asset: use /assets endpoint
         const assetData: any = {
           asset_type: data.asset_type,
           name: data.asset_name,
@@ -71,7 +138,7 @@ const PropertiesPage = () => {
         fetchProperties();
         navigate(`/properties/${newAsset.id}`);
       } else {
-        // Real estate — use existing /properties endpoint
+        // Real estate: use existing /properties endpoint
         const propertyData: any = {
           property_type: data.property_type,
           street: data.street,
@@ -191,19 +258,27 @@ const PropertiesPage = () => {
     navigate(`/properties/${property.id}`);
   };
 
-  const handleArchiveProperty = async (property: Property) => {
-    const saleDate = prompt(t('properties.enterSaleDate'), new Date().toISOString().split('T')[0]);
-    if (!saleDate) return;
+  const handleArchiveProperty = (property: Property) => {
+    setDisposalTarget(property);
+  };
+
+  const handleShowArchivedChange = (archived: boolean) => {
+    setShowArchived(archived);
+    refreshAll(archived);
+  };
+
+  const handleDispose = async (data: DisposalRequest) => {
+    if (!disposalTarget) return;
     try {
-      await archiveProperty(property.id, saleDate);
+      await disposeProperty(disposalTarget.id, data);
+      setDisposalTarget(null);
       if (propertyId) {
         navigate('/properties');
-      } else {
-        fetchProperties();
       }
+      refreshAll();
     } catch (error) {
-      console.error('Failed to archive property:', error);
-      await showAlert(t('properties.archiveError'), { variant: 'danger' });
+      console.error('Failed to dispose property:', error);
+      await showAlert(t('properties.disposalError'), { variant: 'danger' });
     }
   };
 
@@ -227,6 +302,9 @@ const PropertiesPage = () => {
       return (
         <div className="properties-page">
           <div className="properties-header">
+            <button type="button" className="btn btn-secondary" onClick={handleCancelForm} style={{ marginBottom: '8px' }}>
+              &larr; {t('common.back', 'Back')}
+            </button>
             <h1>{t('properties.editProperty')}</h1>
           </div>
           <div className="property-form-container">
@@ -242,6 +320,14 @@ const PropertiesPage = () => {
 
     return (
       <div className="properties-page">
+        {disposalTarget && (
+          <DisposalDialog
+            open={!!disposalTarget}
+            property={disposalTarget}
+            onClose={() => setDisposalTarget(null)}
+            onConfirm={handleDispose}
+          />
+        )}
         <PropertyDetail
           property={selectedProperty}
           onEdit={handleEditProperty}
@@ -255,6 +341,14 @@ const PropertiesPage = () => {
   // Show property list view
   return (
     <div className="properties-page">
+      {disposalTarget && (
+        <DisposalDialog
+          open={!!disposalTarget}
+          property={disposalTarget}
+          onClose={() => setDisposalTarget(null)}
+          onConfirm={handleDispose}
+        />
+      )}
       <div className="properties-header">
         <div className="properties-title">
           <h1>{t('properties.title')}</h1>
@@ -275,12 +369,15 @@ const PropertiesPage = () => {
       {error && (
         <div className="error-banner">
           <span>{error}</span>
-          <button onClick={clearError} className="error-close">×</button>
+          <button onClick={clearError} className="error-close">&times;</button>
         </div>
       )}
 
       {showForm && (
         <div className="property-form-container">
+          <button type="button" className="btn btn-secondary" onClick={handleCancelForm} style={{ marginBottom: '12px' }}>
+            &larr; {t('common.back', 'Back')}
+          </button>
           <PropertyForm
             property={editingProperty}
             onSubmit={editingProperty ? handleUpdateProperty : handleCreateProperty}
@@ -290,14 +387,62 @@ const PropertiesPage = () => {
       )}
 
       {!showForm && (
-        <PropertyList
-          properties={properties}
-          isLoading={isLoading}
-          onView={handleViewProperty}
-          onEdit={handleEditProperty}
-          onArchive={handleArchiveProperty}
-          onDelete={handleDeleteProperty}
-        />
+        <>
+          <div className="properties-overview-link" style={{ marginBottom: '16px' }}>
+            <Link to="/properties/portfolio" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <BarChart3 size={16} /> {t('properties.viewOverview', 'Asset overview & comparison')}
+            </Link>
+          </div>
+
+          {(loadingAssetDocuments || pendingAssetDocuments.length > 0) && (
+            <section className="liability-panel card" style={{ marginBottom: '16px' }}>
+              <div className="liability-group-header">
+                <div>
+                  <h2>{t('properties.pendingDocuments.title', 'Pending purchase contracts')}</h2>
+                  <p className="liability-hint">
+                    {t('properties.pendingDocuments.hint', 'Confirmed contracts become assets automatically. Contracts still waiting for review or missing fields stay here until you finish them in Documents.')}
+                  </p>
+                </div>
+                <span className="liability-count-badge">
+                  {loadingAssetDocuments ? '...' : pendingAssetDocuments.length}
+                </span>
+              </div>
+
+              {loadingAssetDocuments ? (
+                <p className="liability-hint">{t('common.loading')}</p>
+              ) : (
+                <div className="liability-list-items">
+                  {pendingAssetDocuments.map((doc) => (
+                    <article key={doc.id} className="liability-pending-doc-card">
+                      <div>
+                        <strong>{doc.file_name || `${t('documents.document', 'Document')} #${doc.id}`}</strong>
+                        <p>{getPendingAssetDocumentStatus(doc)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => navigate(`/documents/${doc.id}`)}
+                      >
+                        {t('properties.pendingDocuments.openSourceDocument', 'Open source document')}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          <PropertyList
+            properties={[...properties, ...otherAssets] as Property[]}
+            isLoading={isLoading}
+            onView={handleViewProperty}
+            onEdit={handleEditProperty}
+            onArchive={handleArchiveProperty}
+            onDelete={handleDeleteProperty}
+            showArchived={showArchived}
+            onShowArchivedChange={handleShowArchivedChange}
+          />
+        </>
       )}
     </div>
   );

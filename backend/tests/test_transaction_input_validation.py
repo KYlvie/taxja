@@ -48,6 +48,19 @@ class TestTransactionCreateValidation:
         assert transaction.amount == Decimal("50.99")
         assert transaction.expense_category == ExpenseCategory.OFFICE_SUPPLIES
         assert transaction.income_category is None
+
+    def test_valid_liability_repayment_transaction(self):
+        """Non-income/expense transaction types should not require categories."""
+        transaction = TransactionCreate(
+            type=TransactionType.LIABILITY_REPAYMENT,
+            amount=Decimal("602.08"),
+            transaction_date=date.today(),
+            description="Loan principal repayment",
+        )
+
+        assert transaction.type == TransactionType.LIABILITY_REPAYMENT
+        assert transaction.income_category is None
+        assert transaction.expense_category is None
     
     # Test required field validation
     
@@ -313,6 +326,21 @@ class TestTransactionCreateValidation:
         errors = exc_info.value.errors()
         error_messages = [error['msg'] for error in errors]
         assert any('income_category should not be set' in msg for msg in error_messages)
+
+    def test_non_expense_transaction_rejects_expense_category(self):
+        """Principal repayments and similar types should not accept expense categories."""
+        with pytest.raises(ValidationError) as exc_info:
+            TransactionCreate(
+                type=TransactionType.LIABILITY_REPAYMENT,
+                amount=Decimal("100.00"),
+                transaction_date=date.today(),
+                description="Loan principal",
+                expense_category=ExpenseCategory.LOAN_INTEREST,
+            )
+
+        errors = exc_info.value.errors()
+        error_messages = [error['msg'] for error in errors]
+        assert any('should not be set for liability_repayment transactions' in msg for msg in error_messages)
     
     def test_invalid_income_category_value(self):
         """Test that invalid income category values are rejected"""

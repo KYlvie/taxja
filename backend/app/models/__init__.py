@@ -14,6 +14,20 @@ from app.models.tax_report import TaxReport
 from app.models.classification_correction import ClassificationCorrection
 from app.models.property import Property, PropertyType, PropertyStatus
 from app.models.property_loan import PropertyLoan
+from app.models.liability import Liability, LiabilityType, LiabilityReportCategory
+from app.models.bank_statement_import import (
+    BankStatementImport,
+    BankStatementImportSourceType,
+    BankStatementLine,
+    BankStatementLineStatus,
+    BankStatementSuggestedAction,
+)
+from app.models.reminder_state import ReminderState
+from app.models.loan_installment import (
+    LoanInstallment,
+    LoanInstallmentSource,
+    LoanInstallmentStatus,
+)
 from app.models.recurring_transaction import (
     RecurringTransaction,
     RecurrenceFrequency,
@@ -37,6 +51,7 @@ from app.models.usage_record import UsageRecord, ResourceType
 from app.models.payment_event import PaymentEvent
 from app.models.account_deletion_log import AccountDeletionLog
 from app.models.user_classification_rule import UserClassificationRule
+from app.models.user_deductibility_rule import UserDeductibilityRule
 from app.models.transaction_line_item import TransactionLineItem
 from app.models.tax_filing_data import TaxFilingData
 from app.models.employer_month import EmployerMonth, EmployerMonthDocument, EmployerMonthStatus
@@ -47,6 +62,7 @@ from app.models.employer_annual_archive import (
 )
 from app.models.asset_policy_snapshot import AssetPolicySnapshot
 from app.models.asset_event import AssetEvent, AssetEventType, AssetEventTriggerSource
+from app.models.reminder_state import ReminderState
 from app.models.credit_balance import CreditBalance
 from app.models.credit_ledger import (
     CreditLedger,
@@ -81,6 +97,18 @@ __all__ = [
     "PropertyType",
     "PropertyStatus",
     "PropertyLoan",
+    "Liability",
+    "LiabilityType",
+    "LiabilityReportCategory",
+    "BankStatementImport",
+    "BankStatementImportSourceType",
+    "BankStatementLine",
+    "BankStatementLineStatus",
+    "BankStatementSuggestedAction",
+    "ReminderState",
+    "LoanInstallment",
+    "LoanInstallmentSource",
+    "LoanInstallmentStatus",
     "RecurringTransaction",
     "RecurrenceFrequency",
     "RecurringTransactionType",
@@ -108,6 +136,7 @@ __all__ = [
     "PaymentEvent",
     "AccountDeletionLog",
     "UserClassificationRule",
+    "UserDeductibilityRule",
     "TransactionLineItem",
     "TaxFilingData",
     "EmployerMonth",
@@ -120,6 +149,7 @@ __all__ = [
     "AssetEvent",
     "AssetEventType",
     "AssetEventTriggerSource",
+    "ReminderState",
     "CreditBalance",
     "CreditLedger",
     "CreditOperation",

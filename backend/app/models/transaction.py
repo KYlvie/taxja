@@ -7,15 +7,67 @@ from sqlalchemy import Column, Integer, String, Numeric, Date, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
+from app.models.transaction_line_item import LineItemPostingType
 
 # Save builtin property before SQLAlchemy relationship shadows it
 _property = builtins.property
+
+
+def _mirror_posting_type_for_transaction_type(
+    transaction_type,
+) -> LineItemPostingType:
+    """Map a parent transaction type to a fallback posting type."""
+    raw = getattr(transaction_type, "value", transaction_type)
+    mapping = {
+        TransactionType.INCOME.value: LineItemPostingType.INCOME,
+        TransactionType.EXPENSE.value: LineItemPostingType.EXPENSE,
+        TransactionType.ASSET_ACQUISITION.value: LineItemPostingType.ASSET_ACQUISITION,
+        TransactionType.LIABILITY_DRAWDOWN.value: LineItemPostingType.LIABILITY_DRAWDOWN,
+        TransactionType.LIABILITY_REPAYMENT.value: LineItemPostingType.LIABILITY_REPAYMENT,
+        TransactionType.TAX_PAYMENT.value: LineItemPostingType.TAX_PAYMENT,
+        TransactionType.TRANSFER.value: LineItemPostingType.TRANSFER,
+    }
+    return mapping.get(raw, LineItemPostingType.EXPENSE)
+
+
+def _resolve_line_posting_type(transaction, line_item) -> LineItemPostingType:
+    """Resolve posting type for real ORM rows and lightweight test doubles."""
+    resolver = getattr(transaction, "_line_posting_type", None)
+    if callable(resolver):
+        return resolver(line_item)
+    raw = getattr(line_item, "posting_type", None)
+    if raw is None:
+        return _mirror_posting_type_for_transaction_type(getattr(transaction, "type", None))
+    if isinstance(raw, LineItemPostingType):
+        return raw
+    try:
+        return LineItemPostingType(getattr(raw, "value", raw))
+    except ValueError:
+        return _mirror_posting_type_for_transaction_type(getattr(transaction, "type", None))
+
+
+def _resolved_transaction_type(transaction) -> "TransactionType":
+    """Return a transaction type with a safe legacy fallback."""
+    raw = getattr(transaction, "type", None)
+    if raw is None:
+        return TransactionType.EXPENSE
+    if isinstance(raw, TransactionType):
+        return raw
+    try:
+        return TransactionType(getattr(raw, "value", raw))
+    except ValueError:
+        return TransactionType.EXPENSE
 
 
 class TransactionType(str, Enum):
     """Transaction type enumeration"""
     INCOME = "income"
     EXPENSE = "expense"
+    ASSET_ACQUISITION = "asset_acquisition"
+    LIABILITY_DRAWDOWN = "liability_drawdown"
+    LIABILITY_REPAYMENT = "liability_repayment"
+    TAX_PAYMENT = "tax_payment"
+    TRANSFER = "transfer"
 
 
 class IncomeCategory(str, Enum):
@@ -73,6 +125,50 @@ class ExpenseCategory(str, Enum):
     OTHER = "other"
 
 
+def _transaction_type_db_labels(enum_cls):
+    return [member.name for member in enum_cls]
+
+
+def _income_category_db_labels(enum_cls):
+    return [member.name for member in enum_cls]
+
+
+def _expense_category_db_labels(enum_cls):
+    legacy_lowercase_members = {
+        ExpenseCategory.CLEANING,
+        ExpenseCategory.CLOTHING,
+        ExpenseCategory.SOFTWARE,
+        ExpenseCategory.SHIPPING,
+        ExpenseCategory.FUEL,
+        ExpenseCategory.EDUCATION,
+    }
+    return [
+        member.value if member in legacy_lowercase_members else member.name
+        for member in enum_cls
+    ]
+
+
+TRANSACTION_TYPE_ENUM = SQLEnum(
+    TransactionType,
+    name="transactiontype",
+    values_callable=_transaction_type_db_labels,
+    validate_strings=True,
+)
+
+INCOME_CATEGORY_ENUM = SQLEnum(
+    IncomeCategory,
+    name="incomecategory",
+    values_callable=_income_category_db_labels,
+    validate_strings=True,
+)
+
+EXPENSE_CATEGORY_ENUM = SQLEnum(
+    ExpenseCategory,
+    name="expensecategory",
+    values_callable=_expense_category_db_labels,
+)
+
+
 class Transaction(Base):
     """Transaction model for income and expenses"""
     __tablename__ = "transactions"
@@ -81,13 +177,14 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Foreign key to user
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # Foreign key to property (nullable - not all transactions are property-related)
     property_id = Column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="SET NULL"), nullable=True, index=True)
+    liability_id = Column(Integer, ForeignKey("liabilities.id", ondelete="SET NULL"), nullable=True, index=True)
     
     # Transaction type
-    type = Column(SQLEnum(TransactionType), nullable=False, index=True)
+    type = Column(TRANSACTION_TYPE_ENUM, nullable=False, index=True)
     
     # Amount (always positive, type determines income/expense)
     amount = Column(Numeric(12, 2), nullable=False)
@@ -99,8 +196,8 @@ class Transaction(Base):
     description = Column(String(500))
     
     # Categories (only one should be set based on type)
-    income_category = Column(SQLEnum(IncomeCategory), nullable=True)
-    expense_category = Column(SQLEnum(ExpenseCategory), nullable=True)
+    income_category = Column(INCOME_CATEGORY_ENUM, nullable=True)
+    expense_category = Column(EXPENSE_CATEGORY_ENUM, nullable=True)
     
     # Deductibility
     is_deductible = Column(Boolean, default=False)
@@ -112,7 +209,7 @@ class Transaction(Base):
     vat_type = Column(String(50), nullable=True, default="DOMESTIC")
     
     # Foreign key to document (for OCR integration)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
     
     # Classification confidence (0.0 to 1.0)
     classification_confidence = Column(Numeric(3, 2), nullable=True)
@@ -135,6 +232,10 @@ class Transaction(Base):
 
     # Import source
     import_source = Column(String(50), nullable=True)  # csv, psd2, manual, ocr
+
+    # Bank statement reconciliation flags
+    bank_reconciled = Column(Boolean, default=False, nullable=False)
+    bank_reconciled_at = Column(DateTime, nullable=True)
     
     # Recurring transaction fields
     is_recurring = Column(Boolean, default=False, nullable=False)
@@ -155,6 +256,7 @@ class Transaction(Base):
     # Relationships
     user = relationship("User", back_populates="transactions")
     property = relationship("Property", back_populates="transactions", foreign_keys=[property_id])
+    liability = relationship("Liability", back_populates="transactions", foreign_keys=[liability_id])
     corrections = relationship("ClassificationCorrection", back_populates="transaction")
     line_items = relationship(
         "TransactionLineItem", back_populates="transaction",
@@ -171,15 +273,107 @@ class Transaction(Base):
     @_property
     def has_line_items(self) -> bool:
         """Whether this transaction has per-item breakdown."""
-        return bool(self.line_items)
+        raw_line_items = getattr(self, "line_items", None)
+        if raw_line_items is None:
+            return False
+        try:
+            return len(raw_line_items) > 0
+        except Exception:
+            try:
+                return bool(list(raw_line_items))
+            except Exception:
+                return False
+
+    def _default_line_posting_type(self) -> LineItemPostingType:
+        """Map the parent cash-event type to a mirror posting type."""
+        return _mirror_posting_type_for_transaction_type(_resolved_transaction_type(self))
+
+    def _line_posting_type(self, line_item) -> LineItemPostingType:
+        """Resolve a line item's posting type with safe fallback for legacy rows."""
+        raw = getattr(line_item, "posting_type", None)
+        if raw is None:
+            return self._default_line_posting_type()
+        if isinstance(raw, LineItemPostingType):
+            return raw
+        try:
+            return LineItemPostingType(getattr(raw, "value", raw))
+        except ValueError:
+            return self._default_line_posting_type()
+
+    @_property
+    def posting_gross_amount(self) -> Decimal:
+        """Gross amount reconstructed from canonical posting lines."""
+        if not self.line_items:
+            return self.amount or Decimal("0.00")
+        total = Decimal("0.00")
+        for li in self.line_items:
+            qty = getattr(li, "quantity", 1) or 1
+            line_amount = getattr(li, "amount", Decimal("0.00")) or Decimal("0.00")
+            recoverable_vat = getattr(li, "vat_recoverable_amount", Decimal("0.00")) or Decimal("0.00")
+            total += (line_amount * qty) + recoverable_vat
+        return total
+
+    @_property
+    def bookkeeping_expense_amount(self) -> Decimal:
+        """Total expense postings that belong in bookkeeping/GuV."""
+        if not self.line_items:
+            return (
+                self.amount or Decimal("0.00")
+            ) if _resolved_transaction_type(self) == TransactionType.EXPENSE else Decimal("0.00")
+        return sum(
+            (
+                (li.amount or Decimal("0.00")) * (li.quantity or 1)
+                for li in self.line_items
+                if _resolve_line_posting_type(self, li) == LineItemPostingType.EXPENSE
+            ),
+            Decimal("0.00"),
+        )
+
+    @_property
+    def private_use_amount(self) -> Decimal:
+        """Private-use postings excluded from business expense totals."""
+        if not self.line_items:
+            return Decimal("0.00")
+        return sum(
+            (
+                (li.amount or Decimal("0.00")) * (li.quantity or 1)
+                for li in self.line_items
+                if _resolve_line_posting_type(self, li) == LineItemPostingType.PRIVATE_USE
+            ),
+            Decimal("0.00"),
+        )
+
+    @_property
+    def vat_recoverable_amount_total(self) -> Decimal:
+        """Recoverable VAT captured on canonical line items."""
+        if not self.line_items:
+            return Decimal("0.00")
+        return sum(
+            (
+                getattr(li, "vat_recoverable_amount", Decimal("0.00")) or Decimal("0.00")
+                for li in self.line_items
+            ),
+            Decimal("0.00"),
+        )
 
     @_property
     def deductible_amount(self) -> Decimal:
         """Total deductible amount: sum of deductible line items, or full amount if no items."""
         if not self.line_items:
-            return self.amount if self.is_deductible else Decimal("0.00")
+            return (
+                self.amount or Decimal("0.00")
+                if _resolved_transaction_type(self) == TransactionType.EXPENSE and self.is_deductible
+                else Decimal("0.00")
+            )
         return sum(
-            (li.amount * li.quantity for li in self.line_items if li.is_deductible),
+            (
+                (li.amount or Decimal("0.00")) * (li.quantity or 1)
+                for li in self.line_items
+                if (
+                    _resolve_line_posting_type(self, li) == LineItemPostingType.EXPENSE
+                    and getattr(li, "is_deductible", False)
+                )
+            ),
             Decimal("0.00"),
         )
 
@@ -187,9 +381,21 @@ class Transaction(Base):
     def non_deductible_amount(self) -> Decimal:
         """Total non-deductible amount."""
         if not self.line_items:
-            return Decimal("0.00") if self.is_deductible else self.amount
+            if _resolved_transaction_type(self) != TransactionType.EXPENSE:
+                return Decimal("0.00")
+            return Decimal("0.00") if self.is_deductible else (self.amount or Decimal("0.00"))
         return sum(
-            (li.amount * li.quantity for li in self.line_items if not li.is_deductible),
+            (
+                (li.amount or Decimal("0.00")) * (li.quantity or 1)
+                for li in self.line_items
+                if (
+                    _resolve_line_posting_type(self, li) == LineItemPostingType.PRIVATE_USE
+                    or (
+                        _resolve_line_posting_type(self, li) == LineItemPostingType.EXPENSE
+                        and not getattr(li, "is_deductible", False)
+                    )
+                )
+            ),
             Decimal("0.00"),
         )
 
@@ -201,18 +407,22 @@ class Transaction(Base):
         Used by tax reports to aggregate expenses per category accurately.
         """
         if not self.line_items:
-            if self.is_deductible:
+            if _resolved_transaction_type(self) == TransactionType.EXPENSE and self.is_deductible:
                 cat = (
                     self.expense_category.value
                     if self.expense_category
                     else "other"
                 )
-                return {cat: self.amount}
+                return {cat: self.amount or Decimal("0.00")}
             return {}
         result: dict = {}
         for li in self.line_items:
-            if li.is_deductible and li.category:
+            if (
+                _resolve_line_posting_type(self, li) == LineItemPostingType.EXPENSE
+                and getattr(li, "is_deductible", False)
+                and li.category
+            ):
                 result[li.category] = result.get(li.category, Decimal("0.00")) + (
-                    li.amount * li.quantity
+                    (li.amount or Decimal("0.00")) * (li.quantity or 1)
                 )
         return result

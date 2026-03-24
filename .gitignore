@@ -105,6 +105,7 @@ debug_*.py
 reprocess_*.py
 seed_*.py
 import_*.py
+!backend/tests/**/test_*.py
 create_template_table.py
 update_*.cjs
 backend/test_*.py

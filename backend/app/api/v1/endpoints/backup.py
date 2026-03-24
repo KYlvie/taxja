@@ -3,10 +3,13 @@ Backup management API endpoints.
 Admin-only endpoints for creating and managing backups.
 """
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import get_current_admin_user, get_db
 from app.core.exceptions import BackupError
@@ -50,9 +53,10 @@ def trigger_full_backup(
         )
 
     except Exception as e:
+        logger.exception("Failed to trigger full backup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger backup: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -75,9 +79,10 @@ def trigger_database_backup(
         )
 
     except Exception as e:
+        logger.exception("Failed to trigger database backup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger database backup: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -100,9 +105,10 @@ def trigger_documents_backup(
         )
 
     except Exception as e:
+        logger.exception("Failed to trigger documents backup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger documents backup: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -125,9 +131,10 @@ def list_backups(
         )
 
     except Exception as e:
+        logger.exception("Failed to list backups")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list backups: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -154,9 +161,10 @@ def trigger_backup_cleanup(
         )
 
     except Exception as e:
+        logger.exception("Failed to trigger backup cleanup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger backup cleanup: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -195,9 +203,10 @@ def restore_from_backup(
         )
 
     except Exception as e:
+        logger.exception("Failed to restore from backup")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore from backup: {str(e)}",
+            detail="backup_operation_failed",
         )
 
 
@@ -229,7 +238,8 @@ def restore_database_only(
         )
 
     except Exception as e:
+        logger.exception("Failed to restore database")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore database: {str(e)}",
+            detail="backup_operation_failed",
         )

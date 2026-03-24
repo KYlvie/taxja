@@ -9,7 +9,13 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react';
-import { Transaction, TransactionType } from '../../types/transaction';
+import {
+  getTransactionAmountPrefix,
+  getTransactionAmountTone,
+  isExpenseTransactionType,
+  Transaction,
+  TransactionType,
+} from '../../types/transaction';
 import { getLocaleForLanguage } from '../../utils/locale';
 import './TransactionList.css';
 
@@ -47,7 +53,7 @@ const TransactionList = ({
       currency: 'EUR',
     }).format(amount);
 
-    return type === TransactionType.INCOME ? `+${formatted}` : `-${formatted}`;
+    return `${getTransactionAmountPrefix(type)}${formatted}`;
   };
 
   const formatDate = (dateString: string) =>
@@ -236,11 +242,15 @@ const TransactionList = ({
                   </span>
                 </td>
                 <td>
-                  <span className="category-badge">
-                    {t(`transactions.categories.${transaction.category}`)}
-                  </span>
+                  {transaction.category ? (
+                    <span className="category-badge">
+                      {t(`transactions.categories.${transaction.category}`)}
+                    </span>
+                  ) : (
+                    <span className="category-empty">-</span>
+                  )}
                 </td>
-                <td className={`amount ${transaction.type}`}>
+                <td className={`amount ${getTransactionAmountTone(transaction.type)}`}>
                   {formatAmount(transaction.amount, transaction.type)}
                 </td>
                 <td>
@@ -249,10 +259,14 @@ const TransactionList = ({
                   </span>
                 </td>
                 <td>
-                  {transaction.is_deductible ? (
-                    <span className="deductible-yes">✓</span>
+                  {isExpenseTransactionType(transaction.type) ? (
+                    transaction.is_deductible ? (
+                      <span className="deductible-yes">✓</span>
+                    ) : (
+                      <span className="deductible-no">✕</span>
+                    )
                   ) : (
-                    <span className="deductible-no">✕</span>
+                    <span className="deductible-na">-</span>
                   )}
                 </td>
                 <td className="actions">{renderActionButtons(transaction)}</td>
@@ -271,7 +285,7 @@ const TransactionList = ({
           >
             <div className="transaction-card-top">
               <div className="transaction-card-date">{formatDate(transaction.date)}</div>
-              <div className={`amount ${transaction.type}`}>
+              <div className={`amount ${getTransactionAmountTone(transaction.type)}`}>
                 {formatAmount(transaction.amount, transaction.type)}
               </div>
             </div>
@@ -279,17 +293,21 @@ const TransactionList = ({
             <div className="transaction-card-description">{transaction.description}</div>
 
             <div className="transaction-card-tags">
-              <span className="category-badge">
-                {t(`transactions.categories.${transaction.category}`)}
-              </span>
+              {transaction.category ? (
+                <span className="category-badge">
+                  {t(`transactions.categories.${transaction.category}`)}
+                </span>
+              ) : null}
               <span className={`type-badge ${transaction.type}`}>
                 {t(`transactions.types.${transaction.type}`)}
               </span>
-              <span
-                className={`transaction-chip ${transaction.is_deductible ? 'positive' : 'neutral'}`}
-              >
-                {t('transactions.deductible')}: {transaction.is_deductible ? t('common.yes', 'Yes') : t('common.no', 'No')}
-              </span>
+              {isExpenseTransactionType(transaction.type) ? (
+                <span
+                  className={`transaction-chip ${transaction.is_deductible ? 'positive' : 'neutral'}`}
+                >
+                  {t('transactions.deductible')}: {transaction.is_deductible ? t('common.yes', 'Yes') : t('common.no', 'No')}
+                </span>
+              ) : null}
 
               {transaction.needs_review && !transaction.reviewed ? (
                 <span className="transaction-chip needs-review">

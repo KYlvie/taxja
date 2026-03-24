@@ -62,19 +62,19 @@
   gap: 12px;
 }
 
-.legal-back {
+.legal-back.subpage-back-link {
+  margin-bottom: 0;
   font-size: 0.85rem;
-  font-weight: 600;
+  padding: 0.34rem 0.82rem 0.34rem 0.42rem;
   color: var(--color-primary);
-  text-decoration: none;
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  transition: all 0.2s;
+  border-color: var(--color-border);
+  box-shadow:
+    0 8px 18px rgba(99, 102, 241, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.52) inset;
 }
 
-.legal-back:hover {
-  background: rgba(99, 102, 241, 0.06);
+.legal-back.subpage-back-link:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(243, 244, 255, 0.96));
   border-color: var(--color-border-hover);
 }
 

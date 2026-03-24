@@ -2,14 +2,24 @@
 import pytest
 from datetime import date, datetime
 from decimal import Decimal
+from sqlalchemy import text
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.models.credit_balance import CreditBalance
 from app.models.credit_cost_config import CreditCostConfig
+from app.models.recurring_transaction import RecurringTransaction, RecurringTransactionType
+from app.models.transaction_line_item import (
+    LineItemAllocationSource,
+    LineItemPostingType,
+    TransactionLineItem,
+)
 from app.models.user import User, UserType
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
+from app.models.user_classification_rule import UserClassificationRule
+from app.models.user_deductibility_rule import UserDeductibilityRule
 from app.models.usage_record import UsageRecord
 from app.core.security import get_password_hash, create_access_token
+from app.services.deductibility_checker import DeductibilityChecker
 
 
 @pytest.fixture
@@ -118,6 +128,43 @@ def test_create_expense_transaction(client: TestClient, auth_headers: dict, db: 
     assert Decimal(data["vat_rate"]) == Decimal("0.2000")
 
 
+def test_create_liability_repayment_transaction_without_categories(
+    client: TestClient,
+    auth_headers: dict,
+    db: Session,
+):
+    """New liability transaction types should be creatable without income/expense categories."""
+    transaction_data = {
+        "type": "liability_repayment",
+        "amount": 602.08,
+        "transaction_date": "2026-01-20",
+        "description": "Loan principal repayment",
+        "is_recurring": True,
+        "recurring_frequency": "monthly",
+        "recurring_start_date": "2026-01-20",
+    }
+
+    response = client.post(
+        "/api/v1/transactions",
+        json=transaction_data,
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["type"] == "liability_repayment"
+    assert data["income_category"] is None
+    assert data["expense_category"] is None
+    assert data["is_deductible"] is False
+
+    recurring = db.query(RecurringTransaction).filter(
+        RecurringTransaction.id == data["source_recurring_id"]
+    ).one()
+    assert recurring.recurring_type == RecurringTransactionType.MANUAL
+    assert recurring.transaction_type == "liability_repayment"
+    assert recurring.category == "liability_repayment"
+
+
 def test_create_transaction_missing_category(client: TestClient, auth_headers: dict):
     """Test that creating a transaction without required category fails"""
     transaction_data = {
@@ -189,6 +236,66 @@ def test_get_transactions(client: TestClient, auth_headers: dict, test_user: Use
     assert len(data["transactions"]) == 2
     assert data["page"] == 1
     assert data["total_pages"] == 1
+
+
+def test_get_transactions_accepts_legacy_lowercase_line_item_enums(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """List endpoint should tolerate rows written with lowercase enum values."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("150.00"),
+        transaction_date=date(2026, 1, 20),
+        description="Office supplies",
+        expense_category=ExpenseCategory.OFFICE_SUPPLIES,
+        is_deductible=True,
+    )
+    db.add(transaction)
+    db.flush()
+
+    line_item = TransactionLineItem(
+        transaction_id=transaction.id,
+        description="Pens",
+        amount=Decimal("150.00"),
+        quantity=1,
+        posting_type=LineItemPostingType.EXPENSE,
+        allocation_source=LineItemAllocationSource.MANUAL,
+        category=ExpenseCategory.OFFICE_SUPPLIES.value,
+        is_deductible=True,
+    )
+    db.add(line_item)
+    db.commit()
+
+    db.execute(
+        text(
+            """
+            UPDATE transaction_line_items
+            SET posting_type = :posting_type,
+                allocation_source = :allocation_source
+            WHERE id = :line_item_id
+            """
+        ),
+        {
+            "posting_type": "expense",
+            "allocation_source": "manual",
+            "line_item_id": line_item.id,
+        },
+    )
+    db.commit()
+
+    response = client.get(
+        "/api/v1/transactions?page=1&page_size=20",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["transactions"][0]["line_items"][0]["posting_type"] == "expense"
 
 
 def test_get_transactions_with_filters(client: TestClient, auth_headers: dict, test_user: User, db: Session):
@@ -308,6 +415,295 @@ def test_update_transaction(client: TestClient, auth_headers: dict, test_user: U
     assert data["description"] == "Updated description"
     assert data["is_deductible"] is True
     assert data["deduction_reason"] == "Business expense"
+    assert data["reviewed"] is True
+    assert data["locked"] is True
+    assert data["needs_review"] is False
+
+
+def test_update_transaction_category_change_with_line_items_locks_and_cascades(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """Manual parent category corrections should survive legacy uppercase line-item categories."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("68.32"),
+        transaction_date=date(2026, 1, 15),
+        description="Eni Service-Station",
+        expense_category=ExpenseCategory.OTHER,
+        is_deductible=False,
+        needs_review=True,
+        reviewed=False,
+        locked=False,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    db.add(
+        TransactionLineItem(
+            transaction_id=transaction.id,
+            description="Diesel fuel purchase",
+            amount=Decimal("68.32"),
+            quantity=1,
+            posting_type=LineItemPostingType.EXPENSE,
+            allocation_source=LineItemAllocationSource.MANUAL,
+            category=ExpenseCategory.OTHER.value,
+            is_deductible=False,
+            deduction_reason="Initial automatic guess",
+            sort_order=0,
+        )
+    )
+    db.commit()
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={
+            "expense_category": "fuel",
+            "line_items": [
+                {
+                    "description": "Diesel fuel purchase",
+                    "amount": 68.32,
+                    "quantity": 1,
+                    "posting_type": "expense",
+                    "allocation_source": "manual",
+                    "category": "OTHER",
+                    "is_deductible": True,
+                    "deduction_reason": "Guest transport for lodging business",
+                    "sort_order": 0,
+                }
+            ],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["expense_category"] == "fuel"
+    assert payload["reviewed"] is True
+    assert payload["locked"] is True
+    assert payload["needs_review"] is False
+    assert payload["is_deductible"] is True
+
+    db.refresh(transaction)
+    updated_line_items = (
+        db.query(TransactionLineItem)
+        .filter(TransactionLineItem.transaction_id == transaction.id)
+        .order_by(TransactionLineItem.sort_order.asc())
+        .all()
+    )
+    assert len(updated_line_items) == 1
+    assert updated_line_items[0].category == "fuel"
+    assert updated_line_items[0].is_deductible is True
+
+
+def test_update_transaction_first_category_assignment_creates_rule(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """Assigning a first category to a legacy uncategorized transaction should learn a rule."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("64.03"),
+        transaction_date=date(2026, 1, 15),
+        description="INTERSPAR breakfast groceries",
+        expense_category=None,
+        income_category=None,
+        is_deductible=False,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={"expense_category": "groceries"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    learned_rule = (
+        db.query(UserClassificationRule)
+        .filter(
+            UserClassificationRule.user_id == test_user.id,
+            UserClassificationRule.txn_type == "expense",
+            UserClassificationRule.category == "groceries",
+        )
+        .first()
+    )
+    assert learned_rule is not None
+    assert learned_rule.original_description == "INTERSPAR breakfast groceries"
+
+
+def test_update_transaction_deductibility_override_is_remembered(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """A manual deductible/non-deductible correction should create a reusable override rule."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("89.00"),
+        transaction_date=date(2026, 1, 15),
+        description="OMV guest shuttle fuel",
+        expense_category=ExpenseCategory.VEHICLE,
+        is_deductible=False,
+        deduction_reason="Use Pendlerpauschale",
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={
+            "is_deductible": True,
+            "deduction_reason": "Guest transport for lodging business",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    learned_rule = (
+        db.query(UserDeductibilityRule)
+        .filter(
+            UserDeductibilityRule.user_id == test_user.id,
+            UserDeductibilityRule.expense_category == "vehicle",
+        )
+        .first()
+    )
+    assert learned_rule is not None
+    assert learned_rule.is_deductible is True
+    assert learned_rule.original_description == "OMV guest shuttle fuel"
+
+    checker = DeductibilityChecker(db=db)
+    result = checker.check(
+        "vehicle",
+        test_user.user_type.value,
+        description="OMV guest shuttle fuel",
+        user_id=test_user.id,
+    )
+    assert result.is_deductible is True
+    assert "Guest transport" in result.reason
+
+
+def test_update_transaction_can_skip_rule_learning_for_document_sync(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """Document-originated sync updates should not double-learn user rules."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("237.90"),
+        transaction_date=date(2026, 1, 15),
+        description="ÖAMTC: Purchase of VARTA battery and coolant",
+        expense_category=ExpenseCategory.OTHER,
+        is_deductible=False,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={
+            "expense_category": "other",
+            "reviewed": True,
+            "locked": True,
+            "suppress_rule_learning": True,
+            "line_items": [
+                {
+                    "description": "VARTA ABA71 BLUE DYN EFB",
+                    "amount": 222.00,
+                    "quantity": 1,
+                    "posting_type": "expense",
+                    "allocation_source": "manual",
+                    "category": "other",
+                    "is_deductible": False,
+                    "deduction_reason": "Battery purchase is not deductible.",
+                    "sort_order": 0,
+                },
+                {
+                    "description": "KÜHLERFROSTSCHUTZ MC30 1,5l.",
+                    "amount": 15.90,
+                    "quantity": 1,
+                    "posting_type": "expense",
+                    "allocation_source": "manual",
+                    "category": "other",
+                    "is_deductible": False,
+                    "deduction_reason": "Battery purchase is not deductible.",
+                    "sort_order": 1,
+                },
+            ],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert (
+        db.query(UserClassificationRule)
+        .filter(UserClassificationRule.user_id == test_user.id)
+        .count()
+        == 0
+    )
+    assert (
+        db.query(UserDeductibilityRule)
+        .filter(UserDeductibilityRule.user_id == test_user.id)
+        .count()
+        == 0
+    )
+
+
+def test_update_transaction_to_liability_repayment_clears_expense_fields(
+    client: TestClient,
+    auth_headers: dict,
+    test_user: User,
+    db: Session,
+):
+    """Changing an expense into principal repayment must clear expense-only semantics."""
+    transaction = Transaction(
+        user_id=test_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("1508.33"),
+        transaction_date=date(2026, 1, 15),
+        description="Monthly loan payment",
+        expense_category=ExpenseCategory.LOAN_INTEREST,
+        is_deductible=True,
+        deduction_reason="Old incorrect expense classification",
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+
+    response = client.put(
+        f"/api/v1/transactions/{transaction.id}",
+        json={
+            "type": "liability_repayment",
+            "description": "Monthly principal repayment",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["type"] == "liability_repayment"
+    assert data["expense_category"] is None
+    assert data["income_category"] is None
+    assert data["is_deductible"] is False
+    assert data["deduction_reason"] is None
 
 
 def test_delete_transaction(client: TestClient, auth_headers: dict, test_user: User, db: Session):

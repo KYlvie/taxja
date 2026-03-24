@@ -974,11 +974,22 @@
   font-size: 13px;
 }
 
+.receipt-breakdown-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .receipt-breakdown-amount {
   font-size: 18px;
   font-weight: 700;
   color: var(--color-primary);
   white-space: nowrap;
+}
+
+.receipt-review-edit-btn--header {
+  min-width: 108px;
 }
 
 .receipt-review-card {
@@ -1011,6 +1022,57 @@
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 13px;
+}
+
+.receipt-review-category-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.receipt-review-category-row .custom-select {
+  min-width: 220px;
+}
+
+.receipt-review-category-label,
+.receipt-review-item-category-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.receipt-review-category-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.receipt-review-item-category-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.receipt-review-category-hint {
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .receipt-review-summary {
@@ -1134,6 +1196,18 @@
   text-align: right;
   min-width: 80px;
   flex-shrink: 0;
+}
+
+.receipt-review-item-category-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.receipt-review-item-category-edit .custom-select {
+  min-width: 220px;
 }
 
 .receipt-review-readonly {
@@ -1358,4 +1432,81 @@
 
 .line-item-txn-status.not-created {
   color: #9ca3af;
+}
+
+.receipt-presentation-strip {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.receipt-presentation-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.receipt-presentation-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.receipt-presentation-field span {
+  font-weight: 600;
+  color: #334155;
+}
+
+.receipt-presentation-field select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #dbe2f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.receipt-presentation-field--checkbox {
+  align-content: end;
+}
+
+.receipt-presentation-field--checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.receipt-presentation-toggle-group {
+  display: flex;
+  gap: 8px;
+}
+
+.receipt-presentation-meta {
+  display: grid;
+  gap: 8px;
+}
+
+.receipt-presentation-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.receipt-presentation-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.1);
+  color: #3730a3;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.receipt-presentation-helper {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #475569;
 }

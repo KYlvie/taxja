@@ -1,5 +1,5 @@
 """Stripe payment service for subscriptions, portal access, and overage invoicing."""
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 import logging
@@ -22,6 +22,11 @@ PRICE_MAP: Dict[tuple, str] = {
     ("plus", "yearly"): settings.STRIPE_PLUS_YEARLY_PRICE_ID,
     ("pro", "monthly"): settings.STRIPE_PRO_MONTHLY_PRICE_ID,
     ("pro", "yearly"): settings.STRIPE_PRO_YEARLY_PRICE_ID,
+}
+REVERSE_PRICE_MAP: Dict[str, Tuple[str, str]] = {
+    price_id: plan_details
+    for plan_details, price_id in PRICE_MAP.items()
+    if price_id
 }
 
 
@@ -241,6 +246,168 @@ class StripePaymentService:
             .first()
         )
 
+    def cancel_subscription(self, stripe_subscription_id: str) -> Any:
+        """Schedule Stripe subscription cancellation at period end."""
+        try:
+            return stripe.Subscription.modify(
+                stripe_subscription_id,
+                cancel_at_period_end=True,
+            )
+        except stripe.error.StripeError as e:
+            logger.error("Stripe cancel subscription error for %s: %s", stripe_subscription_id, e)
+            raise ValueError(f"Failed to cancel subscription: {str(e)}")
+
+    def reactivate_subscription(self, stripe_subscription_id: str) -> Any:
+        """Reactivate a Stripe subscription scheduled for cancellation."""
+        try:
+            return stripe.Subscription.modify(
+                stripe_subscription_id,
+                cancel_at_period_end=False,
+            )
+        except stripe.error.StripeError as e:
+            logger.error("Stripe reactivate subscription error for %s: %s", stripe_subscription_id, e)
+            raise ValueError(f"Failed to reactivate subscription: {str(e)}")
+
+    def schedule_subscription_cancellation(self, user_id: int) -> Subscription:
+        """Cancel a Stripe-backed subscription at period end and sync local state."""
+        subscription = self._get_subscription(user_id)
+        if not subscription:
+            raise ValueError(f"No subscription found for user {user_id}")
+        if not subscription.stripe_subscription_id:
+            raise ValueError("No Stripe subscription found for this user")
+
+        stripe_sub = self.cancel_subscription(subscription.stripe_subscription_id)
+        return self._sync_local_subscription_from_stripe(
+            stripe_sub,
+            user_id=user_id,
+            local_subscription=subscription,
+        )
+
+    def resume_scheduled_cancellation(self, user_id: int) -> Subscription:
+        """Undo a scheduled Stripe cancellation and sync local state."""
+        subscription = self._get_subscription(user_id)
+        if not subscription:
+            raise ValueError(f"No subscription found for user {user_id}")
+        if not subscription.stripe_subscription_id:
+            raise ValueError("No Stripe subscription found for this user")
+
+        stripe_sub = self.reactivate_subscription(subscription.stripe_subscription_id)
+        return self._sync_local_subscription_from_stripe(
+            stripe_sub,
+            user_id=user_id,
+            local_subscription=subscription,
+        )
+
+    def _map_stripe_status(self, stripe_status: Optional[str]) -> SubscriptionStatus:
+        if stripe_status == "trialing":
+            return SubscriptionStatus.TRIALING
+        if stripe_status in {"past_due", "unpaid"}:
+            return SubscriptionStatus.PAST_DUE
+        if stripe_status in {"canceled", "incomplete_expired"}:
+            return SubscriptionStatus.CANCELED
+        return SubscriptionStatus.ACTIVE
+
+    def _resolve_plan_and_cycle(
+        self,
+        stripe_sub: Dict[str, Any],
+        fallback_plan_id: Optional[int] = None,
+        fallback_billing_cycle: Optional[BillingCycle] = None,
+    ) -> Tuple[Optional[Plan], Optional[BillingCycle]]:
+        items = stripe_sub.get("items", {}).get("data", [])
+        price_id: Optional[str] = None
+        if items:
+            price_id = items[0].get("price", {}).get("id")
+
+        if price_id and price_id in REVERSE_PRICE_MAP:
+            plan_type_value, billing_cycle_value = REVERSE_PRICE_MAP[price_id]
+            plan = self.db.query(Plan).filter(
+                Plan.plan_type == PlanType(plan_type_value)
+            ).first()
+            return plan, BillingCycle(billing_cycle_value)
+
+        plan = None
+        if fallback_plan_id is not None:
+            plan = self.db.query(Plan).filter(Plan.id == fallback_plan_id).first()
+        return plan, fallback_billing_cycle
+
+    def _sync_local_subscription_from_stripe(
+        self,
+        stripe_sub: Dict[str, Any],
+        user_id: Optional[int] = None,
+        fallback_plan_id: Optional[int] = None,
+        fallback_billing_cycle: Optional[BillingCycle] = None,
+        local_subscription: Optional[Subscription] = None,
+    ) -> Subscription:
+        from app.services.feature_gate_service import FeatureGateService
+        from app.services.subscription_service import SubscriptionService
+
+        subscription_id = stripe_sub["id"]
+        customer_id = stripe_sub.get("customer")
+
+        subscription = local_subscription or (
+            self.db.query(Subscription)
+            .filter(Subscription.stripe_subscription_id == subscription_id)
+            .first()
+        )
+
+        if not subscription and customer_id:
+            subscription = (
+                self.db.query(Subscription)
+                .filter(Subscription.stripe_customer_id == customer_id)
+                .order_by(Subscription.created_at.desc())
+                .first()
+            )
+
+        if not subscription and user_id is not None:
+            subscription = SubscriptionService(self.db).get_user_subscription(user_id)
+
+        if not subscription and user_id is None:
+            raise ValueError(f"No local subscription found for Stripe subscription {subscription_id}")
+
+        plan, billing_cycle = self._resolve_plan_and_cycle(
+            stripe_sub,
+            fallback_plan_id=fallback_plan_id,
+            fallback_billing_cycle=fallback_billing_cycle,
+        )
+        if not plan:
+            raise ValueError(f"Unable to resolve local plan for Stripe subscription {subscription_id}")
+
+        period_start_ts = stripe_sub.get("current_period_start")
+        period_end_ts = stripe_sub.get("current_period_end")
+        status = self._map_stripe_status(stripe_sub.get("status"))
+
+        if subscription:
+            subscription.plan_id = plan.id
+            subscription.billing_cycle = billing_cycle
+            subscription.status = status
+            subscription.stripe_subscription_id = subscription_id
+            subscription.stripe_customer_id = customer_id
+            subscription.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
+            if period_start_ts:
+                subscription.current_period_start = datetime.fromtimestamp(period_start_ts)
+            if period_end_ts:
+                subscription.current_period_end = datetime.fromtimestamp(period_end_ts)
+            self.db.commit()
+            self.db.refresh(subscription)
+        else:
+            created = SubscriptionService(self.db).create_subscription(
+                user_id=user_id,
+                plan_id=plan.id,
+                billing_cycle=billing_cycle,
+                stripe_subscription_id=subscription_id,
+                stripe_customer_id=customer_id,
+                status=status,
+                current_period_start=datetime.fromtimestamp(period_start_ts) if period_start_ts else None,
+                current_period_end=datetime.fromtimestamp(period_end_ts) if period_end_ts else None,
+            )
+            subscription = created
+            subscription.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
+            self.db.commit()
+            self.db.refresh(subscription)
+
+        FeatureGateService(self.db).invalidate_user_plan_cache(subscription.user_id)
+        return subscription
+
     def _build_overage_description(
         self,
         overage_credits_used: int,
@@ -305,34 +472,39 @@ class StripePaymentService:
             logger.error(f"Missing metadata in checkout session: {session['id']}")
             return {"status": "error", "reason": "missing_metadata"}
 
-        from app.services.subscription_service import SubscriptionService
-
-        svc = SubscriptionService(self.db)
-        existing = svc.get_user_subscription(user_id)
-
         billing_cycle = (
             BillingCycle.YEARLY if billing_cycle_str == "yearly" else BillingCycle.MONTHLY
         )
 
-        if existing:
-            existing.plan_id = plan_id
-            existing.status = SubscriptionStatus.ACTIVE
-            existing.billing_cycle = billing_cycle
-            existing.stripe_subscription_id = stripe_subscription_id
-            existing.stripe_customer_id = stripe_customer_id
-            existing.cancel_at_period_end = False
-            existing.current_period_start = datetime.utcnow()
-            self.db.commit()
-            self.db.refresh(existing)
-        else:
-            svc.create_subscription(
-                user_id=user_id,
-                plan_id=plan_id,
-                billing_cycle=billing_cycle,
-                stripe_subscription_id=stripe_subscription_id,
-                stripe_customer_id=stripe_customer_id,
-                status=SubscriptionStatus.ACTIVE,
-            )
+        if stripe_subscription_id:
+            try:
+                stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
+                self._sync_local_subscription_from_stripe(
+                    stripe_sub,
+                    user_id=user_id,
+                    fallback_plan_id=plan_id,
+                    fallback_billing_cycle=billing_cycle,
+                )
+            except stripe.error.StripeError as e:
+                logger.warning(
+                    "Failed to retrieve Stripe subscription %s after checkout; falling back to checkout metadata: %s",
+                    stripe_subscription_id,
+                    e,
+                )
+                self._sync_local_subscription_from_stripe(
+                    {
+                        "id": stripe_subscription_id,
+                        "customer": stripe_customer_id,
+                        "status": "active",
+                        "cancel_at_period_end": False,
+                        "current_period_start": int(datetime.utcnow().timestamp()),
+                        "current_period_end": None,
+                        "items": {"data": []},
+                    },
+                    user_id=user_id,
+                    fallback_plan_id=plan_id,
+                    fallback_billing_cycle=billing_cycle,
+                )
 
         logger.info(f"Checkout completed: user {user_id} → plan {plan_id}")
         return {"status": "processed", "action": "subscription_activated"}
@@ -383,20 +555,7 @@ class StripePaymentService:
 
     def _on_subscription_updated(self, event: Dict[str, Any]) -> Dict[str, Any]:
         stripe_sub = event["data"]["object"]
-        sub = (
-            self.db.query(Subscription)
-            .filter(Subscription.stripe_subscription_id == stripe_sub["id"])
-            .first()
-        )
-        if sub:
-            sub.current_period_start = datetime.fromtimestamp(
-                stripe_sub["current_period_start"]
-            )
-            sub.current_period_end = datetime.fromtimestamp(
-                stripe_sub["current_period_end"]
-            )
-            sub.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
-            self.db.commit()
+        self._sync_local_subscription_from_stripe(stripe_sub)
         return {"status": "processed", "action": "subscription_synced"}
 
     def _on_subscription_deleted(self, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -407,12 +566,17 @@ class StripePaymentService:
             .first()
         )
         if sub:
+            from app.services.feature_gate_service import FeatureGateService
+
             free_plan = self.db.query(Plan).filter(Plan.plan_type == PlanType.FREE).first()
             if free_plan:
                 sub.plan_id = free_plan.id
             sub.status = SubscriptionStatus.CANCELED
+            sub.billing_cycle = None
+            sub.cancel_at_period_end = False
             sub.stripe_subscription_id = None
             self.db.commit()
+            FeatureGateService(self.db).invalidate_user_plan_cache(sub.user_id)
         return {"status": "processed", "action": "downgraded_to_free"}
 
     def _log_payment_event(self, event: Dict[str, Any]) -> None:

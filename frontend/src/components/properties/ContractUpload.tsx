@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { documentService } from '../../services/documentService';
+import DateInput from '../common/DateInput';
+import { getLocaleForLanguage } from '../../utils/locale';
 import { PropertyFormData } from '../../types/property';
 import './ContractUpload.css';
 
@@ -41,7 +43,7 @@ interface ContractUploadProps {
 }
 
 const ContractUpload: React.FC<ContractUploadProps> = ({ onExtracted, onCancel }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'processing' | 'extracted' | 'error'>('idle');
@@ -331,10 +333,11 @@ const ContractUpload: React.FC<ContractUploadProps> = ({ onExtracted, onCancel }
                 <div className="field-row">
                   <div className="field-group">
                     <label>{t('properties.purchaseDate')}</label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={editableData.purchase_date || ''}
-                      onChange={(e) => handleFieldChange('purchase_date', e.target.value)}
+                      onChange={(val) => handleFieldChange('purchase_date', val)}
+                      locale={getLocaleForLanguage(i18n.language)}
+                      todayLabel={String(t('common.today', 'Today'))}
                     />
                   </div>
 

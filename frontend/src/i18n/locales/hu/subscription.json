@@ -1,0 +1,192 @@
+{
+  "pricing": {
+    "title": "Valasszon csomagot",
+    "subtitle": "Kezdje 14 napos Pro probaidoszakkal, majd valassza az Onnek megfelelo csomagot",
+    "free": "Ingyenes",
+    "recommended": "Ajanlott",
+    "per_month": "/ho",
+    "per_month_billed_yearly": "/ho, eves szamlazassal",
+    "billed_as": "Szamlazas: {{amount}} EUR/ev",
+    "trial_info": "Uj felhasznalok 14 napos Pro probaidoszakot kapnak. Nem szukseges bankkartya az indulashoz.",
+    "support": "Kerdese van? Irjon nekunk: support@taxja.com",
+    "billing": {
+      "monthly": "Havi",
+      "yearly": "Eves",
+      "save": "Megtakaritas {{percent}}%"
+    },
+    "plans": {
+      "free": {
+        "name": "Ingyenes"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "30 tranzakcio/ho",
+      "basic_tax_calc": "Alapveto adoszamitas",
+      "unlimited_transactions": "Korlatlan tranzakciok",
+      "ocr_limit": "20 dokumentumbeolvaso/ho",
+      "full_tax_calc": "Teljes adoszamitas",
+      "multi_language": "Tobbnyelvuseg (DE, EN, ZH)",
+      "vat_svs": "AFA es SVS szamitasok",
+      "property_management": "Ingatlankezeles",
+      "bank_import": "Bankkivonat importalas",
+      "recurring_suggestions": "Intelligens ismetlodo javaslatok",
+      "everything_plus": "Minden a Plus csomagbol",
+      "unlimited_ocr": "Korlatlan dokumentumbeolvaso",
+      "ai_assistant": "MI adotanacsado",
+      "e1_generation": "E1 urlap generalas",
+      "advanced_reports": "Halado jelenetesek (EA, Bilanz)",
+      "priority_support": "Elsobbsegi tamogatas",
+      "ocr": "Dokumentumbeolvaso"
+    },
+    "buttons": {
+      "get_started": "Kezdes",
+      "subscribe": "Feliratkozas",
+      "upgrade": "Fejlesztes",
+      "start_trial": "14 napos Pro proba inditas",
+      "loading": "Betoltes..."
+    },
+    "errors": {
+      "checkout_failed": "A fizetes inditas sikertelen. Probalja ujra."
+    }
+  },
+  "subscription": {
+    "loading": "Elofizetesi adatok betoltese...",
+    "manage": "Elofizetes kezelese",
+    "manage_title": "Elofizetes kezelese",
+    "current_plan": "Jelenlegi csomag",
+    "free": "Ingyenes",
+    "per_month": "/ho",
+    "per_year": "/ev",
+    "not_applicable": "N/A",
+    "trial_days_remaining": "{{days}} nap van hatra",
+    "trial_message": "a Pro probaidoszakbol. Fejlesszen a funkciok megtartasahoz!",
+    "trial_active": "Ingyenes probaidoszakon van {{date}}-ig",
+    "period_start": "Idoszak kezdete",
+    "period_end": "Idoszak vege",
+    "billing_cycle": "Szamlazasi ciklus",
+    "next_billing": "Kovetkezo szamlazas datuma",
+    "canceling": "Lemondas folyamatban",
+    "ends_on": "Veget er: {{date}}",
+    "cancel_notice": "Az elofizetes a jelenlegi idoszak vegen kerul lemondara",
+    "credits_title": "Kreditek",
+    "credits_available": "Elerheto kreditek",
+    "overage_mode": "Tulepites",
+    "overage_on": "Bekapcsolva",
+    "overage_off": "Kikapcsolva",
+    "overage_unavailable": "Nem elerheto",
+    "overage_suspended": "Szuneteltetve",
+    "overage_rate": "{{rate}} / kredit",
+    "overage_estimate": "Becsult {{amount}}",
+    "overage_toggle_error": "A tulepitesi mod frissitese sikertelen.",
+    "overage_payment_due_title": "Tulepites szuneteltetve",
+    "overage_payment_due_message": "A tulepites szunetel, amig a kifizetetlen szamlat nem rendezi a Stripe-ban.",
+    "resolve_billing": "Szamlazas rendezese",
+    "billing_portal_error": "A szamlazasi portal megnyitasa sikertelen.",
+    "usage_title": "Felhasznalt ebben az idoszakban",
+    "unlimited": "Korlatlan",
+    "quota_exceeded": "Tullept",
+    "change_plan": "Csomag valtasa",
+    "reactivate": "Elofizetes ujraaktivalasa",
+    "cancel": "Elofizetes lemondasa",
+    "payment_method": "Fizetesi mod",
+    "payment_managed": "A fizetesi mod a Stripe-on keresztul kezelheto.",
+    "manage_payment": "Fizetesi mod kezelese",
+    "billing_history": "Szamlazasi elozmeny",
+    "no_history": "Meg nincs szamlazasi elozmeny.",
+    "cancel_confirm_title": "Elofizetes lemondasa?",
+    "cancel_confirm_message": "Az elofizetes {{date}}-ig aktiv marad. Ezutan az Ingyenes csomagra kerul visszaminositesre.",
+    "confirm_cancel": "Igen, lemondas",
+    "change_plan_title": "Csomag valtasa",
+    "change_plan_message": "Atiranyitjuk az arak oldalara, ahol uj csomagot valaszthat.",
+    "continue": "Folytatas",
+    "cancel_success": "Az elofizetes a jelenlegi idoszak vegen kerul lemondara.",
+    "cancel_error": "Az elofizetes lemondasa sikertelen. Probalja ujra.",
+    "reactivate_success": "Az elofizetes sikeresen ujra lett aktivalva!",
+    "reactivate_error": "Az elofizetes ujraaktivalasa sikertelen. Probalja ujra.",
+    "status": {
+      "active": "Aktiv",
+      "trialing": "Probaidoszak",
+      "past_due": "Lejart",
+      "canceled": "Lemondva"
+    },
+    "billing": {
+      "monthly": "Havi",
+      "yearly": "Eves"
+    },
+    "resources": {
+      "transactions": "Tranzakciok",
+      "ocr_scans": "Dokumentumbeolvaso",
+      "ai_conversations": "MI beszelgetesek"
+    }
+  },
+  "usage": {
+    "title": "Eroforras-hasznalat",
+    "resets_on": "Visszaallitas: {{date}}",
+    "unlimited": "Korlatlan",
+    "quota_exceeded": "Kvota tullepve",
+    "quota_warning": "Kozeliti a hatart ({{percent}}%)",
+    "transactions": "Tranzakciok",
+    "ocr_scans": "Dokumentumbeolvaso",
+    "ai_conversations": "MI beszelgetesek"
+  },
+  "upgrade": {
+    "title": "Fejlesztes erre: {{plan}}",
+    "description": "A(z) {{feature}} a {{plan}} csomagban erheto el. Fejlesszen most a funkcio es tovabbi elonyok feloldasahoz!",
+    "benefits_title": "Amit kap:",
+    "button": "Fejlesztes most",
+    "cancel": "Talan kesobb",
+    "trial_note": "Kezdje 14 napos ingyenes Pro probaidoszakkal",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "Dokumentumbeolvaso",
+      "unlimited_ocr": "Korlatlan dokumentumbeolvaso",
+      "ai_assistant": "MI adotanacsado",
+      "e1_generation": "E1 urlap generalas",
+      "advanced_reports": "Halado jelenetesek",
+      "api_access": "API hozzaferes",
+      "unlimited_transactions": "Korlatlan tranzakciok"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Korlatlan tranzakciok",
+        "2": "20 dokumentumbeolvaso havonta",
+        "3": "Teljes adoszamitasok",
+        "4": "Tobbnyelvuseg tamogatas",
+        "5": "AFA es SVS szamitasok"
+      },
+      "pro": {
+        "1": "Korlatlan dokumentumbeolvaso",
+        "2": "MI-alapu adotanacsadas",
+        "3": "Automatikus E1 urlap generalas",
+        "4": "Halado elemzesek es jelenetesek",
+        "5": "Elsobbsegi ugyfelszolgalat"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Sikeres fizetes!",
+    "success_message": "Koszonjuk a feliratkozast! A fizetes sikeresen feldolgozasra kerult.",
+    "plan_activated": "A(z) {{plan}} csomag most aktiv!",
+    "detail_1": "Teljes hozzaferes az osszes funkciohoz",
+    "detail_2": "A szamlazas ma kezdodik",
+    "detail_3": "Barmikor lemondhat",
+    "session_id": "Munkamenet-azonosito",
+    "continue_dashboard": "Tovabb az iranyitopultra",
+    "view_subscription": "Elofizetes reszleteinek megtekintese",
+    "support": "Kerdese van? Irjon nekunk: support@taxja.com"
+  },
+  "common": {
+    "back": "Vissza",
+    "cancel": "Megse",
+    "nevermind": "Mindegy"
+  }
+}

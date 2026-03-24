@@ -17,9 +17,15 @@ from app.core.security import get_current_user
 from app.api.deps import require_feature
 from app.services.feature_gate_service import Feature
 from app.services.credit_service import CreditService, InsufficientCreditsError
+from app.services.report_transaction_filters import (
+    requires_profit_loss_category,
+    should_include_in_ea_report,
+)
 from app.models.user import User
 from app.models.transaction import Transaction, TransactionType
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.document import Document
+from app.services.posting_line_utils import sum_postings, total_vat_recoverable, transaction_has_deductible_expense
 
 logger = logging.getLogger(__name__)
 
@@ -72,21 +78,29 @@ def _get_transactions_for_year(db: Session, user_id: int, tax_year: int):
 
 def _build_summary(transactions):
     """Build a summary dict from transactions."""
-    total_income = Decimal("0")
-    total_expenses = Decimal("0")
-    total_deductible = Decimal("0")
-    total_vat = Decimal("0")
-
-    for t in transactions:
-        amt = t.amount or Decimal("0")
-        if t.type == TransactionType.INCOME:
-            total_income += amt
-        else:
-            total_expenses += amt
-            if t.is_deductible:
-                total_deductible += amt
-        if t.vat_amount:
-            total_vat += t.vat_amount
+    total_income = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.INCOME},
+    )
+    total_expenses = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        include_private_use=False,
+    )
+    total_deductible = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        deductible_only=True,
+        include_private_use=False,
+    )
+    total_vat = sum(
+        (
+            (t.vat_amount or Decimal("0")) + (t.vat_recoverable_amount_total or Decimal("0"))
+            for t in transactions
+            if t.type in {TransactionType.INCOME, TransactionType.EXPENSE}
+        ),
+        Decimal("0"),
+    )
 
     return {
         "total_income": total_income,
@@ -105,19 +119,24 @@ def get_audit_checklist(
     db: Session = Depends(get_db),
 ):
     """Get audit readiness checklist based on actual user data."""
-    transactions = _get_transactions_for_year(db, current_user.id, tax_year)
-    summary = _build_summary(transactions)
+    all_transactions = _get_transactions_for_year(db, current_user.id, tax_year)
+    report_transactions = [
+        transaction
+        for transaction in all_transactions
+        if should_include_in_ea_report(transaction)
+    ]
+    summary = _build_summary(report_transactions)
 
     items = []
     missing_docs = 0
     compliance_issues = 0
 
     # Check 1: Transaction records
-    if summary["transaction_count"] > 0:
+    if len(all_transactions) > 0:
         items.append({
             "category": "transactions",
             "status": "pass",
-            "message": f"{summary['transaction_count']} transactions recorded for {tax_year}",
+            "message": f"{len(all_transactions)} transactions recorded for {tax_year}",
         })
     else:
         items.append({
@@ -134,7 +153,7 @@ def get_audit_checklist(
         extract("year", Document.uploaded_at) == tax_year,
     ).scalar() or 0
 
-    deductible_count = sum(1 for t in transactions if t.is_deductible)
+    deductible_count = sum(1 for t in report_transactions if transaction_has_deductible_expense(t))
     if deductible_count > 0 and doc_count < deductible_count:
         gap = deductible_count - doc_count
         missing_docs = gap
@@ -152,7 +171,9 @@ def get_audit_checklist(
         })
 
     # Check 3: Deduction documentation
-    undocumented = sum(1 for t in transactions if t.is_deductible and not t.document_id)
+    undocumented = sum(
+        1 for t in report_transactions if transaction_has_deductible_expense(t) and not t.document_id
+    )
     if undocumented > 0:
         items.append({
             "category": "deductions",
@@ -168,7 +189,9 @@ def get_audit_checklist(
         })
 
     # Check 4: VAT
-    vat_transactions = [t for t in transactions if t.vat_amount and t.vat_amount > 0]
+    vat_transactions = [
+        t for t in report_transactions if t.vat_amount and t.vat_amount > 0
+    ]
     if summary["total_income"] > 55000:
         if vat_transactions:
             items.append({
@@ -192,7 +215,13 @@ def get_audit_checklist(
         })
 
     # Check 5: Data completeness
-    no_category = sum(1 for t in transactions if not t.income_category and not t.expense_category)
+    no_category = sum(
+        1
+        for t in report_transactions
+        if requires_profit_loss_category(t)
+        and not t.income_category
+        and not t.expense_category
+    )
     if no_category > 0:
         items.append({
             "category": "completeness",
@@ -860,17 +889,19 @@ async def download_filled_tax_form_pdf(
             from app.services.e1_official_pdf_service import generate_official_e1_pdf
             filled_pdf = generate_official_e1_pdf(form_data)
         except Exception as fallback_err:
-            logger.error("Fallback PDF generation failed: %s", fallback_err)
+            logger.exception("Fallback PDF generation failed")
             raise HTTPException(
                 status_code=500,
-                detail=f"PDF generation failed: {fallback_err}"
+                detail="report_generation_failed"
             )
     except PDFLibraryNotAvailable as e:
         db.rollback()
-        raise HTTPException(status_code=503, detail=str(e))
+        logger.exception("PDF library not available")
+        raise HTTPException(status_code=503, detail="report_generation_failed")
     except PDFFillerError as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("PDF form filling failed")
+        raise HTTPException(status_code=500, detail="report_generation_failed")
     except Exception:
         db.rollback()
         raise

@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, ComponentType } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { useAuthStore } from '../../stores/authStore';
 import UpgradePrompt from './UpgradePrompt';
@@ -48,6 +49,7 @@ export function withFeatureGate<P extends object>(
   config: FeatureGateConfig
 ) {
   return function FeatureGatedComponent(props: P) {
+    const { t } = useTranslation();
     const { currentPlan } = useSubscriptionStore();
     const user = useAuthStore((state) => state.user);
     const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
@@ -96,9 +98,9 @@ export function withFeatureGate<P extends object>(
           />
           <div className="feature-locked">
             <div className="lock-icon">🔒</div>
-            <p>This feature requires {config.requiredPlan.toUpperCase()} plan</p>
+            <p>{t('subscription.featureRequiresPlan', { plan: config.requiredPlan.toUpperCase(), defaultValue: 'This feature requires {{plan}} plan' })}</p>
             <button onClick={() => setShowUpgradePrompt(true)}>
-              Upgrade Now
+              {t('subscription.upgradeNow', 'Upgrade Now')}
             </button>
           </div>
         </>
@@ -225,6 +227,7 @@ export const FeatureLockedBanner: React.FC<{
   requiredPlan: PlanType;
   onUpgrade?: () => void;
 }> = ({ feature, requiredPlan, onUpgrade }) => {
+  const { t } = useTranslation();
   const [showPrompt, setShowPrompt] = useState(false);
   
   const handleUpgrade = () => {
@@ -241,11 +244,11 @@ export const FeatureLockedBanner: React.FC<{
         <div className="banner-content">
           <span className="lock-icon">🔒</span>
           <span className="banner-text">
-            This feature requires {requiredPlan.toUpperCase()} plan
+            {t('subscription.featureRequiresPlan', { plan: requiredPlan.toUpperCase(), defaultValue: 'This feature requires {{plan}} plan' })}
           </span>
         </div>
         <button className="upgrade-button" onClick={handleUpgrade}>
-          Upgrade
+          {t('subscription.upgrade', 'Upgrade')}
         </button>
       </div>
       

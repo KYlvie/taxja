@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { useConfirm } from '../hooks/useConfirm';
 import { useAuthStore } from '../stores/authStore';
 import { formatCurrency, getLocaleForLanguage } from '../utils/locale';
+import SubpageBackLink from '../components/common/SubpageBackLink';
 import './PricingPage.css';
 
 interface PlanFeature {
@@ -43,19 +43,21 @@ const PricingPage: React.FC = () => {
       name: t('pricing.plans.free.name', 'Free'),
       monthlyPrice: 0,
       yearlyPrice: 0,
-      monthlyCredits: 50,
+      monthlyCredits: 100,
       overagePrice: null,
       features: [
-        { name: t('pricing.features.transactions_limit', '30 transactions/month'), included: true },
+        { name: t('pricing.features.ocr_scanning', 'AI document scanning & recognition'), included: true },
+        { name: t('pricing.features.ai_assistant', 'AI tax assistant'), included: true },
         { name: t('pricing.features.basic_tax_calc', 'Basic tax calculation'), included: true },
-        { name: t('pricing.features.ocr', 'Document scanning'), included: false },
+        { name: t('pricing.features.transaction_entry', 'Transaction management'), included: true },
+        { name: t('pricing.features.basic_reports', 'Basic reports (annual summary, tax estimate)'), included: true },
         { name: t('pricing.features.full_tax_calc', 'Full tax calculation'), included: false },
         { name: t('pricing.features.vat_svs', 'VAT & SVS calculations'), included: false },
         { name: t('pricing.features.property_management', 'Property management'), included: false },
         { name: t('pricing.features.bank_import', 'Bank statement import'), included: false },
         { name: t('pricing.features.recurring_suggestions', 'Smart recurring suggestions'), included: false },
-        { name: t('pricing.features.ai_assistant', 'AI Tax Assistant'), included: false },
-        { name: t('pricing.features.e1_generation', 'E1 form generation'), included: false },
+        { name: t('pricing.features.tax_forms', 'Tax form generation (E1, E1a, E1b...)'), included: false },
+        { name: t('pricing.features.advanced_reports', 'All reports (EA, Balance Sheet, Saldenliste)'), included: false },
       ],
     },
     {
@@ -67,16 +69,17 @@ const PricingPage: React.FC = () => {
       monthlyCredits: 500,
       overagePrice: 0.04,
       features: [
-        { name: t('pricing.features.unlimited_transactions', 'Unlimited transactions'), included: true },
+        { name: t('pricing.features.ocr_scanning', 'AI document scanning & recognition'), included: true },
+        { name: t('pricing.features.ai_assistant', 'AI tax assistant'), included: true },
         { name: t('pricing.features.full_tax_calc', 'Full tax calculation'), included: true },
         { name: t('pricing.features.vat_svs', 'VAT & SVS calculations'), included: true },
-        { name: t('pricing.features.ocr_limit', '20 document scans/month'), included: true },
+        { name: t('pricing.features.unlimited_transactions', 'Unlimited transactions'), included: true },
         { name: t('pricing.features.property_management', 'Property management'), included: true },
         { name: t('pricing.features.bank_import', 'Bank statement import'), included: true },
         { name: t('pricing.features.recurring_suggestions', 'Smart recurring suggestions'), included: true },
-        { name: t('pricing.features.ai_assistant', 'AI Tax Assistant'), included: false },
-        { name: t('pricing.features.e1_generation', 'E1 form generation'), included: false },
-        { name: t('pricing.features.advanced_reports', 'Advanced reports (EA, Balance Sheet)'), included: false },
+        { name: t('pricing.features.basic_reports', 'Basic reports'), included: true },
+        { name: t('pricing.features.tax_forms', 'Tax form generation (E1, E1a, E1b...)'), included: false },
+        { name: t('pricing.features.advanced_reports', 'All reports (EA, Balance Sheet, Saldenliste)'), included: false },
         { name: t('pricing.features.priority_support', 'Priority support'), included: false },
       ],
     },
@@ -88,16 +91,16 @@ const PricingPage: React.FC = () => {
       monthlyCredits: 2000,
       overagePrice: 0.03,
       features: [
-        { name: t('pricing.features.unlimited_transactions', 'Unlimited transactions'), included: true },
+        { name: t('pricing.features.ocr_scanning', 'AI document scanning & recognition'), included: true },
+        { name: t('pricing.features.ai_assistant', 'AI tax assistant'), included: true },
         { name: t('pricing.features.full_tax_calc', 'Full tax calculation'), included: true },
         { name: t('pricing.features.vat_svs', 'VAT & SVS calculations'), included: true },
-        { name: t('pricing.features.unlimited_ocr', 'Unlimited document scanning'), included: true },
+        { name: t('pricing.features.unlimited_transactions', 'Unlimited transactions'), included: true },
         { name: t('pricing.features.property_management', 'Property management'), included: true },
         { name: t('pricing.features.bank_import', 'Bank statement import'), included: true },
         { name: t('pricing.features.recurring_suggestions', 'Smart recurring suggestions'), included: true },
-        { name: t('pricing.features.ai_assistant', 'AI Tax Assistant'), included: true },
-        { name: t('pricing.features.e1_generation', 'E1 form generation'), included: true },
-        { name: t('pricing.features.advanced_reports', 'Advanced reports (EA, Balance Sheet)'), included: true },
+        { name: t('pricing.features.tax_forms_pro', 'All tax forms (E1, E1a, E1b, L1, U1...)'), included: true },
+        { name: t('pricing.features.advanced_reports', 'All reports (EA, Balance Sheet, Saldenliste)'), included: true },
         { name: t('pricing.features.priority_support', 'Priority support'), included: true },
       ],
     },
@@ -141,30 +144,17 @@ const PricingPage: React.FC = () => {
       return;
     }
 
-    const tierOrder = { free: 0, plus: 1, pro: 2 };
-    const isUpgrade = tierOrder[planType] > tierOrder[currentPlanType];
-    const isDowngrade = tierOrder[planType] < tierOrder[currentPlanType];
-    const hasActiveSubscription = subscription?.status === 'active' && subscription?.stripe_subscription_id;
+    const hasActiveStripeSubscription =
+      subscription?.status === 'active' && Boolean(subscription?.stripe_subscription_id);
 
     setLoading(true);
 
     try {
       const planId = planType === 'plus' ? 3 : 4;
 
-      if (hasActiveSubscription && isUpgrade) {
-        // Upgrade existing subscription (proration handled by Stripe)
-        const { upgradeSubscription, fetchSubscription } = useSubscriptionStore.getState();
-        await upgradeSubscription(planId, billingCycle);
-        await fetchSubscription();
-        await showAlert(t('pricing.upgrade_success', 'Your plan has been upgraded!'));
-        navigate('/dashboard');
-      } else if (hasActiveSubscription && isDowngrade) {
-        // Downgrade existing subscription (effective at period end)
-        const { downgradeSubscription, fetchSubscription } = useSubscriptionStore.getState();
-        await downgradeSubscription(planId);
-        await fetchSubscription();
-        await showAlert(t('pricing.downgrade_success', 'Your plan will be downgraded at the end of the current billing period.'));
-        navigate('/dashboard');
+      if (hasActiveStripeSubscription) {
+        // Existing subscriber switching plan → Stripe Customer Portal
+        await openCustomerPortal(`${window.location.origin}/pricing`);
       } else {
         // New subscription — create Stripe Checkout session
         const successUrl = `${window.location.origin}/checkout/success`;
@@ -205,38 +195,55 @@ const PricingPage: React.FC = () => {
       : t('pricing.per_month_billed_yearly', '/month, billed yearly');
   };
 
+  const tierOrder: Record<string, number> = { free: 0, plus: 1, pro: 2 };
+  const isTrialing = subscription?.status === 'trialing';
+  const isActive = subscription?.status === 'active';
+
+  const isPlanDisabled = (planType: string) => {
+    // Free card: disabled for trial users and paid subscribers (cancel is in Account Management)
+    if (planType === 'free') {
+      return isTrialing || (isActive && currentPlanType !== 'free');
+    }
+    // Current plan card: disabled
+    if (planType === currentPlanType && isActive) return true;
+    return false;
+  };
+
   const getButtonText = (planType: 'free' | 'plus' | 'pro') => {
-    // Current plan → manage
-    if (currentPlanType === planType && subscription?.status === 'active') {
-      if (planType === 'free') {
-        return t('pricing.buttons.current_plan', 'Current Plan');
-      }
-      return t('pricing.buttons.manage', 'Manage Subscription');
+    // Current active plan → Current Plan
+    if (planType === currentPlanType && isActive) {
+      return t('pricing.buttons.current_plan', 'Current Plan');
     }
 
+    // Free card
     if (planType === 'free') {
+      if (currentPlanType === 'free' && !isTrialing) {
+        return t('pricing.buttons.current_plan', 'Current Plan');
+      }
       return t('pricing.buttons.get_started', 'Get Started');
     }
 
-    // Upgrade or downgrade
-    const tierOrder = { free: 0, plus: 1, pro: 2 };
-    if (tierOrder[planType] > tierOrder[currentPlanType]) {
-      return t('pricing.buttons.upgrade', 'Upgrade');
-    }
-    if (tierOrder[planType] < tierOrder[currentPlanType]) {
-      return t('pricing.buttons.downgrade', 'Downgrade');
+    // Paid subscriber switching to the other paid tier (Pro→Plus)
+    if (isActive && currentPlanType !== 'free' && tierOrder[planType] < tierOrder[currentPlanType]) {
+      return t('pricing.buttons.switch_plan', 'Switch Plan');
     }
 
+    // Higher tier
+    if (isActive && tierOrder[planType] > tierOrder[currentPlanType]) {
+      return t('pricing.buttons.upgrade', 'Upgrade');
+    }
+
+    // Trial / free users picking a paid plan
     return t('pricing.buttons.subscribe', 'Subscribe');
   };
 
   return (
     <div className="pricing-page">
       <div className="pricing-header">
-        <Link to={isAuthenticated ? '/dashboard' : '/'} className="pricing-back-btn">
-          <ArrowLeft size={18} />
-          <span>{isAuthenticated ? t('pricing.backToDashboard', 'Back to Dashboard') : t('pricing.backToHome', 'Back to Home')}</span>
-        </Link>
+        <SubpageBackLink
+          to={isAuthenticated ? '/dashboard' : '/'}
+          label={isAuthenticated ? t('pricing.backToDashboard', 'Back to Dashboard') : t('pricing.backToHome', 'Back to Home')}
+        />
         <h1>{t('pricing.title', 'Choose Your Plan')}</h1>
         <p className="pricing-subtitle">
           {t('pricing.subtitle', 'Start with a 14-day Pro trial, then choose the plan that fits your needs')}
@@ -325,7 +332,7 @@ const PricingPage: React.FC = () => {
             <button
               className={`plan-button ${plan.recommended ? 'primary' : 'secondary'}`}
               onClick={() => handleSelectPlan(plan.type)}
-              disabled={loading || (plan.type === 'free' && currentPlanType === 'free')}
+              disabled={loading || isPlanDisabled(plan.type)}
             >
               {loading ? t('pricing.buttons.loading', 'Loading...') : getButtonText(plan.type)}
             </button>
@@ -333,8 +340,9 @@ const PricingPage: React.FC = () => {
         ))}
       </div>
 
-      <div className="credit-cost-reference">
-        <h3>{t('pricing.cost_reference_title', 'Credit Cost Reference')}</h3>
+      {/* Credit cost reference hidden - internal billing detail, not user-facing */}
+      {isAdmin && <div className="credit-cost-reference">
+        <h3>{t('pricing.cost_reference_title', 'Credit Cost Reference')} (Admin only)</h3>
         <div className="cost-table">
           <div className="cost-row">
             <span className="cost-operation">{t('pricing.cost_ocr', 'OCR Scan')}</span>
@@ -361,7 +369,7 @@ const PricingPage: React.FC = () => {
             <span className="cost-value">2 {t('pricing.credits_word', 'credits')}</span>
           </div>
         </div>
-      </div>
+      </div>}
 
       <div className="pricing-footer">
         <p className="trial-info">

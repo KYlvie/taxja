@@ -11,6 +11,11 @@ import { useAIAdvisorStore } from '../stores/aiAdvisorStore';
 const uploadDocument = vi.fn();
 const uploadImageGroup = vi.fn();
 const getDocument = vi.fn();
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -46,6 +51,7 @@ vi.mock('../mobile/files', () => ({
 describe('DocumentUpload duplicate reuse flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     useAuthStore.setState({
       user: null,
       token: null,
@@ -105,7 +111,8 @@ describe('DocumentUpload duplicate reuse flow', () => {
   });
 
   it('marks duplicate uploads as reused and keeps one document in the store', async () => {
-    const { container } = render(<DocumentUpload />);
+    const onDocumentsSubmitted = vi.fn();
+    const { container } = render(<DocumentUpload onDocumentsSubmitted={onDocumentsSubmitted} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
     fireEvent.change(input, {
@@ -125,5 +132,33 @@ describe('DocumentUpload duplicate reuse flow', () => {
     const state = useDocumentStore.getState();
     expect(state.documents).toHaveLength(1);
     expect(state.documents[0].id).toBe(101);
+    expect(onDocumentsSubmitted).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 101 }),
+    ]);
+
+    const proactiveMessages = useAIAdvisorStore.getState().messages;
+    expect(proactiveMessages).toEqual([
+      expect.objectContaining({
+        type: 'upload_success',
+        link: '/documents/101',
+        linkLabel: 'View document',
+      }),
+    ]);
+  });
+
+  it('opens the completed upload row when the user clicks it', async () => {
+    const { container } = render(<DocumentUpload />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['same-content'], 'existing.pdf', { type: 'application/pdf' })],
+      },
+    });
+
+    const completedRow = await screen.findByRole('button', { name: 'View document' });
+    fireEvent.click(completedRow);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/documents/101');
   });
 });

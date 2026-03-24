@@ -4,6 +4,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { RecurringTemplate } from '../../types/template';
 import { templateService } from '../../services/templateService';
+import Select from '../common/Select';
 
 interface CreateFromTemplateModalProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ export const CreateFromTemplateModal: React.FC<CreateFromTemplateModalProps> = (
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'select' | 'details'>('select');
 
-  const { register, handleSubmit, formState: { errors }, setValue } = useForm<FormData>({
+  const { register, handleSubmit, watch, formState: { errors }, setValue } = useForm<FormData>({
     defaultValues: {
       start_date: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
     },
@@ -205,16 +206,14 @@ export const CreateFromTemplateModal: React.FC<CreateFromTemplateModalProps> = (
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {t('recurring.form.dayOfMonth')}
                   </label>
-                  <select
+                  <Select
                     {...register('day_of_month')}
+                    value={watch('day_of_month')?.toString() || ''}
                     className="w-full border rounded px-3 py-2"
-                  >
-                    {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                      <option key={day} value={day}>
-                        {day}. {t('recurring.quickSetup.dayOfMonthSuffix')}
-                      </option>
-                    ))}
-                  </select>
+                    options={Array.from({ length: 28 }, (_, i) => i + 1).map(day => ({
+                      value: String(day),
+                      label: `${day}. ${t('recurring.quickSetup.dayOfMonthSuffix')}`,
+                    }))} />
                 </div>
               </div>
 

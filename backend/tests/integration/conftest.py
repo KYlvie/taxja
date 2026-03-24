@@ -80,12 +80,28 @@ def db():
     Base.metadata.drop_all(bind=engine)
     _create_sqlite_tables(engine, Base.metadata)
     db = TestingSessionLocal()
-    
+
     # Seed tax configuration for 2026
     tax_config = TaxConfiguration(**get_2026_tax_config())
     db.add(tax_config)
     db.commit()
-    
+
+    # Clear token blacklist keys in Redis to avoid test isolation issues
+    # (SQLite user IDs restart from 1 each test, but Redis persists)
+    try:
+        from app.core.cache import cache
+        import asyncio
+
+        async def _flush_blacklist():
+            if cache.redis_client:
+                await cache.delete_pattern("token_blacklist:*")
+                await cache.delete_pattern("user_token_revoked_at:*")
+                await cache.delete_pattern("rate_limit:*")
+
+        asyncio.get_event_loop().run_until_complete(_flush_blacklist())
+    except Exception:
+        pass  # Redis not available — no cleanup needed
+
     try:
         yield db
     finally:

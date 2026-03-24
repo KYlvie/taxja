@@ -173,26 +173,6 @@
   font-weight: 500;
 }
 
-.format-select {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  background-color: white;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.format-select:hover {
-  border-color: #4a90e2;
-}
-
-.format-select:focus {
-  outline: none;
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-}
 
 /* Report Content */
 .report-content {

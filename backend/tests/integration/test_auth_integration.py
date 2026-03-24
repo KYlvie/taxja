@@ -56,8 +56,9 @@ class TestUserRegistration:
             "user_type": "employee",
         }
 
-        first = client.post("/api/v1/auth/register", json=payload)
-        second = client.post("/api/v1/auth/register", json=payload)
+        headers = {"Accept-Language": "en"}
+        first = client.post("/api/v1/auth/register", json=payload, headers=headers)
+        second = client.post("/api/v1/auth/register", json=payload, headers=headers)
 
         assert first.status_code == 201
         assert second.status_code == 400
@@ -74,6 +75,51 @@ class TestUserRegistration:
             },
         )
         assert response.status_code == 422
+
+    @patch("app.api.v1.endpoints.auth.send_verification_email")
+    @patch("app.api.v1.endpoints.auth.generate_verification_token", return_value="verify-token")
+    def test_registration_persists_optional_profile_fields(
+        self,
+        _mock_generate_token,
+        _mock_send_email,
+        client,
+        db,
+    ):
+        payload = {
+            "email": "profiled@example.com",
+            "password": "SecurePassword123!",
+            "name": "Profiled User",
+            "user_type": "mixed",
+            "user_roles": ["employee", "self_employed"],
+            "business_type": "freiberufler",
+            "business_name": "Profile Studio",
+            "business_industry": "trainer",
+            "vat_status": "regelbesteuert",
+            "gewinnermittlungsart": "ea_rechnung",
+            "employer_mode": "regular",
+            "employer_region": "Wien",
+            "num_children": 2,
+            "is_single_parent": True,
+            "language": "zh",
+        }
+
+        response = client.post("/api/v1/auth/register", json=payload)
+
+        assert response.status_code == 201
+
+        user = db.query(User).filter(User.email == "profiled@example.com").first()
+        assert user is not None
+        assert user.business_name == "Profile Studio"
+        assert getattr(user.business_type, "value", user.business_type) == "freiberufler"
+        assert user.business_industry == "trainer"
+        assert getattr(user.vat_status, "value", user.vat_status) == "regelbesteuert"
+        assert getattr(user.gewinnermittlungsart, "value", user.gewinnermittlungsart) == "ea_rechnung"
+        assert user.employer_mode == "regular"
+        assert user.employer_region == "Wien"
+        assert user.language == "zh"
+        assert user.family_info["user_roles"] == ["employee", "self_employed"]
+        assert user.family_info["num_children"] == 2
+        assert user.family_info["is_single_parent"] is True
 
 
 class TestEmailVerificationAndLogin:
@@ -246,25 +292,22 @@ class TestPasswordResetFlow:
         assert response.json()["detail"] == "token_expired"
 
 
-class TestPlaceholderAuthEndpoints:
-    """Current placeholder endpoints should stay stable until real implementations land."""
+class TestAuthEndpoints:
+    """Auth endpoints: logout, refresh, 2FA."""
 
     def test_logout_returns_success_message(self, client):
         response = client.post("/api/v1/auth/logout")
         assert response.status_code == 200
         assert response.json()["message"] == "Successfully logged out"
 
-    def test_refresh_returns_placeholder_message(self, client):
+    def test_refresh_without_token_returns_401(self, client):
         response = client.post("/api/v1/auth/refresh")
-        assert response.status_code == 200
-        assert response.json()["message"] == "Token refresh not implemented yet"
+        assert response.status_code == 401
 
-    def test_2fa_setup_returns_placeholder_payload(self, client):
+    def test_2fa_setup_requires_auth(self, client):
         response = client.post("/api/v1/auth/2fa/setup")
-        assert response.status_code == 200
-        assert response.json() == {"qr_code": "", "secret": ""}
+        assert response.status_code == 401
 
-    def test_2fa_verify_returns_placeholder_payload(self, client):
-        response = client.post("/api/v1/auth/2fa/verify")
-        assert response.status_code == 200
-        assert response.json() == {"success": True}
+    def test_2fa_verify_requires_auth(self, client):
+        response = client.post("/api/v1/auth/2fa/verify", json={"code": "000000"})
+        assert response.status_code == 401

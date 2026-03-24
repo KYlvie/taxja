@@ -305,16 +305,62 @@
   align-items: center;
 }
 
-.page-size-select {
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border, #e0e0e0);
-  border-radius: 8px;
-  background: var(--color-bg, #fff);
-  color: var(--color-text, #333);
-  font-size: 0.85rem;
-  cursor: pointer;
+.export-zip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.22);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
 }
+
+.export-zip-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 16px 32px rgba(79, 70, 229, 0.28);
+}
+
+.export-zip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.export-zip-btn .icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.export-zip-btn__format {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.spinner-inline {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 999px;
+  animation: spin 1s linear infinite;
+}
+
 
 .document-year-group {
   margin-bottom: 8px;
@@ -369,7 +415,7 @@
 
 .document-table-head {
   display: grid;
-  grid-template-columns: minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px 100px;
+  grid-template-columns: minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px minmax(140px, 1fr);
   gap: 16px;
   padding: 14px 26px 12px;
   border-bottom: 1px solid var(--color-border-light);
@@ -388,7 +434,7 @@
 
 .document-row {
   display: grid;
-  grid-template-columns: minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px 100px;
+  grid-template-columns: minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px minmax(140px, 1fr);
   gap: 16px;
   align-items: center;
   min-height: 72px;
@@ -526,6 +572,15 @@
   color: #b45309;
 }
 
+.document-status-badge.pending {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(251, 191, 36, 0.25));
+  color: #b45309;
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.82rem;
+  padding: 4px 16px;
+  min-height: 34px;
+}
+
 .document-status-badge.processing {
   background: rgba(99, 102, 241, 0.08);
   color: var(--color-primary);
@@ -536,15 +591,46 @@
   color: #dc2626;
 }
 
+/* Pending review row highlight */
+.document-row.pending-review-row,
+.document-card.pending-review-row {
+  background: linear-gradient(90deg, rgba(255, 237, 213, 0.5), rgba(254, 243, 199, 0.35), rgba(255, 237, 213, 0.5)) !important;
+  border-left: 3px solid #f59e0b !important;
+}
+
+.document-row.pending-review-row:hover,
+.document-card.pending-review-row:hover {
+  background: linear-gradient(90deg, rgba(255, 237, 213, 0.7), rgba(254, 243, 199, 0.5), rgba(255, 237, 213, 0.7)) !important;
+}
+
 .document-row-actions {
-  display: inline-flex;
-  justify-content: flex-end;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
   gap: 8px;
-  min-width: 84px;
+  min-width: 120px;
+}
+
+.document-row-actions-card {
+  margin-top: auto;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.document-row-actions-card .confirm-primary-btn {
+  width: 100%;
+}
+
+.document-utility-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .download-btn,
-.delete-btn {
+.delete-btn,
+.retry-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -564,14 +650,66 @@
 }
 
 .download-btn:hover,
-.delete-btn:hover {
+.delete-btn:hover,
+.retry-btn:hover {
   transform: translateY(-1px);
   border-color: var(--color-border-hover);
   box-shadow: var(--shadow-xs);
 }
 
+.confirm-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary), #7c3aed);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.2);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+.confirm-primary-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.24);
+}
+
+.confirm-primary-btn .icon-svg {
+  width: 16px;
+  height: 16px;
+}
+
 .download-btn:hover {
   color: var(--color-primary);
+}
+
+.retry-btn:hover {
+  color: var(--color-warning, #d97706);
+}
+
+.retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+@keyframes spin-retry {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.retry-btn:disabled .icon-svg {
+  animation: spin-retry 1s linear infinite;
 }
 
 .delete-btn:hover {
@@ -675,7 +813,7 @@
 @media (max-width: 1240px) {
   .document-table-head,
   .document-row {
-    grid-template-columns: minmax(280px, 2.5fr) minmax(124px, 1.1fr) 116px 120px 134px 100px;
+    grid-template-columns: minmax(280px, 2.5fr) minmax(124px, 1.1fr) 116px 120px 134px minmax(210px, 1.2fr);
   }
 
   .document-col-size,
@@ -722,6 +860,7 @@
   .document-row-actions {
     align-self: center;
     grid-area: actions;
+    min-width: 0;
   }
 }
 
@@ -801,9 +940,196 @@
 
   .document-row-actions {
     justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .document-row-actions-card {
+    align-items: stretch;
+  }
+
+  .document-utility-actions {
+    justify-content: flex-start;
   }
 
   .pagination {
     flex-direction: column;
   }
+}
+
+/* ── Review button glow effect ── */
+.confirm-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--color-primary, #7c3aed);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  animation: reviewGlow 2s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.4);
+}
+
+.confirm-primary-btn:hover {
+  background: var(--color-primary-600, #6d28d9);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.6);
+  transform: scale(1.03);
+}
+
+.confirm-primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: none;
+}
+
+.confirm-primary-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes reviewGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.6), 0 0 40px rgba(124, 58, 237, 0.2);
+  }
+}
+
+/* ── Review status button (clickable pending badge) ── */
+.review-status-btn {
+  cursor: pointer;
+  border: none;
+  font-weight: 800;
+  font-size: 0.82rem;
+  padding: 6px 20px;
+  min-height: 36px;
+  letter-spacing: 0.03em;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: reviewStatusGlow 1.5s ease-in-out infinite, reviewShimmer 2s linear infinite, reviewBlink 1.2s ease-in-out infinite;
+  background: linear-gradient(135deg, #f59e0b, #f97316, #f59e0b) !important;
+  background-size: 200% 200% !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 999px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.review-status-btn::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 70%
+  );
+  animation: reviewSweep 2.5s ease-in-out infinite;
+}
+
+.review-status-btn:hover {
+  transform: scale(1.12) translateY(-1px);
+  box-shadow:
+    0 0 20px rgba(245, 158, 11, 0.6),
+    0 0 40px rgba(249, 115, 22, 0.3),
+    0 4px 15px rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, #fbbf24, #f97316, #fbbf24) !important;
+}
+
+.review-status-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.review-status-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  animation: none;
+  transform: none !important;
+  box-shadow: none !important;
+  background: rgba(245, 158, 11, 0.3) !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.review-status-btn:disabled::before {
+  display: none;
+}
+
+@keyframes reviewStatusGlow {
+  0% {
+    box-shadow:
+      0 0 8px rgba(245, 158, 11, 0.4),
+      0 0 4px rgba(249, 115, 22, 0.3);
+  }
+  25% {
+    box-shadow:
+      0 0 25px rgba(245, 158, 11, 0.7),
+      0 0 50px rgba(249, 115, 22, 0.35),
+      0 0 80px rgba(245, 158, 11, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 0 10px rgba(251, 191, 36, 0.5),
+      0 0 30px rgba(245, 158, 11, 0.3);
+  }
+  75% {
+    box-shadow:
+      0 0 30px rgba(249, 115, 22, 0.65),
+      0 0 60px rgba(245, 158, 11, 0.3),
+      0 0 90px rgba(251, 191, 36, 0.12);
+  }
+  100% {
+    box-shadow:
+      0 0 8px rgba(245, 158, 11, 0.4),
+      0 0 4px rgba(249, 115, 22, 0.3);
+  }
+}
+
+@keyframes reviewShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes reviewSweep {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  30%, 100% { transform: translateX(100%) rotate(45deg); }
+}
+
+@keyframes reviewBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Second-click confirm state */
+.review-status-btn.confirm-pulse {
+  background: linear-gradient(135deg, #16a34a, #22c55e, #16a34a) !important;
+  animation: confirmFlash 0.5s ease-in-out infinite, reviewShimmer 1.5s linear infinite;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.5), 0 0 40px rgba(34, 197, 94, 0.2);
+  transform: scale(1.08);
+}
+
+.review-status-btn.confirm-pulse::before {
+  background: linear-gradient(
+    45deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 80%
+  );
+  animation: reviewSweep 1s ease-in-out infinite;
+}
+
+@keyframes confirmFlash {
+  0%, 100% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 24px rgba(34, 197, 94, 0.7), 0 0 48px rgba(34, 197, 94, 0.3); }
 }

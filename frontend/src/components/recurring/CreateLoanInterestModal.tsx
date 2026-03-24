@@ -4,6 +4,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useForm } from 'react-hook-form';
 import { recurringService } from '../../services/recurringService';
 import { loanService } from '../../services/loanService';
+import Select from '../common/Select';
 import '../transactions/RecurringTransactionEditor.css';
 
 interface Loan {
@@ -31,7 +32,7 @@ export const CreateLoanInterestModal: React.FC<CreateLoanInterestModalProps> = (
 }) => {
   const { t } = useTranslation();
   const { alert: showAlert } = useConfirm();
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>();
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -91,14 +92,12 @@ export const CreateLoanInterestModal: React.FC<CreateLoanInterestModalProps> = (
         <form onSubmit={handleSubmit(onSubmit)} className="recurring-editor-form">
           <div className="form-group">
             <label>{t('recurring.form.loan')}</label>
-            <select {...register('loan_id', { required: true, valueAsNumber: true })}>
-              <option value="">{t('recurring.form.selectLoan')}</option>
-              {loans.map(loan => (
-                <option key={loan.id} value={loan.id}>
-                  {loan.lender_name} - {loan.property_address}
-                </option>
-              ))}
-            </select>
+            <Select {...register('loan_id', { required: true, valueAsNumber: true })} value={watch('loan_id')?.toString() || ''}
+              placeholder={t('recurring.form.selectLoan')}
+              options={loans.map(loan => ({
+                value: String(loan.id),
+                label: `${loan.lender_name} - ${loan.property_address}`,
+              }))} />
             {errors.loan_id && (
               <span className="field-error">{t('recurring.errors.loanRequired')}</span>
             )}

@@ -302,40 +302,17 @@ export interface BescheidParseResult {
   [key: string]: unknown;
 }
 
-export interface BescheidImportTransaction {
-  id: number;
-  type: string;
-  category: string;
-  amount: number;
-  description: string;
+export interface TaxDataConfirmResult {
+  message: string;
+  tax_filing_data_id: number;
+  data_type: string;
+  tax_year: number | null;
+  saved_data: Record<string, unknown>;
+  document_id?: number | null;
+  already_confirmed?: boolean;
 }
 
-export interface BescheidImportResult {
-  tax_year: number;
-  taxpayer_name: string | null;
-  steuernummer: string | null;
-  finanzamt: string | null;
-  einkommen: number | null;
-  festgesetzte_einkommensteuer: number | null;
-  abgabengutschrift: number | null;
-  abgabennachforderung: number | null;
-  transactions_created: number;
-  transactions: BescheidImportTransaction[];
-  confidence: number;
-  bescheid_data: Record<string, unknown>;
-  requires_property_linking?: boolean;
-  property_linking_suggestions?: Array<{
-    extracted_address: string;
-    matched_property_id: string | null;
-    confidence_score: number;
-    suggested_action: string;
-    match_details?: {
-      street_match?: boolean;
-      postal_code_match?: boolean;
-      city_match?: boolean;
-    };
-  }>;
-}
+export type BescheidImportResult = TaxDataConfirmResult;
 
 // ── E1 Form types ────────────────────────────────────────────────────
 export interface E1FormParseResult {
@@ -355,28 +332,7 @@ export interface E1FormParseResult {
   [key: string]: unknown;
 }
 
-export interface E1FormImportResult {
-  tax_year: number;
-  taxpayer_name: string | null;
-  steuernummer: string | null;
-  transactions_created: number;
-  transactions: Array<{
-    id: number;
-    type: string;
-    amount: number;
-    description: string;
-    kz: string;
-  }>;
-  all_kz_values: Record<string, number>;
-  requires_property_linking?: boolean;
-  property_linking_suggestions?: Array<{
-    extracted_address?: string;
-    property_id?: string;
-    address?: string;
-    confidence?: number;
-    suggested_action?: string;
-  }>;
-}
+export type E1FormImportResult = TaxDataConfirmResult;
 
 const reportService = {
   // Get audit checklist
@@ -529,7 +485,7 @@ const reportService = {
     return response.data;
   },
 
-  // Parse Einkommensteuerbescheid (preview without creating transactions)
+  // Parse Einkommensteuerbescheid (preview without persisting)
   parseBescheid: async (ocrText: string, documentId?: number): Promise<BescheidParseResult> => {
     const response = await api.post('/tax/parse-bescheid', {
       ocr_text: ocrText,
@@ -538,11 +494,16 @@ const reportService = {
     return response.data;
   },
 
-  // Import Einkommensteuerbescheid (creates transactions)
-  importBescheid: async (ocrText: string, documentId?: number): Promise<BescheidImportResult> => {
+  // Confirm Einkommensteuerbescheid data into TaxFilingData
+  importBescheid: async (
+    ocrText: string,
+    documentId?: number,
+    editedData?: Record<string, unknown>,
+  ): Promise<BescheidImportResult> => {
     const response = await api.post('/tax/import-bescheid', {
       ocr_text: ocrText,
       document_id: documentId,
+      edited_data: editedData,
     });
     return response.data;
   },
@@ -558,7 +519,7 @@ const reportService = {
     return response.data;
   },
 
-  // E1 Form Import
+  // E1 Form preview
   parseE1Form: async (ocrText: string, documentId?: number): Promise<E1FormParseResult> => {
     const response = await api.post('/tax/parse-e1-form', {
       ocr_text: ocrText,
@@ -567,10 +528,15 @@ const reportService = {
     return response.data;
   },
 
-  importE1Form: async (ocrText: string, documentId?: number): Promise<E1FormImportResult> => {
+  importE1Form: async (
+    ocrText: string,
+    documentId?: number,
+    editedData?: Record<string, unknown>,
+  ): Promise<E1FormImportResult> => {
     const response = await api.post('/tax/import-e1-form', {
       ocr_text: ocrText,
       document_id: documentId,
+      edited_data: editedData,
     });
     return response.data;
   },

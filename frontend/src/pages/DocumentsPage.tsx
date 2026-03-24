@@ -1,23 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import Select from '../components/common/Select';
 import DocumentUpload from '../components/documents/DocumentUpload';
 import { translateDeductionReason } from '../utils/translateDeductionReason';
 import DocumentList from '../components/documents/DocumentList';
 import OCRReview from '../components/documents/OCRReview';
+import BankStatementWorkbench from '../components/documents/BankStatementWorkbench';
 import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
-import BescheidImport from '../components/documents/BescheidImport';
-import E1FormImport from '../components/documents/E1FormImport';
+import DocumentActionGate from '../components/documents/DocumentActionGate';
+import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
 import { documentService, type AssetSuggestionConfirmationPayload } from '../services/documentService';
 import { transactionService } from '../services/transactionService';
 import { propertyService } from '../services/propertyService';
 import { Document } from '../types/document';
 import { Property } from '../types/property';
-import { Transaction } from '../types/transaction';
+import { ExpenseCategory, IncomeCategory, Transaction } from '../types/transaction';
 import { saveBlobWithNativeShare } from '../mobile/files';
 import { useRefreshStore } from '../stores/refreshStore';
 import { aiToast } from '../stores/aiToastStore';
+import { getLocaleForLanguage } from '../utils/locale';
+import i18n from '../i18n';
+import { formatTransactionCategoryLabel } from '../utils/formatTransactionCategoryLabel';
+import { getApiErrorMessage, getLineItemReconciliationError } from '../utils/apiError';
+import isDocumentPresentationResolverEnabled from '../documents/presentation/featureFlag';
+import normalizeDocumentType from '../documents/presentation/normalizeDocumentType';
+import { resolveDocumentPresentation } from '../documents/presentation/resolveDocumentPresentation';
+import { resolveControlPolicy } from '../documents/presentation/resolveControlPolicy';
+import type {
+  DocumentPresentationDraft,
+} from '../documents/presentation/types';
 import './DocumentsPage.css';
 
 type ReceiptDraftItem = {
@@ -50,8 +64,9 @@ type PipelineCurrentState =
   | 'phase_2_failed';
 
 const RECEIPT_DOC_TYPES = new Set(['receipt', 'invoice']);
-const INCOME_DOC_TYPES = new Set(['payslip', 'lohnzettel', 'einkommensteuerbescheid']);
 const LEGACY_FINAL_ASSET_STATUSES = new Set(['confirmed', 'auto-created']);
+const EXPENSE_CATEGORY_VALUES = new Set(Object.values(ExpenseCategory));
+const INCOME_CATEGORY_VALUES = new Set(Object.values(IncomeCategory));
 const OCR_META_SKIP_KEYS = [
   'field_confidence',
   'confidence',
@@ -86,9 +101,116 @@ const normalizeVatRate = (value: unknown): number | null => {
   return numeric > 1 ? Number((numeric / 100).toFixed(4)) : Number(numeric.toFixed(4));
 };
 
+const EMPTY_DISPLAY_VALUE = '-';
+
+const formatCurrencyDisplay = (value: unknown): string => {
+  const numeric = toFiniteNumber(value);
+  return numeric === null
+    ? EMPTY_DISPLAY_VALUE
+    : numeric.toLocaleString(getLocaleForLanguage(i18n.language), {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+};
+
+const isValidReceiptCategoryForTransactionType = (
+  category: string | undefined,
+  transactionType: 'expense' | 'income' | 'unknown',
+): boolean => {
+  const token = String(category || '').trim();
+  if (!token) return false;
+  if (transactionType === 'income') {
+    return INCOME_CATEGORY_VALUES.has(token as IncomeCategory);
+  }
+  if (transactionType === 'expense') {
+    return EXPENSE_CATEGORY_VALUES.has(token as ExpenseCategory);
+  }
+  return INCOME_CATEGORY_VALUES.has(token as IncomeCategory)
+    || EXPENSE_CATEGORY_VALUES.has(token as ExpenseCategory);
+};
+
+const normalizeReceiptItemsForTransactionType = (
+  items: ReceiptDraftItem[],
+  transactionType: 'expense' | 'income' | 'unknown',
+): ReceiptDraftItem[] => items.map((item) => {
+  const nextCategory = isValidReceiptCategoryForTransactionType(item.category, transactionType)
+    ? item.category
+    : undefined;
+
+  if (transactionType === 'income') {
+    return {
+      ...item,
+      category: nextCategory,
+      is_deductible: false,
+      deduction_reason: '',
+    };
+  }
+
+  return {
+    ...item,
+    category: nextCategory,
+  };
+});
+
+const buildReceiptSyncBlockedMessage = (
+  error: any,
+  t: any,
+  options?: { ocrSaved?: boolean }
+): string => {
+  const reconciliation = getLineItemReconciliationError(error);
+  if (reconciliation) {
+    const expectedLabel = reconciliation.expected !== null
+      ? formatCurrencyDisplay(reconciliation.expected)
+      : EMPTY_DISPLAY_VALUE;
+    const reconstructedLabel = reconciliation.reconstructed !== null
+      ? formatCurrencyDisplay(reconciliation.reconstructed)
+      : EMPTY_DISPLAY_VALUE;
+    const prefix = options?.ocrSaved
+      ? t(
+          'documents.taxReview.syncBlockedAfterSave',
+          'Document details were saved, but the linked transaction was not updated.'
+        )
+      : t(
+          'documents.taxReview.syncBlocked',
+          'The linked transaction was not updated.'
+        );
+    const template = t(
+      'documents.taxReview.syncAmountMismatch',
+      'The invoice total {{expected}} does not match the reconstructed line-item total {{reconstructed}}. Check the line-item amounts or VAT on this invoice, then save again.'
+    );
+
+    return `${prefix} ${template
+      .replace('{{expected}}', expectedLabel)
+      .replace('{{reconstructed}}', reconstructedLabel)}`;
+  }
+
+  const baseMessage = getApiErrorMessage(error, t('common.saveFailed', 'Save failed'));
+  if (options?.ocrSaved) {
+    return `${t(
+      'documents.taxReview.syncBlockedAfterSave',
+      'Document details were saved, but the linked transaction was not updated.'
+    )} ${baseMessage}`;
+  }
+  return baseMessage;
+};
+
 const normalizeReceiptSection = (receipt: Record<string, any>): Record<string, any> => {
-  const { _additional_receipts, _receipt_count, tax_analysis, import_suggestion, asset_outcome, multiple_receipts, receipt_count, receipts, ...rest } = receipt;
-  return normalizeReceiptData(rest);
+  const sanitized = { ...receipt };
+  [
+    '_additional_receipts',
+    '_receipt_count',
+    'tax_analysis',
+    'import_suggestion',
+    'asset_outcome',
+    'multiple_receipts',
+    'receipt_count',
+    'receipts',
+  ].forEach((key) => {
+    delete sanitized[key];
+  });
+  return normalizeReceiptData(sanitized);
 };
 
 const buildTaxAnalysisItems = (items: ReceiptDraftItem[]) => {
@@ -158,12 +280,24 @@ const getAssetOutcome = (ocrResult: unknown): AssetOutcomeRecord | null => {
   return null;
 };
 
+const INTERMEDIATE_PIPELINE_STATES = new Set([
+  'processing_phase_1', 'first_result_available', 'finalizing',
+]);
+
 const getPipelineCurrentState = (
   ocrResult: unknown,
-  processedAt?: string | null
+  processedAt?: string | null,
+  ocrStatus?: string | null
 ): PipelineCurrentState | null => {
+  if (ocrStatus === 'failed') {
+    return 'phase_2_failed';
+  }
   const parsed = parseOcrData(ocrResult);
   const state = parsed?._pipeline?.current_state;
+  // If document is fully processed, don't show intermediate state banners
+  if (processedAt && typeof state === 'string' && INTERMEDIATE_PIPELINE_STATES.has(state)) {
+    return 'completed';
+  }
   if (typeof state === 'string' && state) {
     return state as PipelineCurrentState;
   }
@@ -178,26 +312,26 @@ const getPipelineStatePresentation = (
     case 'processing_phase_1':
       return {
         tone: 'info',
-        title: t('documents.pipeline.processingPhase1Title', '正在提取文档内容'),
-        description: t('documents.pipeline.processingPhase1Body', 'OCR 和分类仍在进行中，稍后会显示首批可查看结果。'),
+        title: t('documents.pipeline.processingPhase1Title', 'Extracting document content'),
+        description: t('documents.pipeline.processingPhase1Body', 'OCR and classification are still running. The first reviewable results will appear shortly.'),
       };
     case 'first_result_available':
       return {
         tone: 'info',
-        title: t('documents.pipeline.firstResultTitle', '首批结果已可见'),
-        description: t('documents.pipeline.firstResultBody', '已保存 OCR、分类和提取结果，后续自动建议仍在处理中。'),
+        title: t('documents.pipeline.firstResultTitle', 'First results are ready'),
+        description: t('documents.pipeline.firstResultBody', 'OCR, classification, and extracted data have been saved. Follow-up suggestions are still being prepared.'),
       };
     case 'finalizing':
       return {
         tone: 'info',
-        title: t('documents.pipeline.finalizingTitle', '正在完成后续处理'),
-        description: t('documents.pipeline.finalizingBody', '你现在可以查看首批结果；自动建议和落库动作仍在继续。'),
+        title: t('documents.pipeline.finalizingTitle', 'Finishing background processing'),
+        description: t('documents.pipeline.finalizingBody', 'You can already review the first extracted results while automated suggestions and follow-up actions keep running.'),
       };
     case 'phase_2_failed':
       return {
         tone: 'warning',
-        title: t('documents.pipeline.phase2FailedTitle', '后续自动处理未完成'),
-        description: t('documents.pipeline.phase2FailedBody', '首批 OCR 结果已保留，你仍然可以查看和编辑当前提取结果。'),
+        title: t('documents.pipeline.phase2FailedTitle', 'Follow-up automation did not finish'),
+        description: t('documents.pipeline.phase2FailedBody', 'The initial OCR result is still available, and you can continue reviewing or editing the extracted data.'),
       };
     default:
       return null;
@@ -258,8 +392,22 @@ const normalizeOcrDataForDisplay = (ocrResult: unknown): Record<string, any> | n
 
 const getDisplayLineItems = (data: Record<string, any> | null | undefined): any[] => {
   if (!data || typeof data !== 'object') return [];
-  if (Array.isArray(data.line_items)) return data.line_items;
-  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.line_items) && data.line_items.length > 0) return data.line_items;
+  if (Array.isArray(data.items) && data.items.length > 0) return data.items;
+
+// Fallback: no line_items but an amount exists, so create a single whole-receipt item.
+  // This ensures tax deductibility judgment is always available
+  const amount = data.amount || data.total_amount || data.total;
+  if (amount && Number(amount) > 0) {
+    return [{
+      name: data.description || data.merchant || 'Gesamtbetrag',
+      description: data.description || data.merchant || 'Gesamtbetrag',
+      quantity: 1,
+      price: Number(amount),
+      total: Number(amount),
+      total_price: Number(amount),
+    }];
+  }
   return [];
 };
 
@@ -331,16 +479,22 @@ const normalizeReceiptDraftItem = (item: any, fallback: any = {}): ReceiptDraftI
   };
 };
 
-const mapTransactionLineItemToDraftItem = (item: NonNullable<Transaction['line_items']>[number]): ReceiptDraftItem => ({
-  description: item.description,
-  amount: Number(item.amount || 0),
-  quantity: item.quantity ?? 1,
-  unitPrice: Number(item.amount || 0),
-  vatRate: toFiniteNumber(item.vat_rate),
-  category: item.category,
-  is_deductible: item.is_deductible ?? null,
-  deduction_reason: item.deduction_reason ?? '',
-});
+const mapTransactionLineItemToDraftItem = (item: NonNullable<Transaction['line_items']>[number]): ReceiptDraftItem => {
+  const quantity = toFiniteNumber(item.quantity) ?? 1;
+  const unitPrice = toFiniteNumber(item.amount) ?? 0;
+  const totalAmount = Number((unitPrice * quantity).toFixed(2));
+
+  return {
+    description: item.description,
+    amount: totalAmount,
+    quantity: item.quantity ?? 1,
+    unitPrice,
+    vatRate: toFiniteNumber(item.vat_rate),
+    category: item.category,
+    is_deductible: item.is_deductible ?? null,
+    deduction_reason: item.deduction_reason ?? '',
+  };
+};
 
 const buildReceiptDrafts = (
   data: Record<string, any> | null,
@@ -365,11 +519,71 @@ const buildReceiptDrafts = (
   }, {});
 };
 
+const buildReceiptPresentationDrafts = (
+  documentType: string | undefined,
+  data: Record<string, any> | null
+): Record<number, DocumentPresentationDraft> => {
+  const receipts = getAllReceiptsForDisplay(data);
+
+  return receipts.reduce<Record<number, DocumentPresentationDraft>>((result, receipt, receiptIndex) => {
+    const resolvedDocumentType = String(receipt.document_type || documentType || 'receipt').toLowerCase();
+    const isInvoiceFamilyDocumentType = [
+      'invoice',
+      'credit_note',
+      'gutschrift',
+      'proforma_invoice',
+      'delivery_note',
+    ].includes(resolvedDocumentType);
+    const transactionType = String(
+      receipt._transaction_type
+        ?? receipt.transaction_type
+        ?? receipt.document_transaction_direction
+        ?? receipt.transaction_direction
+        ?? ''
+    ).toLowerCase();
+    const resolvedTransactionType = transactionType === 'income'
+      ? 'income'
+      : transactionType === 'expense'
+        ? 'expense'
+        : 'expense';
+
+    result[receiptIndex] = {
+      documentType: isInvoiceFamilyDocumentType ? 'invoice' : 'receipt',
+      transactionType: resolvedTransactionType,
+      documentTransactionDirection:
+        receipt.document_transaction_direction
+        ?? receipt.transaction_direction
+        ?? null,
+      commercialDocumentSemantics:
+        receipt.commercial_document_semantics
+        ?? (resolvedDocumentType === 'invoice' ? 'standard_invoice' : 'receipt'),
+      isReversal:
+        typeof receipt.is_reversal === 'boolean'
+          ? receipt.is_reversal
+          : null,
+    };
+
+    return result;
+  }, {});
+};
+
+const RECEIPT_PRESENTATION_SCALAR_SKIP_KEYS = new Set([
+  'document_type',
+  'transaction_type',
+  '_transaction_type',
+  'document_transaction_direction',
+  'document_transaction_direction_source',
+  'document_transaction_direction_confidence',
+  'commercial_document_semantics',
+  'is_reversal',
+]);
+
 const buildReceiptScalarEntries = (receipt: Record<string, any>): [string, unknown][] =>
   Object.entries(receipt).filter(
     ([key, value]) =>
       !key.startsWith('_')
       && !OCR_META_SKIP_KEYS.includes(key)
+      && !RECEIPT_PRESENTATION_SCALAR_SKIP_KEYS.has(key)
       && value !== null
       && value !== undefined
       && typeof value !== 'object'
@@ -377,12 +591,23 @@ const buildReceiptScalarEntries = (receipt: Record<string, any>): [string, unkno
 
 const buildUpdatedReceiptCorrections = (
   ocrResult: unknown,
-  drafts: Record<number, ReceiptDraftItem[]>
+  drafts: Record<number, ReceiptDraftItem[]>,
+  presentationDrafts: Record<number, DocumentPresentationDraft>,
+  documentType?: string
 ): Record<string, any> => {
   const displayData = normalizeOcrDataForDisplay(ocrResult);
   const receipts = getAllReceiptsForDisplay(displayData);
   const updatedReceipts = receipts.map((receipt, receiptIndex) => {
-    const draftItems = drafts[receiptIndex] || [];
+    const presentationDraft = presentationDrafts[receiptIndex] || {};
+    const transactionType = presentationDraft.transactionType === 'income'
+      ? 'income'
+      : presentationDraft.transactionType === 'expense'
+        ? 'expense'
+        : 'unknown';
+    const draftItems = normalizeReceiptItemsForTransactionType(
+      drafts[receiptIndex] || [],
+      transactionType,
+    );
     const mappedItems = draftItems.map((item) => ({
       name: item.description,
       description: item.description,
@@ -401,6 +626,19 @@ const buildUpdatedReceiptCorrections = (
 
     return {
       ...receipt,
+      document_type: presentationDraft.documentType ?? receipt.document_type ?? documentType ?? 'receipt',
+      _transaction_type: presentationDraft.transactionType ?? receipt._transaction_type ?? receipt.transaction_type,
+      document_transaction_direction:
+        presentationDraft.documentTransactionDirection
+        ?? receipt.document_transaction_direction
+        ?? receipt.transaction_direction,
+      commercial_document_semantics:
+        presentationDraft.commercialDocumentSemantics
+        ?? receipt.commercial_document_semantics,
+      is_reversal:
+        typeof presentationDraft.isReversal === 'boolean'
+          ? presentationDraft.isReversal
+          : receipt.is_reversal,
       line_items: mappedItems,
       items: mappedItems,
     };
@@ -408,7 +646,13 @@ const buildUpdatedReceiptCorrections = (
 
   const corrections: Record<string, any> = {};
   const primaryItems = updatedReceipts[0]?.line_items || [];
+  const primaryReceipt = updatedReceipts[0] || null;
 
+  corrections._document_type = primaryReceipt?.document_type ?? documentType ?? 'receipt';
+  corrections._transaction_type = primaryReceipt?._transaction_type ?? undefined;
+  corrections.document_transaction_direction = primaryReceipt?.document_transaction_direction ?? undefined;
+  corrections.commercial_document_semantics = primaryReceipt?.commercial_document_semantics ?? undefined;
+  corrections.is_reversal = primaryReceipt?.is_reversal ?? undefined;
   corrections.line_items = primaryItems;
   corrections.items = primaryItems;
 
@@ -429,21 +673,183 @@ const buildUpdatedReceiptCorrections = (
   return corrections;
 };
 
-const buildTransactionLineItems = (items: ReceiptDraftItem[]) =>
-  items
+const getReceiptTotalAmount = (receipt: Record<string, any> | null | undefined): number | null => {
+  if (!receipt) return null;
+  return [
+    receipt.amount,
+    receipt.total_amount,
+    receipt.total,
+  ]
+    .map(toFiniteNumber)
+    .find((value) => value !== null)
+    ?? null;
+};
+
+const getReceiptVatAmount = (receipt: Record<string, any> | null | undefined): number | null => {
+  if (!receipt) return null;
+
+  const directVat = toFiniteNumber(receipt.vat_amount);
+  if (directVat !== null) return Number(directVat.toFixed(2));
+
+  if (receipt.vat_amounts && typeof receipt.vat_amounts === 'object') {
+    const vatFromMap = Object.values(receipt.vat_amounts as Record<string, unknown>)
+      .map(toFiniteNumber)
+      .filter((value): value is number => value !== null)
+      .reduce((sum, value) => sum + value, 0);
+    if (vatFromMap > 0) return Number(vatFromMap.toFixed(2));
+  }
+
+  if (Array.isArray(receipt.vat_summary)) {
+    const vatFromSummary = receipt.vat_summary
+      .map((row: any) => toFiniteNumber(row?.vat_amount))
+      .filter((value: number | null): value is number => value !== null)
+      .reduce((sum: number, value: number) => sum + value, 0);
+    if (vatFromSummary > 0) return Number(vatFromSummary.toFixed(2));
+  }
+
+  return null;
+};
+
+const buildTransactionLineItems = (
+  items: ReceiptDraftItem[],
+  receiptData?: Record<string, any> | null,
+) => {
+  const resolveCanonicalAmountAndQuantity = (
+    item: ReceiptDraftItem,
+    lineTotal: number,
+  ): { quantity: number; amount: number } => {
+    const rawQuantity = toFiniteNumber(item.quantity);
+    const integerQuantity = rawQuantity && rawQuantity > 0 && Number.isInteger(rawQuantity)
+      ? Number(rawQuantity)
+      : 1;
+
+    if (integerQuantity <= 1) {
+      return {
+        quantity: 1,
+        amount: Number(lineTotal.toFixed(2)),
+      };
+    }
+
+    const explicitUnitPrice = toFiniteNumber(item.unitPrice);
+    if (explicitUnitPrice !== null) {
+      const roundedUnitPrice = Number(explicitUnitPrice.toFixed(2));
+      const reconstructed = Number((roundedUnitPrice * integerQuantity).toFixed(2));
+      if (Math.abs(reconstructed - lineTotal) <= 0.01) {
+        return {
+          quantity: integerQuantity,
+          amount: roundedUnitPrice,
+        };
+      }
+    }
+
+    const derivedUnitPrice = Number((lineTotal / integerQuantity).toFixed(2));
+    const reconstructed = Number((derivedUnitPrice * integerQuantity).toFixed(2));
+    if (Math.abs(reconstructed - lineTotal) <= 0.01) {
+      return {
+        quantity: integerQuantity,
+        amount: derivedUnitPrice,
+      };
+    }
+
+    return {
+      quantity: 1,
+      amount: Number(lineTotal.toFixed(2)),
+    };
+  };
+
+  const baseItems = items
     .filter((item) => item.description.trim() && item.amount > 0)
-    .map((item, index) => ({
+    .map((item, index) => {
+      const lineTotal = Number(item.amount.toFixed(2));
+      const canonical = resolveCanonicalAmountAndQuantity(item, lineTotal);
+
+      return {
       description: item.description.trim(),
-      amount: Number(item.amount.toFixed(2)),
-      quantity: Number.isInteger(toFiniteNumber(item.quantity))
-        ? Number(item.quantity)
-        : 1,
+      amount: canonical.amount,
+      quantity: canonical.quantity,
+      lineTotal,
       category: item.category,
       is_deductible: item.is_deductible === true,
       deduction_reason: item.deduction_reason?.trim() || undefined,
       vat_rate: normalizeVatRate(item.vatRate),
       sort_order: index,
-    }));
+    };
+    });
+
+  if (!receiptData || baseItems.length === 0) {
+    return baseItems;
+  }
+
+  const receiptTotal = getReceiptTotalAmount(receiptData);
+  if (receiptTotal === null) {
+    return baseItems;
+  }
+
+  const baseTotal = Number(
+    baseItems.reduce((sum, item) => sum + Number(item.lineTotal || item.amount || 0), 0).toFixed(2)
+  );
+  const grossGap = Number((receiptTotal - baseTotal).toFixed(2));
+
+  if (Math.abs(grossGap) <= 0.01) {
+    return baseItems;
+  }
+
+  const explicitVat = getReceiptVatAmount(receiptData);
+  const inferredVat = baseItems.every((item) => item.vat_rate != null)
+    ? Number(
+      baseItems.reduce((sum, item) => {
+        const rate = Number(item.vat_rate || 0);
+        return sum + (Number(item.amount || 0) * rate);
+      }, 0).toFixed(2)
+    )
+    : null;
+
+  const vatToAllocate = explicitVat !== null && Math.abs(explicitVat - grossGap) <= 0.02
+    ? explicitVat
+    : inferredVat !== null && Math.abs(inferredVat - grossGap) <= 0.02
+      ? inferredVat
+      : null;
+
+  if (vatToAllocate === null || vatToAllocate <= 0 || baseTotal <= 0) {
+    return baseItems;
+  }
+
+  let remainingVat = Number(vatToAllocate.toFixed(2));
+
+  return baseItems.map((item, index) => {
+    const isLastItem = index === baseItems.length - 1;
+    const rawShare = isLastItem
+      ? remainingVat
+      : Number((((item.lineTotal || item.amount) / baseTotal) * vatToAllocate).toFixed(2));
+    const allocatedVat = Number(rawShare.toFixed(2));
+    remainingVat = Number((remainingVat - allocatedVat).toFixed(2));
+
+    if (item.is_deductible) {
+      return {
+        ...item,
+        vat_amount: allocatedVat,
+        vat_recoverable_amount: allocatedVat,
+      };
+    }
+
+    const grossLineTotal = Number(((item.lineTotal || item.amount) + allocatedVat).toFixed(2));
+    const grossCanonical = resolveCanonicalAmountAndQuantity(
+      {
+        ...item,
+        amount: grossLineTotal,
+      },
+      grossLineTotal,
+    );
+
+    return {
+      ...item,
+      amount: grossCanonical.amount,
+      quantity: grossCanonical.quantity,
+      vat_amount: allocatedVat,
+      vat_recoverable_amount: 0,
+    };
+  }).map(({ lineTotal, ...item }) => item);
+};
 
 const DocumentsPage = () => {
   const { t, i18n } = useTranslation();
@@ -452,13 +858,8 @@ const DocumentsPage = () => {
   const [searchParams] = useSearchParams();
   const uploadPropertyId = searchParams.get('property_id');
   const uploadType = searchParams.get('type');
-  const [reviewingDocument, setReviewingDocument] = useState<number | null>(null);
-  const [bescheidOcrText, setBescheidOcrText] = useState<string | null>(null);
-  const [bescheidDocId, setBescheidDocId] = useState<number | null>(null);
-  const [bescheidParseResult, setBescheidParseResult] = useState<any>(null);
-  const [e1OcrText, setE1OcrText] = useState<string | null>(null);
-  const [e1DocId, setE1DocId] = useState<number | null>(null);
-  const [e1ParseResult, setE1ParseResult] = useState<any>(null);
+  const resolverEnabled = isDocumentPresentationResolverEnabled();
+  const [reviewingDocument, setReviewingDocument] = useState<Document | null>(null);
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
   const [linkedTransaction, setLinkedTransaction] = useState<Transaction | null>(null);
   const [linkedAsset, setLinkedAsset] = useState<Property | null>(null);
@@ -467,8 +868,41 @@ const DocumentsPage = () => {
   const [confirmResult, setConfirmResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
+  const [docIdList, setDocIdList] = useState<number[]>([]);
+
+  // Fetch document ID list for prev/next navigation
+  useEffect(() => {
+    documentService.getDocuments().then((docs: any) => {
+      const list = (docs.documents || docs || []).map((d: any) => d.id).sort((a: number, b: number) => b - a);
+      setDocIdList(list);
+    }).catch(() => {});
+  }, [refreshKey]);
+
+  const navigateToDocument = (direction: 'prev' | 'next') => {
+    if (!documentId || docIdList.length === 0) return;
+    const currentId = parseInt(documentId);
+    const idx = docIdList.indexOf(currentId);
+    if (idx === -1) return;
+    const targetIdx = direction === 'next' ? idx + 1 : idx - 1;
+    if (targetIdx >= 0 && targetIdx < docIdList.length) {
+      navigate(`/documents/${docIdList[targetIdx]}`, { replace: true });
+    }
+  };
+
+  const hasPrevDoc = (() => {
+    if (!documentId || docIdList.length === 0) return false;
+    const idx = docIdList.indexOf(parseInt(documentId));
+    return idx > 0;
+  })();
+
+  const hasNextDoc = (() => {
+    if (!documentId || docIdList.length === 0) return false;
+    const idx = docIdList.indexOf(parseInt(documentId));
+    return idx >= 0 && idx < docIdList.length - 1;
+  })();
 
   const [receiptItemDrafts, setReceiptItemDrafts] = useState<Record<number, ReceiptDraftItem[]>>({});
+  const [receiptPresentationDrafts, setReceiptPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
   const [editingReceiptIndex, setEditingReceiptIndex] = useState<number | null>(null);
   const [savingReceiptIndex, setSavingReceiptIndex] = useState<number | null>(null);
   const [receiptItemSaveResult, setReceiptItemSaveResult] = useState<{
@@ -482,6 +916,11 @@ const DocumentsPage = () => {
   const [editingOcrValue, setEditingOcrValue] = useState<string>('');
   const [savingOcrField, setSavingOcrField] = useState<string | null>(null);
   const [ocrFieldError, setOcrFieldError] = useState<string | null>(null);
+
+  const RECEIPT_INLINE_TYPES = new Set(['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note']);
+  const isReceiptOrInvoice = (doc: Document) =>
+    RECEIPT_INLINE_TYPES.has((doc.document_type as string || '').toLowerCase());
+
 
   const handleOcrFieldClick = (scopeKey: string, val: unknown) => {
     setOcrFieldError(null);
@@ -531,7 +970,7 @@ const DocumentsPage = () => {
       setViewingDocument(updated);
     } catch (err) {
       console.error('OCR field save failed:', scopeKey, err);
-      setOcrFieldError(t('documents.ocr.saveFailed', '保存失败，请重试'));
+      setOcrFieldError(t('documents.ocr.saveFailed', 'Save failed. Please try again.'));
     } finally {
       setSavingOcrField(null);
       setEditingOcrField(null);
@@ -539,13 +978,49 @@ const DocumentsPage = () => {
   };
 
   const formatOcrFieldValue = (key: string, val: unknown): string => {
-    if (val === null || val === undefined) return '—';
-    if (typeof val === 'boolean') return val ? '✓' : '✗';
+    if (val === null || val === undefined) return EMPTY_DISPLAY_VALUE;
+    if (typeof val === 'boolean') return val ? t('common.yes', 'Yes') : t('common.no', 'No');
 
     const s = String(val);
+
+    // Translate enum values for known fields
+    const enumTranslations: Record<string, Record<string, string>> = {
+      document_transaction_direction: {
+        income: t('documents.review.direction.income', 'Income'),
+        expense: t('documents.review.direction.expense', 'Expense'),
+        unknown: t('documents.review.direction.unknown', 'Unknown'),
+      },
+      document_transaction_direction_source: {
+        manual: t('documents.review.directionSource.manual', 'Manual'),
+        partyMatch: t('documents.review.directionSource.partyMatch', 'Party match'),
+        merchant: t('documents.review.directionSource.merchant', 'Merchant'),
+        statement: t('documents.review.directionSource.statement', 'Statement'),
+        unknown: t('documents.review.direction.unknown', 'Unknown'),
+      },
+      commercial_document_semantics: {
+        receipt: t('documents.review.semantics.receipt', 'Receipt'),
+        standard_invoice: t('documents.review.semantics.standard_invoice', 'Standard invoice'),
+        credit_note: t('documents.review.semantics.credit_note', 'Credit note'),
+        proforma: t('documents.review.semantics.proforma', 'Proforma'),
+        delivery_note: t('documents.review.semantics.delivery_note', 'Delivery note'),
+        unknown: t('documents.review.direction.unknown', 'Unknown'),
+      },
+      user_contract_role: {
+        landlord: t('documents.review.contractRole.landlord', 'Landlord'),
+        tenant: t('documents.review.contractRole.tenant', 'Tenant'),
+        buyer: t('documents.review.contractRole.buyer', 'Buyer'),
+        seller: t('documents.review.contractRole.seller', 'Seller'),
+        unknown: t('documents.review.direction.unknown', 'Unknown'),
+      },
+    };
+
+    if (enumTranslations[key] && enumTranslations[key][s]) {
+      return enumTranslations[key][s];
+    }
+
     if (key.includes('date') && s.match(/^\d{4}-\d{2}-\d{2}/)) {
       try {
-        return new Date(s).toLocaleDateString('de-AT');
+        return new Date(s).toLocaleDateString(getLocaleForLanguage(i18n.language));
       } catch {
         return s;
       }
@@ -572,10 +1047,7 @@ const DocumentsPage = () => {
       ].includes(key) &&
       !isNaN(Number(val))
     ) {
-      return `€ ${Number(val).toLocaleString('de-AT', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`;
+      return formatCurrencyDisplay(val);
     }
 
     return s;
@@ -583,31 +1055,68 @@ const DocumentsPage = () => {
 
   const formatReceiptItemName = (description: string | undefined, itemIndex: number): string => {
     const normalized = String(description || '').trim();
-    return normalized || `项目 ${itemIndex + 1}`;
+    return normalized || `Item ${itemIndex + 1}`;
   };
 
   const formatCategoryLabel = (category?: string | null): string => {
-    const normalized = String(category || '').trim();
-    if (!normalized) return '';
-
-    const translationKey = normalized.toLowerCase().replace(/[\\/\s-]+/g, '_');
-    const translated = t(`transactions.categories.${translationKey}`, { defaultValue: normalized });
-
-    if (translated && translated !== `transactions.categories.${translationKey}`) {
-      return translated;
-    }
-
-    return normalized.replace(/_/g, ' ');
+    return formatTransactionCategoryLabel(category, t);
   };
 
   const formatReceiptItemMeta = (item: ReceiptDraftItem): string => {
-    const parts = [`${t('documents.ocr.quantity', '数量')} ${item.quantity ?? 1}`];
+    const parts = [`${t('documents.ocr.quantity', 'Quantity')} ${item.quantity ?? 1}`];
     const categoryLabel = formatCategoryLabel(item.category);
     if (categoryLabel) {
       parts.push(categoryLabel);
     }
     return parts.join(' | ');
   };
+
+  const getReceiptCategoryOptions = (transactionType: 'expense' | 'income' | 'unknown') => {
+    if (transactionType === 'income') {
+      return Object.values(IncomeCategory).map((category) => ({
+        value: category,
+        label: formatCategoryLabel(category),
+      }));
+    }
+
+    return Object.values(ExpenseCategory).map((category) => ({
+      value: category,
+      label: formatCategoryLabel(category),
+    }));
+  };
+
+  const getUniformReceiptCategory = (items: ReceiptDraftItem[]): string => {
+    const uniqueCategories = Array.from(new Set(
+      items
+        .map((item) => String(item.category || '').trim())
+        .filter(Boolean)
+    ));
+    return uniqueCategories.length === 1 ? uniqueCategories[0] : '';
+  };
+
+  const getPrimaryReceiptCategory = (
+    items: ReceiptDraftItem[],
+    transactionType: 'expense' | 'income' | 'unknown',
+  ): string => {
+    const uniformCategory = getUniformReceiptCategory(items);
+    if (isValidReceiptCategoryForTransactionType(uniformCategory, transactionType)) {
+      return uniformCategory;
+    }
+
+    const firstValid = items
+      .map((item) => String(item.category || '').trim())
+      .find((category) => isValidReceiptCategoryForTransactionType(category, transactionType));
+
+    return firstValid || '';
+  };
+
+  const applyCategoryToReceiptItems = (
+    items: ReceiptDraftItem[],
+    category: string | undefined,
+  ): ReceiptDraftItem[] => items.map((item) => ({
+    ...item,
+    category: category || undefined,
+  }));
 
   const findMatchingTransaction = (
     item: ReceiptDraftItem,
@@ -632,6 +1141,105 @@ const DocumentsPage = () => {
     return null;
   };
 
+  const findMatchingReceiptTransaction = (
+    receiptIndex: number,
+    receiptItems: ReceiptDraftItem[],
+    linkedTransactions: Array<{ transaction_id: number; description: string; amount: number; date: string | null; has_line_items?: boolean }> | undefined,
+  ): { transaction_id: number } | null => {
+    if (!linkedTransactions || linkedTransactions.length === 0 || receiptItems.length === 0) {
+      return null;
+    }
+
+    const receiptTotal = receiptItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const exactReceiptMatch = linkedTransactions.find((txn) => Math.abs(Number(txn.amount || 0) - receiptTotal) < 0.01);
+    if (exactReceiptMatch) {
+      return exactReceiptMatch;
+    }
+
+    for (let itemIndex = 0; itemIndex < receiptItems.length; itemIndex += 1) {
+      const match = findMatchingTransaction(receiptItems[itemIndex], linkedTransactions, itemIndex);
+      if (match) {
+        return match;
+      }
+    }
+
+    if (receiptIndex < linkedTransactions.length) {
+      return linkedTransactions[receiptIndex];
+    }
+
+    return null;
+  };
+
+  const syncReceiptReviewToLinkedTransaction = async (
+    receiptIndex: number,
+    items: ReceiptDraftItem[],
+    transactionType: 'expense' | 'income' | 'unknown',
+  ) => {
+    const displayData = normalizeReceiptData(parseOcrData(viewingDocument?.ocr_result));
+    const receiptSections = getAllReceiptsForDisplay(displayData);
+    const receiptData = receiptSections[receiptIndex] ?? null;
+    const linkedTransactions = (viewingDocument as any)?.linked_transactions as
+      Array<{ transaction_id: number; description: string; amount: number; date: string | null; has_line_items?: boolean }>
+      | undefined;
+
+    if (!linkedTransactions?.length || items.length === 0) return false;
+
+    const matchedTransactionSummary = receiptIndex === 0 && linkedTransaction
+      ? { transaction_id: linkedTransaction.id }
+      : findMatchingReceiptTransaction(receiptIndex, items, linkedTransactions);
+
+    if (!matchedTransactionSummary?.transaction_id) return false;
+
+    const targetTransaction = receiptIndex === 0 && linkedTransaction?.id === matchedTransactionSummary.transaction_id
+      ? linkedTransaction
+      : await transactionService.getById(matchedTransactionSummary.transaction_id);
+
+    const normalizedItems = normalizeReceiptItemsForTransactionType(items, transactionType);
+    const syncedCategory = getPrimaryReceiptCategory(normalizedItems, transactionType);
+
+    if (transactionType === 'income' && !syncedCategory) {
+      throw new Error(
+        t(
+          'documents.receiptReview.selectIncomeCategory',
+          'Choose an income category before saving this income document.'
+        )
+      );
+    }
+
+    const transactionUpdatePayload: Record<string, any> = {
+      line_items: buildTransactionLineItems(normalizedItems, receiptData),
+      reviewed: true,
+      locked: true,
+      suppress_rule_learning: true,
+    };
+    const receiptVatAmount = getReceiptVatAmount(receiptData);
+    if (receiptVatAmount !== null) {
+      transactionUpdatePayload.vat_amount = receiptVatAmount;
+    }
+
+    if (transactionType === 'expense') {
+      transactionUpdatePayload.type = 'expense';
+      if (syncedCategory) {
+        transactionUpdatePayload.category = syncedCategory;
+      }
+      transactionUpdatePayload.is_deductible = normalizedItems.some((item) => item.is_deductible === true);
+      transactionUpdatePayload.deduction_reason = normalizedItems.some((item) => item.is_deductible === true)
+        && normalizedItems.some((item) => item.is_deductible === false)
+        ? 'Mixed deductibility confirmed at line-item level'
+        : undefined;
+    } else if (transactionType === 'income') {
+      transactionUpdatePayload.type = 'income';
+      if (syncedCategory) {
+        transactionUpdatePayload.category = syncedCategory;
+      }
+      transactionUpdatePayload.is_deductible = false;
+      transactionUpdatePayload.deduction_reason = undefined;
+    }
+
+    await transactionService.update(targetTransaction.id, transactionUpdatePayload);
+    return true;
+  };
+
   const renderOcrFieldValue = (key: string, val: unknown, scopeKey?: string) => {
     const editKey = scopeKey || key;
     if (editingOcrField === editKey) {
@@ -654,43 +1262,33 @@ const DocumentsPage = () => {
       <span
         className="ocr-field-value ocr-field-editable"
         onClick={() => handleOcrFieldClick(editKey, val)}
-        title={t('documents.ocr.clickToEdit', '点击编辑')}
+        title={t('documents.ocr.clickToEdit', 'Click to edit')}
       >
         {formatOcrFieldValue(key, val)}
-        {savingOcrField === editKey && <span className="ocr-field-saving">…</span>}
+        {savingOcrField === editKey && <span className="ocr-field-saving">...</span>}
         {ocrFieldError && !editingOcrField && <span className="ocr-field-error">{ocrFieldError}</span>}
-        <span className="ocr-field-edit-icon">✏️</span>
+        <span className="ocr-field-edit-icon">{t('common.edit', 'Edit')}</span>
       </span>
     );
   };
 
   // When navigated with a documentId param, load and show that document
+  // When navigated back to /documents (no param), clear the detail view
   useEffect(() => {
+    if (!documentId) {
+      setViewingDocument(null);
+      setReviewingDocument(null);
+      return;
+    }
     if (documentId) {
       const id = parseInt(documentId);
       if (!isNaN(id)) {
         documentService.getDocument(id).then((doc) => {
-          const docType = doc.document_type as string;
-          if (docType === 'einkommensteuerbescheid') {
-            const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
-            if (rawText) {
-              setBescheidOcrText(rawText);
-              setBescheidDocId(id);
-              return;
-            }
-          }
-          if (docType === 'e1_form') {
-            const rawText = doc.raw_text || (typeof doc.ocr_result === 'string' ? doc.ocr_result : '');
-            if (rawText) {
-              setE1OcrText(rawText);
-              setE1DocId(id);
-              return;
-            }
-          }
-          if (doc.needs_review) {
-            setReviewingDocument(id);
-          } else {
+          // Route: receipt/invoice types -> inline viewer, everything else -> OCRReview
+          if (isReceiptOrInvoice(doc)) {
             setViewingDocument(doc);
+          } else {
+            setReviewingDocument(doc);
           }
         }).catch((err) => {
           console.error('Failed to load document:', err);
@@ -711,6 +1309,9 @@ const DocumentsPage = () => {
       setViewerBlobUrl(url);
     }).catch(() => {});
     return () => { if (url) URL.revokeObjectURL(url); };
+    // viewerBlobUrl is intentionally excluded to avoid re-fetching the same blob
+    // after storing the generated object URL in local state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingDocument]);
 
   useEffect(() => {
@@ -772,47 +1373,29 @@ const DocumentsPage = () => {
   useEffect(() => {
     if (!viewingDocument) {
       setReceiptItemDrafts({});
+      setReceiptPresentationDrafts({});
       setEditingReceiptIndex(null);
       return;
     }
 
     const data = normalizeOcrDataForDisplay(viewingDocument.ocr_result);
     setReceiptItemDrafts(buildReceiptDrafts(data, linkedTransaction));
+    setReceiptPresentationDrafts(
+      buildReceiptPresentationDrafts(viewingDocument.document_type as string, data)
+    );
     setEditingReceiptIndex(null);
+    // Keep dependencies scoped to the receipt payload so unrelated object identity
+    // changes do not reset local editing state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingDocument?.id, viewingDocument?.ocr_result, linkedTransaction]);
 
   const handleDocumentSelect = async (document: Document) => {
-    const docType = document.document_type as string;
-    if (docType === 'einkommensteuerbescheid') {
-      try {
-        const detail = await documentService.getDocument(document.id);
-        const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
-        if (rawText) {
-          setBescheidOcrText(rawText);
-          setBescheidDocId(document.id);
-          return;
-        }
-      } catch (err) {
-        console.error('Failed to load Bescheid document:', err);
-      }
-    }
-    if (docType === 'e1_form') {
-      try {
-        const detail = await documentService.getDocument(document.id);
-        const rawText = detail.raw_text || (typeof detail.ocr_result === 'string' ? detail.ocr_result : '');
-        if (rawText) {
-          setE1OcrText(rawText);
-          setE1DocId(document.id);
-          return;
-        }
-      } catch (err) {
-        console.error('Failed to load E1 document:', err);
-      }
-    }
-    if (document.needs_review) {
-      setReviewingDocument(document.id);
-    } else {
+    // Route: receipt/invoice types -> inline viewer, everything else -> OCRReview
+    if (isReceiptOrInvoice(document)) {
       setViewingDocument(document);
+      navigate(`/documents/${document.id}`, { replace: true });
+    } else {
+      setReviewingDocument(document);
       navigate(`/documents/${document.id}`, { replace: true });
     }
   };
@@ -828,6 +1411,22 @@ const DocumentsPage = () => {
     navigate('/documents', { replace: true });
   };
 
+  const handleWorkbenchDocumentUpdated = useCallback((updated: Document) => {
+    if (reviewingDocument?.id === updated.id) {
+      setReviewingDocument(updated);
+    }
+    if (viewingDocument?.id === updated.id) {
+      setViewingDocument(updated);
+    }
+  }, [reviewingDocument?.id, viewingDocument?.id]);
+
+  const handleOpenBankWorkbench = useCallback(() => {
+    if (!viewingDocument) return;
+    setReviewingDocument(viewingDocument);
+    setViewingDocument(null);
+    navigate(`/documents/${viewingDocument.id}`, { replace: true });
+  }, [navigate, viewingDocument]);
+
   const handleCloseViewer = () => {
     setViewingDocument(null);
     setLinkedTransaction(null);
@@ -836,6 +1435,7 @@ const DocumentsPage = () => {
     setTaxOverrides({});
     setReceiptItemSaveResult(null);
     setReceiptItemDrafts({});
+    setReceiptPresentationDrafts({});
     setEditingReceiptIndex(null);
     setSavingReceiptIndex(null);
     setEditingOcrField(null);
@@ -948,6 +1548,42 @@ const DocumentsPage = () => {
     }
   }, [viewingDocument, t]);
 
+  const handleConfirmLoanRepayment = useCallback(async () => {
+    if (!viewingDocument) return;
+    setConfirmingAction('loan_repayment');
+    setConfirmResult(null);
+    try {
+      const result = await documentService.confirmLoanRepayment(viewingDocument.id);
+      const promotedToPropertyLoan = Boolean(result?.recurring_id);
+      const successMessage = promotedToPropertyLoan
+        ? t(
+            'documents.suggestion.loanRepaymentPromoted',
+            'Loan linked to a property. We created the deductible interest schedule.'
+          )
+        : t(
+            'documents.suggestion.loanContractAcknowledged',
+            'Loan contract saved without creating expense entries because no property is linked yet.'
+          );
+      setConfirmResult({
+        type: 'success',
+        message: successMessage,
+      });
+      aiToast(successMessage, 'success');
+      if (promotedToPropertyLoan) {
+        useRefreshStore.getState().refreshRecurring();
+        useRefreshStore.getState().refreshTransactions();
+      }
+      useRefreshStore.getState().refreshDashboard();
+      const updated = await documentService.getDocument(viewingDocument.id);
+      setViewingDocument(updated);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Error';
+      setConfirmResult({ type: 'error', message: detail });
+    } finally {
+      setConfirmingAction(null);
+    }
+  }, [viewingDocument, t]);
+
   const handleDismissSuggestion = useCallback(async () => {
     if (!viewingDocument) return;
     setConfirmingAction('dismiss');
@@ -962,7 +1598,7 @@ const DocumentsPage = () => {
     } finally {
       setConfirmingAction(null);
     }
-  }, [viewingDocument]);
+  }, [viewingDocument, t]);
 
   const handleConfirmTaxData = useCallback(async () => {
     if (!viewingDocument) return;
@@ -972,26 +1608,6 @@ const DocumentsPage = () => {
       await documentService.confirmTaxData(viewingDocument.id);
       setConfirmResult({ type: 'success', message: t('documents.suggestion.taxDataConfirmed') });
       aiToast(t('documents.suggestion.taxDataConfirmed'), 'success');
-      useRefreshStore.getState().refreshDashboard();
-      const updated = await documentService.getDocument(viewingDocument.id);
-      setViewingDocument(updated);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || err?.message || 'Error';
-      setConfirmResult({ type: 'error', message: detail });
-    } finally {
-      setConfirmingAction(null);
-    }
-  }, [viewingDocument, t]);
-
-  const handleConfirmBankTransactions = useCallback(async (indices: number[]) => {
-    if (!viewingDocument) return;
-    setConfirmingAction('bank_import');
-    setConfirmResult(null);
-    try {
-      await documentService.confirmBankTransactions(viewingDocument.id, indices);
-      setConfirmResult({ type: 'success', message: t('documents.suggestion.taxDataConfirmed') });
-      aiToast(t('documents.suggestion.taxDataConfirmed'), 'success');
-      useRefreshStore.getState().refreshTransactions();
       useRefreshStore.getState().refreshDashboard();
       const updated = await documentService.getDocument(viewingDocument.id);
       setViewingDocument(updated);
@@ -1014,27 +1630,43 @@ const DocumentsPage = () => {
     }
   };
 
-  const [retryingOcr, setRetryingOcr] = useState(false);
-  const handleRetryOcr = async () => {
-    if (!viewingDocument || retryingOcr) return;
-    setRetryingOcr(true);
-    try {
-      await documentService.retryOcr(viewingDocument.id);
-      aiToast(t('documents.reprocessStarted'), 'success');
-      // Reload document after a short delay to let OCR finish
-      setTimeout(async () => {
-        try {
-          const updated = await documentService.getDocument(viewingDocument.id);
-          setViewingDocument(updated);
-        } catch { /* ignore */ }
-        setRetryingOcr(false);
-      }, 3000);
-    } catch (error) {
-      console.error('Failed to retry OCR:', error);
-      aiToast(t('documents.reprocessFailed'), 'error');
-      setRetryingOcr(false);
+  const renderGenericDocumentReview = useCallback((document: Document) => {
+    const normalizedType = normalizeDocumentType(document.document_type as string, document);
+
+    if (normalizedType === 'bank_statement') {
+      return (
+        <BankStatementWorkbench
+          document={document}
+          onDocumentUpdated={handleWorkbenchDocumentUpdated}
+          onCancel={handleReviewCancel}
+          onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+          onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+          hasPrevDocument={hasPrevDoc}
+          hasNextDocument={hasNextDoc}
+        />
+      );
     }
-  };
+
+    return (
+      <OCRReview
+        documentId={Number(document.id)}
+        presentationTemplate="generic_review"
+        onConfirm={handleReviewComplete}
+        onCancel={handleReviewCancel}
+        onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+        onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+        hasPrevDocument={hasPrevDoc}
+        hasNextDocument={hasNextDoc}
+      />
+    );
+  }, [
+    handleReviewCancel,
+    handleReviewComplete,
+    handleWorkbenchDocumentUpdated,
+    hasNextDoc,
+    hasPrevDoc,
+    navigateToDocument,
+  ]);
 
   const handleOpenLinkedTransaction = () => {
     if (!viewingDocument?.transaction_id) return;
@@ -1055,23 +1687,64 @@ const DocumentsPage = () => {
     setReceiptItemSaveResult(null);
   };
 
+  const handleReceiptPresentationDraftChange = (
+    receiptIndex: number,
+    patch: Partial<DocumentPresentationDraft>
+  ) => {
+    const currentDraft = receiptPresentationDrafts[receiptIndex] || {};
+    const nextTransactionType = patch.transactionType ?? currentDraft.transactionType;
+    const previousDirection = currentDraft.documentTransactionDirection;
+    const nextDirection = patch.documentTransactionDirection
+      ?? (
+        patch.transactionType
+        && (!previousDirection || previousDirection === 'unknown' || previousDirection === currentDraft.transactionType)
+          ? patch.transactionType
+          : currentDraft.documentTransactionDirection
+      );
+
+    setReceiptPresentationDrafts((current) => ({
+      ...current,
+      [receiptIndex]: {
+        ...(current[receiptIndex] || {}),
+        ...patch,
+        ...(nextDirection ? { documentTransactionDirection: nextDirection } : {}),
+      },
+    }));
+
+    if (nextTransactionType === 'income' || nextTransactionType === 'expense') {
+      setReceiptItemDrafts((current) => ({
+        ...current,
+        [receiptIndex]: normalizeReceiptItemsForTransactionType(
+          current[receiptIndex] || [],
+          nextTransactionType,
+        ),
+      }));
+    }
+
+    setReceiptItemSaveResult(null);
+  };
+
   // Quick-decide: auto-save when user toggles a pending item in view mode
   const handleQuickDecide = async (receiptIndex: number, items: ReceiptDraftItem[]) => {
     if (!viewingDocument) return;
     setSavingReceiptIndex(receiptIndex);
+    let ocrSaved = false;
     try {
       const drafts = { ...receiptItemDrafts, [receiptIndex]: items };
-      const corrections = buildUpdatedReceiptCorrections(viewingDocument.ocr_result, drafts);
+      const corrections = buildUpdatedReceiptCorrections(
+        viewingDocument.ocr_result,
+        drafts,
+        receiptPresentationDrafts,
+        viewingDocument.document_type as string
+      );
       await documentService.correctOCR(viewingDocument.id, corrections);
+      ocrSaved = true;
+      const reviewTransactionType = resolveControlPolicy(
+        viewingDocument,
+        receiptPresentationDrafts[receiptIndex]
+      ).transactionType;
 
-      if (receiptIndex === 0 && linkedTransaction) {
-        await transactionService.update(linkedTransaction.id, {
-          line_items: buildTransactionLineItems(items),
-          is_deductible: items.some((item) => item.is_deductible === true),
-          reviewed: true,
-          locked: true,
-        });
-      }
+      await syncReceiptReviewToLinkedTransaction(receiptIndex, items, reviewTransactionType);
 
       const updatedDocument = await documentService.getDocument(viewingDocument.id);
       setViewingDocument(updatedDocument);
@@ -1081,72 +1754,10 @@ const DocumentsPage = () => {
       }
       useRefreshStore.getState().refreshTransactions();
       useRefreshStore.getState().refreshDashboard();
-      aiToast(t('documents.taxReview.quickDecideSaved', '已保存'), 'success');
+      aiToast(t('documents.taxReview.quickDecideSaved', 'Saved'), 'success');
     } catch (error: any) {
       console.error('Failed to quick-decide:', error);
-      aiToast(error?.response?.data?.detail || error?.message || 'Save failed', 'error');
-    } finally {
-      setSavingReceiptIndex(null);
-    }
-  };
-
-  const resetReceiptDraft = useCallback((receiptIndex: number) => {
-    const data = normalizeOcrDataForDisplay(viewingDocument?.ocr_result);
-    const freshDrafts = buildReceiptDrafts(data, linkedTransaction);
-    setReceiptItemDrafts((current) => ({
-      ...current,
-      [receiptIndex]: freshDrafts[receiptIndex] || [],
-    }));
-    setReceiptItemSaveResult(null);
-  }, [viewingDocument?.ocr_result, linkedTransaction]);
-
-  const handleSaveReceiptReview = async (receiptIndex: number) => {
-    if (!viewingDocument) return;
-
-    setSavingReceiptIndex(receiptIndex);
-    setReceiptItemSaveResult(null);
-
-    try {
-      const corrections = buildUpdatedReceiptCorrections(viewingDocument.ocr_result, receiptItemDrafts);
-      await documentService.correctOCR(viewingDocument.id, corrections);
-
-      if (receiptIndex === 0 && linkedTransaction) {
-        await transactionService.update(linkedTransaction.id, {
-          line_items: buildTransactionLineItems(receiptItemDrafts[receiptIndex] || []),
-          is_deductible: (receiptItemDrafts[receiptIndex] || []).some((item) => item.is_deductible === true),
-          deduction_reason: (receiptItemDrafts[receiptIndex] || []).some((item) => item.is_deductible === true)
-            && (receiptItemDrafts[receiptIndex] || []).some((item) => item.is_deductible === false)
-            ? 'Mixed deductibility confirmed at line-item level'
-            : undefined,
-          reviewed: true,
-          locked: true,
-        });
-      }
-
-      const updatedDocument = await documentService.getDocument(viewingDocument.id);
-      setViewingDocument(updatedDocument);
-
-      if (updatedDocument.transaction_id) {
-        const updatedTransaction = await transactionService.getById(updatedDocument.transaction_id);
-        setLinkedTransaction(updatedTransaction);
-      }
-
-      useRefreshStore.getState().refreshTransactions();
-      useRefreshStore.getState().refreshDashboard();
-
-      const message = receiptIndex === 0 && linkedTransaction
-        ? '小票判断已保存，并同步到交易记录'
-        : '小票判断已保存';
-      setEditingReceiptIndex(null);
-      setReceiptItemSaveResult({
-        type: 'success',
-        message,
-        receiptIndex,
-      });
-      aiToast(message, 'success');
-    } catch (error: any) {
-      console.error('Failed to save receipt review:', error);
-      const message = error?.response?.data?.detail || error?.message || 'Save failed';
+      const message = buildReceiptSyncBlockedMessage(error, t, { ocrSaved });
       setReceiptItemSaveResult({
         type: 'error',
         message,
@@ -1158,110 +1769,247 @@ const DocumentsPage = () => {
     }
   };
 
-  const handleBescheidComplete = () => {
-    setBescheidOcrText(null);
-    setBescheidDocId(null);
-    setBescheidParseResult(null);
-    navigate('/documents', { replace: true });
-    setRefreshKey((k) => k + 1);
-  };
-
-  const handleE1Complete = () => {
-    setE1OcrText(null);
-    setE1DocId(null);
-    setE1ParseResult(null);
-    navigate('/documents', { replace: true });
-    setRefreshKey((k) => k + 1);
-  };
-
-  // Bescheid / E1 import views (triggered when OCR detects these document types)
-  if (bescheidOcrText) {
-    return (
-      <div className="documents-page">
-        <BescheidImport
-          ocrText={bescheidOcrText}
-          documentId={bescheidDocId ?? undefined}
-          initialParseResult={bescheidParseResult}
-          onImportComplete={handleBescheidComplete}
-          onCancel={handleBescheidComplete}
-        />
-      </div>
+  const resetReceiptDraft = useCallback((receiptIndex: number) => {
+    const data = normalizeOcrDataForDisplay(viewingDocument?.ocr_result);
+    const freshDrafts = buildReceiptDrafts(data, linkedTransaction);
+    const freshPresentationDrafts = buildReceiptPresentationDrafts(
+      viewingDocument?.document_type as string,
+      data
     );
-  }
+    setReceiptItemDrafts((current) => ({
+      ...current,
+      [receiptIndex]: freshDrafts[receiptIndex] || [],
+    }));
+    setReceiptPresentationDrafts((current) => ({
+      ...current,
+      [receiptIndex]: freshPresentationDrafts[receiptIndex] || {},
+    }));
+    setReceiptItemSaveResult(null);
+  }, [viewingDocument?.document_type, viewingDocument?.ocr_result, linkedTransaction]);
 
-  if (e1OcrText) {
-    return (
-      <div className="documents-page">
-        <E1FormImport
-          ocrText={e1OcrText}
-          documentId={e1DocId ?? undefined}
-          initialParseResult={e1ParseResult}
-          onImportComplete={handleE1Complete}
-          onCancel={handleE1Complete}
-        />
-      </div>
-    );
-  }
+  const handleSaveReceiptReview = async (receiptIndex: number) => {
+    if (!viewingDocument) return;
+
+    setSavingReceiptIndex(receiptIndex);
+    setReceiptItemSaveResult(null);
+    let ocrSaved = false;
+
+    try {
+      const corrections = buildUpdatedReceiptCorrections(
+        viewingDocument.ocr_result,
+        receiptItemDrafts,
+        receiptPresentationDrafts,
+        viewingDocument.document_type as string
+      );
+      await documentService.correctOCR(viewingDocument.id, corrections);
+      ocrSaved = true;
+      const reviewTransactionType = resolveControlPolicy(
+        viewingDocument,
+        receiptPresentationDrafts[receiptIndex]
+      ).transactionType;
+
+      const syncedTransaction = await syncReceiptReviewToLinkedTransaction(
+        receiptIndex,
+        receiptItemDrafts[receiptIndex] || [],
+        reviewTransactionType,
+      );
+
+      const updatedDocument = await documentService.getDocument(viewingDocument.id);
+      setViewingDocument(updatedDocument);
+
+      if (updatedDocument.transaction_id) {
+        const updatedTransaction = await transactionService.getById(updatedDocument.transaction_id);
+        setLinkedTransaction(updatedTransaction);
+      }
+
+      useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+
+      const message = syncedTransaction
+        ? 'Receipt review saved and synced to the linked transaction.'
+        : 'Receipt review saved.';
+      setEditingReceiptIndex(null);
+      setReceiptItemSaveResult({
+        type: 'success',
+        message,
+        receiptIndex,
+      });
+      aiToast(message, 'success');
+    } catch (error: any) {
+      console.error('Failed to save receipt review:', error);
+      const message = buildReceiptSyncBlockedMessage(error, t, { ocrSaved });
+      setReceiptItemSaveResult({
+        type: 'error',
+        message,
+        receiptIndex,
+      });
+      aiToast(message, 'error');
+    } finally {
+      setSavingReceiptIndex(null);
+    }
+  };
 
   if (reviewingDocument) {
+    if (resolverEnabled) {
+      return (
+        <div className="documents-page">
+          <DocumentPresentationRouter
+            document={reviewingDocument}
+            renderReceiptWorkbench={() => (
+              <OCRReview
+                documentId={Number(reviewingDocument.id)}
+
+                presentationTemplate="generic_review"
+                onConfirm={handleReviewComplete}
+                onCancel={handleReviewCancel}
+                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+                hasPrevDocument={hasPrevDoc}
+                hasNextDocument={hasNextDoc}
+              />
+            )}
+            renderContractReview={() => (
+              <OCRReview
+                documentId={Number(reviewingDocument.id)}
+
+                presentationTemplate="contract_review"
+                onConfirm={handleReviewComplete}
+                onCancel={handleReviewCancel}
+                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+                hasPrevDocument={hasPrevDoc}
+                hasNextDocument={hasNextDoc}
+              />
+            )}
+            renderGenericReview={() => (
+              renderGenericDocumentReview(reviewingDocument)
+            )}
+            renderTaxImport={() => (
+              <OCRReview
+                documentId={Number(reviewingDocument.id)}
+
+                presentationTemplate="tax_import"
+                onConfirm={handleReviewComplete}
+                onCancel={handleReviewCancel}
+                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+                hasPrevDocument={hasPrevDoc}
+                hasNextDocument={hasNextDoc}
+              />
+            )}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="documents-page">
-        <OCRReview
-          documentId={reviewingDocument}
-          onConfirm={handleReviewComplete}
-          onCancel={handleReviewCancel}
-        />
+        {renderGenericDocumentReview(reviewingDocument)}
       </div>
     );
   }
 
   if (viewingDocument) {
+    const liveViewerDecision = resolverEnabled
+      ? resolveDocumentPresentation(viewingDocument, receiptPresentationDrafts[0])
+      : null;
+
+    if (resolverEnabled && liveViewerDecision?.template !== 'receipt_workbench') {
+      return (
+        <div className="documents-page">
+          <DocumentPresentationRouter
+            document={viewingDocument}
+            decision={liveViewerDecision ?? undefined}
+            renderReceiptWorkbench={() => null}
+            renderContractReview={() => (
+              <OCRReview
+                documentId={Number(viewingDocument.id)}
+
+                presentationTemplate="contract_review"
+                onConfirm={handleReviewComplete}
+                onCancel={handleReviewCancel}
+                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+                hasPrevDocument={hasPrevDoc}
+                hasNextDocument={hasNextDoc}
+              />
+            )}
+            renderGenericReview={() => (
+              renderGenericDocumentReview(viewingDocument)
+            )}
+            renderTaxImport={() => (
+              <OCRReview
+                documentId={Number(viewingDocument.id)}
+
+                presentationTemplate="tax_import"
+                onConfirm={handleReviewComplete}
+                onCancel={handleReviewCancel}
+                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+                hasPrevDocument={hasPrevDoc}
+                hasNextDocument={hasNextDoc}
+              />
+            )}
+          />
+        </div>
+      );
+    }
+
+    if (normalizeDocumentType(viewingDocument.document_type as string, viewingDocument) === 'bank_statement') {
+      return (
+        <div className="documents-page">
+          {renderGenericDocumentReview(viewingDocument)}
+        </div>
+      );
+    }
+
     const isImage = viewingDocument.mime_type?.startsWith('image/');
     const isPdf = viewingDocument.mime_type === 'application/pdf';
     const viewerOcrData = normalizeOcrDataForDisplay(viewingDocument.ocr_result);
     const assetOutcome = getAssetOutcome(viewingDocument.ocr_result);
     const pipelineCurrentState = getPipelineCurrentState(
       viewingDocument.ocr_result,
-      viewingDocument.processed_at
+      viewingDocument.processed_at,
+      viewingDocument.ocr_status
     );
     const pipelineStatePresentation = getPipelineStatePresentation(t, pipelineCurrentState);
     const linkedTransactionSummary = linkedTransaction
-      ? [linkedTransaction.description || null, linkedTransaction.date || null].filter(Boolean).join(' · ')
-      : t('documents.linkedTransaction.hint', '这份文档已经生成交易记录，可直接前往查看。');
+      ? [linkedTransaction.description || null, linkedTransaction.date || null].filter(Boolean).join(' | ')
+      : t('documents.linkedTransaction.hint', 'This document already created a linked transaction. You can open it directly.');
     const linkedAssetTitle = linkedAsset?.name
       || (linkedAsset?.asset_type
         ? t(`properties.assetTypes.${linkedAsset.asset_type}`, linkedAsset.asset_type)
-        : t('documents.linkedAsset.title', '已创建资产'));
+        : t('documents.linkedAsset.title', 'Linked asset'));
     const linkedAssetSummary = linkedAsset
       ? [
           linkedAsset.supplier || null,
           linkedAsset.put_into_use_date || linkedAsset.purchase_date || null,
-        ].filter(Boolean).join(' · ')
-      : t('documents.linkedAsset.hint', '这份文档已经创建资产台账，可直接前往查看。');
+        ].filter(Boolean).join(' | ')
+      : t('documents.linkedAsset.hint', 'This document already created an asset record. You can open it directly.');
     const linkedAssetTaxFlags = linkedAsset
       ? [
           linkedAsset.gwg_elected
-            ? t('documents.linkedAsset.gwg', 'GWG 一次性费用化')
+            ? t('documents.linkedAsset.gwg', 'GWG one-off expense')
             : linkedAsset.depreciation_method === 'degressive'
-              ? t('documents.linkedAsset.degressive', '递减折旧')
+              ? t('documents.linkedAsset.degressive', 'Declining-balance depreciation')
               : linkedAsset.depreciation_method === 'linear'
-                ? t('documents.linkedAsset.linear', '线性折旧')
+                ? t('documents.linkedAsset.linear', 'Straight-line depreciation')
                 : null,
           linkedAsset.business_use_percentage != null
-            ? `${t('documents.linkedAsset.businessUse', '业务使用')} ${linkedAsset.business_use_percentage}%`
+            ? `${t('documents.linkedAsset.businessUse', 'Business use')} ${linkedAsset.business_use_percentage}%`
             : null,
           linkedAsset.ifb_candidate
-            ? t('documents.linkedAsset.ifbCandidate', 'IFB 候选')
+            ? t('documents.linkedAsset.ifbCandidate', 'IFB candidate')
             : null,
         ].filter(Boolean)
       : [];
     const linkedAssetValueSummary = linkedAsset
       ? [
           linkedAsset.annual_depreciation != null
-            ? `${t('documents.linkedAsset.annualDepreciation', '年折旧')} ${linkedAsset.annual_depreciation.toLocaleString('de-AT', { style: 'currency', currency: 'EUR' })}`
+            ? `${t('documents.linkedAsset.annualDepreciation', 'Annual depreciation')} ${linkedAsset.annual_depreciation.toLocaleString(getLocaleForLanguage(i18n.language), { style: 'currency', currency: 'EUR' })}`
             : null,
           linkedAsset.remaining_value != null
-            ? `${t('documents.linkedAsset.remainingValue', '剩余价值')} ${linkedAsset.remaining_value.toLocaleString('de-AT', { style: 'currency', currency: 'EUR' })}`
+            ? `${t('documents.linkedAsset.remainingValue', 'Remaining value')} ${linkedAsset.remaining_value.toLocaleString(getLocaleForLanguage(i18n.language), { style: 'currency', currency: 'EUR' })}`
             : null,
         ].filter(Boolean)
       : [];
@@ -1270,27 +2018,38 @@ const DocumentsPage = () => {
       <div className="documents-page">
         <div className="document-viewer">
           <div className="viewer-header">
-            <button className="btn btn-secondary" onClick={handleCloseViewer}>
-              ← {t('common.back')}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={handleCloseViewer}>
+                {t('common.back')}
+              </button>
+              {hasPrevDoc && (
+                <button className="btn btn-secondary" onClick={() => navigateToDocument('prev')} title={t('documents.prevDocument', 'Previous document')}>
+                  ← {t('documents.prev', 'Prev')}
+                </button>
+              )}
+              {hasNextDoc && (
+                <button className="btn btn-secondary" onClick={() => navigateToDocument('next')} title={t('documents.nextDocument', 'Next document')}>
+                  {t('documents.next', 'Next')} →
+                </button>
+              )}
+            </div>
             <h2>{viewingDocument.file_name}</h2>
-            <button className="btn btn-primary" onClick={handleDownloadDocument}>
-              ⬇️ {t('documents.download')}
-            </button>
-            <button className="btn btn-secondary" onClick={handleRetryOcr} disabled={retryingOcr}>
-              🔄 {retryingOcr ? t('documents.reprocessing') : t('documents.reprocess')}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button className="btn btn-primary" onClick={handleDownloadDocument}>
+                {t('documents.download')}
+              </button>
+            </div>
           </div>
           <div className="viewer-meta">
             <span>{t(`documents.types.${viewingDocument.document_type}`)}</span>
-            <span>{new Date(viewingDocument.created_at).toLocaleDateString('de-AT')}</span>
+            <span>{new Date(viewingDocument.created_at).toLocaleDateString(getLocaleForLanguage(i18n.language))}</span>
             {viewingDocument.confidence_score != null && (
               <span>{t('documents.confidence')}: {(viewingDocument.confidence_score * 100).toFixed(0)}%</span>
             )}
             {(() => {
               const count = viewerOcrData?._receipt_count;
               if (count && count > 1) {
-                return <span className="multi-receipt-badge">📑 {t('documents.multiReceipt.badge', { count })}</span>;
+                return <span className="multi-receipt-badge">{t('documents.multiReceipt.badge', { count })}</span>;
               }
               return null;
             })()}
@@ -1304,18 +2063,18 @@ const DocumentsPage = () => {
           {viewingDocument.transaction_id && (
             <div className="viewer-linked-transaction">
               <div className="viewer-linked-transaction-copy">
-                <strong>{t('documents.linkedTransaction.title', '已生成交易')}</strong>
+                <strong>{t('documents.linkedTransaction.title', 'Linked transaction')}</strong>
                 <span>{linkedTransactionSummary}</span>
               </div>
               <button type="button" className="btn btn-primary" onClick={handleOpenLinkedTransaction}>
-                {t('documents.linkedTransaction.open', '已生成交易，前往查看')}
+                {t('documents.linkedTransaction.open', 'Open transaction')}
               </button>
             </div>
           )}
           {assetOutcome && linkedAsset && (
             <div className="viewer-linked-asset">
               <div className="viewer-linked-asset-copy">
-                <strong>{t('documents.linkedAsset.title', '已创建资产')}</strong>
+                <strong>{t('documents.linkedAsset.title', 'Linked asset')}</strong>
                 <span>{linkedAssetTitle}</span>
                 <span>{linkedAssetSummary}</span>
                 {linkedAssetTaxFlags.length > 0 && (
@@ -1326,11 +2085,11 @@ const DocumentsPage = () => {
                   </div>
                 )}
                 {linkedAssetValueSummary.length > 0 && (
-                  <span>{linkedAssetValueSummary.join(' · ')}</span>
+                  <span>{linkedAssetValueSummary.join(' | ')}</span>
                 )}
               </div>
               <button type="button" className="btn btn-primary" onClick={handleOpenLinkedAsset}>
-                {t('documents.linkedAsset.open', '前往查看资产')}
+                {t('documents.linkedAsset.open', 'Open asset')}
               </button>
             </div>
           )}
@@ -1345,7 +2104,7 @@ const DocumentsPage = () => {
               <div className="viewer-fallback">
                 <p>{t('documents.previewNotAvailable')}</p>
                 <button className="btn btn-primary" onClick={handleDownloadDocument}>
-                  ⬇️ {t('documents.download')}
+                  {t('documents.download')}
                 </button>
               </div>
             )}
@@ -1382,13 +2141,13 @@ const DocumentsPage = () => {
                     notary_location: t('documents.ocr.notaryLocation'),
                     construction_year: t('documents.ocr.constructionYear'),
                     property_type: t('documents.ocr.propertyType'),
-                    asset_name: t('documents.ocr.assetName', '资产名称'),
-                    asset_type: t('documents.ocr.assetType', '资产类型'),
-                    first_registration_date: t('documents.ocr.firstRegistrationDate', '首次登记日期'),
-                    vehicle_identification_number: t('documents.ocr.vehicleIdentificationNumber', '车架号'),
-                    license_plate: t('documents.ocr.licensePlate', '车牌号'),
-                    mileage_km: t('documents.ocr.mileageKm', '里程'),
-                    is_used_asset: t('documents.ocr.isUsedAsset', '是否二手'),
+                    asset_name: t('documents.ocr.assetName', 'Asset name'),
+                    asset_type: t('documents.ocr.assetType', 'Asset type'),
+                    first_registration_date: t('documents.ocr.firstRegistrationDate', 'First registration date'),
+                    vehicle_identification_number: t('documents.ocr.vehicleIdentificationNumber', 'VIN'),
+                    license_plate: t('documents.ocr.licensePlate', 'License plate'),
+                    mileage_km: t('documents.ocr.mileageKm', 'Mileage'),
+                    is_used_asset: t('documents.ocr.isUsedAsset', 'Used asset'),
                     monthly_rent: t('documents.ocr.monthlyRent'),
                     start_date: t('documents.ocr.startDate'),
                     end_date: t('documents.ocr.endDate'),
@@ -1407,16 +2166,49 @@ const DocumentsPage = () => {
                     date: t('documents.ocr.date'),
                     employee_name: t('documents.ocr.employeeName'),
                     personnel_number: t('documents.ocr.personnelNumber'),
-                    amount: t('documents.ocr.amount', '金额'),
-                    merchant: t('documents.ocr.merchant', '商家'),
-                    supplier: t('documents.ocr.supplier', '供应商'),
-                    description: t('documents.ocr.description', '描述'),
-                    product_summary: t('documents.ocr.productSummary', '商品摘要'),
+                    amount: t('documents.ocr.amount', 'Amount'),
+                    merchant: t('documents.ocr.merchant', 'Merchant'),
+                    supplier: t('documents.ocr.supplier', 'Supplier'),
+                    description: t('documents.ocr.description', 'Description'),
+                    product_summary: t('documents.ocr.productSummary', 'Product summary'),
                     vat_amount: t('documents.ocr.vatAmount'),
                     vat_rate: t('documents.ocr.vatRate'),
-                    payment_method: t('documents.ocr.paymentMethod', '支付方式'),
-                    currency: t('documents.ocr.currency', '货币'),
-                    invoice_number: t('documents.ocr.invoiceNumber', '发票号'),
+                    payment_method: t('documents.ocr.paymentMethod', 'Payment method'),
+                    currency: t('documents.ocr.currency', 'Currency'),
+                    invoice_number: t('documents.ocr.invoiceNumber', 'Invoice number'),
+                    tax_id: t('documents.ocr.taxId', 'Tax ID'),
+                    is_reversal: t('documents.ocr.isReversal', 'Reversal'),
+                    document_transaction_direction: t('documents.review.directionLabel', 'Direction'),
+                    document_transaction_direction_source: t('documents.review.directionSourceLabel', 'Direction source'),
+                    document_transaction_direction_confidence: t('documents.review.directionConfidence', 'Direction confidence'),
+                    commercial_document_semantics: t('documents.review.semanticsLabel', 'Semantics'),
+                    user_contract_role: t('documents.review.contractRoleLabel', 'Contract role'),
+                    user_contract_role_source: t('documents.review.contractRoleSourceLabel', 'Role source'),
+                    _extraction_method: t('documents.ocr.extractionMethod', 'Extraction method'),
+                    _llm_supplement: t('documents.ocr.llmSupplement', 'LLM supplement'),
+                    loan_amount: t('documents.ocr.loanAmount', 'Loan amount'),
+                    interest_rate: t('documents.ocr.interestRate', 'Interest rate'),
+                    monthly_payment: t('documents.ocr.monthlyPayment', 'Monthly payment'),
+                    lender_name: t('documents.ocr.lenderName', 'Lender'),
+                    borrower_name: t('documents.ocr.borrowerName', 'Borrower'),
+                    contract_number: t('documents.ocr.contractNumber', 'Contract number'),
+                    first_rate_date: t('documents.ocr.firstRateDate', 'First payment date'),
+                    term_years: t('documents.ocr.termYears', 'Term (years)'),
+                    term_months: t('documents.ocr.termMonths', 'Term (months)'),
+                    purpose: t('documents.ocr.loanPurpose', 'Loan purpose'),
+                    annual_interest_amount: t('documents.ocr.annualInterestAmount', 'Annual interest'),
+                    certificate_year: t('documents.ocr.certificateYear', 'Certificate year'),
+                    insurer_name: t('documents.ocr.insurerName', 'Insurer'),
+                    versicherer: t('documents.ocr.insurerName', 'Insurer'),
+                    policy_holder_name: t('documents.ocr.policyHolderName', 'Policy holder'),
+                    versicherungsnehmer: t('documents.ocr.policyHolderName', 'Policy holder'),
+                    insurance_type: t('documents.ocr.insuranceType', 'Insurance type'),
+                    versicherungsart: t('documents.ocr.insuranceType', 'Insurance type'),
+                    praemie: t('documents.ocr.premium', 'Premium'),
+                    premium: t('documents.ocr.premium', 'Premium'),
+                    polizze: t('documents.ocr.policyNumber', 'Policy number'),
+                    payment_frequency: t('documents.ocr.paymentFrequency', 'Payment frequency'),
+                    zahlungsfrequenz: t('documents.ocr.paymentFrequency', 'Payment frequency'),
                   };
 
                   const skipKeys = ['field_confidence', 'confidence', 'import_suggestion', 'asset_outcome', 'line_items', 'items', 'vat_summary', 'tax_analysis', '_additional_receipts', '_receipt_count', '_pipeline', '_validation', 'correction_history', 'multiple_receipts', 'receipt_count', 'receipts', 'total_amount', 'purchase_contract_kind'];
@@ -1439,6 +2231,8 @@ const DocumentsPage = () => {
                     rental_contract: ['property_address', 'street', 'unit_number', 'city', 'postal_code', 'monthly_rent', 'start_date', 'end_date', 'betriebskosten', 'heating_costs', 'deposit_amount', 'utilities_included', 'tenant_name', 'landlord_name', 'contract_type'],
                     payslip: ['gross_income', 'net_income', 'withheld_tax', 'social_insurance', 'employer', 'employee_name', 'personnel_number', 'date'],
                     lohnzettel: ['gross_income', 'net_income', 'withheld_tax', 'social_insurance', 'employer', 'employee_name', 'personnel_number', 'date'],
+                    loan_contract: ['loan_amount', 'interest_rate', 'monthly_payment', 'lender_name', 'borrower_name', 'contract_number', 'start_date', 'end_date', 'term_years', 'purpose', 'property_address', 'annual_interest_amount', 'certificate_year'],
+                    versicherungsbestaetigung: ['insurer_name', 'policy_holder_name', 'insurance_type', 'praemie', 'polizze', 'payment_frequency', 'start_date', 'end_date'],
                   };
                   const docType = viewingDocument.document_type as string;
                   const expectedFields = expectedFieldsByType[docType] || [];
@@ -1459,19 +2253,16 @@ const DocumentsPage = () => {
                   const isReceiptDocument = RECEIPT_DOC_TYPES.has((viewingDocument.document_type as string).toLowerCase());
                   const receiptSections = isReceiptDocument ? getAllReceiptsForDisplay(data) : [];
 
-                  const fmtEur = (v: unknown) =>
-                    v != null && !isNaN(Number(v))
-                      ? `€ ${Number(v).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : '—';
+                  const fmtEur = (v: unknown) => formatCurrencyDisplay(v);
                   const fmtPct = (v: unknown) => {
-                    if (v == null || isNaN(Number(v))) return '—';
+                    if (v == null || isNaN(Number(v))) return EMPTY_DISPLAY_VALUE;
                     const n = Number(v);
                     // VLM may return 10/20 (whole %) or 0.10/0.20 (decimal)
                     const pct = n >= 1 ? n : n * 100;
                     return `${pct.toFixed(0)}%`;
                   };
 
-                  // Austrian VAT indicator → rate mapping
+                  // Austrian VAT indicator to rate mapping
                   const vatIndicatorMap: Record<string, number> = { A: 10, B: 20, C: 13, D: 0 };
                   const resolveVatRate = (item: any): string => {
                     if (item.vat_rate != null && !isNaN(Number(item.vat_rate))) {
@@ -1481,7 +2272,7 @@ const DocumentsPage = () => {
                     if (ind && vatIndicatorMap[ind] !== undefined) {
                       return `${vatIndicatorMap[ind]}%`;
                     }
-                    return '—';
+                    return EMPTY_DISPLAY_VALUE;
                   };
 
                   return (
@@ -1491,11 +2282,34 @@ const DocumentsPage = () => {
                           {receiptSections.map((receipt, receiptIndex) => {
                             const receiptEntries = buildReceiptScalarEntries(receipt);
                             const receiptItems = receiptItemDrafts[receiptIndex] || [];
+                            const receiptPresentationDraft = receiptPresentationDrafts[receiptIndex] || {};
                             const isReceiptEditing = editingReceiptIndex === receiptIndex;
                             const receiptVatSummary = Array.isArray(receipt.vat_summary) ? receipt.vat_summary : [];
-                            const deductibleTotal = receiptItems
-                              .filter((item) => item.is_deductible === true)
-                              .reduce((sum, item) => sum + item.amount, 0);
+                            const receiptPresentationDocument = {
+                              ...viewingDocument,
+                              document_type:
+                                receiptPresentationDraft.documentType
+                                ?? receipt.document_type
+                                ?? viewingDocument.document_type,
+                              ocr_result: receipt,
+                            };
+                              const liveReceiptDecision = resolveDocumentPresentation(
+                                receiptPresentationDocument,
+                                receiptPresentationDraft
+                              );
+                              const receiptShouldShowExpenseControls = !liveReceiptDecision.controlPolicy.hideDeductibility;
+                              const receiptCategoryOptions = getReceiptCategoryOptions(
+                                liveReceiptDecision.controlPolicy.transactionType
+                              );
+                              const receiptCategoryValue = getUniformReceiptCategory(receiptItems);
+                              const receiptCategoryLabel = receiptCategoryValue
+                                ? formatCategoryLabel(receiptCategoryValue)
+                                : receiptItems.some((item) => String(item.category || '').trim())
+                                  ? t('documents.receiptReview.mixedCategories', 'Mixed categories')
+                                  : t('documents.receiptReview.noCategory', 'No category assigned');
+                              const deductibleTotal = receiptItems
+                                .filter((item) => item.is_deductible === true)
+                                .reduce((sum, item) => sum + item.amount, 0);
                             const nonDeductibleTotal = receiptItems
                               .filter((item) => item.is_deductible === false)
                               .reduce((sum, item) => sum + item.amount, 0);
@@ -1504,14 +2318,146 @@ const DocumentsPage = () => {
                               <section key={`receipt-${receiptIndex}`} className="receipt-breakdown-card">
                                 <div className="receipt-breakdown-header">
                                   <div>
-                                    <h4>{`小票 ${receiptIndex + 1}`}</h4>
+                                    <h4>{t('documents.receiptReview.receiptNumber', { number: receiptIndex + 1 })}</h4>
                                     <p>
                                       {[receipt.merchant, receipt.date ? formatOcrFieldValue('date', receipt.date) : null]
                                         .filter(Boolean)
-                                        .join(' | ') || 'OCR 识别的小票'}
+                                        .join(' | ') || 'OCR-detected receipt'}
                                     </p>
                                   </div>
-                                  <div className="receipt-breakdown-amount">{fmtEur(receipt.amount)}</div>
+                                  <div className="receipt-breakdown-header-actions">
+                                    <div className="receipt-breakdown-amount">{fmtEur(receipt.amount)}</div>
+                                    {!isReceiptEditing && (
+                                      <button
+                                        type="button"
+                                        className="receipt-review-edit-btn receipt-review-edit-btn--header"
+                                        onClick={() => {
+                                          setEditingReceiptIndex(receiptIndex);
+                                          setReceiptItemSaveResult(null);
+                                        }}
+                                      >
+                                        {t('common.edit', 'Edit')}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="receipt-presentation-strip">
+                                  <div className="receipt-presentation-fields">
+                                    <label className="receipt-presentation-field">
+                                      <span>{t('documents.ocr.documentType', 'Document type')}</span>
+                                      <select
+                                        value={String(
+                                          receiptPresentationDraft.documentType
+                                          ?? receipt.document_type
+                                          ?? viewingDocument.document_type
+                                          ?? 'receipt'
+                                        )}
+                                        disabled={!isReceiptEditing}
+                                        onChange={(event) => {
+                                          handleReceiptPresentationDraftChange(receiptIndex, {
+                                            documentType: event.target.value,
+                                          });
+                                        }}
+                                      >
+                                        <option value="receipt">{t('documents.types.receipt', 'Receipt')}</option>
+                                        <option value="invoice">{t('documents.types.invoice', 'Invoice')}</option>
+                                      </select>
+                                    </label>
+
+                                    <div className="receipt-presentation-field">
+                                      <span>{t('documents.review.transactionType', 'Transaction type')}</span>
+                                      <div className="receipt-presentation-toggle-group">
+                                        <button
+                                          type="button"
+                                          className={`toggle-btn ${liveReceiptDecision.controlPolicy.transactionType === 'income' ? 'active income' : ''}`}
+                                          disabled={!isReceiptEditing}
+                                          onClick={() => handleReceiptPresentationDraftChange(receiptIndex, {
+                                            transactionType: 'income',
+                                            documentTransactionDirection: 'income',
+                                          })}
+                                        >
+                                          {t('documents.review.direction.income', 'Income')}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`toggle-btn ${liveReceiptDecision.controlPolicy.transactionType === 'expense' ? 'active expense' : ''}`}
+                                          disabled={!isReceiptEditing}
+                                          onClick={() => handleReceiptPresentationDraftChange(receiptIndex, {
+                                            transactionType: 'expense',
+                                            documentTransactionDirection: 'expense',
+                                          })}
+                                        >
+                                          {t('documents.review.direction.expense', 'Expense')}
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <label className="receipt-presentation-field">
+                                      <span>{t('documents.review.semanticLabel', 'Semantics')}</span>
+                                      <select
+                                        value={String(
+                                          receiptPresentationDraft.commercialDocumentSemantics
+                                          ?? receipt.commercial_document_semantics
+                                          ?? (String(receiptPresentationDraft.documentType ?? receipt.document_type ?? viewingDocument.document_type) === 'invoice'
+                                            ? 'standard_invoice'
+                                            : 'receipt')
+                                        )}
+                                        disabled={!isReceiptEditing}
+                                        onChange={(event) => {
+                                          handleReceiptPresentationDraftChange(receiptIndex, {
+                                            commercialDocumentSemantics: event.target.value,
+                                          });
+                                        }}
+                                      >
+                                        <option value="receipt">{t('documents.review.semantic.receipt', 'Receipt')}</option>
+                                        <option value="standard_invoice">{t('documents.review.semantic.invoice', 'Standard invoice')}</option>
+                                        <option value="credit_note">{t('documents.review.semantic.creditNote', 'Credit note')}</option>
+                                        <option value="proforma">{t('documents.review.semantic.proforma', 'Proforma')}</option>
+                                        <option value="delivery_note">{t('documents.review.semantic.deliveryNote', 'Delivery note')}</option>
+                                      </select>
+                                    </label>
+
+                                    <label className="receipt-presentation-field receipt-presentation-field--checkbox">
+                                      <span>{t('documents.review.reversal', 'Reversal')}</span>
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(
+                                          receiptPresentationDraft.isReversal
+                                          ?? receipt.is_reversal
+                                        )}
+                                        disabled={!isReceiptEditing}
+                                        onChange={(event) => {
+                                          handleReceiptPresentationDraftChange(receiptIndex, {
+                                            isReversal: event.target.checked,
+                                          });
+                                        }}
+                                      />
+                                    </label>
+                                  </div>
+
+                                  {(liveReceiptDecision.badges.length > 0 || liveReceiptDecision.helpers.length > 0) && (
+                                    <div className="receipt-presentation-meta">
+                                      {liveReceiptDecision.badges.length > 0 && (
+                                        <div className="receipt-presentation-badges">
+                                          {liveReceiptDecision.badges.map((badge) => (
+                                            <span key={`${receiptIndex}-${badge}`} className="receipt-presentation-badge">
+                                              {badge}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                      {liveReceiptDecision.helpers.length > 0 && (
+                                        <div className="receipt-presentation-helpers">
+                                          {liveReceiptDecision.helpers.map((helper) => (
+                                            <p key={`${receiptIndex}-${helper}`} className="receipt-presentation-helper">
+                                              {helper}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {receiptEntries.length > 0 && (
@@ -1663,7 +2609,7 @@ const DocumentsPage = () => {
                                                       }}
                                                     />
                                                   ) : (
-                                                    item.vatIndicator || '—'
+                                                    item.vatIndicator || EMPTY_DISPLAY_VALUE
                                                   )}
                                                 </span>
                                               )}
@@ -1675,70 +2621,127 @@ const DocumentsPage = () => {
                                   </div>
                                 )}
 
-                                {!INCOME_DOC_TYPES.has(viewingDocument.document_type as string) && receiptItems.length > 0 && (
+                                {receiptItems.length > 0 && (
                                   <div className="receipt-review-card">
                                     <div className="receipt-review-header">
                                       <div>
-                                        <h5>{t('documents.taxReview.title', '税务判断')}</h5>
+                                        <h5>
+                                          {receiptShouldShowExpenseControls
+                                            ? t('documents.taxReview.title', 'Tax review')
+                                            : t('documents.receiptReview.incomeTitle', 'Income details')}
+                                        </h5>
                                         <p>
+                                          {receiptShouldShowExpenseControls
+                                            ? (
+                                                isReceiptEditing
+                                                  ? t('documents.taxReview.editHint', 'The system already prepared a first pass. You can now correct line items and deductibility.')
+                                                  : t('documents.taxReview.viewHint', 'The system shows its first assessment here. Edit only when the classification looks wrong.')
+                                              )
+                                            : (
+                                                isReceiptEditing
+                                                  ? t('documents.receiptReview.incomeEditingHint', 'You can correct item names, quantities, amounts, and VAT details, then save directly.')
+                                                  : t('documents.receiptReview.incomeStatusHint', 'The extracted item, quantity, amount, and VAT details stay visible here without expense-only deductibility controls.')
+                                              )}
+                                        </p>
+                                        <div className="receipt-review-category-row">
+                                          <span className="receipt-review-category-label">
+                                            {t('documents.ocr.category', 'Category')}
+                                          </span>
+                                          <Select
+                                            value={receiptCategoryValue}
+                                            onChange={(value) => {
+                                              handleReceiptItemsChange(
+                                                receiptIndex,
+                                                applyCategoryToReceiptItems(receiptItems, value || undefined),
+                                              );
+                                            }}
+                                            options={receiptCategoryOptions}
+                                            placeholder={
+                                              receiptItems.some((item) => String(item.category || '').trim())
+                                                ? t('documents.receiptReview.mixedCategories', 'Mixed categories')
+                                                : t('documents.receiptReview.noCategory', 'No category assigned')
+                                            }
+                                            size="sm"
+                                            disabled={!isReceiptEditing}
+                                            aria-label={`receipt-category-${receiptIndex}`}
+                                          />
+                                          {!isReceiptEditing && (
+                                            <span className="receipt-review-category-value">
+                                              {receiptCategoryLabel}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="receipt-review-category-hint">
                                           {isReceiptEditing
-                                            ? t('documents.taxReview.editHint', '系统已先做预判，您现在可以修正商品明细和抵税判断。')
-                                            : t('documents.taxReview.viewHint', '系统会先给出预判，只有您觉得不对时再点编辑修改。')}
+                                            ? t(
+                                              'documents.receiptReview.categoryEditHint',
+                                              'Use the selector above to apply one category to the whole receipt, or adjust each line item below.'
+                                            )
+                                            : t(
+                                              'documents.receiptReview.categoryReadonlyHint',
+                                              'Click Edit to unlock category and deductibility changes for this receipt.'
+                                            )}
                                         </p>
                                       </div>
                                       <div className="receipt-review-header-side">
-                                        <div className="receipt-review-summary">
-                                          <span className="deductible">{`${t('documents.ocr.deductible', '可抵税')} ${fmtEur(deductibleTotal)}`}</span>
-                                          <span className="non-deductible">{`${t('documents.ocr.notDeductible', '不可抵税')} ${fmtEur(nonDeductibleTotal)}`}</span>
-                                        </div>
-                                        <div className="receipt-review-batch-actions">
-                                          <button
-                                            type="button"
-                                            className="receipt-review-batch-btn deductible"
-                                            disabled={savingReceiptIndex !== null}
-                                            onClick={() => {
-                                              const nextItems = receiptItems.map((item) => ({ ...item, is_deductible: true }));
-                                              handleReceiptItemsChange(receiptIndex, nextItems);
-                                              handleQuickDecide(receiptIndex, nextItems);
-                                            }}
-                                          >
-                                            ✅ {t('documents.taxReview.markAllDeductible', '全部可抵税')}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="receipt-review-batch-btn non-deductible"
-                                            disabled={savingReceiptIndex !== null}
-                                            onClick={() => {
-                                              const nextItems = receiptItems.map((item) => ({ ...item, is_deductible: false }));
-                                              handleReceiptItemsChange(receiptIndex, nextItems);
-                                              handleQuickDecide(receiptIndex, nextItems);
-                                            }}
-                                          >
-                                            ❌ {t('documents.taxReview.markAllNotDeductible', '全部不可抵税')}
-                                          </button>
-                                        </div>
-                                        {!isReceiptEditing && (
-                                          <button
-                                            type="button"
-                                            className="receipt-review-edit-btn"
-                                            onClick={() => {
-                                              setEditingReceiptIndex(receiptIndex);
-                                              setReceiptItemSaveResult(null);
-                                            }}
-                                          >
-                                            {t('common.edit', '编辑')}
-                                          </button>
-                                        )}
+                                        <DocumentActionGate
+                                          action="deductibility_controls"
+                                          policy={liveReceiptDecision.controlPolicy}
+                                          helpers={liveReceiptDecision.helpers}
+                                        >
+                                          {({ hidden }) => !hidden ? (
+                                            <div className="receipt-review-summary">
+                                              <span className="deductible">{`${t('documents.ocr.deductible', 'Deductible')} ${fmtEur(deductibleTotal)}`}</span>
+                                              <span className="non-deductible">{`${t('documents.ocr.notDeductible', 'Non-deductible')} ${fmtEur(nonDeductibleTotal)}`}</span>
+                                            </div>
+                                          ) : null}
+                                        </DocumentActionGate>
+                                        <DocumentActionGate
+                                          action="bulk_expense_quick_actions"
+                                          policy={liveReceiptDecision.controlPolicy}
+                                          helpers={liveReceiptDecision.helpers}
+                                        >
+                                          {({ hidden }) => !hidden ? (
+                                            <div className="receipt-review-batch-actions">
+                                              <button
+                                              type="button"
+                                              className="receipt-review-batch-btn deductible"
+                                              disabled={savingReceiptIndex !== null}
+                                                onClick={() => {
+                                                  const nextItems = receiptItems.map((item) => ({ ...item, is_deductible: true }));
+                                                  handleReceiptItemsChange(receiptIndex, nextItems);
+                                                handleQuickDecide(receiptIndex, nextItems);
+                                              }}
+                                            >
+                                                {t('documents.taxReview.markAllDeductible', 'Mark all deductible')}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="receipt-review-batch-btn non-deductible"
+                                                disabled={savingReceiptIndex !== null}
+                                                onClick={() => {
+                                                  const nextItems = receiptItems.map((item) => ({ ...item, is_deductible: false }));
+                                                  handleReceiptItemsChange(receiptIndex, nextItems);
+                                                handleQuickDecide(receiptIndex, nextItems);
+                                              }}
+                                            >
+                                                {t('documents.taxReview.markAllNotDeductible', 'Mark all non-deductible')}
+                                              </button>
+                                            </div>
+                                          ) : null}
+                                        </DocumentActionGate>
                                       </div>
                                     </div>
 
                                     <div className="receipt-review-items">
                                       {receiptItems.map((item, itemIndex) => {
-                                        const decisionClass = item.is_deductible === true
-                                          ? 'deductible'
-                                          : item.is_deductible === false
-                                            ? 'non-deductible'
-                                            : 'needs-review';
+                                        const decisionClass = receiptShouldShowExpenseControls
+                                          ? item.is_deductible === true
+                                            ? 'deductible'
+                                            : item.is_deductible === false
+                                              ? 'non-deductible'
+                                              : 'needs-review'
+                                          : 'needs-review';
 
                                         return (
                                           <div key={`review-${receiptIndex}-${itemIndex}`} className={`receipt-review-item ${decisionClass}`}>
@@ -1765,37 +2768,81 @@ const DocumentsPage = () => {
                                                     tabIndex={0}
                                                     onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/transactions?transactionId=${matchedTxn.transaction_id}`); }}
                                                   >
-                                                    🔗✅
+                                                    Linked
                                                   </span>
                                                 ) : (
                                                   <span
                                                     className="line-item-txn-status not-created"
                                                     title={t('documents.lineItems.noTransaction', 'No transaction created')}
                                                   >
-                                                    🔗⏳
+                                                    Pending
                                                   </span>
                                                 );
                                               })()}
                                             </div>
 
-                                            {!isReceiptEditing && item.is_deductible !== null ? (
+                                            <div className="receipt-review-item-category-edit">
+                                              <span className="receipt-review-item-category-label">
+                                                {t('documents.ocr.category', 'Category')}
+                                              </span>
+                                              <Select
+                                                value={item.category || ''}
+                                                onChange={(value) => {
+                                                  const nextItems = [...receiptItems];
+                                                  nextItems[itemIndex] = {
+                                                    ...nextItems[itemIndex],
+                                                    category: value || undefined,
+                                                  };
+                                                  handleReceiptItemsChange(receiptIndex, nextItems);
+                                                }}
+                                                options={receiptCategoryOptions}
+                                                placeholder={t('documents.receiptReview.selectCategory', 'Select category')}
+                                                size="sm"
+                                                disabled={!isReceiptEditing}
+                                                aria-label={`receipt-item-category-${receiptIndex}-${itemIndex}`}
+                                              />
+                                              {!isReceiptEditing && (
+                                                <span className="receipt-review-item-category-value">
+                                                  {formatCategoryLabel(item.category)
+                                                    || t('documents.receiptReview.noCategory', 'No category assigned')}
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {!receiptShouldShowExpenseControls ? (
+                                              <div className="receipt-review-readonly">
+                                                <span className="receipt-review-status needs-review">
+                                                  {!liveReceiptDecision.controlPolicy.isPostable
+                                                    ? t('documents.review.nonPostable', 'Non-postable')
+                                                    : isReceiptEditing
+                                                      ? t('documents.receiptReview.incomeEditing', 'Editing income details')
+                                                      : t('documents.receiptReview.incomeStatus', 'Income details')}
+                                                </span>
+                                                <p className="receipt-review-reason-text">
+                                                  {liveReceiptDecision.helpers[0]
+                                                    || (isReceiptEditing
+                                                      ? t('documents.receiptReview.incomeEditingHint', 'You can correct item names, quantities, amounts, and VAT details, then save directly.')
+                                                      : t('documents.receiptReview.incomeStatusHint', 'The extracted item, quantity, amount, and VAT details stay visible here without expense-only deductibility controls.'))}
+                                                </p>
+                                              </div>
+                                            ) : !isReceiptEditing && item.is_deductible !== null ? (
                                               <div className="receipt-review-readonly">
                                                 <span className={`receipt-review-status ${decisionClass}`}>
                                                   {item.is_deductible === true
-                                                    ? t('documents.ocr.deductible', '可抵税')
-                                                    : t('documents.ocr.notDeductible', '不可抵税')}
+                                                    ? t('documents.ocr.deductible', 'Deductible')
+                                                    : t('documents.ocr.notDeductible', 'Non-deductible')}
                                                 </span>
                                                 <p className="receipt-review-reason-text">
                                                   {translateDeductionReason(
                                                     item.deduction_reason || '',
                                                     i18n?.language || 'de',
-                                                  ) || t('documents.taxReview.pendingReason', '系统暂时没有给出原因，请点击编辑后修正。')}
+                                                  ) || t('documents.taxReview.pendingReason', 'The system did not provide a reason yet. Click edit if you want to adjust this decision.')}
                                                 </p>
                                               </div>
                                             ) : !isReceiptEditing && item.is_deductible === null ? (
                                               <div className="receipt-review-inline-decide">
                                                 <span className="receipt-review-status needs-review">
-                                                  {t('documents.taxReview.needsReview', '待确认')}
+                                                  {t('documents.taxReview.needsReview', 'Needs review')}
                                                 </span>
                                                 <div className="receipt-review-toggle-group">
                                                   <button
@@ -1809,7 +2856,7 @@ const DocumentsPage = () => {
                                                       handleQuickDecide(receiptIndex, nextItems);
                                                     }}
                                                   >
-                                                    ✅ {t('documents.ocr.deductible', '可抵税')}
+                                                    {t('documents.ocr.deductible', 'Deductible')}
                                                   </button>
                                                   <button
                                                     type="button"
@@ -1822,7 +2869,7 @@ const DocumentsPage = () => {
                                                       handleQuickDecide(receiptIndex, nextItems);
                                                     }}
                                                   >
-                                                    ❌ {t('documents.ocr.notDeductible', '不可抵税')}
+                                                    {t('documents.ocr.notDeductible', 'Non-deductible')}
                                                   </button>
                                                 </div>
                                               </div>
@@ -1838,7 +2885,7 @@ const DocumentsPage = () => {
                                                       handleReceiptItemsChange(receiptIndex, nextItems);
                                                     }}
                                                   >
-                                                    {t('documents.ocr.deductible', '可抵税')}
+                                                    {t('documents.ocr.deductible', 'Deductible')}
                                                   </button>
                                                   <button
                                                     type="button"
@@ -1849,14 +2896,14 @@ const DocumentsPage = () => {
                                                       handleReceiptItemsChange(receiptIndex, nextItems);
                                                     }}
                                                   >
-                                                    {t('documents.ocr.notDeductible', '不可抵税')}
+                                                    {t('documents.ocr.notDeductible', 'Non-deductible')}
                                                   </button>
                                                 </div>
 
                                                 <input
                                                   type="text"
                                                   className="receipt-review-reason-input"
-                                                  placeholder={t('documents.taxReview.reasonPlaceholder', '填写判断原因或备注')}
+                                                  placeholder={t('documents.taxReview.reasonPlaceholder', 'Add a reason or note')}
                                                   value={item.deduction_reason || ''}
                                                   onChange={(event) => {
                                                     const nextItems = [...receiptItems];
@@ -1882,13 +2929,24 @@ const DocumentsPage = () => {
 
                                     <div className="receipt-review-footer">
                                       <p>
-                                        {isReceiptEditing
+                                        {receiptShouldShowExpenseControls
                                           ? (
-                                            receiptIndex === 0 && linkedTransaction
-                                              ? t('documents.taxReview.editingLinkedTransaction', '保存后会同时更新 OCR 内容和已关联的交易记录。')
-                                              : t('documents.taxReview.editingDocumentOnly', '保存后会更新这份文档的 OCR 明细，并记录这次人工修正。')
+                                            isReceiptEditing
+                                              ? (
+                                                receiptIndex === 0 && linkedTransaction
+                                                  ? t('documents.taxReview.editingLinkedTransaction', 'Saving will update both recognition data and the linked transaction.')
+                                                  : t('documents.taxReview.editingDocumentOnly', 'Saving will update the recognition details and record this manual correction.')
+                                              )
+                                              : t('documents.taxReview.readonlyHint', 'Showing the system\'s initial assessment. Edit only if the assessment is incorrect.')
                                           )
-                                          : t('documents.taxReview.readonlyHint', '这里先展示系统预判。只有系统判断不准确时，才需要进入编辑。')}
+                                          : (
+                                            !liveReceiptDecision.controlPolicy.isPostable
+                                              ? (liveReceiptDecision.helpers[0]
+                                                || t('documents.review.nonPostableHint', 'This document stays as a reference document and will not create a transaction.'))
+                                              : isReceiptEditing
+                                                ? t('documents.receiptReview.incomeFooterEditing', 'Saving updates the OCR details for this income document and syncs any linked transaction when present.')
+                                                : t('documents.receiptReview.incomeFooterReadonly', 'This area shows the extracted income document details. Enter edit mode if item names, quantities, amounts, or VAT need correction.')
+                                          )}
                                       </p>
                                       {isReceiptEditing && (
                                         <div className="receipt-review-actions">
@@ -1901,7 +2959,7 @@ const DocumentsPage = () => {
                                             }}
                                             disabled={savingReceiptIndex !== null}
                                           >
-                                            {t('common.cancel', '取消')}
+                                            {t('common.cancel', 'Cancel')}
                                           </button>
                                           <button
                                             type="button"
@@ -1910,10 +2968,16 @@ const DocumentsPage = () => {
                                             disabled={savingReceiptIndex !== null}
                                           >
                                             {savingReceiptIndex === receiptIndex
-                                              ? t('common.saving', '保存中...')
-                                              : receiptIndex === 0 && linkedTransaction
-                                                ? t('documents.taxReview.saveAndSync', '保存并同步交易')
-                                                : t('documents.taxReview.saveReceipt', '保存这张小票')}
+                                              ? t('common.saving', 'Saving...')
+                                              : !receiptShouldShowExpenseControls
+                                                ? !liveReceiptDecision.controlPolicy.isPostable
+                                                  ? t('documents.review.saveReferenceDocument', 'Save document details')
+                                                  : receiptIndex === 0 && linkedTransaction
+                                                    ? t('documents.taxReview.saveAndSync', 'Save and sync transaction')
+                                                    : t('documents.receiptReview.saveIncomeDocument', 'Save document')
+                                                : receiptIndex === 0 && linkedTransaction
+                                                ? t('documents.taxReview.saveAndSync', 'Save and sync transaction')
+                                                : t('documents.taxReview.saveReceipt', 'Save receipt')}
                                           </button>
                                         </div>
                                       )}
@@ -1923,7 +2987,7 @@ const DocumentsPage = () => {
 
                                 {receiptVatSummary.length > 0 && (
                                   <div className="ocr-vat-summary">
-                                    <h4>📊 {t('documents.ocr.vatSummary')}</h4>
+                                    <h4>{t('documents.ocr.vatSummary')}</h4>
                                     <div className="vat-summary-table">
                                       <div className="vat-summary-header">
                                         <span>{t('documents.ocr.vatRate')}</span>
@@ -1973,12 +3037,12 @@ const DocumentsPage = () => {
                                 </div>
                                 {lineItems.map((item: any, idx: number) => (
                                   <div key={idx} className="line-items-row">
-                                    <span className="li-col-name">{item.name || '—'}</span>
+                                    <span className="li-col-name">{item.name || EMPTY_DISPLAY_VALUE}</span>
                                     <span className="li-col-qty">{item.quantity ?? 1}</span>
                                     <span className="li-col-price">{fmtEur(item.unit_price ?? item.price)}</span>
                                     <span className="li-col-total">{fmtEur(item.total_price ?? item.total)}</span>
                                     {hasVatData && <span className="li-col-vat">{resolveVatRate(item)}</span>}
-                                    {hasVatData && <span className="li-col-ind">{item.vat_indicator || '—'}</span>}
+                                    {hasVatData && <span className="li-col-ind">{item.vat_indicator || EMPTY_DISPLAY_VALUE}</span>}
                                   </div>
                                 ))}
                               </div>
@@ -1989,7 +3053,7 @@ const DocumentsPage = () => {
 
                       {!isReceiptDocument && vatSummary.length > 0 && (
                         <div className="ocr-vat-summary">
-                          <h4>📊 {t('documents.ocr.vatSummary')}</h4>
+                          <h4>{t('documents.ocr.vatSummary')}</h4>
                           <div className="vat-summary-table">
                             <div className="vat-summary-header">
                               <span>{t('documents.ocr.vatRate')}</span>
@@ -2017,7 +3081,7 @@ const DocumentsPage = () => {
                         if (additionalReceipts.length === 0) return null;
                         return (
                           <div className="multi-receipt-section">
-                            <h4>📑 {t('documents.multiReceipt.additionalReceipts', { count: additionalReceipts.length })}</h4>
+                            <h4>{t('documents.multiReceipt.additionalReceipts', { count: additionalReceipts.length })}</h4>
                             {additionalReceipts.map((receipt: any, rIdx: number) => {
                               const normalizedReceipt = normalizeReceiptData(receipt);
                               const rEntries = Object.entries(normalizedReceipt).filter(
@@ -2028,8 +3092,8 @@ const DocumentsPage = () => {
                               return (
                                 <div key={rIdx} className="additional-receipt-card">
                                   <div className="additional-receipt-header">
-                                    <span>🧾 {t('documents.multiReceipt.receiptNumber', { number: rIdx + 2 })}</span>
-                                    {receipt.amount && <span className="receipt-amount">€ {Number(receipt.amount).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                                    <span>{t('documents.multiReceipt.receiptNumber', { number: rIdx + 2 })}</span>
+                                    {receipt.amount && <span className="receipt-amount">{formatCurrencyDisplay(receipt.amount)}</span>}
                                   </div>
                                   {rEntries.length > 0 && (
                                     <div className="ocr-fields-table">
@@ -2052,7 +3116,7 @@ const DocumentsPage = () => {
                                         </div>
                                         {rLineItems.map((item: any, liIdx: number) => (
                                           <div key={liIdx} className="line-items-row">
-                                            <span className="li-col-name">{item.name || '—'}</span>
+                                            <span className="li-col-name">{item.name || EMPTY_DISPLAY_VALUE}</span>
                                             <span className="li-col-qty">{item.quantity ?? 1}</span>
                                             <span className="li-col-price">{fmtEur(item.unit_price ?? item.price)}</span>
                                             <span className="li-col-total">{fmtEur(item.total_price ?? item.total)}</span>
@@ -2074,7 +3138,7 @@ const DocumentsPage = () => {
             </div>
           )}
 
-          {/* Tax Analysis Card — skip for income documents (payslip/lohnzettel) where deductibility is not applicable */}
+            {/* Tax analysis is skipped for income documents where deductibility does not apply. */}
           {(() => {
             const incomeDocTypes = ['payslip', 'lohnzettel', 'einkommensteuerbescheid'];
             if (
@@ -2087,7 +3151,7 @@ const DocumentsPage = () => {
             if (!taxAnalysis || !taxAnalysis.items || taxAnalysis.items.length === 0) return null;
 
             const fmtEur2 = (v: number | string | null | undefined) =>
-              v != null ? `€ ${Number(v).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+              v != null ? formatCurrencyDisplay(v) : EMPTY_DISPLAY_VALUE;
 
             // Apply user overrides to items
             const effectiveItems = taxAnalysis.items.map((item: any, idx: number) => {
@@ -2106,7 +3170,6 @@ const DocumentsPage = () => {
             return (
               <div className="tax-analysis-card">
                 <div className="tax-analysis-header">
-                  <span className="tax-analysis-icon">📋</span>
                   <h3>{t('documents.ocr.taxAnalysis')}</h3>
                   {taxAnalysis.is_split && (
                     <span className="split-badge">{t('documents.ocr.splitReceipt')}</span>
@@ -2115,11 +3178,11 @@ const DocumentsPage = () => {
 
                 <div className="tax-analysis-summary">
                   <div className="tax-summary-item deductible">
-                    <span className="tax-summary-label">✅ {t('documents.ocr.deductibleAmount')}</span>
+                    <span className="tax-summary-label">{t('documents.ocr.deductibleAmount')}</span>
                     <span className="tax-summary-value">{fmtEur2(totalDeductible)}</span>
                   </div>
                   <div className="tax-summary-item non-deductible">
-                    <span className="tax-summary-label">❌ {t('documents.ocr.nonDeductibleAmount')}</span>
+                    <span className="tax-summary-label">{t('documents.ocr.nonDeductibleAmount')}</span>
                     <span className="tax-summary-value">{fmtEur2(totalNonDeductible)}</span>
                   </div>
                 </div>
@@ -2129,9 +3192,8 @@ const DocumentsPage = () => {
                     <div key={idx} className={`tax-item ${item.is_deductible ? 'deductible' : 'non-deductible'}`}>
                       <div className="tax-item-header">
                         <span className="tax-item-badge">
-                          {item.is_deductible ? '✅' : '❌'}
                           {item.is_deductible ? t('documents.ocr.deductible') : t('documents.ocr.notDeductible')}
-                          {item.overridden && <span className="tax-override-badge">{t('documents.ocr.userOverride', '手动')}</span>}
+                          {item.overridden && <span className="tax-override-badge">{t('documents.ocr.userOverride', 'Manual')}</span>}
                         </span>
                         <span className="tax-item-amount">{fmtEur2(item.amount)}</span>
                       </div>
@@ -2151,8 +3213,8 @@ const DocumentsPage = () => {
                         onClick={() => setTaxOverrides(prev => ({ ...prev, [idx]: !item.is_deductible }))}
                       >
                         {item.is_deductible
-                          ? t('documents.ocr.markNonDeductible', '标记为不可报税')
-                          : t('documents.ocr.markDeductible', '标记为可报税')}
+                          ? t('documents.ocr.markNonDeductible', 'Mark as non-deductible')
+                          : t('documents.ocr.markDeductible', 'Mark as deductible')}
                       </button>
                     </div>
                   ))}
@@ -2165,23 +3227,43 @@ const DocumentsPage = () => {
           {(() => {
             const data = normalizeOcrDataForDisplay(viewingDocument.ocr_result);
             const suggestion = data?.import_suggestion;
-            if (!suggestion || suggestion.status !== 'pending') return null;
+            const isLegacyLoanNeedsInput =
+              suggestion?.status === 'needs_input'
+              && (suggestion?.type === 'create_loan' || suggestion?.type === 'create_loan_repayment');
+            const isVisibleSuggestion =
+              suggestion
+              && (suggestion.status === 'pending'
+                || suggestion.status === 'ready_to_confirm'
+                || isLegacyLoanNeedsInput);
+            if (!isVisibleSuggestion) return null;
 
             return (
-              <SuggestionCardFactory
-                suggestion={suggestion}
-                confirmResult={confirmResult}
-                confirmingAction={confirmingAction}
-                onConfirm={() => {}}
-                onDismiss={handleDismissSuggestion}
-                onConfirmProperty={handleConfirmProperty}
-                onConfirmRecurring={handleConfirmRecurring}
-                onConfirmRecurringExpense={handleConfirmRecurringExpense}
-                onConfirmAsset={handleConfirmAsset}
-                onConfirmLoan={handleConfirmLoan}
-                onConfirmTaxData={handleConfirmTaxData}
-                onConfirmBankTransactions={handleConfirmBankTransactions}
-              />
+              <DocumentActionGate
+                action="suggestion_create"
+                policy={(liveViewerDecision ?? resolveDocumentPresentation(viewingDocument)).controlPolicy}
+                helpers={(liveViewerDecision ?? resolveDocumentPresentation(viewingDocument)).helpers}
+              >
+                {({ hidden, disabled, reason }) => !hidden ? (
+                  <SuggestionCardFactory
+                    suggestion={suggestion}
+                    confirmResult={confirmResult}
+                    confirmingAction={confirmingAction}
+                    onConfirm={() => {}}
+                    onDismiss={handleDismissSuggestion}
+                    onConfirmProperty={handleConfirmProperty}
+                    onConfirmRecurring={handleConfirmRecurring}
+                    onConfirmRecurringExpense={handleConfirmRecurringExpense}
+                    onConfirmAsset={handleConfirmAsset}
+                    onConfirmLoan={handleConfirmLoan}
+                    onConfirmLoanRepayment={handleConfirmLoanRepayment}
+                    onConfirmTaxData={handleConfirmTaxData}
+                    onOpenBankWorkbench={handleOpenBankWorkbench}
+                    confirmDisabled={disabled}
+                    confirmDisabledReason={reason}
+                    documentId={viewingDocument.id}
+                  />
+                ) : null}
+              </DocumentActionGate>
             );
           })()}
         </div>
@@ -2210,7 +3292,6 @@ const DocumentsPage = () => {
             alignItems: 'center',
             gap: '8px',
           }}>
-            <span>📋</span>
             <span>
               {uploadType === 'purchase_contract'
                 ? t('documents.upload.contextHintPurchase', { propertyId: uploadPropertyId })

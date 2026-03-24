@@ -44,7 +44,11 @@
   gap: 8px;
 }
 
-.gov-icon { font-size: 1.1rem; opacity: 0.8; }
+.gov-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* KPI grid */
 .gov-kpi-grid {
@@ -205,6 +209,9 @@
 }
 
 .gov-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 20px;
   border-radius: 8px;
   border: 1px solid var(--color-border);

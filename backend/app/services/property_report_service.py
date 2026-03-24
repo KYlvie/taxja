@@ -167,6 +167,11 @@ class PropertyReportService:
 
         expenses_by_category = {}
         total_expenses = Decimal("0")
+        depreciation_categories = {
+            ExpenseCategory.DEPRECIATION.value,
+            ExpenseCategory.DEPRECIATION_AFA.value,
+        }
+        has_recorded_depreciation = False
 
         for t in expense_transactions:
             if t.has_line_items:
@@ -176,6 +181,8 @@ class PropertyReportService:
                     amt = li.amount * li.quantity
                     expenses_by_category[cat] = expenses_by_category.get(cat, 0.0) + float(amt)
                     total_expenses += amt
+                    if cat in depreciation_categories:
+                        has_recorded_depreciation = True
             else:
                 # Legacy: whole-transaction amount
                 if t.expense_category:
@@ -183,13 +190,16 @@ class PropertyReportService:
                     amt = t.amount or Decimal("0")
                     expenses_by_category[cat] = expenses_by_category.get(cat, 0.0) + float(amt)
                     total_expenses += amt
+                    if cat in depreciation_categories:
+                        has_recorded_depreciation = True
 
         net_income = rental_income - total_expenses
 
-        # Add calculated building AfA (not stored as transactions)
+        # Add calculated building AfA only when the period has no recorded
+        # depreciation expense yet. Otherwise we would double-count AfA in reports.
         year = start_date.year
         calculated_afa = self.afa_calculator.calculate_annual_depreciation(property, year)
-        if calculated_afa > Decimal("0"):
+        if calculated_afa > Decimal("0") and not has_recorded_depreciation:
             expenses_by_category["depreciation_afa"] = float(calculated_afa)
             total_expenses += calculated_afa
             net_income = rental_income - total_expenses

@@ -1,5 +1,8 @@
 .classification-rules {
   margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .cr-loading, .cr-error, .cr-empty {
@@ -30,6 +33,12 @@
   font-weight: 600;
 }
 
+.cr-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
 .cr-count {
   font-size: 0.85rem;
   color: var(--color-text-secondary);
@@ -38,8 +47,190 @@
   border-radius: 12px;
 }
 
+.cr-section {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 1rem;
+  background: var(--color-surface);
+}
+
+.cr-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.cr-section-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cr-section-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cr-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.cr-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.cr-select-all input {
+  cursor: pointer;
+}
+
+.cr-bulk-delete-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.cr-bulk-delete-btn:hover:not(:disabled) {
+  background: rgba(239,68,68,0.08);
+  border-color: rgba(239,68,68,0.2);
+}
+
+.cr-bulk-delete-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cr-section-count {
+  min-width: 32px;
+  text-align: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cr-section-empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+}
+
+.cr-empty-state {
+  display: flex;
+  align-items: center;
+  min-height: 120px;
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-soft);
+}
+
+.cr-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.cr-search-input {
+  width: 100%;
+  padding: 10px 36px 10px 14px;
+  border: 1.5px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.9rem;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #1f2937);
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.cr-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #7c3aed);
+}
+
+.cr-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--color-text-secondary, #6b7280);
+}
+
 .cr-table-wrap {
   overflow-x: auto;
+}
+
+.cr-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 1rem;
+}
+
+.cr-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.cr-page-btn,
+.cr-page-number {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.cr-page-number {
+  min-width: 38px;
+  padding-inline: 0;
+}
+
+.cr-page-btn:hover:not(:disabled),
+.cr-page-number:hover:not(:disabled) {
+  background: var(--color-bg-soft);
+}
+
+.cr-page-number.active {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.28);
+  color: #6366f1;
+}
+
+.cr-page-btn:disabled,
+.cr-page-number:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .cr-table {
@@ -57,6 +248,15 @@
   letter-spacing: 0.04em;
   color: var(--color-text-secondary);
   border-bottom: 2px solid var(--color-border);
+}
+
+.cr-checkbox-col {
+  width: 42px;
+  text-align: center;
+}
+
+.cr-checkbox-col input {
+  cursor: pointer;
 }
 
 .cr-table td {
@@ -88,6 +288,15 @@
 
 .cr-category { font-weight: 500; }
 
+.cr-reason {
+  min-width: 220px;
+  color: var(--color-text-secondary);
+}
+
+.cr-muted {
+  color: var(--color-text-secondary);
+}
+
 .cr-rule-type {
   font-size: 0.82rem;
   font-weight: 500;
@@ -114,7 +323,9 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
   padding: 4px;
   border-radius: 4px;
   transition: background 0.15s;

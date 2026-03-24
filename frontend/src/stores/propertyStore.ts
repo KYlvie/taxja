@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Property, PropertyCreate, PropertyUpdate, PropertyDetailResponse, PropertyStatus } from '../types/property';
+import { Property, PropertyCreate, PropertyUpdate, PropertyDetailResponse, PropertyStatus, DisposalRequest } from '../types/property';
 import { propertyService } from '../services/propertyService';
 
 interface PropertyState {
@@ -15,6 +15,7 @@ interface PropertyState {
   createProperty: (data: PropertyCreate) => Promise<Property>;
   updateProperty: (id: string, data: PropertyUpdate) => Promise<Property>;
   archiveProperty: (id: string, saleDate: string) => Promise<Property>;
+  disposeProperty: (id: string, data: DisposalRequest) => Promise<Property>;
   deleteProperty: (id: string) => Promise<void>;
   selectProperty: (id: string | null) => void;
   setLoading: (isLoading: boolean) => void;
@@ -178,6 +179,40 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
         properties: originalProperties,
         selectedProperty: originalSelected,
         error: error.response?.data?.detail || error.message || 'Failed to archive property',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  /**
+   * Dispose of a property/asset with a specific reason
+   */
+  disposeProperty: async (id: string, data: DisposalRequest) => {
+    set({ isLoading: true, error: null });
+
+    const originalProperties = get().properties;
+    const originalSelected = get().selectedProperty;
+
+    try {
+      const disposedProperty = await propertyService.disposeProperty(id, data);
+
+      set((state) => ({
+        properties: state.properties.map((p) =>
+          p.id === id ? disposedProperty : p
+        ),
+        selectedProperty: state.selectedProperty?.id === id
+          ? { ...state.selectedProperty, ...disposedProperty }
+          : state.selectedProperty,
+        isLoading: false,
+      }));
+
+      return disposedProperty;
+    } catch (error: any) {
+      set({
+        properties: originalProperties,
+        selectedProperty: originalSelected,
+        error: error.response?.data?.detail || error.message || 'Failed to dispose property',
         isLoading: false,
       });
       throw error;

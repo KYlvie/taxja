@@ -5,12 +5,46 @@
   padding-bottom: 2rem;
 }
 
+/* --- Trial banner --- */
+.dashboard-trial-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 20px;
+  border-radius: var(--radius-lg, 12px);
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fbbf24 100%);
+  color: #78350f;
+  font-size: 0.9rem;
+  animation: dashboardHeroReveal 700ms cubic-bezier(.22,1,.36,1) both;
+}
+
+.dashboard-trial-days {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 2ch;
+  text-align: center;
+}
+
+.dashboard-trial-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+.dashboard-trial-banner .btn-link {
+  color: #92400e;
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 /* --- Header --- */
 .dashboard-header {
   position: relative;
-  overflow: hidden;
-  margin-bottom: 28px;
-  padding: 28px 30px;
+  overflow: visible;
+  margin-bottom: 22px;
+  padding: 20px 24px;
   border-radius: var(--radius-xl);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -24,6 +58,8 @@
   content: '';
   position: absolute;
   inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
   background: radial-gradient(circle, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: linear-gradient(to bottom, rgba(0,0,0,.12), transparent 80%);
@@ -38,6 +74,7 @@
   left: 0;
   right: 0;
   height: 2px;
+  border-radius: inherit;
   background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-accent), transparent);
   background-size: 300% 100%;
   animation: dashBorderGlow 5s linear infinite;
@@ -49,14 +86,14 @@
   z-index: 1;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
 }
 
 .dashboard-header h1 {
-  margin: 0 0 4px 0;
+  margin: 0 0 2px 0;
   font-family: var(--font-display);
-  font-size: 1.65rem;
+  font-size: 1.38rem;
   color: var(--color-text);
   font-weight: 700;
   letter-spacing: -.03em;
@@ -64,7 +101,7 @@
 
 .dashboard-subtitle {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--color-text-muted);
 }
 
@@ -77,29 +114,11 @@
 }
 
 .year-selector label {
-  font-size: .82rem;
+  font-size: .78rem;
   color: var(--color-text-muted);
   white-space: nowrap;
 }
 
-.year-selector select {
-  padding: .45rem .85rem;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface);
-  font-size: .88rem;
-  font-weight: 600;
-  color: var(--color-text);
-  cursor: pointer;
-  appearance: auto;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.year-selector select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
-}
 
 /* --- Loading --- */
 .loading {
@@ -314,13 +333,12 @@
 
 /* --- Responsive --- */
 @media (max-width: 768px) {
-  .dashboard-header h1 { font-size: 1.35rem; }
-  .dashboard-header { padding: 20px 18px; border-radius: var(--radius-lg); }
+  .dashboard-header h1 { font-size: 1.22rem; }
+  .dashboard-header { padding: 16px 16px; border-radius: var(--radius-lg); }
   .dashboard-header-top { flex-direction: column; gap: .75rem; }
   .year-selector { align-self: flex-start; }
   .dashboard-summary-card { padding: 18px 16px; border-radius: 16px; }
   .dashboard-quick-start { padding: 20px 16px; border-radius: 16px; }
   .rental-income-warning { flex-direction: column; text-align: center; gap: 10px; }
 }
-
 

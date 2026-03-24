@@ -65,7 +65,7 @@ class TestSVSCalculator:
         assert result.breakdown['health'] == expected_health.quantize(Decimal('0.01'))
         
         # Verify accident is fixed
-        assert result.breakdown['accident'] == Decimal('12.17')
+        assert result.breakdown['accident'] == Decimal('12.25')
         
         # Verify supplementary (1.53%)
         expected_supplementary = monthly_income * Decimal('0.0153')
@@ -84,12 +84,12 @@ class TestSVSCalculator:
             annual_income=Decimal('150000.00'),  # €12,500/month
             user_type=UserType.GSVG
         )
-        
+
         # Should be capped at maximum base
-        assert result.contribution_base == Decimal('7585.00')
-        
+        assert result.contribution_base == Decimal('7720.50')
+
         # Verify calculations use maximum base
-        expected_pension = Decimal('7585.00') * Decimal('0.185')
+        expected_pension = Decimal('7720.50') * Decimal('0.185')
         assert result.breakdown['pension'] == expected_pension.quantize(Decimal('0.01'))
     
     def test_gsvg_low_income_minimum_base(self):
@@ -152,9 +152,9 @@ class TestSVSCalculator:
         # Calculate expected values
         expected_pension = monthly_income * Decimal('0.185')
         expected_health = monthly_income * Decimal('0.068')
-        expected_accident = Decimal('12.17')
+        expected_accident = Decimal('12.25')
         expected_supplementary = monthly_income * Decimal('0.0153')
-        
+
         assert result.breakdown['pension'] == expected_pension.quantize(Decimal('0.01'))
         assert result.breakdown['health'] == expected_health.quantize(Decimal('0.01'))
         assert result.breakdown['accident'] == expected_accident
@@ -172,12 +172,12 @@ class TestSVSCalculator:
         )
         
         # Should be capped at maximum base
-        assert result.contribution_base == Decimal('7585.00')
-        
+        assert result.contribution_base == Decimal('7720.50')
+
         # Verify calculations use maximum base
-        expected_pension = Decimal('7585.00') * Decimal('0.185')
+        expected_pension = Decimal('7720.50') * Decimal('0.185')
         assert result.breakdown['pension'] == expected_pension.quantize(Decimal('0.01'))
-    
+
     def test_neue_selbstaendige_at_minimum_threshold(self):
         """Test Neue Selbständige at income that produces exactly minimum contribution"""
         # Calculate income that would produce minimum contribution
@@ -193,7 +193,7 @@ class TestSVSCalculator:
         calculated_total = (
             monthly_income * Decimal('0.185') +  # pension
             monthly_income * Decimal('0.068') +  # health
-            Decimal('12.17') +  # accident
+            Decimal('12.25') +  # accident
             monthly_income * Decimal('0.0153')  # supplementary
         )
         
@@ -391,7 +391,7 @@ class TestSVSCalculator:
         # Expected calculations
         expected_pension = monthly_income * Decimal('0.185')  # €555.00
         expected_health = monthly_income * Decimal('0.068')   # €204.00
-        expected_accident = Decimal('12.17')
+        expected_accident = Decimal('12.25')
         expected_supplementary = monthly_income * Decimal('0.0153')  # €45.90
         expected_monthly = expected_pension + expected_health + expected_accident + expected_supplementary
         expected_annual = expected_monthly * Decimal('12')

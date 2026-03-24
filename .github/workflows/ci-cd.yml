@@ -2,223 +2,89 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
-  # Backend Tests
-  backend-test:
+  # Build frontend
+  build-frontend:
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: taxja
-          POSTGRES_PASSWORD: taxja_password
-          POSTGRES_DB: taxja_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        working-directory: ./backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
-      
-      - name: Run tests
-        working-directory: ./backend
-        env:
-          SECRET_KEY: test-secret-key
-          ENCRYPTION_KEY: test-encryption-key
-          POSTGRES_SERVER: localhost
-          POSTGRES_USER: taxja
-          POSTGRES_PASSWORD: taxja_password
-          POSTGRES_DB: taxja_test
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          MINIO_ENDPOINT: localhost:9000
-          MINIO_ACCESS_KEY: minioadmin
-          MINIO_SECRET_KEY: minioadmin
-        run: |
-          pytest --cov=app --cov-report=xml
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./backend/coverage.xml
-          flags: backend
 
-  # Frontend Tests
-  frontend-test:
-    runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
+
       - name: Install dependencies
         working-directory: ./frontend
         run: npm ci
-      
-      - name: Run linter
-        working-directory: ./frontend
-        run: npm run lint
-      
-      - name: Run tests
-        working-directory: ./frontend
-        run: npx vitest --run
-      
-      - name: Build
-        working-directory: ./frontend
-        run: npm run build
 
-  # Build and Push Docker Images
-  build-and-push:
-    needs: [backend-test, frontend-test]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      
-      - name: Build and push backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: taxja/backend:latest,taxja/backend:${{ github.sha }}
-          cache-from: type=registry,ref=taxja/backend:latest
-          cache-to: type=inline
-      
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: taxja/frontend:latest,taxja/frontend:${{ github.sha }}
-          cache-from: type=registry,ref=taxja/frontend:latest
-          cache-to: type=inline
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npx vite build
 
-  # Deploy to Staging
-  deploy-staging:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: staging
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Upload frontend dist
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
         with:
-          version: 'v1.28.0'
-      
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-      
-      - name: Update image tags
-        run: |
-          kubectl set image deployment/backend backend=taxja/backend:${{ github.sha }} -n taxja-staging
-          kubectl set image deployment/celery-worker celery-worker=taxja/backend:${{ github.sha }} -n taxja-staging
-          kubectl set image deployment/frontend frontend=taxja/frontend:${{ github.sha }} -n taxja-staging
-      
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/backend -n taxja-staging --timeout=5m
-          kubectl rollout status deployment/celery-worker -n taxja-staging --timeout=5m
-          kubectl rollout status deployment/frontend -n taxja-staging --timeout=5m
-      
-      - name: Verify deployment
-        run: |
-          kubectl get pods -n taxja-staging
-          kubectl get services -n taxja-staging
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
 
-  # Deploy to Production
-  deploy-production:
-    needs: deploy-staging
+  # Deploy to Production (SSH + Docker Compose)
+  deploy:
+    needs: [build-frontend]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     environment: production
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
         with:
-          version: 'v1.28.0'
-      
-      - name: Configure kubectl
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Setup SSH
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
-      
-      - name: Update image tags
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 178.104.73.139 >> ~/.ssh/known_hosts
+
+      - name: Deploy backend (git pull + rebuild + migrate)
         run: |
-          kubectl set image deployment/backend backend=taxja/backend:${{ github.sha }} -n taxja
-          kubectl set image deployment/celery-worker celery-worker=taxja/backend:${{ github.sha }} -n taxja
-          kubectl set image deployment/frontend frontend=taxja/frontend:${{ github.sha }} -n taxja
-      
-      - name: Wait for rollout
+          ssh root@178.104.73.139 << 'EOF'
+            set -e
+            cd /opt/taxja
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose -f docker-compose.server.yml build backend
+            docker compose -f docker-compose.server.yml up -d backend
+            sleep 8
+            # Run database migrations
+            docker compose -f docker-compose.server.yml exec -T backend alembic upgrade head
+            sleep 3
+            curl -sf http://localhost:8000/api/v1/health | grep -q healthy && echo "Backend OK" || (echo "Backend health check failed" && exit 1)
+          EOF
+
+      - name: Upload frontend dist to server
         run: |
-          kubectl rollout status deployment/backend -n taxja --timeout=10m
-          kubectl rollout status deployment/celery-worker -n taxja --timeout=10m
-          kubectl rollout status deployment/frontend -n taxja --timeout=10m
-      
-      - name: Verify deployment
+          rsync -az --delete frontend/dist/ root@178.104.73.139:/opt/taxja/frontend/dist/
+
+      - name: Reload nginx
         run: |
-          kubectl get pods -n taxja
-          kubectl get services -n taxja
-      
-      - name: Run smoke tests
+          ssh root@178.104.73.139 "docker restart taxja-nginx"
+
+      - name: Smoke test
         run: |
-          # Wait for services to be ready
-          sleep 30
-          # Test backend health endpoint
-          curl -f https://taxja.at/api/health || exit 1
-          # Test frontend
-          curl -f https://taxja.at/ || exit 1
+          sleep 5
+          curl -sf https://taxja.at/api/v1/health | grep -q healthy && echo "Production OK"

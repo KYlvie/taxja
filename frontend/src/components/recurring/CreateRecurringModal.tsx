@@ -7,6 +7,7 @@ import { propertyService } from '../../services/propertyService';
 import { loanService } from '../../services/loanService';
 import { IncomeCategory, ExpenseCategory } from '../../types/transaction';
 import { RecurrenceFrequency } from '../../types/recurring';
+import Select from '../common/Select';
 import '../transactions/RecurringTransactionEditor.css';
 
 interface Property {
@@ -140,22 +141,20 @@ export const CreateRecurringModal: React.FC<CreateRecurringModalProps> = ({
         <form onSubmit={handleSubmit(onSubmit)} className="recurring-editor-form">
           {/* Type: income / expense */}
           <div className="form-group">
-            <label>{t('transactions.type')}</label>
-            <select {...register('transaction_type')}>
-              <option value="income">{t('transactions.types.income')}</option>
-              <option value="expense">{t('transactions.types.expense')}</option>
-            </select>
+            <label>{t('transactions.type')} <span className="required">*</span></label>
+            <Select {...register('transaction_type')} value={watch('transaction_type') || ''}
+              options={[
+                { value: 'income', label: t('transactions.types.income') },
+                { value: 'expense', label: t('transactions.types.expense') },
+              ]} />
           </div>
 
           {/* Category */}
           <div className="form-group">
-            <label>{t('transactions.category')}</label>
-            <select {...register('category', { required: true })}>
-              <option value="">{t('transactions.selectCategory')}</option>
-              {getCategoryOptions().map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <label>{t('transactions.category')} <span className="required">*</span></label>
+            <Select {...register('category', { required: true })} value={watch('category') || ''}
+              placeholder={t('transactions.selectCategory')}
+              options={getCategoryOptions()} />
             {errors.category && (
               <span className="field-error">{t('recurring.errors.categoryRequired')}</span>
             )}
@@ -163,7 +162,7 @@ export const CreateRecurringModal: React.FC<CreateRecurringModalProps> = ({
 
           {/* Description */}
           <div className="form-group">
-            <label>{t('transactions.description')}</label>
+            <label>{t('transactions.description')} <span className="required">*</span></label>
             <input
               type="text"
               placeholder={t('transactions.descriptionPlaceholder')}
@@ -176,7 +175,7 @@ export const CreateRecurringModal: React.FC<CreateRecurringModalProps> = ({
 
           {/* Amount */}
           <div className="form-group">
-            <label>{t('recurring.form.amount')} (€)</label>
+            <label>{t('recurring.form.amount')} (€) <span className="required">*</span></label>
             <input
               type="number"
               step="0.01"
@@ -191,12 +190,12 @@ export const CreateRecurringModal: React.FC<CreateRecurringModalProps> = ({
           {needsProperty && (
             <div className="form-group">
               <label>{t('recurring.form.property')}</label>
-              <select {...register('property_id')}>
-                <option value="">{t('recurring.form.selectProperty')}</option>
-                {properties.map(p => (
-                  <option key={p.id} value={p.id}>{p.address}</option>
-                ))}
-              </select>
+              <Select {...register('property_id')} value={watch('property_id') || ''}
+                placeholder={t('recurring.form.selectProperty')}
+                options={properties.map(p => ({
+                  value: p.id,
+                  label: p.address,
+                }))} />
             </div>
           )}
 
@@ -204,37 +203,38 @@ export const CreateRecurringModal: React.FC<CreateRecurringModalProps> = ({
           {needsLoan && (
             <div className="form-group">
               <label>{t('recurring.form.loan')}</label>
-              <select {...register('loan_id', { valueAsNumber: true })}>
-                <option value="">{t('recurring.form.selectLoan')}</option>
-                {loans.map(l => (
-                  <option key={l.id} value={l.id}>{l.label}</option>
-                ))}
-              </select>
+              <Select {...register('loan_id', { valueAsNumber: true })} value={watch('loan_id')?.toString() || ''}
+                placeholder={t('recurring.form.selectLoan')}
+                options={loans.map(l => ({
+                  value: String(l.id),
+                  label: l.label,
+                }))} />
             </div>
           )}
 
           {/* Frequency */}
           <div className="form-group">
-            <label>{t('recurring.frequency.label')}</label>
-            <select {...register('frequency')}>
-              <option value="monthly">{t('recurring.frequency.monthly')}</option>
-              <option value="quarterly">{t('recurring.frequency.quarterly')}</option>
-              <option value="yearly">{t('recurring.frequency.annually')}</option>
-              <option value="weekly">{t('recurring.frequency.weekly')}</option>
-            </select>
+            <label>{t('recurring.frequency.label')} <span className="required">*</span></label>
+            <Select {...register('frequency')} value={watch('frequency') || ''}
+              options={[
+                { value: 'monthly', label: t('recurring.frequency.monthly') },
+                { value: 'quarterly', label: t('recurring.frequency.quarterly') },
+                { value: 'yearly', label: t('recurring.frequency.annually') },
+                { value: 'weekly', label: t('recurring.frequency.weekly') },
+              ]} />
           </div>
 
           {/* Start date + day of month */}
           <div className="form-row">
             <div className="form-group">
-              <label>{t('recurring.form.startDate')}</label>
+              <label>{t('recurring.form.startDate')} <span className="required">*</span></label>
               <input type="date" {...register('start_date', { required: true })} />
               {errors.start_date && (
                 <span className="field-error">{t('recurring.errors.dateRequired')}</span>
               )}
             </div>
             <div className="form-group">
-              <label>{t('recurring.form.dayOfMonth')}</label>
+              <label>{t('recurring.form.dayOfMonth')} <span className="required">*</span></label>
               <input
                 type="number"
                 min="1"

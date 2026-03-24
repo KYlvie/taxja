@@ -1,13 +1,31 @@
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+// Prevent CDNs (Cloudflare) from caching Service Worker files
+function noCacheSW(): Plugin {
+  return {
+    name: 'no-cache-sw',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url && /^\/(sw|registerSW|workbox-)/.test(req.url)) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+          res.setHeader('CDN-Cache-Control', 'no-store');
+          res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+        }
+        next();
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const isMobileBuild = mode === 'mobile';
 
   return {
     plugins: [
+      noCacheSW(),
       react(),
       !isMobileBuild &&
         VitePWA({
@@ -25,15 +43,15 @@ export default defineConfig(({ mode }) => {
             start_url: '/',
             icons: [
               {
-                src: 'pwa-192x192.png',
+                src: 'icons/icon-192.webp',
                 sizes: '192x192',
-                type: 'image/png',
+                type: 'image/webp',
                 purpose: 'any maskable',
               },
               {
-                src: 'pwa-512x512.png',
+                src: 'icons/icon-512.webp',
                 sizes: '512x512',
-                type: 'image/png',
+                type: 'image/webp',
                 purpose: 'any maskable',
               },
             ],
@@ -146,11 +164,11 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/api': {
-          target: 'http://localhost:8001',
+          target: 'http://localhost:8000',
           changeOrigin: true,
         },
       },
-      allowedHosts: 'all',
+      allowedHosts: true,
     },
     test: {
       globals: true,

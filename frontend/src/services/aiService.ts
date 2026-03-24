@@ -12,6 +12,9 @@ export interface ChatMessage {
 export interface ChatResponse {
   content: string;
   timestamp: string;
+  intent?: string;
+  showDisclaimer?: boolean;
+  sourceTier?: string;
 }
 
 export interface ContextData {
@@ -34,10 +37,13 @@ class AIService {
     }, {
       timeout: 120000,  // 120s — Ollama on CPU can be slow
     });
-    // Backend returns { message, message_id, timestamp }
+    // Backend returns { message, message_id, timestamp, intent, data, suggestions, show_disclaimer, source_tier }
     return {
       content: response.data.message,
       timestamp: response.data.timestamp,
+      intent: response.data.intent,
+      showDisclaimer: response.data.show_disclaimer,
+      sourceTier: response.data.source_tier,
     };
   }
 
@@ -57,6 +63,9 @@ class AIService {
     return {
       content: response.data.message,
       timestamp: response.data.timestamp,
+      intent: response.data.intent,
+      showDisclaimer: response.data.show_disclaimer,
+      sourceTier: response.data.source_tier,
     };
   }
 

@@ -119,11 +119,11 @@ class User(Base):
     employer_region = Column(String(100), nullable=True)
     
     # Family information (JSON)
-    family_info = Column(JSON, default={})
+    family_info = Column(JSON, default=dict)
     # Example: {"num_children": 2, "is_single_parent": false}
     
     # Commuting information (JSON)
-    commuting_info = Column(JSON, default={})
+    commuting_info = Column(JSON, default=dict)
     # Example: {"distance_km": 35, "public_transport_available": true}
     
     # Home office / Telearbeit
@@ -132,7 +132,7 @@ class User(Base):
     employer_telearbeit_pauschale = Column(Numeric(10, 2), nullable=True, default=None)  # AG tax-free payment
     
     # Language setting
-    language = Column(String(5), default="de")  # de, en, zh
+    language = Column(String(5), default="de")  # de, en, zh, fr, ru, hu, pl, tr, bs
     
     # Two-factor authentication
     two_factor_enabled = Column(Boolean, default=False)
@@ -149,6 +149,10 @@ class User(Base):
 
     # Disclaimer acceptance
     disclaimer_accepted_at = Column(DateTime, nullable=True)
+
+    # Onboarding — show guide for first 3 logins
+    onboarding_completed = Column(Boolean, nullable=False, default=False)
+    onboarding_dismiss_count = Column(Integer, nullable=False, default=0)
     
     # Admin flag
     is_admin = Column(Boolean, nullable=False, default=False)
@@ -180,12 +184,16 @@ class User(Base):
     chat_messages = relationship("ChatMessage", back_populates="user", cascade="all, delete-orphan")
     properties = relationship("Property", back_populates="user", cascade="all, delete-orphan")
     property_loans = relationship("PropertyLoan", back_populates="user", cascade="all, delete-orphan")
+    liabilities = relationship("Liability", back_populates="user", cascade="all, delete-orphan")
+    bank_statement_imports = relationship("BankStatementImport", back_populates="user", cascade="all, delete-orphan")
+    reminder_states = relationship("ReminderState", back_populates="user", cascade="all, delete-orphan")
     recurring_transactions = relationship("RecurringTransaction", back_populates="user", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     subscription = relationship("Subscription", back_populates="user", foreign_keys="[Subscription.user_id]", uselist=False)
     usage_records = relationship("UsageRecord", back_populates="user", cascade="all, delete-orphan")
     payment_events = relationship("PaymentEvent", back_populates="user", cascade="all, delete-orphan")
     classification_rules = relationship("UserClassificationRule", back_populates="user", cascade="all, delete-orphan")
+    deductibility_rules = relationship("UserDeductibilityRule", back_populates="user", cascade="all, delete-orphan")
     employer_months = relationship("EmployerMonth", back_populates="user", cascade="all, delete-orphan")
     employer_annual_archives = relationship("EmployerAnnualArchive", back_populates="user", cascade="all, delete-orphan")
     asset_policy_snapshots = relationship("AssetPolicySnapshot", back_populates="user", cascade="all, delete-orphan")
@@ -220,4 +228,3 @@ class User(Base):
     
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, user_type={self.user_type})>"
-

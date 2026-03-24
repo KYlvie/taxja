@@ -164,20 +164,24 @@ class IncomeTaxCalculator:
         tax_year: int
     ) -> IncomeTaxResult:
         """
-        Calculate income tax after applying exemption amount.
-        
+        Calculate income tax using progressive brackets.
+
+        Note: The tax-free allowance (Freibetrag) is already embedded in the
+        progressive tax brackets as the 0% first bracket.  Do NOT subtract
+        exemption_amount separately — that would double-count the exemption.
+
         Args:
-            gross_income: The gross income before exemption
+            gross_income: The gross income (taxable income after deductions)
             tax_year: The tax year for calculation
-            
+
         Returns:
             IncomeTaxResult with total tax, breakdown, and effective rate
         """
-        # Apply exemption
-        taxable_income = self.apply_exemption(gross_income)
-        
-        # Calculate tax
-        return self.calculate_progressive_tax(taxable_income, tax_year)
+        if not isinstance(gross_income, Decimal):
+            gross_income = Decimal(str(gross_income))
+
+        # Pass directly to progressive tax — the 0% bracket IS the exemption
+        return self.calculate_progressive_tax(gross_income, tax_year)
     
     def calculate_tax_with_loss_carryforward(
         self,
@@ -210,20 +214,27 @@ class IncomeTaxCalculator:
         if not isinstance(remaining_loss_balance, Decimal):
             remaining_loss_balance = Decimal(str(remaining_loss_balance))
         
-        # Apply exemption
-        taxable_income_after_exemption = self.apply_exemption(gross_income)
-        
-        # Apply loss carryforward
-        taxable_income_after_loss = taxable_income_after_exemption - loss_carryforward_applied
-        
+        # The tax-free allowance (Freibetrag) is already embedded in the
+        # progressive brackets as the 0% first bracket.  Do NOT call
+        # apply_exemption() here — that would double-count it.
+
+        # §18 Abs. 6 EStG: Defensive cap — loss carryforward may not exceed
+        # 75% of income (Verrechnungsgrenze).  The primary enforcement is in
+        # LossCarryforwardService; this is a safety net.
+        max_offset = (gross_income * Decimal('0.75')).quantize(Decimal('0.01'))
+        capped_loss = min(loss_carryforward_applied, max_offset)
+
+        # Apply loss carryforward to gross income
+        taxable_income_after_loss = gross_income - capped_loss
+
         # Ensure taxable income doesn't go negative
         taxable_income_after_loss = max(taxable_income_after_loss, Decimal('0.00'))
         
         # Calculate tax
         tax_result = self.calculate_progressive_tax(taxable_income_after_loss, tax_year)
         
-        # Add loss carryforward information to result
-        tax_result.loss_carryforward_applied = loss_carryforward_applied.quantize(Decimal('0.01'))
+        # Add loss carryforward information to result (report the capped amount)
+        tax_result.loss_carryforward_applied = capped_loss.quantize(Decimal('0.01'))
         tax_result.remaining_loss_balance = remaining_loss_balance.quantize(Decimal('0.01'))
         
         return tax_result

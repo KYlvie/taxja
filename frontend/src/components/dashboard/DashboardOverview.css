@@ -52,14 +52,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
   flex-shrink: 0;
-  font-size: 1.05rem;
-  font-family: var(--font-display);
-  font-weight: 700;
-  background: var(--color-bg-soft);
+}
+
+.card-icon .f-icon {
+  width: 100%;
+  height: 100%;
 }
 
 .card-content {
@@ -124,7 +124,7 @@
 .overview-card.vat-threshold .card-icon { color: var(--color-accent); }
 
 .overview-card.pending-review::after { background: #d97706; }
-.overview-card.pending-review .card-icon { color: #d97706; background: rgba(245, 158, 11, 0.1); }
+.overview-card.pending-review .card-icon { color: #d97706; }
 .overview-card.pending-review .amount { color: #d97706; }
 
 @keyframes overviewReveal {

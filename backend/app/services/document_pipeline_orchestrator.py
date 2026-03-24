@@ -108,6 +108,10 @@ class PipelineResult:
     phase_checkpoints: List[Dict[str, Any]] = field(default_factory=list)
     current_state: str = "processing_phase_1"
     processing_decision: Optional[Dict[str, Any]] = None
+    provider_used: Optional[str] = None
+    reprocess_mode: Optional[str] = None
+    reprocess_requested_at: Optional[str] = None
+    ocr_provider_override: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -177,6 +181,7 @@ OCR_TO_DB_TYPE_MAP = {
     OCRDocumentType.KAUFVERTRAG: DBDocumentType.PURCHASE_CONTRACT,
     OCRDocumentType.MIETVERTRAG: DBDocumentType.RENTAL_CONTRACT,
     OCRDocumentType.RENTAL_CONTRACT: DBDocumentType.RENTAL_CONTRACT,
+    OCRDocumentType.LOAN_CONTRACT: DBDocumentType.LOAN_CONTRACT,
     OCRDocumentType.E1_FORM: DBDocumentType.E1_FORM,
     OCRDocumentType.EINKOMMENSTEUERBESCHEID: DBDocumentType.EINKOMMENSTEUERBESCHEID,
     OCRDocumentType.L1_FORM: DBDocumentType.L1_FORM,
@@ -383,6 +388,9 @@ class DocumentPipelineOrchestrator:
             result.current_state = "finalizing"
             self._persist_checkpoint_state(document, result, commit=True)
 
+            # Stage 4.5: AI-driven duplicate entity check
+            self._check_duplicate_entity(document, db_type, result)
+
             # Stage 5: Build suggestions AND auto-create
             self._stage_suggest(document, db_type, ocr_result, result)
 
@@ -396,6 +404,9 @@ class DocumentPipelineOrchestrator:
                     },
                 )
             )
+            # Guarantee: every document gets at least one suggestion/feedback
+            self._ensure_suggestion_exists(document, db_type, result)
+
             result.current_state = "completed"
 
             # Determine overall confidence
@@ -441,7 +452,22 @@ class DocumentPipelineOrchestrator:
             self._log_audit(result, "ocr", f"Download failed: {e}")
             return None
 
-        ocr_result = self.ocr_engine.process_document(image_bytes, mime_type=document.mime_type)
+        pipeline_state = {}
+        if isinstance(document.ocr_result, dict):
+            pipeline_state = document.ocr_result.get("_pipeline") or {}
+        vision_provider_preference = pipeline_state.get("ocr_provider_override")
+        reprocess_mode = pipeline_state.get("reprocess_mode")
+        ocr_result = self.ocr_engine.process_document(
+            image_bytes,
+            mime_type=document.mime_type,
+            vision_provider_preference=vision_provider_preference,
+            reprocess_mode=reprocess_mode,
+            document_type_hint=document.document_type,
+        )
+        result.provider_used = ocr_result.provider_used
+        result.reprocess_mode = reprocess_mode
+        result.reprocess_requested_at = pipeline_state.get("reprocess_requested_at")
+        result.ocr_provider_override = vision_provider_preference
         self._log_audit(
             result, "ocr",
             f"OCR completed: confidence={ocr_result.confidence_score:.2f}, "
@@ -493,18 +519,78 @@ class DocumentPipelineOrchestrator:
                 classification.method = "filename"
                 classification.confidence = max(ocr_confidence, 0.6)
 
-        # Signal 3: LLM arbitration when still uncertain
-        if db_type == DBDocumentType.OTHER and ocr_result.raw_text:
-            llm_type = self._try_llm_classification(ocr_result.raw_text)
-            if llm_type and llm_type != DBDocumentType.OTHER:
+        # Signal 2.5: Keyword boost for known sensitive document families.
+        if db_type == DBDocumentType.OTHER or classification.confidence < 0.5:
+            keyword_type = self._classify_by_keyword_hints(ocr_result.raw_text)
+            if keyword_type and keyword_type != DBDocumentType.OTHER:
                 self._log_audit(
                     result, "classify",
-                    f"LLM classification: {db_type.value} → {llm_type.value}"
+                    f"Keyword override: {db_type.value} → {keyword_type.value} "
+                    f"(OCR confidence was {ocr_confidence:.2f})"
                 )
-                db_type = llm_type
-                classification.method = "llm"
+                db_type = keyword_type
+                classification.method = "keyword"
+                classification.confidence = max(classification.confidence, 0.62)
+
+        # Signal 3: LLM arbitration — now triggers for ANY low-confidence result, not just OTHER
+        # Previously only called when db_type == OTHER, missing all misclassified documents
+        should_try_llm = (
+            ocr_result.raw_text
+            and len(ocr_result.raw_text.strip()) > 50
+            and (
+                db_type == DBDocumentType.OTHER
+                or classification.confidence < 0.75
+            )
+        )
+        if should_try_llm:
+            llm_type = self._try_llm_classification(ocr_result.raw_text)
+            if llm_type and llm_type != DBDocumentType.OTHER:
+                if db_type == DBDocumentType.OTHER:
+                    # LLM found a type when regex couldn't — use it
+                    self._log_audit(
+                        result, "classify",
+                        f"LLM classification (regex failed): OTHER → {llm_type.value}"
+                    )
+                    db_type = llm_type
+                    classification.method = "llm"
+                    classification.confidence = 0.65
+                elif llm_type != db_type:
+                    # LLM disagrees with regex — LLM wins when regex confidence is low
+                    self._log_audit(
+                        result, "classify",
+                        f"LLM override (low confidence {classification.confidence:.2f}): "
+                        f"{db_type.value} → {llm_type.value}"
+                    )
+                    db_type = llm_type
+                    classification.method = "llm_override"
+                    classification.confidence = 0.70
+                else:
+                    # LLM agrees with regex — boost confidence
+                    self._log_audit(
+                        result, "classify",
+                        f"LLM confirmed regex classification: {db_type.value} (confidence boosted)"
+                    )
+                    classification.method = "regex+llm"
+                    classification.confidence = min(classification.confidence + 0.15, 0.95)
                 classification.needs_llm_arbitration = True
-                classification.confidence = 0.65  # LLM classification is less trusted
+
+        # Detect unsupported document types for suggestion guarantee
+        if db_type == DBDocumentType.OTHER and ocr_result.raw_text:
+            _text_low = ocr_result.raw_text.lower()[:2000]
+            _unsupported = None
+            if "dienstzettel" in _text_low or "pflichten aus dem arbeitsvertrag" in _text_low:
+                _unsupported = "dienstzettel"
+            elif any(m in _text_low for m in ["übergabeprotokoll", "uebergabeprotokoll",
+                                               "wohnungsübergabe", "wohnungsuebergabe"]):
+                _unsupported = "handover_protocol"
+            elif any(m in _text_low for m in ["körperschaftsteuer", "koerperschaftsteuer",
+                                               "k1-pdf", "k 1-pdf"]):
+                _unsupported = "k1_form"
+            if _unsupported:
+                ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+                ocr_json["_unsupported_type"] = _unsupported
+                document.ocr_result = ocr_json
+                self._log_audit(result, "classify", f"Unsupported type detected: {_unsupported}")
 
         # Persist classification
         document.document_type = db_type
@@ -526,6 +612,12 @@ class DocumentPipelineOrchestrator:
             return None
 
         fname_lower = file_name.lower()
+        loan_markers = ("kreditvertrag", "zinsbescheinigung", "darlehen", "wohnbaukredit")
+        if any(marker in fname_lower for marker in loan_markers):
+            return DBDocumentType.LOAN_CONTRACT
+        if "kredit" in fname_lower and any(marker in fname_lower for marker in ("zins", "tilgung", "annuit", "wohnbau")):
+            return DBDocumentType.LOAN_CONTRACT
+
         filename_hints = {
             "kaufvertrag": DBDocumentType.PURCHASE_CONTRACT,
             "mietvertrag": DBDocumentType.RENTAL_CONTRACT,
@@ -550,6 +642,31 @@ class DocumentPipelineOrchestrator:
                 return doc_type
         return None
 
+    def _classify_by_keyword_hints(self, raw_text: Optional[str]) -> Optional[DBDocumentType]:
+        """Classify ambiguous documents using lightweight keyword bundles."""
+        if not raw_text:
+            return None
+
+        text_low = raw_text.lower()
+
+        loan_keywords = (
+            "kreditnehmer",
+            "darlehensnehmer",
+            "kreditkonto",
+            "wohnbaukredit",
+            "zinsbescheinigung",
+            "zinsaufwand",
+            "tilgung",
+            "annuitaet",
+            "annuität",
+            "hypothekendarlehen",
+        )
+        loan_hits = sum(1 for keyword in loan_keywords if keyword in text_low)
+        if loan_hits >= 2:
+            return DBDocumentType.LOAN_CONTRACT
+
+        return None
+
     def _try_llm_classification(self, raw_text: str) -> Optional[DBDocumentType]:
         """Use LLM as fallback for document classification."""
         try:
@@ -562,19 +679,48 @@ class DocumentPipelineOrchestrator:
             if not llm_type_str:
                 return None
 
-            # Map LLM response to DB type
+            # Map LLM response to DB type — comprehensive mapping
             llm_type_map = {
                 "invoice": DBDocumentType.INVOICE,
                 "receipt": DBDocumentType.RECEIPT,
                 "mietvertrag": DBDocumentType.RENTAL_CONTRACT,
+                "rental_contract": DBDocumentType.RENTAL_CONTRACT,
                 "kaufvertrag": DBDocumentType.PURCHASE_CONTRACT,
+                "purchase_contract": DBDocumentType.PURCHASE_CONTRACT,
+                "purchase_contract_vehicle": DBDocumentType.PURCHASE_CONTRACT,
                 "e1_form": DBDocumentType.E1_FORM,
-                "einkommensteuerbescheid": DBDocumentType.EINKOMMENSTEUERBESCHEID,
-                "bank_statement": DBDocumentType.BANK_STATEMENT,
-                "payslip": DBDocumentType.PAYSLIP,
+                "e1a_beilage": DBDocumentType.E1A_BEILAGE,
+                "e1b_beilage": DBDocumentType.E1B_BEILAGE,
+                "e1kv_beilage": DBDocumentType.E1KV_BEILAGE,
+                "l1_form": DBDocumentType.L1_FORM,
+                "l1k_beilage": DBDocumentType.L1K_BEILAGE,
+                "l1ab_beilage": DBDocumentType.L1AB_BEILAGE,
+                "u1_form": DBDocumentType.U1_FORM,
+                "u30_form": DBDocumentType.U30_FORM,
                 "lohnzettel": DBDocumentType.LOHNZETTEL,
+                "lohnzettel_l16": DBDocumentType.LOHNZETTEL,
+                "payslip": DBDocumentType.LOHNZETTEL,
+                "einkommensteuerbescheid": DBDocumentType.EINKOMMENSTEUERBESCHEID,
+                "jahresabschluss": DBDocumentType.JAHRESABSCHLUSS,
+                "bank_statement": DBDocumentType.BANK_STATEMENT,
+                "kontoauszug": DBDocumentType.KONTOAUSZUG,
+                "svs_notice": DBDocumentType.SVS_NOTICE,
+                "betriebskostenabrechnung": DBDocumentType.BETRIEBSKOSTENABRECHNUNG,
+                "versicherungsbestaetigung": DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+                "spendenbestaetigung": DBDocumentType.SPENDENBESTAETIGUNG,
+                "kirchenbeitrag": DBDocumentType.KIRCHENBEITRAG,
+                "kreditvertrag": DBDocumentType.LOAN_CONTRACT,
+                "loan_contract": DBDocumentType.LOAN_CONTRACT,
+                # Unsupported types → map to OTHER
+                "k1_unsupported": DBDocumentType.OTHER,
+                "k1_form": DBDocumentType.OTHER,
+                "dienstzettel_not_payslip": DBDocumentType.OTHER,
+                "dienstzettel": DBDocumentType.OTHER,
+                "handover_protocol": DBDocumentType.OTHER,
+                "other": DBDocumentType.OTHER,
             }
-            return llm_type_map.get(llm_type_str)
+            # Case-insensitive lookup
+            return llm_type_map.get(llm_type_str.lower().strip())
 
         except Exception as e:
             logger.warning(f"LLM classification failed: {e}")
@@ -1051,11 +1197,42 @@ class DocumentPipelineOrchestrator:
     ):
         """Execute explicit Phase-2 actions for the classified document."""
         result.stage_reached = PipelineStage.SUGGEST
+
         decision = self._get_processing_decision_service().build_phase_two_decision(
             db_type,
             tax_form_types=set(self.TAX_FORM_DB_TYPES),
         )
         result.processing_decision = decision.model_dump(mode="json")
+
+        # Check if AI dedup found a match — if so, create link_to_existing suggestion
+        # instead of normal transaction-create suggestions.
+        ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        matched = ocr_json.get("matched_existing")
+        transaction_actions = {ProcessingAction.TRANSACTION_SUGGESTIONS}
+        has_transaction_action = any(
+            action in transaction_actions
+            for action in [*decision.primary_actions, *decision.secondary_actions]
+        )
+        if matched and matched.get("type") != "none" and has_transaction_action:
+            result.suggestions.append({
+                "type": "link_to_existing",
+                "status": "pending",
+                "data": {
+                    "matched_type": matched["type"],
+                    "matched_id": matched.get("id"),
+                    "reason": matched.get("reason", ""),
+                    "extracted_data": result.extracted_data or {},
+                },
+                "document_id": document.id,
+                "user_id": document.user_id,
+                "confidence": 0.8,
+            })
+            self._log_audit(
+                result, "suggest",
+                f"Link-to-existing suggestion: {matched['type']} #{matched.get('id')} — {matched.get('reason')}"
+            )
+            # Skip normal suggestion building — user must confirm or reject the link first
+            return
 
         for action in [*decision.primary_actions, *decision.secondary_actions]:
             self._execute_processing_action(
@@ -1065,6 +1242,304 @@ class DocumentPipelineOrchestrator:
                 ocr_result=ocr_result,
                 result=result,
             )
+
+    # ---- AI-Driven Duplicate Entity Check ----
+
+    def _check_duplicate_entity(
+        self, document: Document, db_type: DBDocumentType, result: "PipelineResult"
+    ):
+        """Use LLM to check if the new document matches an existing entity.
+
+        Queries user's existing properties, recurring expenses, loans, assets,
+        and recent transactions, then asks GPT-4o if the new document is a
+        duplicate or related to any of them.
+
+        If a match is found, stores it in ocr_result["matched_existing"] so
+        suggestion builders can change behavior (link instead of create).
+        """
+        try:
+            extracted = result.extracted_data or {}
+            if not extracted:
+                return  # Nothing to match against
+
+            user_id = document.user_id
+
+            # Build compact summaries of existing entities
+            summaries = self._build_entity_summaries(user_id)
+            if not summaries:
+                return  # New user, nothing to match
+
+            # Call LLM for dedup check
+            from app.services.llm_service import LLMService
+            llm = LLMService()
+            if not llm.is_available:
+                self._log_audit(result, "dedup", "LLM not available, skipping dedup check")
+                return
+
+            # Build compact extracted data summary (avoid sending entire blob)
+            extracted_summary = {
+                k: v for k, v in extracted.items()
+                if k in ("amount", "merchant", "date", "description", "address",
+                         "property_address", "monthly_rent", "purchase_price",
+                         "insurer_name", "praemie", "polizze", "versicherungsart",
+                         "insurance_type", "lender_name", "loan_amount",
+                         "employer", "employer_name", "gross_income")
+                and v is not None
+            }
+            extracted_summary["document_type"] = db_type.value
+
+            prompt = f"""Du bist ein Duplikat-Erkennungsassistent für österreichische Steuerdokumente.
+Prüfe, ob das neue Dokument zu einer bereits existierenden Entität des Benutzers gehört.
+
+Neues Dokument (OCR-Extraktion):
+{json.dumps(extracted_summary, ensure_ascii=False, default=str)}
+
+Bestehende Entitäten des Benutzers:
+{summaries}
+
+Regeln:
+- Gleiche Versicherung (gleicher Versicherer + ähnlicher Betrag) → match
+- Gleiche Adresse (gleiche Straße/PLZ) → match mit Immobilie
+- Gleiche monatliche Zahlung an gleichen Empfänger → match mit wiederkehrender Ausgabe
+- Gleiches Unternehmen + ähnlicher Betrag innerhalb 7 Tage → match mit Transaktion
+- Im Zweifelsfall: match = false
+
+Antworte NUR mit JSON:
+{{"match": true/false, "matched_type": "property|recurring|loan|asset|transaction|none", "matched_id": ID_oder_null, "reason": "kurze Begründung auf Deutsch"}}"""
+
+            response = llm.generate_simple(
+                system_prompt="Du bist ein JSON-Antwort-Bot. Antworte NUR mit validem JSON.",
+                user_prompt=prompt,
+                temperature=0.1,
+                max_tokens=200,
+            )
+
+            # Parse LLM response
+            import json as _json
+            try:
+                # Strip markdown code blocks if present
+                clean = response.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                    clean = clean.rsplit("```", 1)[0]
+                match_result = _json.loads(clean)
+            except (_json.JSONDecodeError, ValueError):
+                self._log_audit(result, "dedup", f"LLM dedup response unparseable: {response[:100]}")
+                return
+
+            if match_result.get("match"):
+                # Store match in ocr_result for suggestion builders
+                ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+                ocr_json["matched_existing"] = {
+                    "type": match_result.get("matched_type", "unknown"),
+                    "id": match_result.get("matched_id"),
+                    "reason": match_result.get("reason", ""),
+                    "user_confirmed": None,  # Will be set by user action
+                }
+                document.ocr_result = ocr_json
+
+                self._log_audit(
+                    result, "dedup",
+                    f"Match found: {match_result.get('matched_type')} "
+                    f"#{match_result.get('matched_id')} — {match_result.get('reason')}"
+                )
+            else:
+                self._log_audit(result, "dedup", "No duplicate entity match found")
+
+        except Exception as e:
+            # Dedup check is non-critical — don't fail the pipeline
+            logger.warning(f"Dedup check failed (non-critical): {e}")
+            self._log_audit(result, "dedup", f"Dedup check error (skipped): {e}")
+
+    def _build_entity_summaries(self, user_id: int) -> str:
+        """Build compact text summaries of user's existing entities for LLM context."""
+        parts = []
+
+        try:
+            # Properties
+            from app.models.property import Property, PropertyStatus
+            properties = self.db.query(Property).filter(
+                Property.user_id == user_id,
+                Property.status == PropertyStatus.ACTIVE,
+            ).all()
+            if properties:
+                prop_lines = []
+                for p in properties[:10]:  # Cap at 10
+                    addr = getattr(p, 'address', '') or ''
+                    price = getattr(p, 'purchase_price', '') or ''
+                    prop_lines.append(f"  ID={p.id}: {addr} (Kaufpreis: {price})")
+                parts.append("Immobilien:\n" + "\n".join(prop_lines))
+
+            # Recurring transactions
+            from app.models.recurring_transaction import RecurringTransaction
+            recurrings = self.db.query(RecurringTransaction).filter(
+                RecurringTransaction.user_id == user_id,
+                RecurringTransaction.is_active == True,
+            ).all()
+            if recurrings:
+                rec_lines = []
+                for r in recurrings[:20]:  # Cap at 20
+                    rec_lines.append(
+                        f"  ID={r.id}: {r.description} — €{r.amount}/{r.frequency}"
+                    )
+                parts.append("Wiederkehrende Ausgaben/Einnahmen:\n" + "\n".join(rec_lines))
+
+            # Loans
+            try:
+                from app.models.property_loan import PropertyLoan
+                loans = self.db.query(PropertyLoan).filter(
+                    PropertyLoan.user_id == user_id,
+                ).all()
+                if loans:
+                    loan_lines = []
+                    for l in loans[:5]:
+                        loan_lines.append(
+                            f"  ID={l.id}: {getattr(l, 'lender_name', 'Unbekannt')} — €{getattr(l, 'loan_amount', '?')}"
+                        )
+                    parts.append("Kredite:\n" + "\n".join(loan_lines))
+            except Exception:
+                pass  # Loan model may not exist
+
+            # Assets
+            try:
+                from app.models.asset import Asset
+                assets = self.db.query(Asset).filter(
+                    Asset.user_id == user_id,
+                ).all()
+                if assets:
+                    asset_lines = []
+                    for a in assets[:15]:
+                        asset_lines.append(
+                            f"  ID={a.id}: {getattr(a, 'name', '')} — €{getattr(a, 'purchase_price', '?')}"
+                        )
+                    parts.append("Vermögenswerte:\n" + "\n".join(asset_lines))
+            except Exception:
+                pass
+
+            # Recent transactions (90 days)
+            from app.models.transaction import Transaction
+            from datetime import datetime, timedelta
+            cutoff = datetime.utcnow() - timedelta(days=90)
+            recent = self.db.query(Transaction).filter(
+                Transaction.user_id == user_id,
+                Transaction.transaction_date >= cutoff,
+            ).order_by(Transaction.transaction_date.desc()).limit(30).all()
+            if recent:
+                txn_lines = []
+                for t in recent:
+                    txn_lines.append(
+                        f"  ID={t.id}: {t.transaction_date} {t.description} €{t.amount}"
+                    )
+                parts.append("Letzte Transaktionen (90 Tage):\n" + "\n".join(txn_lines))
+
+        except Exception as e:
+            self.db.rollback()
+            logger.warning(f"Failed to build entity summaries: {e}")
+
+        return "\n\n".join(parts) if parts else ""
+
+    # ---- Suggestion Guarantee ----
+
+    # Tax form types that should generate import suggestions
+    TAX_FORM_SUGGESTION_TYPES = {
+        DBDocumentType.E1_FORM, DBDocumentType.E1A_BEILAGE, DBDocumentType.E1B_BEILAGE,
+        DBDocumentType.E1KV_BEILAGE, DBDocumentType.L1_FORM, DBDocumentType.L1K_BEILAGE,
+        DBDocumentType.L1AB_BEILAGE, DBDocumentType.U1_FORM, DBDocumentType.U30_FORM,
+        DBDocumentType.LOHNZETTEL, DBDocumentType.SVS_NOTICE,
+        DBDocumentType.EINKOMMENSTEUERBESCHEID, DBDocumentType.JAHRESABSCHLUSS,
+    }
+
+    def _ensure_suggestion_exists(
+        self, document: Document, db_type: DBDocumentType, result: "PipelineResult"
+    ):
+        """Guarantee: every completed document has at least one suggestion.
+
+        If Phase 2 didn't produce any suggestions (due to extraction failure,
+        missing data, or unsupported type), generate a fallback suggestion
+        so the user always gets feedback.
+        """
+        if result.suggestions:
+            return  # Already has suggestions — nothing to do
+
+        # Check if this was detected as an unsupported type
+        classification = result.classification
+        unsupported_type = None
+        if classification and hasattr(classification, 'document_type'):
+            # Check if the original OCR result had _unsupported_type metadata
+            ocr_result_data = document.ocr_result or {}
+            unsupported_type = ocr_result_data.get("_unsupported_type")
+
+        if unsupported_type:
+            # Unsupported document type (K1, Dienstzettel, Übergabeprotokoll)
+            messages = {
+                "k1_form": "K1 (Körperschaftsteuererklärung) — Taxja unterstützt derzeit keine GmbH-Steuererklärungen.",
+                "dienstzettel": "Dienstzettel — kein steuerlich relevantes Dokument. Archiviert.",
+                "handover_protocol": "Übergabeprotokoll — kein steuerlich relevantes Dokument. Archiviert.",
+            }
+            result.suggestions.append({
+                "type": "not_supported",
+                "status": "dismissed",
+                "data": {"unsupported_type": unsupported_type},
+                "review_reason": messages.get(unsupported_type, f"Unsupported document type: {unsupported_type}"),
+                "confidence": 0,
+            })
+            self._log_audit(result, "suggest", f"Unsupported type fallback: {unsupported_type}")
+            return
+
+        # Tax form with no KZ data extracted
+        if db_type in self.TAX_FORM_SUGGESTION_TYPES:
+            type_name = db_type.value.lower()
+            result.suggestions.append({
+                "type": f"import_{type_name}",
+                "status": "needs_review",
+                "data": result.extracted_data or {},
+                "review_reason": "Die strukturierten Steuerdaten konnten nicht vollständig extrahiert werden. Bitte überprüfen Sie das Dokument manuell.",
+                "confidence": classification.confidence if classification else 0,
+                "document_id": document.id,
+                "user_id": document.user_id,
+            })
+            self._log_audit(result, "suggest", f"Tax form fallback suggestion: import_{type_name} (needs_review)")
+            return
+
+        # Invoice/Receipt with no transaction created
+        if db_type in (DBDocumentType.INVOICE, DBDocumentType.RECEIPT):
+            result.suggestions.append({
+                "type": "create_transaction",
+                "status": "needs_review",
+                "data": result.extracted_data or {},
+                "review_reason": "Betrag oder Empfänger konnte nicht extrahiert werden. Bitte überprüfen Sie die Daten.",
+                "confidence": classification.confidence if classification else 0,
+                "document_id": document.id,
+                "user_id": document.user_id,
+            })
+            self._log_audit(result, "suggest", "Transaction fallback suggestion (needs_review)")
+            return
+
+        # Betriebskostenabrechnung
+        if db_type == DBDocumentType.BETRIEBSKOSTENABRECHNUNG:
+            result.suggestions.append({
+                "type": "manual_review",
+                "status": "needs_review",
+                "data": result.extracted_data or {},
+                "review_reason": "Betriebskostenabrechnung erkannt. Bitte überprüfen Sie die einzelnen Positionen.",
+                "confidence": classification.confidence if classification else 0,
+                "document_id": document.id,
+                "user_id": document.user_id,
+            })
+            self._log_audit(result, "suggest", "Betriebskosten fallback suggestion (needs_review)")
+            return
+
+        # Generic fallback — any other type
+        result.suggestions.append({
+            "type": "manual_review",
+            "status": "needs_review",
+            "data": result.extracted_data or {},
+            "review_reason": f"Dokument als {db_type.value} klassifiziert, aber keine automatische Aktion verfügbar.",
+            "confidence": classification.confidence if classification else 0,
+            "document_id": document.id,
+            "user_id": document.user_id,
+        })
+        self._log_audit(result, "suggest", f"Generic fallback suggestion for {db_type.value}")
 
     def _execute_processing_action(
         self,
@@ -1321,6 +1796,23 @@ class DocumentPipelineOrchestrator:
             ocr_result = document.ocr_result or {}
             extracted_data = ocr_result.get("extracted_data", {})
 
+            # Fallback: some OCR extractors store fields at top level of ocr_result
+            # instead of nesting under "extracted_data". Collect non-internal fields.
+            if not extracted_data:
+                _internal_keys = {"_pipeline", "_validation", "confidence", "matched_existing",
+                                  "import_suggestion", "asset_outcome", "transaction_suggestion",
+                                  "tax_analysis", "_additional_receipts",
+                                  "document_transaction_direction",
+                                  "document_transaction_direction_source",
+                                  "document_transaction_direction_confidence",
+                                  "transaction_direction_resolution",
+                                  "commercial_document_semantics",
+                                  "is_reversal"}
+                extracted_data = {
+                    k: v for k, v in ocr_result.items()
+                    if k not in _internal_keys and not k.startswith("_")
+                }
+
             if not extracted_data:
                 return None
 
@@ -1338,6 +1830,14 @@ class DocumentPipelineOrchestrator:
             # Store in document.ocr_result.import_suggestion
             import json as _json
             updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+            if db_type == DBDocumentType.BANK_STATEMENT:
+                updated_ocr.update(
+                    self._build_bank_statement_direction_metadata(
+                        document=document,
+                        ocr_data=updated_ocr,
+                        raw_text=result.raw_text,
+                    )
+                )
             updated_ocr["import_suggestion"] = suggestion
             document.ocr_result = updated_ocr
             from sqlalchemy.orm.attributes import flag_modified
@@ -1348,6 +1848,37 @@ class DocumentPipelineOrchestrator:
         except Exception as e:
             logger.warning(f"Tax form suggestion failed for {db_type.value}: {e}")
             return None
+
+    def _build_bank_statement_direction_metadata(
+        self,
+        *,
+        document: Document,
+        ocr_data: dict[str, Any] | None,
+        raw_text: str | None = None,
+    ) -> dict[str, Any]:
+        from app.services.contract_role_service import ContractRoleService, load_sensitive_user_context
+
+        user = load_sensitive_user_context(self.db, document.user_id)
+        if not user:
+            return {}
+
+        resolution = ContractRoleService(language=getattr(user, "language", None)).resolve_transaction_direction(
+            user,
+            DBDocumentType.BANK_STATEMENT,
+            ocr_data or {},
+            raw_text=raw_text or document.raw_text,
+        )
+        return {
+            "document_transaction_direction": resolution.candidate,
+            "document_transaction_direction_source": resolution.source,
+            "document_transaction_direction_confidence": round(
+                float(resolution.confidence),
+                4,
+            ),
+            "transaction_direction_resolution": resolution.to_payload(),
+            "commercial_document_semantics": resolution.semantics,
+            "is_reversal": bool(resolution.is_reversal),
+        }
 
     def _build_transaction_suggestions(
         self, document: Document, db_type: DBDocumentType, result: PipelineResult,
@@ -1392,7 +1923,7 @@ class DocumentPipelineOrchestrator:
 
             # Auto-create all suggestions as transactions
             for s in suggestions:
-                s["needs_review"] = False  # Don't nag the user
+                s["needs_review"] = True  # Mark for user review
                 try:
                     s["document_id"] = document.id
                     creation_result = service.create_transaction_from_suggestion_with_result(
@@ -1408,12 +1939,14 @@ class DocumentPipelineOrchestrator:
                         s["duplicate_confidence"] = creation_result.duplicate_confidence
                 except Exception as e:
                     logger.warning(f"Auto-create transaction failed for doc {document.id}: {e}")
+                    self.db.rollback()
                     s["status"] = "pending"
 
             return suggestions
 
         except Exception as e:
             logger.warning(f"Transaction suggestion failed for doc {document.id}: {e}")
+            self.db.rollback()
             return []
 
     def _create_multi_receipt_transactions(
@@ -1506,7 +2039,7 @@ class DocumentPipelineOrchestrator:
 
         For asset suggestions: asks about put_into_use_date, business_use_percentage, etc.
         For property suggestions: asks about building_value_ratio, building_year, etc.
-        All questions are trilingual (de/en/zh) with helpText for non-obvious fields.
+        All questions are multilingual (de/en/zh/fr/ru) with helpText for non-obvious fields.
         """
         for suggestion in (result.suggestions or []):
             if not suggestion or not isinstance(suggestion, dict):
@@ -1549,6 +2082,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Wann haben Sie diesen Gegenstand betrieblich in Nutzung genommen?",
                     "en": "When did you start using this item for business?",
                     "zh": "您何时开始将此物品用于业务？",
+                    "fr": "Quand avez-vous commencé à utiliser cet article à des fins professionnelles ?",
+                    "ru": "Когда вы начали использовать этот предмет в бизнесе?",
+                    "hu": "Mikor kezdte üzleti célra használni ezt a tárgyat?",
+                    "pl": "Kiedy zaczął/zaczęła Pan/Pani używać tego przedmiotu w działalności gospodarczej?",
+                    "tr": "Bu esyayi is amacli kullanmaya ne zaman basladiniz?",
+                    "bs": "Kada ste poceli koristiti ovu stavku u poslovne svrhe?",
                 },
                 "input_type": "date",
                 "required": True,
@@ -1558,6 +2097,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Das Datum, an dem Sie den Gegenstand betrieblich nutzen, nicht das Kaufdatum.",
                     "en": "The date you started using this for business, not the purchase date.",
                     "zh": "您开始将此物品用于业务的日期，不是购买日期。",
+                    "fr": "La date de mise en service professionnelle, pas la date d'achat.",
+                    "ru": "Дата начала использования в бизнесе, а не дата покупки.",
+                    "hu": "Az üzleti használat kezdetének dátuma, nem a vásárlás dátuma.",
+                    "pl": "Data rozpoczęcia użytkowania w działalności, a nie data zakupu.",
+                    "tr": "Isletme amacli kullanima basladiginiz tarih, satin alma tarihi degil.",
+                    "bs": "Datum kada ste poceli koristiti za posao, ne datum kupovine.",
                 },
             })
 
@@ -1569,6 +2114,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Wie hoch ist der betriebliche Nutzungsanteil in Prozent?",
                     "en": "What percentage of use is for business?",
                     "zh": "业务使用比例是多少？",
+                    "fr": "Quel pourcentage d'utilisation est professionnel ?",
+                    "ru": "Какой процент использования приходится на бизнес?",
+                    "hu": "Hány százalékban használja üzleti célra?",
+                    "pl": "Jaki procent użytkowania przypada na działalność gospodarczą?",
+                    "tr": "Is amacli kullanim yuzdesi nedir?",
+                    "bs": "Koji postotak koristenja je u poslovne svrhe?",
                 },
                 "input_type": "number",
                 "required": True,
@@ -1579,12 +2130,20 @@ class DocumentPipelineOrchestrator:
                     "de": "100% wenn ausschließlich betrieblich genutzt. Bei gemischter Nutzung den betrieblichen Anteil angeben.",
                     "en": "100% if used exclusively for business. For mixed use, enter the business portion.",
                     "zh": "如果完全用于业务则填100%。混合使用时填写业务占比。",
+                    "fr": "100 % si usage exclusivement professionnel. Pour un usage mixte, indiquez la part professionnelle.",
+                    "ru": "100%, если используется исключительно для бизнеса. При смешанном использовании укажите долю бизнеса.",
+                    "hu": "100%, ha kizárólag üzleti célra használja. Vegyes használat esetén adja meg az üzleti arányt.",
+                    "pl": "100%, jeśli używany wyłącznie w działalności. W przypadku użytku mieszanego podaj udział służbowy.",
+                    "tr": "Yalnizca is amacli kullanimda %100. Karisik kullanimda is payini belirtin.",
+                    "bs": "100% ako se koristi iskljucivo za posao. Za mjesovitu upotrebu navedite poslovni udio.",
                 },
             })
 
         # Conditional: is_used_asset (for vehicles)
+        # Bug #14 fix: Use word boundary matching to avoid "fahrzeugausruestung" false positive
         asset_category = data.get("asset_category", "").lower()
-        is_vehicle = any(kw in asset_category for kw in ("fahrzeug", "vehicle", "auto", "pkw", "kfz", "car"))
+        asset_words = set(asset_category.replace("-", " ").replace("_", " ").split())
+        is_vehicle = bool(asset_words & {"fahrzeug", "vehicle", "auto", "pkw", "kfz", "car"})
         if is_vehicle and data.get("is_used_asset") is None:
             questions.append({
                 "id": "is_used_asset",
@@ -1592,6 +2151,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Ist dies ein Gebrauchtfahrzeug?",
                     "en": "Is this a used vehicle?",
                     "zh": "这是二手车辆吗？",
+                    "fr": "S'agit-il d'un véhicule d'occasion ?",
+                    "ru": "Это подержанный автомобиль?",
+                    "hu": "Ez egy használt jármű?",
+                    "pl": "Czy to pojazd używany?",
+                    "tr": "Bu ikinci el bir arac mi?",
+                    "bs": "Da li je ovo polovni automobil?",
                 },
                 "input_type": "boolean",
                 "required": False,
@@ -1601,6 +2166,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Gebrauchtfahrzeuge haben eine verkürzte Nutzungsdauer für die AfA.",
                     "en": "Used vehicles have a shorter useful life for depreciation purposes.",
                     "zh": "二手车辆的折旧年限较短。",
+                    "fr": "Les véhicules d'occasion ont une durée de vie utile plus courte pour l'amortissement.",
+                    "ru": "Подержанные автомобили имеют более короткий срок полезного использования для амортизации.",
+                    "hu": "A használt járművek rövidebb hasznos élettartammal rendelkeznek az értékcsökkenés szempontjából.",
+                    "pl": "Pojazdy używane mają krótszy okres użytkowania do celów amortyzacji.",
+                    "tr": "Ikinci el araclar, amortisman icin daha kisa faydali omre sahiptir.",
+                    "bs": "Polovna vozila imaju kraci vijek trajanja za potrebe amortizacije.",
                 },
             })
 
@@ -1612,19 +2183,31 @@ class DocumentPipelineOrchestrator:
                     "de": "Welche Abschreibungsmethode möchten Sie verwenden?",
                     "en": "Which depreciation method would you like to use?",
                     "zh": "您希望使用哪种折旧方法？",
+                    "fr": "Quelle méthode d'amortissement souhaitez-vous utiliser ?",
+                    "ru": "Какой метод амортизации вы хотите использовать?",
+                    "hu": "Milyen értékcsökkenési módszert szeretne alkalmazni?",
+                    "pl": "Jaką metodę amortyzacji chciałby/chciałaby Pan/Pani zastosować?",
+                    "tr": "Hangi amortisman yontemini kullanmak istersiniz?",
+                    "bs": "Koju metodu amortizacije zelite koristiti?",
                 },
                 "input_type": "select",
                 "required": False,
                 "field_key": "depreciation_method",
                 "default_value": "linear",
                 "options": [
-                    {"value": "linear", "label": {"de": "Linear (Standard)", "en": "Linear (Standard)", "zh": "直线法（标准）"}},
-                    {"value": "degressive", "label": {"de": "Degressiv", "en": "Degressive", "zh": "递减法"}},
+                    {"value": "linear", "label": {"de": "Linear (Standard)", "en": "Linear (Standard)", "zh": "直线法（标准）", "fr": "Linéaire (standard)", "ru": "Линейный (стандарт)", "hu": "Lineáris (standard)", "pl": "Liniowa (standardowa)", "tr": "Dogrusal (Standart)", "bs": "Linearna (standardna)"}},
+                    {"value": "degressive", "label": {"de": "Degressiv", "en": "Degressive", "zh": "递减法", "fr": "Dégressif", "ru": "Дегрессивный", "hu": "Degresszív", "pl": "Degresywna", "tr": "Azalan bakiyeler", "bs": "Degresivna"}},
                 ],
                 "help_text": {
                     "de": "Linear ist der Standard. Degressive AfA ist nur in bestimmten Fällen möglich.",
                     "en": "Linear is the default. Degressive depreciation is only available in certain cases.",
                     "zh": "直线法是默认方式。递减法仅在特定情况下可用。",
+                    "fr": "Le linéaire est la méthode par défaut. L'amortissement dégressif n'est disponible que dans certains cas.",
+                    "ru": "Линейный метод — стандарт. Дегрессивная амортизация доступна только в определённых случаях.",
+                    "hu": "A lineáris a standard módszer. A degresszív értékcsökkenés csak bizonyos esetekben alkalmazható.",
+                    "pl": "Metoda liniowa jest domyślna. Amortyzacja degresywna jest dostępna tylko w określonych przypadkach.",
+                    "tr": "Dogrusal yontem standarttir. Azalan bakiyeler amortismani yalnizca belirli durumlarda kullanilabilir.",
+                    "bs": "Linearna metoda je standardna. Degresivna amortizacija je dostupna samo u odredenim slucajevima.",
                 },
             })
 
@@ -1642,6 +2225,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Wie ist das Gebäude-zu-Grund-Verhältnis?",
                     "en": "What is the building-to-land value ratio?",
                     "zh": "建筑与土地的价值比例是多少？",
+                    "fr": "Quel est le rapport de valeur bâtiment/terrain ?",
+                    "ru": "Каково соотношение стоимости здания и земли?",
+                    "hu": "Mekkora az épület és a telek értékaránya?",
+                    "pl": "Jaki jest stosunek wartości budynku do gruntu?",
+                    "tr": "Bina-arsa deger orani nedir?",
+                    "bs": "Koji je omjer vrijednosti zgrade i zemljista?",
                 },
                 "input_type": "select",
                 "required": True,
@@ -1651,12 +2240,18 @@ class DocumentPipelineOrchestrator:
                     {"value": "0.7", "label": "70/30 (Standard)"},
                     {"value": "0.6", "label": "60/40"},
                     {"value": "0.8", "label": "80/20"},
-                    {"value": "custom", "label": {"de": "Eigener Wert...", "en": "Custom value...", "zh": "自定义..."}},
+                    {"value": "custom", "label": {"de": "Eigener Wert...", "en": "Custom value...", "zh": "自定义...", "fr": "Valeur personnalisée...", "ru": "Своё значение...", "hu": "Egyéni érték...", "pl": "Wartość niestandardowa...", "tr": "Ozel deger...", "bs": "Prilagodena vrijednost..."}},
                 ],
                 "help_text": {
                     "de": "Standard ist 70% Gebäude / 30% Grund. Verwenden Sie Ihr Liegenschaftsgutachten falls vorhanden.",
                     "en": "Standard is 70% building / 30% land. Use your Liegenschaftsgutachten if available.",
                     "zh": "标准比例为70%建筑/30%土地。如有物业评估报告请使用实际数据。",
+                    "fr": "Le standard est 70 % bâtiment / 30 % terrain. Utilisez votre expertise immobilière si disponible.",
+                    "ru": "Стандарт — 70% здание / 30% земля. Используйте экспертизу недвижимости, если есть.",
+                    "hu": "A standard 70% épület / 30% telek. Használja az ingatlanértékelést, ha rendelkezésre áll.",
+                    "pl": "Standard to 70% budynek / 30% grunt. Użyj operatu szacunkowego, jeśli jest dostępny.",
+                    "tr": "Standart %70 bina / %30 arsadir. Varsa gayrimenkul degerleme raporunuzu kullanin.",
+                    "bs": "Standard je 70% zgrada / 30% zemljiste. Koristite procjenu nekretnine ako je dostupna.",
                 },
             })
 
@@ -1668,6 +2263,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Wann wurde das Gebäude errichtet?",
                     "en": "When was the building constructed?",
                     "zh": "建筑何时建成？",
+                    "fr": "Quand le bâtiment a-t-il été construit ?",
+                    "ru": "Когда было построено здание?",
+                    "hu": "Mikor épült az épület?",
+                    "pl": "Kiedy budynek został wybudowany?",
+                    "tr": "Bina ne zaman insa edildi?",
+                    "bs": "Kada je zgrada izgradena?",
                 },
                 "input_type": "number",
                 "required": False,
@@ -1678,6 +2279,12 @@ class DocumentPipelineOrchestrator:
                     "de": "Das Baujahr beeinflusst den AfA-Satz (1,5% oder 2% p.a.).",
                     "en": "The construction year affects the depreciation rate (1.5% or 2% p.a.).",
                     "zh": "建造年份影响折旧率（每年1.5%或2%）。",
+                    "fr": "L'année de construction affecte le taux d'amortissement (1,5 % ou 2 % par an).",
+                    "ru": "Год постройки влияет на ставку амортизации (1,5% или 2% в год).",
+                    "hu": "Az építés éve befolyásolja az értékcsökkenési rátát (évi 1,5% vagy 2%).",
+                    "pl": "Rok budowy wpływa na stawkę amortyzacji (1,5% lub 2% rocznie).",
+                    "tr": "Insaat yili amortisman oranini etkiler (yillik %1,5 veya %2).",
+                    "bs": "Godina izgradnje utice na stopu amortizacije (1,5% ili 2% godisnje).",
                 },
             })
 
@@ -1689,20 +2296,32 @@ class DocumentPipelineOrchestrator:
                     "de": "Wie wird die Immobilie genutzt?",
                     "en": "How is the property used?",
                     "zh": "房产如何使用？",
+                    "fr": "Comment le bien est-il utilisé ?",
+                    "ru": "Как используется недвижимость?",
+                    "hu": "Hogyan használják az ingatlant?",
+                    "pl": "W jaki sposób jest używana nieruchomość?",
+                    "tr": "Gayrimenkul nasil kullaniliyor?",
+                    "bs": "Kako se nekretnina koristi?",
                 },
                 "input_type": "select",
                 "required": False,
                 "field_key": "intended_use",
                 "default_value": "rental",
                 "options": [
-                    {"value": "rental", "label": {"de": "Vermietung", "en": "Rental", "zh": "出租"}},
-                    {"value": "own_use", "label": {"de": "Eigennutzung", "en": "Own use", "zh": "自用"}},
-                    {"value": "mixed", "label": {"de": "Gemischt", "en": "Mixed", "zh": "混合使用"}},
+                    {"value": "rental", "label": {"de": "Vermietung", "en": "Rental", "zh": "出租", "fr": "Location", "ru": "Аренда", "hu": "Bérbeadás", "pl": "Wynajem", "tr": "Kiralama", "bs": "Iznajmljivanje"}},
+                    {"value": "own_use", "label": {"de": "Eigennutzung", "en": "Own use", "zh": "自用", "fr": "Usage personnel", "ru": "Собственное использование", "hu": "Saját használat", "pl": "Użytek własny", "tr": "Kendi kullanimi", "bs": "Vlastita upotreba"}},
+                    {"value": "mixed", "label": {"de": "Gemischt", "en": "Mixed", "zh": "混合使用", "fr": "Mixte", "ru": "Смешанное", "hu": "Vegyes", "pl": "Mieszany", "tr": "Karisik", "bs": "Mjesovito"}},
                 ],
                 "help_text": {
                     "de": "Nur bei Vermietung oder betrieblicher Nutzung können Kosten steuerlich abgesetzt werden.",
                     "en": "Only rental or business use allows tax deductions on costs.",
                     "zh": "仅出租或业务使用的费用可以税前扣除。",
+                    "fr": "Seul l'usage locatif ou professionnel permet des déductions fiscales sur les coûts.",
+                    "ru": "Только аренда или деловое использование позволяют налоговые вычеты на расходы.",
+                    "hu": "Csak bérbeadás vagy üzleti használat esetén érvényesíthetők adólevonások a költségekre.",
+                    "pl": "Tylko wynajem lub użytek służbowy umożliwia odliczenia podatkowe kosztów.",
+                    "tr": "Yalnizca kiralama veya ticari kullanim masraflarda vergi indirimi saglar.",
+                    "bs": "Samo iznajmljivanje ili poslovna upotreba omogucava porezne odbitke na troskove.",
                 },
             })
 
@@ -1817,6 +2436,9 @@ class DocumentPipelineOrchestrator:
                     "create_loan_repayment",
                     "create_recurring_expense",
                     "create_insurance_recurring",
+                    "link_to_existing",
+                    # All import_* types (tax forms, payslips, etc.)
+                    *(v for v in self.TAX_FORM_SUGGESTION_TYPE_MAP.values()),
                 }
 
                 for s in result.suggestions:
@@ -1967,6 +2589,9 @@ class DocumentPipelineOrchestrator:
             try:
                 # Ensure document_id is set
                 suggestion["document_id"] = document_id
+                # User has explicitly reviewed and approved these suggestions
+                suggestion["needs_review"] = False
+                suggestion["reviewed"] = True
                 creation_result = service.create_transaction_from_suggestion_with_result(
                     suggestion, user_id
                 )

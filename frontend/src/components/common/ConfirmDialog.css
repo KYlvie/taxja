@@ -1,282 +1,209 @@
-/* ConfirmDialog — AI Assistant chat-style */
+/* ConfirmDialog — Full-screen Robot style (matching OnboardingGuide) */
 
-.cfd-overlay {
+/* ── Overlay (dark, full screen) ── */
+.cfd-robot-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 6, 18, 0.55);
-  backdrop-filter: blur(4px);
+  z-index: 10000;
+  background: radial-gradient(ellipse at 40% 50%, rgba(10, 5, 25, 0.97), rgba(3, 3, 12, 0.99)) !important;
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 10000;
-  padding: 20px;
-  animation: cfdFadeIn 0.3s ease-out;
+  animation: cfdRobotFadeIn 0.4s ease-out;
 }
 
-@keyframes cfdFadeIn {
+.cfd-robot-overlay--exit {
+  animation: cfdRobotFadeOut 0.4s ease-in forwards;
+}
+
+@keyframes cfdRobotFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.cfd-dialog {
-  position: relative;
-  max-width: 440px;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.97);
-  backdrop-filter: blur(24px) saturate(1.5);
-  -webkit-backdrop-filter: blur(24px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow:
-    0 0 0 1px rgba(99, 102, 241, 0.08),
-    0 24px 64px -12px rgba(0, 0, 0, 0.22),
-    0 0 80px -20px rgba(99, 102, 241, 0.12);
-  animation: cfdSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+@keyframes cfdRobotFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
-@keyframes cfdSlideUp {
-  from { opacity: 0; transform: translateY(24px) scale(0.95); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-/* ── Header ── */
-.cfd-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(6, 182, 212, 0.04));
-  border-bottom: 1px solid rgba(99, 102, 241, 0.08);
-}
-
-.cfd-avatar {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
-}
-
-.cfd-avatar-icon {
-  font-size: 1.1rem;
-  filter: grayscale(0);
-}
-
-.cfd-avatar-pulse {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #10b981;
-  border: 2px solid #fff;
-  animation: cfdPulse 2s ease-in-out infinite;
-}
-
-@keyframes cfdPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-  50% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
-}
-
-.cfd-header-info {
+/* ── Scene (robot + bubble) ── */
+.cfd-robot-scene {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 24px;
+  max-width: 600px;
+  width: 100%;
 }
 
-.cfd-assistant-name {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--color-text);
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
+/* ── Robot container ── */
+.cfd-robot-container {
+  animation: cfdRobotEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-.cfd-status {
-  font-size: 0.7rem;
-  color: #10b981;
-  font-weight: 500;
+@keyframes cfdRobotEntrance {
+  from {
+    opacity: 0;
+    transform: scale(0.3) translateY(60px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
-/* ── Chat area ── */
-.cfd-chat {
-  padding: 20px 20px 8px;
-  min-height: 60px;
-}
-
-.cfd-bubble-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  animation: cfdBubbleIn 0.3s ease-out;
+/* ── Floating bubble ── */
+.cfd-robot-bubble {
+  background: rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 20px;
+  padding: 28px 32px;
+  max-width: 520px;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.92) !important;
+  animation: cfdBubbleIn 0.4s ease-out 0.3s both;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 0 80px rgba(124, 58, 237, 0.06);
 }
 
 @keyframes cfdBubbleIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.cfd-bubble-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(6, 182, 212, 0.1));
+/* Variant borders — subtle glow, no strong colored borders */
+.cfd-robot-bubble--danger {
+  border-color: rgba(220, 38, 38, 0.15) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 60px rgba(220, 38, 38, 0.06);
+}
+
+.cfd-robot-bubble--warning {
+  border-color: rgba(217, 119, 6, 0.15) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 60px rgba(217, 119, 6, 0.06);
+}
+
+.cfd-robot-bubble--success {
+  border-color: rgba(22, 163, 106, 0.15) !important;
+}
+
+/* ── Bubble title ── */
+.cfd-robot-bubble-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: rgba(255, 255, 255, 0.95);
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  flex-shrink: 0;
-  margin-top: 2px;
+  gap: 8px;
 }
 
-.cfd-bubble {
-  max-width: 85%;
-  padding: 12px 16px;
-  border-radius: 4px 16px 16px 16px;
-  font-size: 0.88rem;
-  line-height: 1.6;
-  color: var(--color-text);
-  position: relative;
+/* ── Bubble text ── */
+.cfd-robot-bubble-text {
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.82);
 }
 
-.cfd-bubble--info {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.04));
-  border: 1px solid rgba(99, 102, 241, 0.12);
+.cfd-robot-bubble-extra {
+  margin-top: 12px;
 }
 
-.cfd-bubble--warning {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
-  border: 1px solid rgba(245, 158, 11, 0.15);
+.cfd-robot-bubble-extra a {
+  color: #a78bfa;
+  text-decoration: underline;
 }
 
-.cfd-bubble--danger {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.04));
-  border: 1px solid rgba(239, 68, 68, 0.12);
-}
-
-.cfd-bubble--success {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.04));
-  border: 1px solid rgba(16, 185, 129, 0.12);
-}
-
-.cfd-bubble-title {
-  font-weight: 700;
-  font-size: 0.85rem;
-  margin-bottom: 4px;
-  color: var(--color-text);
-}
-
-.cfd-bubble-text {
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-}
-
-/* Typing dots */
-.cfd-typing-dots {
-  display: flex;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.cfd-typing-dots span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  opacity: 0.4;
-  animation: cfdDotBounce 1.2s ease-in-out infinite;
-}
-
-.cfd-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
-.cfd-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes cfdDotBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-6px); opacity: 1; }
+.cfd-robot-bubble-extra a:hover {
+  color: #c4b5fd;
 }
 
 /* ── Action buttons ── */
-.cfd-actions {
+.cfd-robot-actions {
   display: flex;
-  gap: 10px;
-  padding: 12px 20px 20px;
-  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
   opacity: 0;
   transform: translateY(8px);
-  transition: all 0.3s ease;
+  transition: opacity 0.3s, transform 0.3s;
   pointer-events: none;
 }
 
-.cfd-actions--visible {
+.cfd-robot-actions--visible {
   opacity: 1;
   transform: translateY(0);
-  pointer-events: auto;
+  pointer-events: all;
 }
 
-.cfd-btn {
-  padding: 9px 22px;
+.cfd-robot-btn {
+  flex: 1;
+  padding: 12px 24px;
   border-radius: 12px;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
   border: none;
-  font-family: var(--font-sans);
-  min-width: 90px;
 }
 
-.cfd-btn:disabled {
+.cfd-robot-btn--cancel {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cfd-robot-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.cfd-robot-btn--confirm {
+  background: var(--btn-color, #7c3aed);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.cfd-robot-btn--confirm:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.cfd-robot-btn--confirm:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.cfd-btn--cancel {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--color-text-muted);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.cfd-btn--cancel:hover { background: rgba(0, 0, 0, 0.07); }
-
-.cfd-btn--info {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(99, 102, 241, 0.25);
-}
-.cfd-btn--info:hover:not(:disabled) { box-shadow: 0 5px 18px rgba(99, 102, 241, 0.35); transform: translateY(-1px); }
-
-.cfd-btn--success {
-  background: linear-gradient(135deg, #10b981, #34d399);
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(16, 185, 129, 0.25);
-}
-.cfd-btn--success:hover:not(:disabled) { box-shadow: 0 5px 18px rgba(16, 185, 129, 0.35); transform: translateY(-1px); }
-
-.cfd-btn--warning {
-  background: linear-gradient(135deg, #f59e0b, #fbbf24);
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.25);
-}
-.cfd-btn--warning:hover:not(:disabled) { box-shadow: 0 5px 18px rgba(245, 158, 11, 0.35); transform: translateY(-1px); }
-
-.cfd-btn--danger {
-  background: linear-gradient(135deg, #ef4444, #f87171);
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(239, 68, 68, 0.25);
-}
-.cfd-btn--danger:hover:not(:disabled) { box-shadow: 0 5px 18px rgba(239, 68, 68, 0.35); transform: translateY(-1px); }
-
 /* ── Mobile ── */
-@media (max-width: 480px) {
-  .cfd-dialog { max-width: 100%; border-radius: 16px; }
-  .cfd-chat { padding: 16px 16px 8px; }
-  .cfd-actions { padding: 10px 16px 16px; flex-direction: column-reverse; }
-  .cfd-btn { width: 100%; text-align: center; }
+@media (max-width: 640px) {
+  .cfd-robot-scene {
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .cfd-robot-container {
+    transform: scale(0.7);
+    transform-origin: center bottom;
+  }
+
+  .cfd-robot-bubble {
+    padding: 18px 20px;
+    border-radius: 16px;
+  }
+
+  .cfd-robot-bubble-text {
+    font-size: 0.88rem;
+  }
+
+  .cfd-robot-btn {
+    padding: 10px 16px;
+    font-size: 0.88rem;
+  }
 }

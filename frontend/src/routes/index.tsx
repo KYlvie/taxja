@@ -14,12 +14,13 @@ import DocumentsPage from '../pages/DocumentsPage';
 import ReportsPage from '../pages/ReportsPage';
 import ProfilePage from '../pages/ProfilePage';
 import PropertiesPage from '../pages/PropertiesPage';
+import AssetInsightsPage from '../pages/AssetInsightsPage';
+import LiabilitiesPage from '../pages/LiabilitiesPage';
+import LiabilityOverviewPage from '../pages/LiabilityOverviewPage';
 import PricingPage from '../pages/PricingPage';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
 import AdvancedManagementPage from '../pages/AdvancedManagementPage';
 import TaxToolsPage from '../pages/TaxToolsPage';
-import { PropertyPortfolioDashboard } from '../components/properties/PropertyPortfolioDashboard';
-import { PropertyComparison } from '../components/properties/PropertyComparison';
 import TaxConfigAdmin from '../pages/admin/TaxConfigAdmin';
 import AdminDashboard from '../pages/admin/AdminDashboard';
 import RecurringTransactionsPage from '../pages/RecurringTransactionsPage';
@@ -125,11 +126,27 @@ export const router = createBrowserRouter([
       },
       {
         path: 'properties/portfolio',
-        element: <PropertyPortfolioDashboard />,
+        element: <AssetInsightsPage />,
       },
       {
         path: 'properties/comparison',
-        element: <PropertyComparison />,
+        element: <Navigate to="/properties/portfolio#comparison" replace />,
+      },
+      {
+        path: 'liabilities',
+        element: <LiabilitiesPage />,
+      },
+      {
+        path: 'liabilities/overview',
+        element: <LiabilityOverviewPage />,
+      },
+      {
+        path: 'liabilities/new',
+        element: <LiabilitiesPage />,
+      },
+      {
+        path: 'liabilities/:id',
+        element: <LiabilitiesPage />,
       },
       {
         path: 'properties/:propertyId',

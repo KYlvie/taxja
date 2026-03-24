@@ -37,7 +37,7 @@ class EmployerMonth(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     year_month = Column(String(7), nullable=False, index=True)  # YYYY-MM
     status = Column(
         SQLEnum(EmployerMonthStatus),
@@ -84,8 +84,8 @@ class EmployerMonthDocument(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    employer_month_id = Column(Integer, ForeignKey("employer_months.id"), nullable=False, index=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    employer_month_id = Column(Integer, ForeignKey("employer_months.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     relation_type = Column(String(30), nullable=False, default="supporting")
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

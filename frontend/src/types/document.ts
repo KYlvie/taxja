@@ -54,6 +54,16 @@ export interface ExtractedData {
   end_date?: string;
   tenant_name?: string;
   landlord_name?: string;
+  user_contract_role?: string;
+  user_contract_role_source?: string;
+  user_contract_role_confidence?: number;
+  contract_role_resolution?: Record<string, any>;
+  document_transaction_direction?: string;
+  document_transaction_direction_source?: string;
+  document_transaction_direction_confidence?: number;
+  transaction_direction_resolution?: Record<string, any>;
+  commercial_document_semantics?: string;
+  is_reversal?: boolean;
   contract_type?: string;
   betriebskosten?: number;
   heating_costs?: number;
@@ -86,8 +96,11 @@ export interface LineItem {
   description: string;
   amount: number;
   quantity?: number;
+  category?: string;
   is_deductible?: boolean;
   deduction_reason?: string;
+  vat_rate?: number | null;
+  sort_order?: number;
 }
 
 export interface Document {

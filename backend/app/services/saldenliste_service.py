@@ -12,7 +12,12 @@ from sqlalchemy import extract
 from sqlalchemy.orm import Session
 
 from app.models.transaction import IncomeCategory, ExpenseCategory, Transaction, TransactionType
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.user import User, UserType
+from app.services.posting_line_utils import iter_transaction_posting_records
+from app.services.report_transaction_filters import (
+    should_include_in_saldenliste,
+)
 
 
 @dataclass
@@ -520,20 +525,32 @@ KONTENPLAN_GMBH: List[AccountDef] = [
 # ── Kontenklasse labels (for grouping headers) ──────────────────────────
 
 KONTENKLASSE_LABELS = {
-    0: {"de": "Anlagevermögen", "en": "Non-Current Assets", "zh": "非流动资产"},
-    1: {"de": "Umlaufvermögen", "en": "Current Assets", "zh": "流动资产"},
-    2: {"de": "Eigenkapital und Verbindlichkeiten", "en": "Equity and Liabilities", "zh": "权益及负债"},
-    3: {"de": "Vorräte", "en": "Inventory", "zh": "存货"},
-    4: {"de": "Erträge", "en": "Income", "zh": "收入"},
-    5: {"de": "Materialaufwand", "en": "Material Expenses", "zh": "材料费用"},
-    6: {"de": "Personalaufwand", "en": "Personnel Expenses", "zh": "人工费用"},
-    7: {"de": "Sonstiger betrieblicher Aufwand", "en": "Other Operating Expenses", "zh": "其他经营费用"},
-    8: {"de": "Finanzerträge und -aufwendungen", "en": "Financial Income and Expenses", "zh": "财务收支"},
-    9: {"de": "Abschlusskonten", "en": "Closing Accounts", "zh": "结转"},
+    0: {"de": "Anlagevermögen", "en": "Non-Current Assets", "zh": "非流动资产", "fr": "Immobilisations", "ru": "Внеоборотные активы", "hu": "Befektetett eszközök", "pl": "Aktywa trwałe", "tr": "Duran Varlıklar", "bs": "Dugotrajna imovina"},
+    1: {"de": "Umlaufvermögen", "en": "Current Assets", "zh": "流动资产", "fr": "Actifs circulants", "ru": "Оборотные активы", "hu": "Forgóeszközök", "pl": "Aktywa obrotowe", "tr": "Dönen Varlıklar", "bs": "Kratkotrajna imovina"},
+    2: {"de": "Eigenkapital und Verbindlichkeiten", "en": "Equity and Liabilities", "zh": "权益及负债", "fr": "Capitaux propres et dettes", "ru": "Собственный капитал и обязательства", "hu": "Saját tőke és kötelezettségek", "pl": "Kapitał własny i zobowiązania", "tr": "Özkaynak ve Yükümlülükler", "bs": "Kapital i obaveze"},
+    3: {"de": "Vorräte", "en": "Inventory", "zh": "存货", "fr": "Stocks", "ru": "Запасы", "hu": "Készletek", "pl": "Zapasy", "tr": "Stoklar", "bs": "Zalihe"},
+    4: {"de": "Erträge", "en": "Income", "zh": "收入", "fr": "Revenus", "ru": "Доходы", "hu": "Bevételek", "pl": "Przychody", "tr": "Gelirler", "bs": "Prihodi"},
+    5: {"de": "Materialaufwand", "en": "Material Expenses", "zh": "材料费用", "fr": "Charges de matières", "ru": "Материальные затраты", "hu": "Anyagköltségek", "pl": "Koszty materiałowe", "tr": "Malzeme Giderleri", "bs": "Troškovi materijala"},
+    6: {"de": "Personalaufwand", "en": "Personnel Expenses", "zh": "人工费用", "fr": "Charges de personnel", "ru": "Расходы на персонал", "hu": "Személyi jellegű ráfordítások", "pl": "Koszty osobowe", "tr": "Personel Giderleri", "bs": "Troškovi osoblja"},
+    7: {"de": "Sonstiger betrieblicher Aufwand", "en": "Other Operating Expenses", "zh": "其他经营费用", "fr": "Autres charges d'exploitation", "ru": "Прочие операционные расходы", "hu": "Egyéb üzemi ráfordítások", "pl": "Pozostałe koszty operacyjne", "tr": "Diğer Faaliyet Giderleri", "bs": "Ostali poslovni rashodi"},
+    8: {"de": "Finanzerträge und -aufwendungen", "en": "Financial Income and Expenses", "zh": "财务收支", "fr": "Produits et charges financiers", "ru": "Финансовые доходы и расходы", "hu": "Pénzügyi bevételek és ráfordítások", "pl": "Przychody i koszty finansowe", "tr": "Finansal Gelir ve Giderler", "bs": "Finansijski prihodi i rashodi"},
+    9: {"de": "Abschlusskonten", "en": "Closing Accounts", "zh": "结转", "fr": "Comptes de clôture", "ru": "Заключительные счета", "hu": "Záró számlák", "pl": "Konta zamknięcia", "tr": "Kapanış Hesapları", "bs": "Zaključni računi"},
 }
 
 # EA user types that use the simplified EA account plan
 _EA_USER_TYPES = {UserType.EMPLOYEE, UserType.SELF_EMPLOYED, UserType.LANDLORD, UserType.MIXED}
+
+
+def _allowed_saldenliste_posting_types(user_type: UserType) -> set[LineItemPostingType]:
+    if user_type in _EA_USER_TYPES:
+        return {LineItemPostingType.INCOME, LineItemPostingType.EXPENSE}
+    return {
+        LineItemPostingType.INCOME,
+        LineItemPostingType.EXPENSE,
+        LineItemPostingType.ASSET_ACQUISITION,
+        LineItemPostingType.LIABILITY_DRAWDOWN,
+        LineItemPostingType.LIABILITY_REPAYMENT,
+    }
 
 
 def get_account_plan(user_type: UserType) -> List[AccountDef]:
@@ -551,6 +568,14 @@ def _find_sonstige_account(account_plan: List[AccountDef]) -> Optional[AccountDe
     """Find the 'Sonstige' (other) fallback account in the plan."""
     for acct in account_plan:
         if ExpenseCategory.OTHER in acct.expense_categories:
+            return acct
+    return None
+
+
+def _find_account_by_konto(account_plan: List[AccountDef], konto: str) -> Optional[AccountDef]:
+    """Find an account definition by its konto number."""
+    for acct in account_plan:
+        if acct.konto == konto:
             return acct
     return None
 
@@ -580,6 +605,19 @@ def _map_transaction_to_konto(transaction, account_plan: List[AccountDef]) -> st
             if transaction.expense_category in acct.expense_categories:
                 return acct.konto
 
+    if transaction.type == TransactionType.ASSET_ACQUISITION:
+        asset_account = _find_account_by_konto(account_plan, "0600")
+        if asset_account is not None:
+            return asset_account.konto
+
+    if transaction.type in {
+        TransactionType.LIABILITY_DRAWDOWN,
+        TransactionType.LIABILITY_REPAYMENT,
+    }:
+        loan_account = _find_account_by_konto(account_plan, "2800")
+        if loan_account is not None:
+            return loan_account.konto
+
     # Fallback: map to "Sonstige" (other) account
     fallback = _find_sonstige_account(account_plan)
     if fallback is not None:
@@ -589,8 +627,18 @@ def _map_transaction_to_konto(transaction, account_plan: List[AccountDef]) -> st
     return account_plan[-1].konto
 
 
+def _saldenliste_entry_amount(entry) -> Decimal:
+    """Return the signed posting amount for a transaction or posting record."""
+    total_amount = getattr(entry, "total_amount", None)
+    amount = total_amount if total_amount is not None else getattr(entry, "amount", Decimal("0"))
+    amount = amount or Decimal("0")
+    if getattr(entry, "type", None) == TransactionType.LIABILITY_REPAYMENT:
+        return -amount
+    return amount
+
+
 def _compute_yearly_balances(
-    transactions, account_plan: List[AccountDef]
+    transactions, account_plan: List[AccountDef], user_type: UserType
 ) -> Dict[str, Decimal]:
     """Compute yearly cumulative balance (Saldo) for each konto.
 
@@ -607,10 +655,14 @@ def _compute_yearly_balances(
         Dict mapping konto string → total Decimal amount.
     """
     balances: Dict[str, Decimal] = {acct.konto: Decimal("0") for acct in account_plan}
+    allowed_posting_types = _allowed_saldenliste_posting_types(user_type)
     for txn in transactions:
-        konto = _map_transaction_to_konto(txn, account_plan)
-        amount = Decimal(str(txn.amount)) if not isinstance(txn.amount, Decimal) else txn.amount
-        balances[konto] = balances.get(konto, Decimal("0")) + amount
+        for record in iter_transaction_posting_records(txn, include_private_use=False):
+            if record.posting_type not in allowed_posting_types:
+                continue
+            konto = _map_transaction_to_konto(record, account_plan)
+            amount = _saldenliste_entry_amount(record)
+            balances[konto] = balances.get(konto, Decimal("0")) + amount
     return balances
 
 
@@ -655,7 +707,7 @@ def _group_by_kontenklasse(
         - ``accounts``: list of ``{"konto", "label", "saldo"}`` dicts
         - ``subtotal``: Decimal sum of all account saldos in the group
     """
-    if language not in ("de", "en", "zh"):
+    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
         language = "de"
 
     # Collect accounts into groups keyed by kontenklasse
@@ -759,7 +811,7 @@ def generate_saldenliste(
     Returns:
         A dict matching the Saldenliste mit VJ response schema.
     """
-    if language not in ("de", "en", "zh"):
+    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
         language = "de"
 
     account_plan = get_account_plan(user.user_type)
@@ -773,6 +825,10 @@ def generate_saldenliste(
         )
         .all()
     )
+    current_txns = [
+        txn for txn in current_txns
+        if should_include_in_saldenliste(txn, user.user_type)
+    ]
     prior_txns = (
         db.query(Transaction)
         .filter(
@@ -781,10 +837,14 @@ def generate_saldenliste(
         )
         .all()
     )
+    prior_txns = [
+        txn for txn in prior_txns
+        if should_include_in_saldenliste(txn, user.user_type)
+    ]
 
     # Compute balances
-    current_balances = _compute_yearly_balances(current_txns, account_plan)
-    prior_balances = _compute_yearly_balances(prior_txns, account_plan)
+    current_balances = _compute_yearly_balances(current_txns, account_plan, user.user_type)
+    prior_balances = _compute_yearly_balances(prior_txns, account_plan, user.user_type)
 
     # Build groups with current + prior data and deviations
     current_groups = _group_by_kontenklasse(current_balances, account_plan, language)
@@ -871,7 +931,7 @@ def generate_saldenliste(
 
 
 def _compute_monthly_balances(
-    transactions, account_plan: List[AccountDef]
+    transactions, account_plan: List[AccountDef], user_type: UserType
 ) -> Dict[str, Dict[int, Decimal]]:
     """Compute monthly balances for each konto across months 1-12.
 
@@ -889,13 +949,19 @@ def _compute_monthly_balances(
     balances: Dict[str, Dict[int, Decimal]] = {
         acct.konto: {m: Decimal("0") for m in range(1, 13)} for acct in account_plan
     }
+    allowed_posting_types = _allowed_saldenliste_posting_types(user_type)
     for txn in transactions:
-        konto = _map_transaction_to_konto(txn, account_plan)
-        month = txn.transaction_date.month
-        amount = Decimal(str(txn.amount)) if not isinstance(txn.amount, Decimal) else txn.amount
-        if konto not in balances:
-            balances[konto] = {m: Decimal("0") for m in range(1, 13)}
-        balances[konto][month] += amount
+        for record in iter_transaction_posting_records(txn, include_private_use=False):
+            if record.posting_type not in allowed_posting_types:
+                continue
+            if not record.transaction_date:
+                continue
+            konto = _map_transaction_to_konto(record, account_plan)
+            month = record.transaction_date.month
+            amount = _saldenliste_entry_amount(record)
+            if konto not in balances:
+                balances[konto] = {m: Decimal("0") for m in range(1, 13)}
+            balances[konto][month] += amount
     return balances
 
 
@@ -918,7 +984,7 @@ def _group_by_kontenklasse_monthly(
     Returns:
         Sorted list of group dicts with monthly data.
     """
-    if language not in ("de", "en", "zh"):
+    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
         language = "de"
 
     groups_map: Dict[int, List[dict]] = {}
@@ -1053,7 +1119,7 @@ def generate_periodensaldenliste(
     Returns:
         A dict matching the Periodensaldenliste response schema.
     """
-    if language not in ("de", "en", "zh"):
+    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
         language = "de"
 
     account_plan = get_account_plan(user.user_type)
@@ -1067,9 +1133,13 @@ def generate_periodensaldenliste(
         )
         .all()
     )
+    transactions = [
+        txn for txn in transactions
+        if should_include_in_saldenliste(txn, user.user_type)
+    ]
 
     # Compute monthly balances and build groups
-    monthly_balances = _compute_monthly_balances(transactions, account_plan)
+    monthly_balances = _compute_monthly_balances(transactions, account_plan, user.user_type)
     groups = _group_by_kontenklasse_monthly(monthly_balances, account_plan, language)
     summary = _build_summary_totals_monthly(groups, user.user_type)
 

@@ -2,9 +2,10 @@ import type {
   EmployerAnnualArchive,
   EmployerMonth,
 } from '../services/employerService';
-import { normalizeLanguage } from './locale';
+import { normalizeLanguage, getLocaleForLanguage } from './locale';
+import i18n from '../i18n';
 
-type EmployerUiLanguage = 'de' | 'en' | 'zh';
+type EmployerUiLanguage = 'de' | 'en' | 'zh' | 'fr' | 'ru';
 
 const resolveLanguage = (language?: string): EmployerUiLanguage =>
   normalizeLanguage(language) as EmployerUiLanguage;
@@ -22,7 +23,7 @@ export const formatEmployerMoney = (
     return emptyValue;
   }
 
-  return numeric.toLocaleString('de-AT', {
+  return numeric.toLocaleString(getLocaleForLanguage(i18n.language), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -37,7 +38,7 @@ export const formatEmployerDate = (
   }
 
   try {
-    return new Date(value).toLocaleDateString('de-AT');
+    return new Date(value).toLocaleDateString(getLocaleForLanguage(i18n.language));
   } catch {
     return value;
   }
@@ -52,7 +53,7 @@ export const formatEmployerDateTime = (
   }
 
   try {
-    return new Date(value).toLocaleString('de-AT');
+    return new Date(value).toLocaleString(getLocaleForLanguage(i18n.language));
   } catch {
     return value;
   }
@@ -72,7 +73,7 @@ export const formatEmployerMonthLabel = (
   }
 
   try {
-    return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('de-AT', {
+    return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString(getLocaleForLanguage(i18n.language), {
       year: 'numeric',
       month: 'long',
     });
@@ -87,38 +88,15 @@ export const getEmployerMonthStatusLabel = (
 ) => {
   const locale = resolveLanguage(language);
 
-  switch (status) {
-    case 'payroll_detected':
-      return locale === 'zh'
-        ? '已确认工资月份'
-        : locale === 'de'
-          ? 'Lohnmonat bestaetigt'
-          : 'Payroll confirmed';
-    case 'missing_confirmation':
-      return locale === 'zh'
-        ? '待确认'
-        : locale === 'de'
-          ? 'Bestaetigung offen'
-          : 'Needs confirmation';
-    case 'no_payroll_confirmed':
-      return locale === 'zh'
-        ? '已确认无工资'
-        : locale === 'de'
-          ? 'Ohne Lohn bestaetigt'
-          : 'No payroll confirmed';
-    case 'archived_year_only':
-      return locale === 'zh'
-        ? '仅年度归档'
-        : locale === 'de'
-          ? 'Nur Jahresarchiv'
-          : 'Archive only';
-    default:
-      return locale === 'zh'
-        ? '尚未确认'
-        : locale === 'de'
-          ? 'Noch nicht bestaetigt'
-          : 'Not confirmed yet';
-  }
+  const labels: Record<string, Record<EmployerUiLanguage, string>> = {
+    payroll_detected: { de: 'Lohnmonat bestaetigt', en: 'Payroll confirmed', zh: '已确认工资月份', fr: 'Paie confirmée', ru: 'Зарплата подтверждена' },
+    missing_confirmation: { de: 'Bestaetigung offen', en: 'Needs confirmation', zh: '待确认', fr: 'Confirmation requise', ru: 'Требуется подтверждение' },
+    no_payroll_confirmed: { de: 'Ohne Lohn bestaetigt', en: 'No payroll confirmed', zh: '已确认无工资', fr: 'Sans paie confirmé', ru: 'Без зарплаты подтверждено' },
+    archived_year_only: { de: 'Nur Jahresarchiv', en: 'Archive only', zh: '仅年度归档', fr: 'Archive uniquement', ru: 'Только архив' },
+  };
+  const fallback: Record<EmployerUiLanguage, string> = { de: 'Noch nicht bestaetigt', en: 'Not confirmed yet', zh: '尚未确认', fr: 'Pas encore confirmé', ru: 'Ещё не подтверждено' };
+  const entry = (status && labels[status]) || fallback;
+  return entry[locale] || entry.en;
 };
 
 export const getEmployerAnnualArchiveStatusLabel = (
@@ -127,17 +105,10 @@ export const getEmployerAnnualArchiveStatusLabel = (
 ) => {
   const locale = resolveLanguage(language);
 
-  if (status === 'archived') {
-    return locale === 'zh'
-      ? '已归档'
-      : locale === 'de'
-        ? 'Archiviert'
-        : 'Archived';
-  }
-
-  return locale === 'zh'
-    ? '待归档'
-    : locale === 'de'
-      ? 'Archiv ausstehend'
-      : 'Pending archive';
+  const labels: Record<string, Record<EmployerUiLanguage, string>> = {
+    archived: { de: 'Archiviert', en: 'Archived', zh: '已归档', fr: 'Archivé', ru: 'Архивировано' },
+  };
+  const fallback: Record<EmployerUiLanguage, string> = { de: 'Archiv ausstehend', en: 'Pending archive', zh: '待归档', fr: 'Archivage en attente', ru: 'Ожидает архивации' };
+  const entry = (status && labels[status]) || fallback;
+  return entry[locale] || entry.en;
 };

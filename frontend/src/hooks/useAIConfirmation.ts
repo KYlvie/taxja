@@ -1,3 +1,4 @@
+import React from 'react';
 import { useCallback } from 'react';
 import { useConfirmStore } from './useConfirm';
 
@@ -5,6 +6,7 @@ interface ConfirmOptions {
   variant?: 'info' | 'warning' | 'danger' | 'success';
   confirmText?: string;
   cancelText?: string;
+  messageNode?: React.ReactNode;
 }
 
 /**
@@ -24,6 +26,7 @@ export function useAIConfirmation() {
     (message: string, opts?: ConfirmOptions): Promise<boolean> =>
       show({
         message,
+        messageNode: opts?.messageNode,
         variant: opts?.variant ?? 'warning',
         showCancel: true,
         confirmText: opts?.confirmText,

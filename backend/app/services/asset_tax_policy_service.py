@@ -27,6 +27,11 @@ class AssetTaxPolicyService:
     GWG_THRESHOLD_2023 = Decimal("1000.00")
     INCOME_TAX_COST_CAP_PKW = Decimal("40000.00")
 
+    # E-Auto Vorsteuer thresholds (BMF)
+    EAUTO_VST_FULL_THRESHOLD = Decimal("40000.00")   # 100% VSt deduction up to €40k brutto AK
+    EAUTO_VST_ZERO_THRESHOLD = Decimal("80000.00")   # 0% VSt above €80k brutto AK
+    # Between €40k-€80k: abziehbare_vst = gesamte_vst × (40000 / brutto_ak)
+
     def evaluate(
         self,
         data: AssetRecognitionInput,
@@ -109,9 +114,11 @@ class AssetTaxPolicyService:
         (
             vat_recoverable_status,
             vat_reason_codes,
+            vat_recoverable_ratio,
         ) = self._resolve_vat_recoverable_status(
             data=data,
             candidate=candidate,
+            comparison_amount=comparison_amount,
             reason_codes=reason_codes,
             rule_ids=rule_ids,
         )
@@ -151,6 +158,7 @@ class AssetTaxPolicyService:
             useful_life_source=useful_life_source,
             income_tax_cost_cap=income_tax_cost_cap,
             income_tax_depreciable_base=income_tax_depreciable_base,
+            vat_recoverable_ratio=vat_recoverable_ratio,
             vat_recoverable_reason_codes=vat_reason_codes,
             ifb_rate_source=ifb_rate_source,
             ifb_exclusion_codes=ifb_exclusion_codes,
@@ -344,33 +352,70 @@ class AssetTaxPolicyService:
         *,
         data: AssetRecognitionInput,
         candidate: AssetCandidate,
+        comparison_amount: Decimal,
         reason_codes: list[AssetReasonCode],
         rule_ids: list[str],
-    ) -> tuple[VatRecoverableStatus, list[AssetReasonCode]]:
+    ) -> tuple[VatRecoverableStatus, list[AssetReasonCode], Decimal | None]:
+        """Resolve VAT recoverability status and ratio.
+
+        Returns:
+            (status, reason_codes, vat_recoverable_ratio)
+            ratio is None for non-vehicle assets, 0 for PKW, 1 for fiscal_truck,
+            and a calculated value for electric_pkw based on BMF Staffelung.
+        """
         subtype = candidate.asset_subtype
         reason_list: list[AssetReasonCode] = []
 
         if data.vat_status != "regelbesteuert":
-            return VatRecoverableStatus.LIKELY_NO, reason_list
+            return VatRecoverableStatus.LIKELY_NO, reason_list, None
 
         if subtype == "pkw":
             rule_ids.append("VEH-001")
             if AssetReasonCode.PKW_DETECTED not in reason_codes:
                 reason_codes.append(AssetReasonCode.PKW_DETECTED)
             reason_list.append(AssetReasonCode.PKW_DETECTED)
-            return VatRecoverableStatus.LIKELY_NO, reason_list
+            return VatRecoverableStatus.LIKELY_NO, reason_list, Decimal("0.00")
 
         if subtype == "electric_pkw":
             rule_ids.append("VEH-003")
             if AssetReasonCode.ELECTRIC_VEHICLE_DETECTED not in reason_codes:
                 reason_codes.append(AssetReasonCode.ELECTRIC_VEHICLE_DETECTED)
             reason_list.append(AssetReasonCode.ELECTRIC_VEHICLE_DETECTED)
-            return VatRecoverableStatus.PARTIAL, reason_list
+
+            # E-Auto VSt Staffelung (BMF):
+            #   ≤ €40,000 brutto AK → 100% Vorsteuerabzug
+            #   €40,000 – €80,000   → abziehbare_vst = gesamte_vst × (40000 / brutto_ak)
+            #   > €80,000            → 0% Vorsteuerabzug
+            # Use extracted_amount (gross) as brutto AK for the formula.
+            brutto_ak = data.extracted_amount
+            ratio = self._calculate_eauto_vst_ratio(brutto_ak)
+            if ratio >= Decimal("1"):
+                status = VatRecoverableStatus.LIKELY_YES
+            elif ratio <= Decimal("0"):
+                status = VatRecoverableStatus.LIKELY_NO
+            else:
+                status = VatRecoverableStatus.PARTIAL
+            return status, reason_list, ratio.quantize(Decimal("0.0001"))
 
         if subtype == "fiscal_truck":
             rule_ids.append("VEH-004")
+            return VatRecoverableStatus.LIKELY_YES, reason_list, Decimal("1.00")
 
-        return VatRecoverableStatus.LIKELY_YES, reason_list
+        return VatRecoverableStatus.LIKELY_YES, reason_list, None
+
+    def _calculate_eauto_vst_ratio(self, brutto_ak: Decimal) -> Decimal:
+        """Calculate E-Auto Vorsteuer deduction ratio per BMF Staffelung.
+
+        Formula: abziehbare_vst = gesamte_vst × (40000 / brutto_ak)
+        - ≤ €40,000: ratio = 1.0 (full deduction)
+        - €40,000 – €80,000: ratio = 40000 / brutto_ak
+        - > €80,000: ratio = 0.0 (no deduction)
+        """
+        if brutto_ak <= self.EAUTO_VST_FULL_THRESHOLD:
+            return Decimal("1.0000")
+        if brutto_ak > self.EAUTO_VST_ZERO_THRESHOLD:
+            return Decimal("0.0000")
+        return (self.EAUTO_VST_FULL_THRESHOLD / brutto_ak).quantize(Decimal("0.0001"))
 
     def _resolve_ifb(
         self,

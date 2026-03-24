@@ -89,6 +89,13 @@ class PropertyLoan(Base):
     # Relationships
     property = relationship("Property", back_populates="loans")
     user = relationship("User", back_populates="property_loans")
+    liability = relationship("Liability", back_populates="linked_loan", uselist=False, foreign_keys="Liability.linked_loan_id")
+    installments = relationship(
+        "LoanInstallment",
+        back_populates="loan",
+        cascade="all, delete-orphan",
+        order_by="LoanInstallment.due_date",
+    )
     
     def __repr__(self):
         return f"<PropertyLoan(id={self.id}, property_id={self.property_id}, lender={self.lender_name}, amount={self.loan_amount})>"

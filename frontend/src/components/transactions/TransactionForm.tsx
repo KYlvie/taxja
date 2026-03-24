@@ -3,7 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
+import Select from '../common/Select';
 import {
+  isExpenseTransactionType,
+  transactionTypeRequiresCategory,
   Transaction,
   TransactionType,
   IncomeCategory,
@@ -12,6 +15,7 @@ import {
 } from '../../types/transaction';
 import { usePropertyStore } from '../../stores/propertyStore';
 import { suggestCategory } from '../../utils/categoryMatcher';
+import { formatTransactionCategoryLabel } from '../../utils/formatTransactionCategoryLabel';
 import './TransactionForm.css';
 
 const transactionSchema = z.object({
@@ -19,7 +23,7 @@ const transactionSchema = z.object({
   amount: z.string().min(1, 'Amount is required'),
   date: z.string().min(1, 'Date is required'),
   description: z.string().min(3, 'Description must be at least 3 characters'),
-  category: z.string().min(1, 'Category is required'),
+  category: z.string().optional(),
   document_id: z.number().optional(),
   property_id: z.string().optional().nullable(),
   is_deductible: z.boolean().optional(),
@@ -29,6 +33,14 @@ const transactionSchema = z.object({
   recurring_start_date: z.string().optional(),
   recurring_end_date: z.string().optional(),
   recurring_day_of_month: z.number().optional(),
+}).superRefine((data, ctx) => {
+  if (transactionTypeRequiresCategory(data.type) && !data.category) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['category'],
+      message: 'Category is required',
+    });
+  }
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
@@ -61,7 +73,7 @@ const TransactionForm = ({
           amount: transaction.amount.toString(),
           date: transaction.date.split('T')[0],
           description: transaction.description,
-          category: transaction.category,
+          category: transaction.category || '',
           document_id: transaction.document_id,
           property_id: transaction.property_id || null,
           is_deductible: transaction.is_deductible ?? false,
@@ -88,6 +100,8 @@ const TransactionForm = ({
   const category = watch('category');
   const isRecurring = watch('is_recurring');
   const isDeductible = watch('is_deductible');
+  const requiresCategory = transactionTypeRequiresCategory(transactionType);
+  const isExpenseType = isExpenseTransactionType(transactionType);
 
   // Track whether user is overriding AI decision
   const [isOverriding, setIsOverriding] = useState(false);
@@ -113,6 +127,7 @@ const TransactionForm = ({
 
   const tryAutoSuggest = useCallback(
     (desc: string) => {
+      if (!transactionTypeRequiresCategory(transactionType)) return;
       if (!desc || desc.length < 3) return;
       // Don't overwrite if user already picked a category manually
       const currentCat = watch('category');
@@ -138,22 +153,29 @@ const TransactionForm = ({
 
   // Reset category when type changes
   useEffect(() => {
-    if (!transaction) {
+    if (
+      !transaction ||
+      transaction.type !== transactionType ||
+      !transactionTypeRequiresCategory(transactionType)
+    ) {
       setValue('category', '');
       setAutoSuggested(false);
     }
   }, [transactionType, transaction, setValue]);
 
   const getCategoryOptions = () => {
+    if (!transactionTypeRequiresCategory(transactionType)) {
+      return [];
+    }
     if (transactionType === TransactionType.INCOME) {
       return Object.values(IncomeCategory).map((cat) => ({
         value: cat,
-        label: t(`transactions.categories.${cat}`),
+        label: formatTransactionCategoryLabel(cat, t),
       }));
     } else {
       return Object.values(ExpenseCategory).map((cat) => ({
         value: cat,
-        label: t(`transactions.categories.${cat}`),
+        label: formatTransactionCategoryLabel(cat, t),
       }));
     }
   };
@@ -204,7 +226,7 @@ const TransactionForm = ({
   // All expense categories for line item dropdown
   const lineItemCategoryOptions = Object.values(ExpenseCategory).map(cat => ({
     value: cat,
-    label: t(`transactions.categories.${cat}`),
+    label: formatTransactionCategoryLabel(cat, t),
   }));
 
   // Wrap onSubmit to inject reviewed/locked when user overrides AI decision
@@ -219,13 +241,15 @@ const TransactionForm = ({
       }
     }
     // Include line items if present
-    if (hasLineItems) {
+    if (isExpenseType && hasLineItems) {
       submitData.line_items = lineItems
         .filter(li => li.description.trim() !== '' && li.amount > 0)
         .map((li, idx) => ({
           ...li,
           sort_order: idx,
         }));
+    } else if (!isExpenseType && transaction?.line_items?.length) {
+      submitData.line_items = [];
     }
     onSubmit(submitData);
   };
@@ -242,14 +266,17 @@ const TransactionForm = ({
         <label htmlFor="type">
           {t('transactions.type')} <span className="required">*</span>
         </label>
-        <select id="type" {...register('type')} disabled={!!transaction}>
-          <option value={TransactionType.INCOME}>
-            {t('transactions.types.income')}
-          </option>
-          <option value={TransactionType.EXPENSE}>
-            {t('transactions.types.expense')}
-          </option>
-        </select>
+        <Select id="type" {...register('type')}
+          value={watch('type')}
+          options={[
+            { value: TransactionType.INCOME, label: t('transactions.types.income') },
+            { value: TransactionType.EXPENSE, label: t('transactions.types.expense') },
+            { value: TransactionType.ASSET_ACQUISITION, label: t('transactions.types.asset_acquisition') },
+            { value: TransactionType.LIABILITY_DRAWDOWN, label: t('transactions.types.liability_drawdown') },
+            { value: TransactionType.LIABILITY_REPAYMENT, label: t('transactions.types.liability_repayment') },
+            { value: TransactionType.TAX_PAYMENT, label: t('transactions.types.tax_payment') },
+            { value: TransactionType.TRANSFER, label: t('transactions.types.transfer') },
+          ]} />
         {errors.type && <span className="error">{errors.type.message}</span>}
       </div>
 
@@ -293,26 +320,16 @@ const TransactionForm = ({
         )}
       </div>
 
+      {requiresCategory && (
       <div className="form-group">
         <label htmlFor="category">
           {t('transactions.category')} <span className="required">*</span>
         </label>
-        <select
-          id="category"
-          {...register('category', {
-            onChange: () => {
-              // User manually picked — clear auto-suggest flag
-              setAutoSuggested(false);
-            },
-          })}
-        >
-          <option value="">{t('transactions.selectCategory')}</option>
-          {getCategoryOptions().map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <Select id="category"
+          {...register('category', { onChange: () => setAutoSuggested(false) })}
+          value={watch('category') || ''}
+          placeholder={t('transactions.selectCategory')}
+          options={getCategoryOptions()} />
         {autoSuggested && (
           <span className="auto-suggest-hint">
             🤖 {t('transactions.autoSuggestHint')}
@@ -320,8 +337,9 @@ const TransactionForm = ({
         )}
         {errors.category && <span className="error">{errors.category.message}</span>}
       </div>
+      )}
 
-      {isPropertyRelatedCategory() && (
+      {requiresCategory && isPropertyRelatedCategory() && (
         <div className="form-group">
           <label htmlFor="property_id">
             {t('transactions.property')}
@@ -329,14 +347,10 @@ const TransactionForm = ({
               <span className="field-hint"> ({t('transactions.propertyRecommended')})</span>
             )}
           </label>
-          <select id="property_id" {...register('property_id')}>
-            <option value="">{t('transactions.selectProperty')}</option>
-            {activeProperties.map((property) => (
-              <option key={property.id} value={property.id}>
-                {property.address}
-              </option>
-            ))}
-          </select>
+          <Select id="property_id" {...register('property_id')}
+            value={watch('property_id') || ''}
+            placeholder={t('transactions.selectProperty')}
+            options={activeProperties.map(p => ({ value: String(p.id), label: p.address }))} />
           {activeProperties.length === 0 && (
             <span className="field-hint">
               {t('transactions.noPropertiesAvailable')}{' '}
@@ -364,12 +378,14 @@ const TransactionForm = ({
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="recurring_frequency">{t('recurring.frequency.label')} <span className="required">*</span></label>
-              <select id="recurring_frequency" {...register('recurring_frequency')}>
-                <option value="monthly">{t('recurring.frequency.monthly')}</option>
-                <option value="quarterly">{t('recurring.frequency.quarterly')}</option>
-                <option value="yearly">{t('recurring.frequency.annually')}</option>
-                <option value="weekly">{t('recurring.frequency.weekly')}</option>
-              </select>
+              <Select id="recurring_frequency" {...register('recurring_frequency')}
+                value={watch('recurring_frequency') || 'monthly'}
+                options={[
+                  { value: 'monthly', label: t('recurring.frequency.monthly') },
+                  { value: 'quarterly', label: t('recurring.frequency.quarterly') },
+                  { value: 'yearly', label: t('recurring.frequency.annually') },
+                  { value: 'weekly', label: t('recurring.frequency.weekly') },
+                ]} />
             </div>
             <div className="form-group">
               <label htmlFor="recurring_day_of_month">{t('recurring.form.dayOfMonth')}</label>
@@ -404,7 +420,7 @@ const TransactionForm = ({
       )}
 
       {/* Deductibility Override Section — only for expenses */}
-      {transaction && hasAiDecision && transactionType !== TransactionType.INCOME && (
+      {transaction && hasAiDecision && isExpenseType && (
         <div className="deductibility-override-section">
           <div className="deductibility-current">
             <span className="deductibility-label">{t('transactions.deductible')}:</span>
@@ -480,7 +496,7 @@ const TransactionForm = ({
       )}
 
       {/* Line Items Section — only when editing a transaction that has them, or user adds them */}
-      {transaction && transactionType === TransactionType.EXPENSE && (
+      {transaction && isExpenseType && (
         <div className="line-items-section">
           <div className="line-items-header">
             <span className="line-items-title">📋 {t('transactions.lineItems.title')}</span>
@@ -522,16 +538,10 @@ const TransactionForm = ({
                     </button>
                   </div>
                   <div className="line-item-edit-meta">
-                    <select
-                      className="line-item-select"
-                      value={item.category || ''}
-                      onChange={e => updateLineItem(idx, 'category', e.target.value || undefined)}
-                    >
-                      <option value="">{t('transactions.lineItems.selectCategory')}</option>
-                      {lineItemCategoryOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
+                    <Select value={item.category || ''}
+                      onChange={v => updateLineItem(idx, 'category', v || undefined)}
+                      placeholder={t('transactions.lineItems.selectCategory')}
+                      options={lineItemCategoryOptions} size="sm" />
                     <label className="line-item-deductible-toggle">
                       <input
                         type="checkbox"

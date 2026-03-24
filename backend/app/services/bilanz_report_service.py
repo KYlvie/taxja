@@ -18,7 +18,13 @@ from sqlalchemy import extract
 from app.models.transaction import (
     Transaction, TransactionType, IncomeCategory, ExpenseCategory,
 )
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.user import User
+from app.services.posting_line_utils import iter_posting_records, sum_postings
+from app.services.report_transaction_filters import (
+    cash_balance_delta,
+    should_include_in_bilanz_report,
+)
 
 
 # ── UGB §231 GuV Gesamtkostenverfahren ───────────────────────────────
@@ -304,6 +310,12 @@ PASSIVA_STRUCTURE = {
         "label_en": "Liabilities",
         "label_zh": "负债",
         "items": {
+            "darlehen_kredite": {
+                "label_de": "Darlehen und Kredite",
+                "label_en": "Loans and Borrowings",
+                "label_zh": "贷款及借款",
+                "source": "loans",
+            },
             "lieferverbindlichkeiten": {
                 "label_de": "sonstige Verbindlichkeiten",
                 "label_en": "Other Liabilities",
@@ -326,7 +338,7 @@ def generate_bilanz_report(
     Follows UGB §231 Gesamtkostenverfahren for GuV and UGB §224 for Bilanz.
     Includes prior-year (Vorjahr) comparison column.
     """
-    lang_key = f"label_{language}" if language in ("de", "en", "zh") else "label_de"
+    lang_key = f"label_{language}" if language in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs") else "label_de"
 
     # Current year transactions
     transactions = (
@@ -338,6 +350,7 @@ def generate_bilanz_report(
         .order_by(Transaction.transaction_date)
         .all()
     )
+    transactions = [t for t in transactions if should_include_in_bilanz_report(t)]
 
     # Prior year transactions (for Vorjahr column)
     prior_transactions = (
@@ -348,6 +361,7 @@ def generate_bilanz_report(
         )
         .all()
     )
+    prior_transactions = [t for t in prior_transactions if should_include_in_bilanz_report(t)]
 
     # ── Build GuV (UGB §231) ─────────────────────────────────────────
     guv_lines = _build_guv(transactions, prior_transactions, lang_key)
@@ -386,21 +400,31 @@ def generate_bilanz_report(
     net_profit = ergebnis_nach_steuern
 
     # ── Build Bilanz ─────────────────────────────────────────────────
-    equipment_total = Decimal("0")
+    equipment_total = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.ASSET_ACQUISITION},
+        include_private_use=False,
+    ) + sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.EXPENSE},
+        categories=_category_tokens([ExpenseCategory.EQUIPMENT, ExpenseCategory.VEHICLE]),
+        include_private_use=False,
+    )
+    loan_drawdowns = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.LIABILITY_DRAWDOWN},
+        include_private_use=False,
+    )
+    loan_repayments = sum_postings(
+        transactions,
+        posting_types={LineItemPostingType.LIABILITY_REPAYMENT},
+        include_private_use=False,
+    )
+    cash_balance = Decimal("0")
     for t in transactions:
-        if t.type == TransactionType.EXPENSE and t.expense_category in (
-            ExpenseCategory.EQUIPMENT, ExpenseCategory.VEHICLE,
-        ):
-            equipment_total += t.amount or Decimal("0")
+        cash_balance += cash_balance_delta(t)
 
-    cash_balance = total_income - total_expenses
-    loan_total = Decimal("0")
-    for t in transactions:
-        if (
-            t.type == TransactionType.EXPENSE
-            and t.expense_category == ExpenseCategory.LOAN_INTEREST
-        ):
-            loan_total += t.amount or Decimal("0")
+    loan_balance = max(loan_drawdowns - loan_repayments, Decimal("0"))
 
     balance_values = {
         "equipment_net": float(equipment_total),
@@ -409,7 +433,7 @@ def generate_bilanz_report(
         "equity_capital": 0.0,
         "net_profit": float(net_profit),
         "payables": 0.0,
-        "loans": float(loan_total * 10) if loan_total else 0.0,
+        "loans": float(loan_balance),
         "tax_provisions": float(steuern),
     }
 
@@ -421,12 +445,23 @@ def generate_bilanz_report(
 
     # VAT summary
     vat_collected = sum(
-        (t.vat_amount or Decimal("0"))
-        for t in transactions if t.type == TransactionType.INCOME
+        (
+            record.vat_amount
+            for record in iter_posting_records(transactions, include_private_use=False)
+            if record.posting_type == LineItemPostingType.INCOME
+        ),
+        Decimal("0"),
     )
     vat_paid = sum(
-        (t.vat_amount or Decimal("0"))
-        for t in transactions if t.type == TransactionType.EXPENSE
+        (
+            record.vat_amount
+            for record in iter_posting_records(transactions, include_private_use=False)
+            if record.posting_type in {
+                LineItemPostingType.EXPENSE,
+                LineItemPostingType.ASSET_ACQUISITION,
+            }
+        ),
+        Decimal("0"),
     )
 
     return {
@@ -465,23 +500,26 @@ def generate_bilanz_report(
     }
 
 
+def _category_tokens(categories: list) -> set[str]:
+    return {
+        category.value if hasattr(category, "value") else str(category)
+        for category in categories
+    }
+
+
 def _sum_by_categories(
     transactions: List[Transaction],
-    txn_type: TransactionType,
+    *,
+    posting_type: LineItemPostingType,
     categories: list,
-    is_income: bool,
-    assigned_ids: set,
 ) -> Decimal:
-    """Sum transaction amounts matching given categories."""
-    total = Decimal("0")
-    for t in transactions:
-        if t.type != txn_type or t.id in assigned_ids:
-            continue
-        cat = t.income_category if is_income else t.expense_category
-        if cat in categories:
-            assigned_ids.add(t.id)
-            total += t.amount or Decimal("0")
-    return total
+    """Sum canonical posting lines matching the given category bucket."""
+    return sum_postings(
+        transactions,
+        posting_types={posting_type},
+        categories=_category_tokens(categories),
+        include_private_use=False,
+    )
 
 
 def _build_guv(
@@ -495,12 +533,13 @@ def _build_guv(
       nr, key, label, amount, amount_prior, line_type, depth, sub_items
     """
     lines = []
-    assigned_current: set = set()
-    assigned_prior: set = set()
-
     for section in GUV_STRUCTURE:
         is_income = section["type"] == "income"
-        txn_type = TransactionType.INCOME if is_income else TransactionType.EXPENSE
+        posting_type = (
+            LineItemPostingType.INCOME
+            if is_income
+            else LineItemPostingType.EXPENSE
+        )
 
         # Collect all categories for this section (including sub-items)
         all_cats = list(section["categories"])
@@ -508,27 +547,30 @@ def _build_guv(
             all_cats.extend(sub["categories"])
 
         amount = _sum_by_categories(
-            transactions, txn_type, all_cats, is_income, assigned_current
+            transactions,
+            posting_type=posting_type,
+            categories=all_cats,
         )
         amount_prior = _sum_by_categories(
-            prior_transactions, txn_type, all_cats, is_income, assigned_prior
+            prior_transactions,
+            posting_type=posting_type,
+            categories=all_cats,
         )
 
         # Build sub-item details for section 5 (sonstige betriebliche Aufwendungen)
         sub_lines = []
         if section["key"] == "sonstige_betriebliche_aufwendungen":
             # Use SONSTIGE_DETAIL for detailed breakdown
-            detail_assigned: set = set()
-            detail_assigned_prior: set = set()
-            # Re-collect from the section's matched transactions
             for detail in SONSTIGE_DETAIL:
                 d_amt = _sum_by_categories(
-                    transactions, txn_type, detail["categories"],
-                    is_income, detail_assigned,
+                    transactions,
+                    posting_type=posting_type,
+                    categories=detail["categories"],
                 )
                 d_amt_prior = _sum_by_categories(
-                    prior_transactions, txn_type, detail["categories"],
-                    is_income, detail_assigned_prior,
+                    prior_transactions,
+                    posting_type=posting_type,
+                    categories=detail["categories"],
                 )
                 if d_amt or d_amt_prior:
                     sub_lines.append({
@@ -538,16 +580,16 @@ def _build_guv(
                         "amount_prior": float(d_amt_prior),
                     })
         elif section.get("sub_items"):
-            sub_assigned: set = set()
-            sub_assigned_prior: set = set()
             for sub in section["sub_items"]:
                 s_amt = _sum_by_categories(
-                    transactions, txn_type, sub["categories"],
-                    is_income, sub_assigned,
+                    transactions,
+                    posting_type=posting_type,
+                    categories=sub["categories"],
                 )
                 s_amt_prior = _sum_by_categories(
-                    prior_transactions, txn_type, sub["categories"],
-                    is_income, sub_assigned_prior,
+                    prior_transactions,
+                    posting_type=posting_type,
+                    categories=sub["categories"],
                 )
                 if s_amt or s_amt_prior:
                     sub_lines.append({

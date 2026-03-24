@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.db.base import get_db
+from app.core.error_messages import get_error_message
 from app.core.security import get_current_user
 from app.api.deps import require_feature
 from app.services.feature_gate_service import Feature
@@ -65,6 +66,16 @@ def _refund_ai_conversation_credits(
         db.rollback()
         logger.exception("Failed to persist AI credit refund for user %s", user_id)
 
+
+def _is_degraded_response(text: str) -> bool:
+    """Check if an AI response is degraded (empty or near-empty after stripping disclaimer)."""
+    if not text:
+        return True
+    # Strip disclaimer portion (everything after ⚠️)
+    clean = text.split("⚠️")[0].strip() if "⚠️" in text else text.strip()
+    return len(clean) < 10
+
+
 # Disclaimers appended to every response
 DISCLAIMERS = {
     "de": (
@@ -80,6 +91,38 @@ DISCLAIMERS = {
     "zh": (
         "\n\n⚠️ **免责声明**：本回答仅供参考，不构成税务咨询。"
         "请以FinanzOnline最终结果为准。复杂情况请咨询Steuerberater。"
+    ),
+    "fr": (
+        "\n\n⚠️ **Avertissement** : Cette réponse est fournie à titre informatif uniquement "
+        "et ne constitue pas un conseil fiscal. Veuillez utiliser FinanzOnline pour votre "
+        "déclaration d'impôts. Pour les cas complexes, consultez un Steuerberater."
+    ),
+    "ru": (
+        "\n\n⚠️ **Отказ от ответственности**: Данный ответ предоставлен исключительно "
+        "в информационных целях и не является налоговой консультацией. Пожалуйста, "
+        "используйте FinanzOnline для подачи налоговой декларации. В сложных случаях "
+        "обратитесь к Steuerberater."
+    ),
+    "hu": (
+        "\n\n⚠️ **Felelősségkizárás**: Ez a válasz kizárólag tájékoztató jellegű, "
+        "és nem minősül adótanácsadásnak. Kérjük, használja a FinanzOnline-t az "
+        "adóbevalláshoz. Összetett esetekben forduljon Steuerberaterhez."
+    ),
+    "pl": (
+        "\n\n⚠️ **Zastrzeżenie**: Ta odpowiedź ma charakter wyłącznie informacyjny "
+        "i nie stanowi porady podatkowej. Proszę korzystać z FinanzOnline do składania "
+        "deklaracji podatkowych. W skomplikowanych przypadkach proszę skonsultować się "
+        "ze Steuerberaterem."
+    ),
+    "tr": (
+        "\n\n⚠️ **Sorumluluk Reddi**: Bu yanıt yalnızca bilgilendirme amaçlıdır "
+        "ve vergi danışmanlığı niteliği taşımaz. Vergi beyannamesi için lütfen "
+        "FinanzOnline'ı kullanın. Karmaşık durumlarda bir Steuerberater'e danışın."
+    ),
+    "bs": (
+        "\n\n⚠️ **Odricanje odgovornosti**: Ovaj odgovor služi isključivo u informativne "
+        "svrhe i ne predstavlja porezni savjet. Molimo koristite FinanzOnline za podnošenje "
+        "porezne prijave. U složenim slučajevima konsultujte Steuerberatera."
     ),
 }
 
@@ -117,6 +160,48 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
                 "• €70,365 - €104,859：48%\n• €104,859 - €1,000,000：50%\n"
                 "• 超过€1,000,000：55%"
             ),
+            "fr": (
+                "Taux d'imposition sur le revenu en Autriche 2026 (USP) :\n"
+                "• 0 € - 13 539 € : 0 %\n• 13 539 € - 21 992 € : 20 %\n"
+                "• 21 992 € - 36 458 € : 30 %\n• 36 458 € - 70 365 € : 40 %\n"
+                "• 70 365 € - 104 859 € : 48 %\n• 104 859 € - 1 000 000 € : 50 %\n"
+                "• Au-delà de 1 000 000 € : 55 %"
+            ),
+            "ru": (
+                "Ставки подоходного налога в Австрии 2026 (USP):\n"
+                "• €0 - €13 539: 0%\n• €13 539 - €21 992: 20%\n"
+                "• €21 992 - €36 458: 30%\n• €36 458 - €70 365: 40%\n"
+                "• €70 365 - €104 859: 48%\n• €104 859 - €1 000 000: 50%\n"
+                "• Свыше €1 000 000: 55%"
+            ),
+            "hu": (
+                "Osztrák jövedelemadó-kulcsok 2026 (USP):\n"
+                "• €0 - €13 539: 0%\n• €13 539 - €21 992: 20%\n"
+                "• €21 992 - €36 458: 30%\n• €36 458 - €70 365: 40%\n"
+                "• €70 365 - €104 859: 48%\n• €104 859 - €1 000 000: 50%\n"
+                "• €1 000 000 felett: 55%"
+            ),
+            "pl": (
+                "Austriackie stawki podatku dochodowego 2026 (USP):\n"
+                "• €0 - €13 539: 0%\n• €13 539 - €21 992: 20%\n"
+                "• €21 992 - €36 458: 30%\n• €36 458 - €70 365: 40%\n"
+                "• €70 365 - €104 859: 48%\n• €104 859 - €1 000 000: 50%\n"
+                "• Powyżej €1 000 000: 55%"
+            ),
+            "tr": (
+                "Avusturya gelir vergisi oranları 2026 (USP):\n"
+                "• €0 - €13.539: %0\n• €13.539 - €21.992: %20\n"
+                "• €21.992 - €36.458: %30\n• €36.458 - €70.365: %40\n"
+                "• €70.365 - €104.859: %48\n• €104.859 - €1.000.000: %50\n"
+                "• €1.000.000 üzeri: %55"
+            ),
+            "bs": (
+                "Austrijske stope poreza na dohodak 2026 (USP):\n"
+                "• €0 - €13.539: 0%\n• €13.539 - €21.992: 20%\n"
+                "• €21.992 - €36.458: 30%\n• €36.458 - €70.365: 40%\n"
+                "• €70.365 - €104.859: 48%\n• €104.859 - €1.000.000: 50%\n"
+                "• Preko €1.000.000: 55%"
+            ),
         }
         return responses.get(language, responses["de"])
 
@@ -135,6 +220,36 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
             "zh": (
                 "小企业免税：营业额不超过€55,000免征增值税。"
                 "容忍阈值：€60,500。标准增值税率：20%。住宅租赁：10%。"
+            ),
+            "fr": (
+                "Régime des petites entreprises : chiffre d'affaires jusqu'à 55 000 € "
+                "exonéré de TVA. Seuil de tolérance : 60 500 €. TVA standard : 20 %. "
+                "Location résidentielle : 10 %."
+            ),
+            "ru": (
+                "Освобождение для малого бизнеса: оборот до €55 000 освобождён от НДС. "
+                "Допустимый порог: €60 500. Стандартная ставка НДС: 20%. "
+                "Аренда жилья: 10%."
+            ),
+            "hu": (
+                "Kisvállalkozói mentesség: évi €55 000-ig forgalmiadó-mentes. "
+                "Tűréshatár: €60 500. Általános ÁFA: 20%. "
+                "Lakásbérbeadás: 10%."
+            ),
+            "pl": (
+                "Zwolnienie dla małych przedsiębiorstw: obrót do €55 000 zwolniony z VAT. "
+                "Próg tolerancji: €60 500. Standardowa stawka VAT: 20%. "
+                "Wynajem mieszkalny: 10%."
+            ),
+            "tr": (
+                "Küçük işletme muafiyeti: €55.000'a kadar ciro KDV'den muaftır. "
+                "Tolerans eşiği: €60.500. Standart KDV: %20. "
+                "Konut kiralaması: %10."
+            ),
+            "bs": (
+                "Oslobođenje za mala preduzeća: promet do €55.000 oslobođen PDV-a. "
+                "Prag tolerancije: €60.500. Standardna stopa PDV-a: 20%. "
+                "Stambeni najam: 10%."
             ),
         }
         return responses.get(language, responses["de"])
@@ -160,6 +275,45 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
                 "• 医疗保险：6.80%\n• 养老保险：18.50%\n"
                 "• 意外保险：固定金额\n• 自雇预备金：1.53%\n"
                 "缴费可作为特殊支出抵扣。"
+            ),
+            "fr": (
+                "Cotisations SVS pour indépendants :\n"
+                "• Assurance maladie : 6,80 %\n• Assurance pension : 18,50 %\n"
+                "• Assurance accident : Montant fixe\n• Prévoyance indépendants : 1,53 %\n"
+                "Les cotisations sont déductibles en tant que dépenses spéciales."
+            ),
+            "ru": (
+                "Взносы SVS для самозанятых:\n"
+                "• Медицинское страхование: 6,80%\n• Пенсионное страхование: 18,50%\n"
+                "• Страхование от несчастных случаев: фиксированная сумма\n"
+                "• Резерв для самозанятых: 1,53%\n"
+                "Взносы вычитаются как особые расходы."
+            ),
+            "hu": (
+                "SVS-járulékok önálló vállalkozóknak:\n"
+                "• Egészségbiztosítás: 6,80%\n• Nyugdíjbiztosítás: 18,50%\n"
+                "• Balesetbiztosítás: fix összeg\n• Önálló vállalkozói előtakarékosság: 1,53%\n"
+                "A járulékok különleges kiadásként leírhatók."
+            ),
+            "pl": (
+                "Składki SVS dla samozatrudnionych:\n"
+                "• Ubezpieczenie zdrowotne: 6,80%\n• Ubezpieczenie emerytalne: 18,50%\n"
+                "• Ubezpieczenie wypadkowe: kwota ryczałtowa\n"
+                "• Zabezpieczenie dla samozatrudnionych: 1,53%\n"
+                "Składki podlegają odliczeniu jako wydatki specjalne."
+            ),
+            "tr": (
+                "Serbest çalışanlar için SVS primleri:\n"
+                "• Sağlık sigortası: %6,80\n• Emeklilik sigortası: %18,50\n"
+                "• Kaza sigortası: Sabit tutar\n• Serbest çalışan karşılığı: %1,53\n"
+                "Primler özel gider olarak düşülebilir."
+            ),
+            "bs": (
+                "SVS doprinosi za samozaposlene:\n"
+                "• Zdravstveno osiguranje: 6,80%\n• Penzijsko osiguranje: 18,50%\n"
+                "• Osiguranje od nesreća: fiksni iznos\n"
+                "• Samozaposlena rezerva: 1,53%\n"
+                "Doprinosi se mogu odbiti kao posebni troškovi."
             ),
         }
         return responses.get(language, responses["de"])
@@ -192,6 +346,54 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
                 "• 单收入者/单亲抵扣\n"
                 "• 特殊支出（保险、捐赠）"
             ),
+            "fr": (
+                "Déductions courantes :\n"
+                "• Indemnité de trajet : selon la distance\n"
+                "• Forfait télétravail : jusqu'à 300 €/an\n"
+                "• Bonus familial plus : 2 000 €/enfant/an\n"
+                "• Déduction pour revenu unique / parent isolé\n"
+                "• Dépenses spéciales (assurances, dons)"
+            ),
+            "ru": (
+                "Распространённые вычеты:\n"
+                "• Транспортная компенсация: в зависимости от расстояния\n"
+                "• Компенсация за домашний офис: до €300/год\n"
+                "• Семейный бонус Плюс: €2 000/ребёнок/год\n"
+                "• Вычет для единственного кормильца / одинокого родителя\n"
+                "• Особые расходы (страхование, пожертвования)"
+            ),
+            "hu": (
+                "Gyakori levonások:\n"
+                "• Ingázási támogatás: távolság alapján\n"
+                "• Otthoni irodai átalány: legfeljebb €300/év\n"
+                "• Családi bónusz Plusz: €2 000/gyermek/év\n"
+                "• Egyedüli kereső / egyedülálló szülő levonás\n"
+                "• Különleges kiadások (biztosítás, adományok)"
+            ),
+            "pl": (
+                "Częste odliczenia:\n"
+                "• Dodatek za dojazd: w zależności od odległości\n"
+                "• Ryczałt za pracę zdalną: do €300/rok\n"
+                "• Bonus rodzinny Plus: €2 000/dziecko/rok\n"
+                "• Odliczenie dla jedynego żywiciela / samotnego rodzica\n"
+                "• Wydatki specjalne (ubezpieczenia, darowizny)"
+            ),
+            "tr": (
+                "Yaygın indirimler:\n"
+                "• İşe gidiş ödeneği: mesafeye göre\n"
+                "• Ev ofisi götürü bedeli: yılda en fazla €300\n"
+                "• Aile bonusu Plus: yılda çocuk başına €2.000\n"
+                "• Tek gelirli / tek ebeveyn indirimi\n"
+                "• Özel giderler (sigorta, bağışlar)"
+            ),
+            "bs": (
+                "Uobičajeni odbici:\n"
+                "• Naknada za putovanje na posao: prema udaljenosti\n"
+                "• Paušal za rad od kuće: do €300/godišnje\n"
+                "• Porodični bonus Plus: €2.000/dijete/godišnje\n"
+                "• Odbitak za jedinog hranitelja / samohranog roditelja\n"
+                "• Posebni troškovi (osiguranje, donacije)"
+            ),
         }
         return responses.get(language, responses["de"])
 
@@ -215,6 +417,48 @@ def _generate_rule_based_response(message: str, language: str, user_context: dic
             "• 所得税税率\n• 增值税和小企业免税\n"
             "• SVS社保缴费\n• 抵扣和补贴\n"
             "• 您当前的税务情况"
+        ),
+        "fr": (
+            "Je suis l'assistant IA Taxja et je peux vous aider avec les questions "
+            "fiscales autrichiennes. Posez-moi des questions sur :\n"
+            "• Taux d'imposition sur le revenu\n• TVA et régime des petites entreprises\n"
+            "• Assurance sociale SVS\n• Déductions et abattements\n"
+            "• Votre situation fiscale actuelle"
+        ),
+        "ru": (
+            "Я AI-ассистент Taxja и могу помочь с вопросами по австрийскому "
+            "налогообложению. Спрашивайте меня о:\n"
+            "• Ставках подоходного налога\n• НДС и освобождении для малого бизнеса\n"
+            "• Социальном страховании SVS\n• Вычетах и льготах\n"
+            "• Вашей текущей налоговой ситуации"
+        ),
+        "hu": (
+            "Én vagyok a Taxja AI asszisztens, és segíthetek az osztrák adókérdésekben. "
+            "Kérdezzen a következőkről:\n"
+            "• Jövedelemadó-kulcsok\n• ÁFA és kisvállalkozói mentesség\n"
+            "• SVS társadalombiztosítás\n• Levonások és kedvezmények\n"
+            "• Jelenlegi adóhelyzete"
+        ),
+        "pl": (
+            "Jestem asystentem AI Taxja i mogę pomóc w kwestiach austriackiego "
+            "prawa podatkowego. Zapytaj mnie o:\n"
+            "• Stawki podatku dochodowego\n• VAT i zwolnienie dla małych firm\n"
+            "• Ubezpieczenie społeczne SVS\n• Odliczenia i ulgi\n"
+            "• Twoją aktualną sytuację podatkową"
+        ),
+        "tr": (
+            "Ben Taxja AI asistanıyım ve Avusturya vergi sorularında yardımcı "
+            "olabilirim. Bana şunları sorabilirsiniz:\n"
+            "• Gelir vergisi oranları\n• KDV ve küçük işletme muafiyeti\n"
+            "• SVS sosyal sigorta\n• İndirimler ve ödenekler\n"
+            "• Mevcut vergi durumunuz"
+        ),
+        "bs": (
+            "Ja sam Taxja AI asistent i mogu vam pomoći s pitanjima o austrijskom "
+            "poreznom sistemu. Pitajte me o:\n"
+            "• Stopama poreza na dohodak\n• PDV-u i oslobođenju za mala preduzeća\n"
+            "• SVS socijalnom osiguranju\n• Odbicima i olakšicama\n"
+            "• Vašoj trenutnoj poreznoj situaciji"
         ),
     }
     return defaults.get(language, defaults["de"])
@@ -318,8 +562,18 @@ def chat_with_assistant(
     )
     conversation_history = [
         {"role": msg.role.value, "content": msg.content}
-        for msg in reversed(recent_msgs)
+        for msg in recent_msgs
     ]
+
+    # Preserve first user message when history is truncated
+    total_count = chat_service.get_message_count(current_user.id)
+    if total_count > 6:
+        first_msg = chat_service.get_first_user_message(current_user.id)
+        if first_msg:
+            first_entry = {"role": first_msg.role.value, "content": first_msg.content}
+            # Only prepend if not already in the recent window
+            if not conversation_history or conversation_history[0].get("content") != first_msg.content:
+                conversation_history.insert(0, first_entry)
 
     # Run through orchestrator
     orchestrator = AIOrchestrator(db=db, user_id=current_user.id)
@@ -337,6 +591,16 @@ def chat_with_assistant(
             refund_key=f"refund:ai:{current_user.id}:{user_message.id}",
         )
         raise
+
+    # Refund credits if response is degraded (empty or near-empty)
+    if _is_degraded_response(result.text):
+        logger.warning("Degraded AI response for user %s, refunding credits", current_user.id)
+        _refund_ai_conversation_credits(
+            db=db,
+            credit_service=credit_service,
+            user_id=current_user.id,
+            refund_key=f"degraded:ai:{current_user.id}:{user_message.id}",
+        )
 
     # Save assistant message
     assistant_message = chat_service.save_message(
@@ -357,6 +621,8 @@ def chat_with_assistant(
         intent=result.intent.value if result.intent else None,
         data=result.data,
         suggestions=result.suggestions,
+        show_disclaimer=result.show_disclaimer,
+        source_tier=result.source_tier,
     )
 
 
@@ -457,7 +723,7 @@ async def chat_with_file(
     then passes the content to the AI orchestrator alongside the user message.
     """
     # Whitelist supported languages
-    if language not in ("de", "en", "zh"):
+    if language not in ("de", "en", "zh", "fr", "ru", "hu", "pl", "tr", "bs"):
         language = "de"
 
     from app.services.ai_orchestrator import AIOrchestrator
@@ -483,9 +749,10 @@ async def chat_with_file(
 
     file_content = await file.read()
     if len(file_content) > MAX_SIZE:
+        user_language = getattr(current_user, 'language', 'de') or 'de'
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File too large. Maximum size is 10 MB.",
+            detail=get_error_message("file_too_large_simple", user_language),
         )
 
     # Try to extract text from the file
@@ -539,8 +806,17 @@ async def chat_with_file(
     )
     conversation_history = [
         {"role": msg.role.value, "content": msg.content}
-        for msg in reversed(recent_msgs)
+        for msg in recent_msgs
     ]
+
+    # Preserve first user message when history is truncated
+    total_count = chat_service.get_message_count(current_user.id)
+    if total_count > 6:
+        first_msg = chat_service.get_first_user_message(current_user.id)
+        if first_msg:
+            first_entry = {"role": first_msg.role.value, "content": first_msg.content}
+            if not conversation_history or conversation_history[0].get("content") != first_msg.content:
+                conversation_history.insert(0, first_entry)
 
     # Run through orchestrator
     orchestrator = AIOrchestrator(db=db, user_id=current_user.id)
@@ -558,6 +834,16 @@ async def chat_with_file(
             refund_key=f"refund:ai-file:{current_user.id}:{user_message.id}",
         )
         raise
+
+    # Refund credits if response is degraded (empty or near-empty)
+    if _is_degraded_response(result.text):
+        logger.warning("Degraded AI response (file) for user %s, refunding credits", current_user.id)
+        _refund_ai_conversation_credits(
+            db=db,
+            credit_service=credit_service,
+            user_id=current_user.id,
+            refund_key=f"degraded:ai-file:{current_user.id}:{user_message.id}",
+        )
 
     # Save assistant response
     assistant_message = chat_service.save_message(
@@ -579,4 +865,6 @@ async def chat_with_file(
         intent=result.intent.value if result.intent else None,
         data=result.data,
         suggestions=result.suggestions,
+        show_disclaimer=result.show_disclaimer,
+        source_tier=result.source_tier,
     )

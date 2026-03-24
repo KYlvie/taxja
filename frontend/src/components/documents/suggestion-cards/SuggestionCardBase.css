@@ -168,8 +168,7 @@
   color: var(--color-text-secondary);
 }
 
-.asset-confirmation-field input,
-.asset-confirmation-field select {
+.asset-confirmation-field input {
   width: 100%;
   min-height: 42px;
   padding: 10px 12px;
@@ -180,8 +179,7 @@
   font-size: 0.92rem;
 }
 
-.asset-confirmation-field input:focus,
-.asset-confirmation-field select:focus {
+.asset-confirmation-field input:focus {
   outline: none;
   border-color: #818cf8;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);

@@ -17,7 +17,7 @@ import {
   getEmployerAnnualArchiveStatusLabel,
   getEmployerMonthStatusLabel,
 } from '../../utils/employerSupport';
-import { normalizeLanguage } from '../../utils/locale';
+import { normalizeLanguage, type SupportedLanguage } from '../../utils/locale';
 import './EmployerDocumentsWorkbench.css';
 
 const currentYear = new Date().getFullYear();
@@ -43,7 +43,30 @@ const EmployerDocumentsWorkbench = () => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const language = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
-  const text = {
+  const textByLanguage: Partial<Record<SupportedLanguage, {
+    loadError: string;
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    refresh: string;
+    payrollMonths: string;
+    missingConfirmations: string;
+    historicalPacks: string;
+    nextDeadline: string;
+    pendingMonths: string;
+    pendingMonthMeta: string;
+    viewDetails: string;
+    confirming: string;
+    confirmPayroll: string;
+    confirmNoPayroll: string;
+    noPendingMonths: string;
+    pendingArchives: string;
+    unknownEmployer: string;
+    documentCount: string;
+    saving: string;
+    archiveYear: string;
+    noPendingArchives: string;
+  }>> = {
     zh: {
       loadError: '加载工资控制台失败。',
       eyebrow: '工资文件工作台',
@@ -116,7 +139,56 @@ const EmployerDocumentsWorkbench = () => {
       archiveYear: 'Lohnjahr archivieren',
       noPendingArchives: 'Aktuell warten keine historischen Lohnpakete auf die Archivierung.',
     },
-  }[language];
+    fr: {
+      loadError: 'Impossible de charger l\'espace de travail employeur.',
+      eyebrow: 'Boîte de réception employeur',
+      title: 'Gérez les mois de paie et les packs historiques en un seul endroit',
+      subtitle: 'Examinez les fichiers de paie, comblez les confirmations manquantes et archivez les anciens Lohnzettel sans ouvrir un module séparé.',
+      refresh: 'Actualiser',
+      payrollMonths: 'Mois de paie',
+      missingConfirmations: 'En attente de confirmation',
+      historicalPacks: 'Packs annuels historiques',
+      nextDeadline: 'Prochaine échéance employeur',
+      pendingMonths: 'Mois de paie en attente de confirmation',
+      pendingMonthMeta: '{{count}} fichier(s) lié(s)',
+      viewDetails: 'Voir les détails',
+      confirming: 'Confirmation...',
+      confirmPayroll: 'Marquer comme mois de paie',
+      confirmNoPayroll: 'Marquer comme sans paie',
+      noPendingMonths: 'Aucun mois de paie n\'est en attente de confirmation pour le moment.',
+      pendingArchives: 'Packs de paie historiques en attente d\'archivage',
+      unknownEmployer: 'Employeur non identifié',
+      documentCount: '{{count}} document(s)',
+      saving: 'Enregistrement...',
+      archiveYear: 'Archiver l\'année de paie',
+      noPendingArchives: 'Aucun pack de paie historique n\'est en attente d\'examen d\'archivage.',
+    },
+    ru: {
+      loadError: 'Не удалось загрузить рабочую область работодателя.',
+      eyebrow: 'Входящие работодателя',
+      title: 'Управляйте месяцами зарплаты и историческими пакетами в одном месте',
+      subtitle: 'Просматривайте файлы зарплаты, устраняйте пробелы в подтверждениях и архивируйте старые Lohnzettel без открытия отдельного модуля.',
+      refresh: 'Обновить',
+      payrollMonths: 'Месяцы зарплаты',
+      missingConfirmations: 'Ожидание подтверждения',
+      historicalPacks: 'Исторические годовые пакеты',
+      nextDeadline: 'Следующий срок',
+      pendingMonths: 'Месяцы зарплаты, ожидающие подтверждения',
+      pendingMonthMeta: '{{count}} связанный файл(ов)',
+      viewDetails: 'Подробнее',
+      confirming: 'Подтверждение...',
+      confirmPayroll: 'Отметить как месяц зарплаты',
+      confirmNoPayroll: 'Отметить как без зарплаты',
+      noPendingMonths: 'В данный момент нет месяцев зарплаты, ожидающих подтверждения.',
+      pendingArchives: 'Исторические пакеты зарплат, ожидающие архивации',
+      unknownEmployer: 'Работодатель не определён',
+      documentCount: '{{count}} документ(ов)',
+      saving: 'Сохранение...',
+      archiveYear: 'Архивировать год зарплаты',
+      noPendingArchives: 'В данный момент нет исторических пакетов зарплат, ожидающих архивации.',
+    },
+  };
+  const text = textByLanguage[language] ?? textByLanguage.en!;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);

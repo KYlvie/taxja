@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Property, PropertyType } from '../../types/property';
 import { HistoricalDepreciationPreview, BackfillResult } from '../../types/historicalDepreciation';
 import { propertyService } from '../../services/propertyService';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './HistoricalDepreciationBackfill.css';
 
 interface HistoricalDepreciationBackfillProps {
@@ -14,7 +15,7 @@ const HistoricalDepreciationBackfill = ({
   property,
   onBackfillComplete,
 }: HistoricalDepreciationBackfillProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [showModal, setShowModal] = useState(false);
   const [preview, setPreview] = useState<HistoricalDepreciationPreview | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -81,7 +82,7 @@ const HistoricalDepreciationBackfill = ({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,
@@ -169,7 +170,7 @@ const HistoricalDepreciationBackfill = ({
                           <tr key={txn.year}>
                             <td>{txn.year}</td>
                             <td className="amount">{formatCurrency(txn.amount)}</td>
-                            <td>{new Date(txn.transaction_date).toLocaleDateString('de-AT')}</td>
+                            <td>{new Date(txn.transaction_date).toLocaleDateString(getLocaleForLanguage(i18n.language))}</td>
                           </tr>
                         ))}
                       </tbody>

@@ -1,19 +1,21 @@
 /* ═══ Suggested Questions — Pill Chips ═══ */
 
 .suggested-questions {
-  margin-top: 4px;
-  padding: 0 4px;
+  margin-top: 8px;
+  padding: 0;
 }
 
 .suggested-questions-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.72rem;
-  font-weight: 500;
+  font-size: 0.68rem;
+  font-weight: 600;
   color: var(--color-text-muted);
   margin-bottom: 10px;
   padding-left: 2px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .suggested-questions-title svg {
@@ -24,43 +26,49 @@
 .suggested-questions-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .suggested-question-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--color-surface-strong);
-  border: 1px solid var(--color-border);
-  border-radius: 20px;
-  padding: 7px 14px;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 14px;
+  padding: 8px 12px;
   font-size: 0.78rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: var(--font-sans);
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: normal;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.04);
 }
 
 .suggested-question-btn:hover {
-  background: var(--color-primary-50);
-  border-color: var(--color-primary-200);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(99, 102, 241, 0.18);
   color: var(--color-primary);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.08);
 }
 
 .suggested-question-btn svg {
   flex-shrink: 0;
-  opacity: 0.55;
+  opacity: 0.8;
   width: 14px;
   height: 14px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  box-sizing: content-box;
 }
 
 .suggested-question-btn:hover svg {
   opacity: 1;
+  background: rgba(99, 102, 241, 0.12);
 }
 
 @media (max-width: 480px) {

@@ -685,7 +685,7 @@ class PropertyService:
             Property.asset_type != "real_estate",
         )
         if not include_archived:
-            query = query.filter(Property.status != PropertyStatus.ARCHIVED)
+            query = query.filter(Property.status == PropertyStatus.ACTIVE)
         return query.order_by(Property.created_at.desc()).all()
 
     def get_property(self, property_id: UUID, user_id: int) -> Property:
@@ -768,8 +768,11 @@ class PropertyService:
         Returns:
             List of Property instances
         """
-        query = self.db.query(Property).filter(Property.user_id == user_id)
-        
+        query = self.db.query(Property).filter(
+            Property.user_id == user_id,
+            Property.asset_type == "real_estate",
+        )
+
         if not include_archived:
             # Exclude both SOLD and ARCHIVED properties
             query = query.filter(Property.status == PropertyStatus.ACTIVE)
@@ -1149,9 +1152,113 @@ class PropertyService:
         # Invalidate portfolio and list caches
         self._invalidate_portfolio_cache(user_id)
         self._invalidate_property_list_cache(user_id)
-        
+
         return property
-    
+
+    def dispose_property(
+        self,
+        property_id: UUID,
+        user_id: int,
+        disposal_reason: str,
+        disposal_date: date,
+        sale_price: Optional[Decimal] = None,
+    ) -> Property:
+        """
+        Dispose of a property/asset with a specific reason.
+
+        Maps disposal_reason to PropertyStatus:
+            sold -> SOLD, scrapped -> SCRAPPED,
+            fully_depreciated -> ARCHIVED, private_withdrawal -> WITHDRAWN
+
+        Creates an AssetEvent for sold/scrapped/private_withdrawal disposals.
+        """
+        from app.models.asset_event import AssetEvent, AssetEventType, AssetEventTriggerSource
+
+        property = self._validate_ownership(property_id, user_id)
+
+        # Real-estate properties may only be sold
+        if property.asset_type == "real_estate" and disposal_reason != "sold":
+            raise ValueError(
+                f"Real-estate properties can only be disposed with reason 'sold'. "
+                f"Got: '{disposal_reason}'"
+            )
+
+        # Validate disposal_date >= purchase_date
+        if disposal_date < property.purchase_date:
+            raise ValueError(
+                f"Disposal date ({disposal_date}) cannot be before "
+                f"purchase date ({property.purchase_date})"
+            )
+
+        # Map disposal_reason -> PropertyStatus
+        status_map = {
+            "sold": PropertyStatus.SOLD,
+            "scrapped": PropertyStatus.SCRAPPED,
+            "fully_depreciated": PropertyStatus.ARCHIVED,
+            "private_withdrawal": PropertyStatus.WITHDRAWN,
+        }
+        new_status = status_map.get(disposal_reason)
+        if new_status is None:
+            raise ValueError(f"Unknown disposal_reason: '{disposal_reason}'")
+
+        property.status = new_status
+        property.disposal_reason = disposal_reason
+        property.sale_date = disposal_date  # reuse sale_date for all disposal dates
+        if disposal_reason == "sold":
+            property.sale_price = sale_price
+
+        # Create AssetEvent for sold / scrapped / private_withdrawal
+        event_type_map = {
+            "sold": AssetEventType.SOLD,
+            "scrapped": AssetEventType.SCRAPPED,
+            "private_withdrawal": AssetEventType.PRIVATE_WITHDRAWAL,
+        }
+        event_type = event_type_map.get(disposal_reason)
+        if event_type is not None:
+            self.asset_lifecycle_service.record_event(
+                asset=property,
+                event_type=event_type,
+                event_date=disposal_date,
+                trigger_source=AssetEventTriggerSource.USER,
+                payload={
+                    "disposal_reason": disposal_reason,
+                    "sale_price": float(sale_price) if sale_price else None,
+                },
+            )
+
+        # Create an income transaction when the asset is sold for a positive price
+        if disposal_reason == "sold" and sale_price and sale_price > 0:
+            sale_transaction = Transaction(
+                user_id=user_id,
+                property_id=property.id,
+                type=TransactionType.INCOME,
+                amount=sale_price,
+                transaction_date=disposal_date,
+                description=f"Sale of {property.name or property.address}",
+                income_category=IncomeCategory.OTHER_INCOME,
+                is_deductible=False,
+                import_source="asset_disposal",
+            )
+            self.db.add(sale_transaction)
+
+        self.db.commit()
+        self.db.refresh(property)
+
+        self._invalidate_portfolio_cache(user_id)
+        self._invalidate_property_list_cache(user_id)
+
+        logger.info(
+            "Property disposed",
+            extra={
+                "user_id": user_id,
+                "property_id": str(property_id),
+                "disposal_reason": disposal_reason,
+                "disposal_date": disposal_date.isoformat(),
+            },
+        )
+
+        return property
+
     def delete_property(self, property_id: UUID, user_id: int, force: bool = False) -> dict:
         """
         Delete property. If force=True, unlinks transactions and deletes
@@ -1717,10 +1824,11 @@ class PropertyService:
         for transaction_id in transaction_ids:
             try:
                 # Link transaction (validates ownership internally)
-                self.link_transaction_to_property(property_id, transaction_id, user_id)
+                self.link_transaction_to_property(transaction_id, property_id, user_id)
                 results["successful"] += 1
 
             except Exception as e:
+                self.db.rollback()
                 results["failed"] += 1
                 results["errors"].append({
                     "transaction_id": transaction_id,

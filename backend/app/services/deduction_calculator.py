@@ -49,7 +49,7 @@ class DeductionCalculator:
     }
     _DEFAULT_PENDLER_EURO_PER_KM = Decimal('6.00')
     _DEFAULT_HOME_OFFICE_DEDUCTION = Decimal('300.00')
-    _DEFAULT_CHILD_DEDUCTION_MONTHLY = Decimal('70.90')  # 2025/2026/2027: €70.90 (frozen)
+    _DEFAULT_CHILD_DEDUCTION_MONTHLY = Decimal('67.80')  # 2025/2026/2027: €67.80 (frozen per BMF)
     _DEFAULT_SINGLE_PARENT_DEDUCTION = Decimal('612.00')  # 2026: €612 (same as Alleinerzieher)
     _DEFAULT_WERBUNGSKOSTENPAUSCHALE = Decimal('132.00')
     _DEFAULT_VERKEHRSABSETZBETRAG = Decimal('496.00')  # 2026: €496 (2025: €487)
@@ -73,6 +73,13 @@ class DeductionCalculator:
     _DEFAULT_ERHOEHTER_PENSIONISTEN_INCOME_LOWER = Decimal('24616.00')  # Full amount up to this income
     # Sonderausgabenpauschale (§18 Abs 2 EStG) — automatic special expenses flat-rate
     _DEFAULT_SONDERAUSGABENPAUSCHALE = Decimal('60.00')  # €60/year (unchanged for years)
+    # Kirchenbeitrag (§18 Abs 1 Z 5 EStG) — church contributions deductible up to cap
+    # Year-dependent: €400 for ≤2023, €600 for 2024+ (AbgÄG 2023, BGBl I Nr. 110/2023)
+    _DEFAULT_KIRCHENBEITRAG_CAP = Decimal('600.00')  # €600/year (2024+)
+    _KIRCHENBEITRAG_CAP_2023 = Decimal('400.00')  # €400/year (≤2023)
+    # Spenden (§18 Abs 1 Z 7 EStG) — donations to qualifying orgs, capped at 10% of
+    # Gesamtbetrag der Einkünfte from the previous year's tax return
+    _DEFAULT_SPENDEN_INCOME_RATIO = Decimal('0.10')  # 10% of income
 
     def __init__(self, deduction_config: Optional[Dict] = None):
         """
@@ -156,6 +163,12 @@ class DeductionCalculator:
             self.SONDERAUSGABENPAUSCHALE = Decimal(str(
                 deduction_config.get('sonderausgabenpauschale', self._DEFAULT_SONDERAUSGABENPAUSCHALE)
             ))
+            self.KIRCHENBEITRAG_CAP = Decimal(str(
+                deduction_config.get('kirchenbeitrag_cap', self._DEFAULT_KIRCHENBEITRAG_CAP)
+            ))
+            self.SPENDEN_INCOME_RATIO = Decimal(str(
+                deduction_config.get('spenden_income_ratio', self._DEFAULT_SPENDEN_INCOME_RATIO)
+            ))
 
             # Commuting brackets from config
             commuting = deduction_config.get('commuting_brackets', {})
@@ -196,7 +209,9 @@ class DeductionCalculator:
             self.ERHOEHTER_PENSIONISTEN_INCOME_LOWER = self._DEFAULT_ERHOEHTER_PENSIONISTEN_INCOME_LOWER
             self.ERHOEHTER_PENSIONISTEN_INCOME_UPPER = self._DEFAULT_PENSIONISTEN_INCOME_UPPER
             self.SONDERAUSGABENPAUSCHALE = self._DEFAULT_SONDERAUSGABENPAUSCHALE
-    
+            self.KIRCHENBEITRAG_CAP = self._DEFAULT_KIRCHENBEITRAG_CAP
+            self.SPENDEN_INCOME_RATIO = self._DEFAULT_SPENDEN_INCOME_RATIO
+
     def calculate_commuting_allowance(
         self,
         distance_km: int,
@@ -614,6 +629,90 @@ class DeductionCalculator:
             note="Sonderausgabenpauschale: €60/Jahr (automatisch für alle Steuerpflichtigen)"
         )
 
+    def calculate_sonderausgaben(
+        self,
+        kirchenbeitrag: Decimal = Decimal("0.00"),
+        spenden: Decimal = Decimal("0.00"),
+        previous_year_income: Optional[Decimal] = None,
+        tax_year: Optional[int] = None,
+    ) -> DeductionResult:
+        """
+        Calculate deductible Sonderausgaben (special expenses) per §18 EStG.
+
+        Covers:
+        1. Kirchenbeitrag (§18 Abs 1 Z 5 EStG) — church contributions, year-dependent cap:
+           - ≤2023: €400/year
+           - 2024+: €600/year (AbgÄG 2023, BGBl I Nr. 110/2023)
+        2. Spenden (§18 Abs 1 Z 7 EStG) — donations to qualifying organisations (BMF list),
+           capped at 10% of Gesamtbetrag der Einkünfte from previous year's tax return
+        3. Sonderausgabenpauschale (§18 Abs 2 EStG) — flat €60, applied automatically;
+           subsumed when actual Sonderausgaben exceed €60
+
+        Args:
+            kirchenbeitrag: Church contribution amount paid in the year
+            spenden: Donation amount to qualifying organisations
+            previous_year_income: Previous year's Gesamtbetrag der Einkünfte (for Spenden cap);
+                if None, no cap is applied (caller may pre-cap)
+            tax_year: Tax year (determines Kirchenbeitrag cap). If None, uses default (2024+ cap).
+
+        Returns:
+            DeductionResult with total deductible Sonderausgaben and breakdown
+        """
+        if not isinstance(kirchenbeitrag, Decimal):
+            kirchenbeitrag = Decimal(str(kirchenbeitrag))
+        if not isinstance(spenden, Decimal):
+            spenden = Decimal(str(spenden))
+
+        # Kirchenbeitrag: year-dependent cap (€400 for ≤2023, €600 for 2024+)
+        if tax_year is not None and tax_year <= 2023:
+            kirchenbeitrag_cap = self._KIRCHENBEITRAG_CAP_2023
+        else:
+            kirchenbeitrag_cap = self.KIRCHENBEITRAG_CAP
+        kirchenbeitrag_deductible = min(kirchenbeitrag, kirchenbeitrag_cap)
+
+        # Spenden: capped at 10% of previous year's income
+        if previous_year_income is not None:
+            if not isinstance(previous_year_income, Decimal):
+                previous_year_income = Decimal(str(previous_year_income))
+            spenden_cap = (previous_year_income * self.SPENDEN_INCOME_RATIO).quantize(Decimal("0.01"))
+            spenden_deductible = min(spenden, spenden_cap)
+        else:
+            spenden_deductible = spenden
+            spenden_cap = None
+
+        actual_total = kirchenbeitrag_deductible + spenden_deductible
+
+        # §18 Abs 2: Sonderausgabenpauschale (€60) is subsumed when actual > €60
+        if actual_total > self.SONDERAUSGABENPAUSCHALE:
+            total = actual_total
+            pauschale_applied = False
+        else:
+            total = self.SONDERAUSGABENPAUSCHALE
+            pauschale_applied = True
+
+        breakdown = {
+            'type': 'Sonderausgaben',
+            'kirchenbeitrag_paid': kirchenbeitrag.quantize(Decimal("0.01")),
+            'kirchenbeitrag_cap': kirchenbeitrag_cap,
+            'kirchenbeitrag_deductible': kirchenbeitrag_deductible.quantize(Decimal("0.01")),
+            'spenden_paid': spenden.quantize(Decimal("0.01")),
+            'spenden_deductible': spenden_deductible.quantize(Decimal("0.01")),
+            'pauschale_applied': pauschale_applied,
+        }
+        if spenden_cap is not None:
+            breakdown['spenden_cap'] = spenden_cap
+
+        return DeductionResult(
+            amount=total.quantize(Decimal("0.01")),
+            breakdown=breakdown,
+            note=(
+                f"Sonderausgaben: Kirchenbeitrag {kirchenbeitrag_deductible}"
+                f" + Spenden {spenden_deductible}"
+                f" = {actual_total}"
+                + (f" (Pauschale {self.SONDERAUSGABENPAUSCHALE} applied)" if pauschale_applied else "")
+            ),
+        )
+
     def calculate_employee_deductions(
         self,
         actual_werbungskosten: Decimal = Decimal('0.00')
@@ -662,7 +761,11 @@ class DeductionCalculator:
         employer_telearbeit_pauschale: Decimal = Decimal("0.00"),
         family_info: Optional[FamilyInfo] = None,
         is_employee: bool = False,
-        actual_werbungskosten: Decimal = Decimal('0.00')
+        actual_werbungskosten: Decimal = Decimal('0.00'),
+        annual_income: Optional[Decimal] = None,
+        kirchenbeitrag: Decimal = Decimal('0.00'),
+        spenden: Decimal = Decimal('0.00'),
+        previous_year_income: Optional[Decimal] = None,
     ) -> DeductionResult:
         """
         Calculate total deductions from all sources.
@@ -677,6 +780,7 @@ class DeductionCalculator:
         Breakdown keys for tax credits (Absetzbeträge — reduce tax, not income):
         - 'verkehrsabsetzbetrag': VAB amount
         - 'pendlereuro': Pendlereuro (€6/km/year) — Absetzbetrag per §33 Abs 5 EStG
+        - 'zuschlag_verkehrsabsetzbetrag': Zuschlag for low-income employees
         - 'familienbonus_amount': Familienbonus Plus
         - 'alleinverdiener_amount': AVAB/AEAB (includes single parent = Alleinerzieher)
 
@@ -693,6 +797,7 @@ class DeductionCalculator:
             family_info: Family information (None if not applicable)
             is_employee: Whether the user is an employee (for Werbungskostenpauschale)
             actual_werbungskosten: Actual work-related expenses (employees only)
+            annual_income: Annual gross income (needed for Zuschlag calculation)
 
         Returns:
             DeductionResult with income deductions total and detailed breakdown.
@@ -754,6 +859,24 @@ class DeductionCalculator:
                 breakdown['alleinverdiener'] = alleinverdiener_result.breakdown
                 breakdown['alleinverdiener_amount'] = alleinverdiener_result.amount
 
+        # Sonderausgaben (§18 EStG): Kirchenbeitrag + Spenden
+        # Replaces the flat Sonderausgabenpauschale (€60) when actual amounts exceed it
+        if kirchenbeitrag > Decimal('0.00') or spenden > Decimal('0.00'):
+            sonderausgaben_result = self.calculate_sonderausgaben(
+                kirchenbeitrag=kirchenbeitrag,
+                spenden=spenden,
+                previous_year_income=previous_year_income,
+            )
+            total_amount += sonderausgaben_result.amount
+            breakdown['sonderausgaben'] = sonderausgaben_result.breakdown
+            breakdown['sonderausgaben_amount'] = sonderausgaben_result.amount
+        else:
+            # Automatic Sonderausgabenpauschale (€60)
+            pauschale_result = self.calculate_sonderausgabenpauschale()
+            total_amount += pauschale_result.amount
+            breakdown['sonderausgaben'] = pauschale_result.breakdown
+            breakdown['sonderausgaben_amount'] = pauschale_result.amount
+
         # Employee-specific deductions
         if is_employee:
             employee_result = self.calculate_employee_deductions(
@@ -765,6 +888,13 @@ class DeductionCalculator:
             breakdown['werbungskostenpauschale_amount'] = employee_result.amount
             # Verkehrsabsetzbetrag is a tax credit - stored in breakdown for the engine
             breakdown['verkehrsabsetzbetrag'] = employee_result.breakdown['verkehrsabsetzbetrag']
+
+            # Zuschlag zum Verkehrsabsetzbetrag for low-income employees (§33 Abs 5 EStG)
+            if annual_income is not None:
+                zuschlag_result = self.calculate_zuschlag_verkehrsabsetzbetrag(annual_income)
+                if zuschlag_result.amount > Decimal('0.00'):
+                    breakdown['zuschlag_verkehrsabsetzbetrag'] = zuschlag_result.amount
+                    breakdown['zuschlag_details'] = zuschlag_result.breakdown
 
         return DeductionResult(
             amount=total_amount.quantize(Decimal('0.01')),

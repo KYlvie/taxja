@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation, Trans } from 'react-i18next';
+import Select from '../../components/common/Select';
 import { authService } from '../../services/authService';
 import { userService, IndustryOption } from '../../services/userService';
 import LanguageSwitcher from '../../components/common/LanguageSwitcher';
@@ -17,9 +18,14 @@ const RegisterPage = () => {
     userType: 'employee',
     userRoles: ['employee'] as string[],
     businessType: '' as string,
+    businessName: '' as string,
     businessIndustry: '' as string,
+    vatStatus: '' as string,
+    gewinnermittlungsart: '' as string,
     employerMode: 'none' as 'none' | 'occasional' | 'regular',
     employerRegion: '' as string,
+    numChildren: '' as string,
+    isSingleParent: false,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,6 +34,7 @@ const RegisterPage = () => {
   const [resending, setResending] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
   const [industries, setIndustries] = useState<IndustryOption[]>([]);
+  const [industriesLoading, setIndustriesLoading] = useState(false);
 
   const getIndustryLabel = (ind: IndustryOption) => {
     const lang = i18n.resolvedLanguage || i18n.language || 'de';
@@ -39,20 +46,56 @@ const RegisterPage = () => {
   // Fetch industries when businessType changes
   useEffect(() => {
     if (formData.businessType) {
-      userService.getIndustries(formData.businessType).then(setIndustries).catch(() => setIndustries([]));
+      let isActive = true;
+      setIndustriesLoading(true);
+      userService
+        .getIndustries(formData.businessType)
+        .then((nextIndustries) => {
+          if (isActive) {
+            setIndustries(nextIndustries);
+          }
+        })
+        .catch(() => {
+          if (isActive) {
+            setIndustries([]);
+          }
+        })
+        .finally(() => {
+          if (isActive) {
+            setIndustriesLoading(false);
+          }
+        });
+
+      return () => {
+        isActive = false;
+      };
     } else {
       setIndustries([]);
+      setIndustriesLoading(false);
     }
   }, [formData.businessType]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData({ ...formData, [name]: checked });
+      return;
+    }
     if (name === 'businessType') {
       setFormData({ ...formData, businessType: value, businessIndustry: '' });
     } else {
       setFormData({ ...formData, [name]: value });
     }
   };
+
+  const handleSelectChange = useCallback((field: string) => (value: string) => {
+    if (field === 'businessType') {
+      setFormData(prev => ({ ...prev, businessType: value, businessIndustry: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+  }, []);
 
   const handleRoleToggle = (role: string) => {
     if (role === 'gmbh') {
@@ -80,6 +123,22 @@ const RegisterPage = () => {
 
   const isGmbHSelected = formData.userRoles.includes('gmbh');
   const isSelfEmployed = formData.userRoles.includes('self_employed');
+  const needsAssetTaxProfile = isSelfEmployed;
+  const needsBusinessIndustry = isSelfEmployed && Boolean(formData.businessType) && industries.length > 0;
+  const businessIndustryPlaceholder = !formData.businessType
+    ? t('profile.selectBusinessTypeFirst', 'Please select a business type above first.')
+    : industriesLoading
+      ? t('profile.loadingIndustryOptions', 'Loading industry subcategories...')
+      : industries.length > 0
+        ? t('profile.selectIndustry')
+        : t('profile.noIndustryOptions', 'No subcategories available for this business type.');
+  const businessIndustryHelpText = !formData.businessType
+    ? t('profile.businessIndustryStepHelp', 'First select the business type, then choose a more specific industry subcategory.')
+    : industriesLoading
+      ? t('profile.businessIndustryLoadingHelp', 'The system is loading industry options for this business type.')
+      : industries.length > 0
+        ? t('profile.businessIndustryHelp')
+        : t('profile.businessIndustryUnavailableHelp', 'This business type currently has no available subcategories. You can add this later.');
   const personalRoles = [
     { value: 'employee', label: t('auth.userTypes.employee') },
     { value: 'landlord', label: t('auth.userTypes.landlord') },
@@ -91,6 +150,18 @@ const RegisterPage = () => {
     { value: 'neue_selbstaendige', label: t('auth.businessTypes.neueSelbstaendige') },
     { value: 'land_forstwirtschaft', label: t('auth.businessTypes.landForstwirtschaft') },
   ];
+  const vatStatusOptions = [
+    { value: 'regelbesteuert', label: t('profile.vatStatus.regelbesteuert', 'Regular VAT') },
+    { value: 'kleinunternehmer', label: t('profile.vatStatus.kleinunternehmer', 'Small business exemption') },
+    { value: 'pauschaliert', label: t('profile.vatStatus.pauschaliert', 'Flat-rate VAT') },
+    { value: 'unknown', label: t('profile.vatStatus.unknown', 'Unknown / not sure yet') },
+  ];
+  const gewinnermittlungsartOptions = [
+    { value: 'ea_rechnung', label: t('profile.gewinnermittlungsart.ea_rechnung', 'Einnahmen-Ausgaben-Rechnung') },
+    { value: 'bilanzierung', label: t('profile.gewinnermittlungsart.bilanzierung', 'Bilanzierung') },
+    { value: 'pauschal', label: t('profile.gewinnermittlungsart.pauschal', 'Pauschalierung') },
+    { value: 'unknown', label: t('profile.gewinnermittlungsart.unknown', 'Unknown / not sure yet') },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +169,11 @@ const RegisterPage = () => {
 
     if (formData.password !== formData.confirmPassword) {
       setError(t('auth.passwordsDoNotMatch', 'Passwords do not match'));
+      return;
+    }
+
+    if (needsBusinessIndustry && !formData.businessIndustry) {
+      setError(t('profile.businessIndustryRequired', 'Please select a specific industry/business subcategory.'));
       return;
     }
 
@@ -114,10 +190,16 @@ const RegisterPage = () => {
         password: formData.password,
         name: formData.name,
         user_type: formData.userType,
+        user_roles: formData.userRoles,
         business_type: isSelfEmployed ? formData.businessType || null : null,
+        business_name: isSelfEmployed ? formData.businessName.trim() || null : null,
         business_industry: isSelfEmployed ? formData.businessIndustry || null : null,
+        vat_status: needsAssetTaxProfile ? formData.vatStatus || null : null,
+        gewinnermittlungsart: needsAssetTaxProfile ? formData.gewinnermittlungsart || null : null,
         employer_mode: isSelfEmployed ? formData.employerMode : 'none',
         employer_region: isSelfEmployed ? formData.employerRegion || null : null,
+        num_children: formData.numChildren === '' ? null : Number(formData.numChildren),
+        is_single_parent: formData.numChildren === '' ? null : formData.isSingleParent,
         language: lang,
       });
       setRegisteredEmail(formData.email);
@@ -227,65 +309,127 @@ const RegisterPage = () => {
             <div style={{ borderTop: '1px solid var(--border-color, #e5e7eb)', margin: '0.5rem 0', paddingTop: '0.5rem', opacity: 0.5 }}>
               <label className="role-checkbox-label" style={{ cursor: 'not-allowed' }}>
                 <input type="checkbox" checked={false} disabled />
-                {t('profile.gmbh', 'GmbH（有限责任公司）')} <span style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: 600, marginLeft: '0.5rem' }}>{t('common.comingSoon')}</span>
+                {t('profile.gmbh', 'GmbH')} <span style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: 600, marginLeft: '0.5rem' }}>{t('common.comingSoon')}</span>
               </label>
             </div>
           </div>
 
           {isSelfEmployed && (
-            <div className="form-group">
-              <label>{t('auth.businessType')}</label>
-              <select
-                name="businessType"
-                value={formData.businessType}
-                onChange={handleChange}
-                disabled={loading}
-              >
-                <option value="">{t('auth.selectBusinessType')}</option>
-                {businessTypes.map(bt => (
-                  <option key={bt.value} value={bt.value}>{bt.label}</option>
-                ))}
-              </select>
-              {formData.businessType && (
-                <small className="business-type-hint">
-                  {t(`auth.businessTypeHints.${formData.businessType}`)}
-                </small>
-              )}
-            </div>
+            <>
+              <div className="form-group">
+                <label>{t('auth.businessType')}</label>
+                <Select name="businessType" value={formData.businessType}
+                  onChange={handleSelectChange('businessType')} disabled={loading}
+                  placeholder={t('auth.selectBusinessType')}
+                  options={businessTypes} />
+                {formData.businessType && (
+                  <small className="business-type-hint">
+                    {t(`auth.businessTypeHints.${formData.businessType}`)}
+                  </small>
+                )}
+              </div>
+
+              <div className="form-group business-subtype-group">
+                <label>
+                  {t('profile.businessIndustry')}
+                  {needsBusinessIndustry && <span className="field-required-marker"> *</span>}
+                </label>
+                <Select name="businessIndustry" value={formData.businessIndustry}
+                  onChange={handleSelectChange('businessIndustry')}
+                  disabled={loading || !formData.businessType || industriesLoading || industries.length === 0}
+                  placeholder={businessIndustryPlaceholder}
+                  options={industries.map(ind => ({ value: ind.value, label: getIndustryLabel(ind) }))} />
+                <small>{businessIndustryHelpText}</small>
+              </div>
+            </>
           )}
 
-          {isSelfEmployed && industries.length > 0 && (
+          <section className="auth-optional-profile-section">
+            <div className="auth-optional-profile-header">
+              <h2>{t('auth.optionalProfileTitle', 'Complete your profile')}</h2>
+              <span>{t('auth.optionalProfileBadge', 'Optional')}</span>
+            </div>
+            <p className="auth-optional-profile-copy">
+              {t(
+                'auth.optionalProfileCopy',
+                'These fields can be left blank for now; filling them in first will help Taxja provide more accurate recognition, deductions, and tips later.'
+              )}
+            </p>
+
+            {isSelfEmployed && (
+              <div className="form-group">
+                <label>{t('profile.businessName', 'Business name')}</label>
+                <input
+                  type="text"
+                  name="businessName"
+                  value={formData.businessName}
+                  onChange={handleChange}
+                  disabled={loading}
+                  placeholder={t('profile.businessNamePlaceholder', 'Optional business name')}
+                />
+              </div>
+            )}
+
+            {needsAssetTaxProfile && (
+              <>
+                <div className="form-group">
+                  <label>{t('profile.vatStatusLabel', 'VAT status')}</label>
+                  <Select name="vatStatus" value={formData.vatStatus}
+                    onChange={handleSelectChange('vatStatus')} disabled={loading}
+                    placeholder={t('profile.selectVatStatus', 'Select VAT status')}
+                    options={vatStatusOptions} />
+                </div>
+
+                <div className="form-group">
+                  <label>{t('profile.gewinnermittlungsartLabel', 'Profit determination method')}</label>
+                  <Select name="gewinnermittlungsart" value={formData.gewinnermittlungsart}
+                    onChange={handleSelectChange('gewinnermittlungsart')} disabled={loading}
+                    placeholder={t('profile.selectGewinnermittlungsart', 'Select profit determination method')}
+                    options={gewinnermittlungsartOptions} />
+                </div>
+              </>
+            )}
+
             <div className="form-group">
-              <label>{t('profile.businessIndustry')}</label>
-              <select
-                name="businessIndustry"
-                value={formData.businessIndustry}
+              <label>{t('profile.numChildren', 'Number of children')}</label>
+              <input
+                type="number"
+                name="numChildren"
+                value={formData.numChildren}
                 onChange={handleChange}
                 disabled={loading}
-              >
-                <option value="">{t('profile.selectIndustry')}</option>
-                {industries.map(ind => (
-                  <option key={ind.value} value={ind.value}>{getIndustryLabel(ind)}</option>
-                ))}
-              </select>
-              <small>{t('profile.businessIndustryHelp')}</small>
+                min="0"
+                placeholder="0"
+              />
             </div>
-          )}
+
+            <div className="form-group checkbox-inline-group">
+              <label className="checkbox-inline-label">
+                <input
+                  type="checkbox"
+                  name="isSingleParent"
+                  checked={formData.isSingleParent}
+                  onChange={handleChange}
+                  disabled={loading}
+                />
+                <span className="checkbox-inline-text">
+                  {t('profile.singleParent', 'I am a single parent')}
+                </span>
+              </label>
+            </div>
+          </section>
 
           {isSelfEmployed && (
             <>
               <div className="form-group">
                 <label>{t('profile.employerMode', 'Employee-related payroll documents')}</label>
-                <select
-                  name="employerMode"
-                  value={formData.employerMode}
-                  onChange={handleChange}
-                  disabled={loading}
-                >
-                  <option value="none">{t('profile.employerModes.none', 'No')}</option>
-                  <option value="occasional">{t('profile.employerModes.occasional', 'Occasionally')}</option>
-                  <option value="regular">{t('profile.employerModes.regular', 'Regularly')}</option>
-                </select>
+                <Select name="employerMode" value={formData.employerMode}
+                  onChange={handleSelectChange('employerMode')} disabled={loading}
+                  options={[
+                    { value: 'none', label: t('profile.employerModes.none', 'No') },
+                    { value: 'occasional', label: t('profile.employerModes.occasional', 'Occasionally') },
+                    { value: 'regular', label: t('profile.employerModes.regular', 'Regularly') },
+                  ]} />
                 <small>
                   {t(
                     'profile.employerModeHelp',

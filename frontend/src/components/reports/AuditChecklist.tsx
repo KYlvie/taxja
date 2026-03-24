@@ -120,7 +120,7 @@ const AuditChecklist = ({ taxYear }: AuditChecklistProps) => {
                 {t('reports.audit.complianceIssues', { count: checklist.compliance_issues })}
               </span>
             )}
-            {checklist.missing_documents === 0 && checklist.compliance_issues === 0 && (
+            {checklist.overall_status === 'ready' && (
               <span className="summary-item success">
                 {t('reports.audit.allGood')}
               </span>

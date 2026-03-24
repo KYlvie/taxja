@@ -224,7 +224,10 @@ class LLMExtractor:
             return False
 
     def extract(
-        self, raw_text: str, doc_type: DocumentType
+        self,
+        raw_text: str,
+        doc_type: DocumentType,
+        provider_preference: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Extract fields from OCR text using LLM.
@@ -258,6 +261,7 @@ class LLMExtractor:
                 user_prompt=f"OCR-Text:\n\n{text}",
                 temperature=0.1,
                 max_tokens=4000,
+                provider_preference=provider_preference,
             )
             parsed = self._parse_json_response(response)
             if parsed is None:

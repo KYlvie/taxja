@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+.git/
+.gitignore
+tests/
+models/versions/**/*.pkl
+data/
+logs/
+*.log
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.egg-info/

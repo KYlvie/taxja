@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
-import { useAuthStore } from '../stores/authStore';
-import { userService } from '../services/userService';
+import SubpageBackLink from '../components/common/SubpageBackLink';
 import './LegalPage.css';
 
 type LegalType = 'impressum' | 'agb' | 'datenschutz' | 'terms' | 'privacy';
@@ -26,7 +25,7 @@ const LegalPage = () => {
           </Link>
           <div className="legal-nav-r">
             <LanguageSwitcher />
-            <Link to="/" className="legal-back">← {t('legal.back')}</Link>
+            <SubpageBackLink to="/" label={t('legal.back')} className="legal-back" />
           </div>
         </div>
       </header>
@@ -56,45 +55,14 @@ const Nl = ({ text }: { text: string }) => (
 
 const ImpressumContent = () => {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
-  const [businessInfo, setBusinessInfo] = useState<{ business_name?: string | null; name?: string; address?: string; tax_number?: string; vat_number?: string } | null>(null);
   const serviceProviderLines = String(t('legal.serviceProviderContent')).split('\n').filter(Boolean);
   const [serviceProviderName, ...serviceProviderDetails] = serviceProviderLines;
   const companyHomepageUrl = String(t('legal.companyHomepageUrl', '/company'));
-
-  useEffect(() => {
-    if (user) {
-      userService.getProfile().then(profile => {
-        if (profile.business_name) {
-          setBusinessInfo({
-            business_name: profile.business_name,
-            name: profile.name,
-            address: profile.address,
-            tax_number: profile.tax_number,
-            vat_number: profile.vat_number,
-          });
-        }
-      }).catch(() => {});
-    }
-  }, [user]);
 
   return (
     <article className="legal-article">
       <h1>{t('legal.impressumTitle')}</h1>
       <p className="legal-meta">{t('legal.impressumMeta')}</p>
-
-      {businessInfo && businessInfo.business_name && (
-        <section className="legal-user-business">
-          <h2>{t('legal.yourBusiness')}</h2>
-          <p>
-            <strong>{businessInfo.business_name}</strong><br />
-            {businessInfo.name}<br />
-            {businessInfo.address && <><Nl text={businessInfo.address} /><br /></>}
-            {businessInfo.tax_number && <>{t('legal.taxInfo')}: {businessInfo.tax_number}<br /></>}
-            {businessInfo.vat_number && <>UID: {businessInfo.vat_number}</>}
-          </p>
-        </section>
-      )}
 
       <section>
         <h2>{t('legal.serviceProvider')}</h2>

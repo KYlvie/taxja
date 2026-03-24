@@ -62,8 +62,8 @@ async def handle_stripe_webhook(
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+        logger.exception("Webhook processing error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to process webhook"
+            detail="payment_processing_error"
         )

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { EmployerAnnualArchive, EmployerOverview } from '../../services/employerService';
 import { formatEmployerDate, formatEmployerMoney } from '../../utils/employerSupport';
-import { normalizeLanguage } from '../../utils/locale';
+import { normalizeLanguage, type SupportedLanguage } from '../../utils/locale';
 import './EmployerStatusCard.css';
 
 interface EmployerStatusCardProps {
@@ -20,7 +20,26 @@ const EmployerStatusCard = ({
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const language = normalizeLanguage(i18n.resolvedLanguage || i18n.language);
-  const text = {
+  const textByLanguage: Partial<Record<SupportedLanguage, {
+    title: string;
+    subtitle: string;
+    action: string;
+    attentionTitle: string;
+    attentionBody: string;
+    selectedYear: string;
+    payrollMonths: string;
+    missingConfirmations: string;
+    noPayrollMonths: string;
+    nextDeadline: string;
+    historicalPacks: string;
+    historyTitle: string;
+    pendingArchives: string;
+    unknownEmployer: string;
+    documentCount: string;
+    archived: string;
+    pending: string;
+    noHistory: string;
+  }>> = {
     zh: {
       title: '雇主支持',
       subtitle: '集中查看工资月份、补确认缺口，并归档历史工资年包。',
@@ -81,7 +100,48 @@ const EmployerStatusCard = ({
       pending: 'Offen',
       noHistory: 'Historische Lohnpakete erscheinen hier, sobald aeltere Lohnzettel oder Jahresdateien archiviert sind.',
     },
-  }[language];
+    fr: {
+      title: 'Support employeur',
+      subtitle: 'Suivez les mois de paie, comblez les lacunes de confirmation et archivez les packs de paie historiques.',
+      action: 'Voir les détails',
+      attentionTitle: 'Action requise',
+      attentionBody: 'Vous avez des éléments liés à l\'employeur en attente de confirmation ou d\'examen d\'archivage.',
+      selectedYear: 'Année sélectionnée',
+      payrollMonths: 'Mois de paie',
+      missingConfirmations: 'En attente de confirmation',
+      noPayrollMonths: 'Mois sans paie confirmés',
+      nextDeadline: 'Prochaine échéance employeur',
+      historicalPacks: 'Packs annuels historiques',
+      historyTitle: 'Packs de paie historiques',
+      pendingArchives: '{{count}} en attente',
+      unknownEmployer: 'Employeur non identifié',
+      documentCount: '{{count}} document(s)',
+      archived: 'Archivé',
+      pending: 'En attente',
+      noHistory: 'Les packs de paie historiques apparaîtront ici une fois que vous aurez archivé des Lohnzettel ou des fichiers de paie annuels plus anciens.',
+    },
+    ru: {
+      title: 'Поддержка работодателя',
+      subtitle: 'Отслеживайте месяцы зарплаты, устраняйте пробелы в подтверждениях и архивируйте исторические пакеты зарплат.',
+      action: 'Подробнее',
+      attentionTitle: 'Требуется действие',
+      attentionBody: 'У вас есть связанные с работодателем элементы, ожидающие подтверждения или проверки архива.',
+      selectedYear: 'Выбранный год',
+      payrollMonths: 'Месяцы зарплаты',
+      missingConfirmations: 'Ожидание подтверждения',
+      noPayrollMonths: 'Месяцы без зарплаты подтверждены',
+      nextDeadline: 'Следующий срок',
+      historicalPacks: 'Исторические годовые пакеты',
+      historyTitle: 'Исторические пакеты зарплат',
+      pendingArchives: '{{count}} в ожидании',
+      unknownEmployer: 'Работодатель не определён',
+      documentCount: '{{count}} документ(ов)',
+      archived: 'Архивировано',
+      pending: 'В ожидании',
+      noHistory: 'Исторические пакеты зарплат появятся здесь после архивации старых Lohnzettel или годовых файлов зарплат.',
+    },
+  };
+  const text = textByLanguage[language] ?? textByLanguage.en!;
 
   const pendingAnnualArchives = useMemo(
     () => annualArchives.filter((archive) => archive.status === 'pending_confirmation'),

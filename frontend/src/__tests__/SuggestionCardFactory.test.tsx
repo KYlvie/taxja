@@ -69,6 +69,29 @@ describe('Legacy entity-creation types', () => {
     );
     expect(container.querySelector('.import-suggestion-card')).toBeTruthy();
   });
+
+  it('renders LoanSuggestionCard for create_loan_repayment', () => {
+    const { container } = render(
+      <SuggestionCardFactory {...makeProps('create_loan_repayment', { bank: 'Erste Bank' })} />,
+    );
+    expect(container.querySelector('.import-suggestion-card')).toBeTruthy();
+  });
+
+  it('uses onConfirmLoanRepayment when provided for create_loan_repayment', () => {
+    const onConfirmLoanRepayment = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <SuggestionCardFactory
+        {...makeProps('create_loan_repayment', { lender_name: 'Erste Bank' })}
+        onConfirmLoanRepayment={onConfirmLoanRepayment}
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirmBtn = screen.getAllByRole('button')[0];
+    fireEvent.click(confirmBtn);
+    expect(onConfirmLoanRepayment).toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

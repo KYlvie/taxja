@@ -22,10 +22,10 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(SQLEnum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
-    language = Column(String(5), nullable=False, default="de")  # de, en, zh
+    language = Column(String(5), nullable=False, default="de")  # de, en, zh, fr, ru, hu, pl, tr, bs
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationship

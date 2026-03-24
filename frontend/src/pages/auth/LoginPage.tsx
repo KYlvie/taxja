@@ -29,6 +29,7 @@ const LoginPage = () => {
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const [resending, setResending] = useState(false);
   const [resendMsg, setResendMsg] = useState('');
+
   const showDeactivatedSuccess =
     new URLSearchParams(location.search).get('account_deactivated') === '1';
 
@@ -72,6 +73,7 @@ const LoginPage = () => {
       });
 
       login(response.user, response.access_token);
+      navigate('/dashboard');
 
       try {
         const fullProfile = await userService.getProfile();
@@ -79,28 +81,44 @@ const LoginPage = () => {
       } catch (profileError) {
         console.warn('Failed to sync full user profile after login', profileError);
       }
-
-      navigate('/dashboard');
     } catch (err: any) {
-      if (err.response?.status === 403 && err.response?.data?.requires_2fa) {
+      const status = err.response?.status;
+      const data = err.response?.data;
+
+      if (!err.response) {
+        // Network error — no response from server
+        setError(t('auth.networkError', 'Unable to connect to the server. Please check your internet connection.'));
+      } else if (status === 403 && data?.requires_2fa) {
         setShowTwoFactor(true);
-        setError(t('auth.enter2FACode'));
-      } else if (
-        err.response?.status === 403 &&
-        err.response?.data?.account_status === 'deactivated'
-      ) {
+        setError('');
+      } else if (status === 403 && data?.account_status === 'deactivated') {
         setDeactivatedInfo({
-          coolingOffDaysRemaining: err.response.data.cooling_off_days_remaining ?? 0,
+          coolingOffDaysRemaining: data.cooling_off_days_remaining ?? 0,
         });
+      } else if (status === 403 && data?.account_status === 'deletion_pending') {
+        setError(t('auth.accountDeletionPending', 'This account has been scheduled for permanent deletion and can no longer be accessed.'));
       } else if (
-        err.response?.status === 403 &&
-        (err.response?.data?.detail === 'email_not_verified' ||
-          err.response?.data?.detail?.detail === 'email_not_verified')
+        status === 403 &&
+        (data?.detail === 'email_not_verified' || data?.detail?.detail === 'email_not_verified')
       ) {
-        const emailAddress = err.response?.data?.email || err.response?.data?.detail?.email || email;
+        const emailAddress = data?.email || data?.detail?.email || email;
         setUnverifiedEmail(emailAddress);
+      } else if (status === 429) {
+        setError(t('auth.tooManyAttempts', 'Too many login attempts. Please wait a moment and try again.'));
+      } else if (status === 422) {
+        // Validation error — show specific field errors if available
+        const errors = data?.error?.details?.errors || data?._detail_obj?.details?.errors;
+        if (errors && Array.isArray(errors) && errors.length > 0) {
+          const fieldMessages = errors.map((e: any) => e.message).filter(Boolean);
+          setError(fieldMessages.join('\n') || t('auth.invalidInput', 'Please check your email and password format.'));
+        } else {
+          setError(t('auth.invalidInput', 'Please check your email and password format.'));
+        }
+      } else if (status === 500 || status === 502 || status === 503) {
+        setError(t('auth.serverError', 'The server is temporarily unavailable. Please try again later.'));
       } else {
-        const detail = err.response?.data?.detail;
+        // 401 or other errors — show the backend message
+        const detail = data?.detail;
         if (typeof detail === 'string') {
           setError(detail);
         } else if (detail?.message) {
@@ -171,65 +189,102 @@ const LoginPage = () => {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="form-group">
-            <label>{t('auth.email')}</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
 
-          <div className="form-group">
-            <label>{t('auth.password')}</label>
-            <div className="password-input-wrapper">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                disabled={loading}
-              />
+
+        {showTwoFactor ? (
+          <>
+            <div className="success-message" style={{ marginBottom: '16px' }}>
+              <strong>{t('auth.twoFactorRequired', 'Two-factor authentication required')}</strong>
+              <div>
+                {t('auth.enter2FACodeForAccount', 'Enter the 6-digit code from your authenticator app for {{email}}.', { email })}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="auth-form">
+              <div className="form-group">
+                <label>{t('auth.twoFactorCode', '2FA Code')}</label>
+                <input
+                  type="text"
+                  value={twoFactorCode}
+                  onChange={(event) => setTwoFactorCode(event.target.value)}
+                  disabled={loading}
+                  maxLength={6}
+                  placeholder="000000"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
+
+              {error ? <div className="error-message">{error}</div> : null}
+
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? t('common.loading') : t('auth.verify', 'Verify')}
+              </button>
+            </form>
+
+            <div className="auth-links">
               <button
                 type="button"
-                className="password-toggle-btn"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                aria-label={showPassword ? t('auth.hidePassword', 'Hide password') : t('auth.showPassword', 'Show password')}
+                className="btn-link"
+                onClick={() => {
+                  setShowTwoFactor(false);
+                  setTwoFactorCode('');
+                  setError('');
+                }}
               >
-                {showPassword ? '🙈' : '👁'}
+                {t('common.back', 'Back')}
               </button>
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <form onSubmit={handleSubmit} className="auth-form">
+              <div className="form-group">
+                <label>{t('auth.email')}</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  disabled={loading}
+                />
+              </div>
 
-          {showTwoFactor ? (
-            <div className="form-group">
-              <label>{t('auth.twoFactorCode')}</label>
-              <input
-                type="text"
-                value={twoFactorCode}
-                onChange={(event) => setTwoFactorCode(event.target.value)}
-                required
-                disabled={loading}
-                maxLength={6}
-              />
+              <div className="form-group">
+                <label>{t('auth.password')}</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                    aria-label={showPassword ? t('auth.hidePassword', 'Hide password') : t('auth.showPassword', 'Show password')}
+                  >
+                    {showPassword ? '🙈' : '👁'}
+                  </button>
+                </div>
+              </div>
+
+              {error ? <div className="error-message">{error}</div> : null}
+
+              <button type="submit" className="btn-primary" disabled={loading}>
+                {loading ? t('common.loading') : t('auth.login')}
+              </button>
+            </form>
+
+            <div className="auth-links">
+              <Link to="/forgot-password">{t('auth.forgotPassword')}</Link>
+              <Link to="/register">{t('auth.register')}</Link>
             </div>
-          ) : null}
-
-          {error ? <div className="error-message">{error}</div> : null}
-
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? t('common.loading') : t('auth.login')}
-          </button>
-        </form>
-
-        <div className="auth-links">
-          <Link to="/forgot-password">{t('auth.forgotPassword')}</Link>
-          <Link to="/register">{t('auth.register')}</Link>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

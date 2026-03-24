@@ -10,6 +10,19 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      try { const s=JSON.parse(localStorage.getItem('taxja-theme')||'{}');
+        if(s.state?.theme==='cyber') document.documentElement.setAttribute('data-theme','cyber');
+      } catch(e){}
+    </script>
+    <script>
+      // Auto-reload when a new Service Worker takes over
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+          window.location.reload();
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

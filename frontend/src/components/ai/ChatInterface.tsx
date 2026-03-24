@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useConfirm } from '../../hooks/useConfirm';
-import { Loader2, Trash2, Paperclip, X as XIcon, ArrowUp, Check, X as XMark } from 'lucide-react';
+import { ArrowRight, ArrowUp, Check, ClipboardList, FileText, Loader2, Paperclip, Plus, Trash2, X as XIcon, X as XMark } from 'lucide-react';
 import { aiService } from '../../services/aiService';
 import { documentService } from '../../services/documentService';
 import { employerService } from '../../services/employerService';
@@ -17,6 +17,8 @@ import ChatProcessingIndicator from './ChatProcessingIndicator';
 import ChatSuggestionCard from './ChatSuggestionCard';
 import ChatFollowUpQuestion from './ChatFollowUpQuestion';
 import ChatProactiveAction, { isActionableProactive } from './ChatProactiveAction';
+import { getLocaleForLanguage } from '../../utils/locale';
+import i18nInstance from '../../i18n';
 import './ChatInterface.css';
 
 interface Message {
@@ -25,6 +27,9 @@ interface Message {
   content: string;
   timestamp: Date;
   fileName?: string;
+  intent?: string;
+  showDisclaimer?: boolean;
+  sourceTier?: string;
 }
 
 interface ChatInterfaceProps {
@@ -39,7 +44,7 @@ interface ChatInterfaceProps {
 const ACCEPTED_FILE_TYPES = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.xlsx,.xls';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const formatEmployerMonthLabel = (yearMonth?: string) => {
+const formatEmployerMonthLabel = (yearMonth?: string, locale?: string) => {
   if (!yearMonth) {
     return '';
   }
@@ -52,7 +57,7 @@ const formatEmployerMonthLabel = (yearMonth?: string) => {
   }
 
   try {
-    return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(
+    return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
       new Date(year, month - 1, 1)
     );
   } catch {
@@ -74,14 +79,14 @@ const formatCurrency = (value: unknown) => {
   if (numeric === undefined) {
     return null;
   }
-  return numeric.toLocaleString('de-AT', {
+  return numeric.toLocaleString(getLocaleForLanguage(i18nInstance.language), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 };
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUpload }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { confirm: showConfirm } = useConfirm();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -128,8 +133,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
   const handleSend = async () => {
     if ((!input.trim() && !attachedFile) || isLoading) return;
 
-    const displayContent = attachedFile
-      ? (input.trim() ? `📎 ${attachedFile.name}\n${input.trim()}` : `📎 ${attachedFile.name}`)
+  const displayContent = attachedFile
+      ? (input.trim() ? `${t('chat.attachment')} ${attachedFile.name}\n${input.trim()}` : `${t('chat.attachment')} ${attachedFile.name}`)
       : input.trim();
 
     const userMessage: Message = {
@@ -160,6 +165,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
         role: 'assistant',
         content: response.content,
         timestamp: new Date(),
+        intent: response.intent,
+        showDisclaimer: response.showDisclaimer,
+        sourceTier: response.sourceTier,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err: any) {
@@ -336,7 +344,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
         type: 'tip',
         content: t('ai.proactive.employerMonthConfirmed', {
           defaultValue: '{{month}} is now recorded as a payroll month.',
-          month: formatEmployerMonthLabel(yearMonth),
+          month: formatEmployerMonthLabel(yearMonth, getLocaleForLanguage(i18n.language)),
         }),
       });
 
@@ -370,7 +378,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
         type: 'tip',
         content: t('ai.proactive.employerMonthNoPayroll', {
           defaultValue: '{{month}} has been marked as a month without employees.',
-          month: formatEmployerMonthLabel(yearMonth),
+          month: formatEmployerMonthLabel(yearMonth, getLocaleForLanguage(i18n.language)),
         }),
       });
 
@@ -452,6 +460,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
     }
   }, [percentageInputs, updateMessageAction, pushMessage, t]);
 
+  const getProactiveLinkActions = useCallback((pm: ProactiveMessage) => {
+    const actions: Array<{ href: string; label: string }> = [];
+
+    if (pm.link) {
+      actions.push({
+        href: pm.link,
+        label:
+          pm.linkLabel ||
+          (pm.link.startsWith('/documents/')
+            ? t('ai.proactive.viewDocument', 'View document')
+            : t('ai.proactive.viewDetails', 'View details')),
+      });
+    }
+
+    if (pm.secondaryLink) {
+      actions.push({
+        href: pm.secondaryLink,
+        label: pm.secondaryLinkLabel || t('ai.proactive.viewDocument', 'View document'),
+      });
+    }
+
+    return actions;
+  }, [t]);
+
   return (
     <div className="chat-interface">
       <div className="chat-messages">
@@ -461,7 +493,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
               <div className="chat-advisor-avatar-lg">T</div>
               <div className="chat-welcome-text">
                 <p className="chat-welcome-greeting">
-                  {t('ai.welcomeTitle', 'Hi, I\'m your Taxja advisor')} 👋
+                  {t('ai.welcomeTitle', 'Hi, I\'m your Taxja advisor')}
                 </p>
                 <p className="chat-welcome-context">{getContextGreeting()}</p>
               </div>
@@ -474,35 +506,62 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
           </div>
         )}
 
-        {/* Proactive advisor messages — shown first, then user chat below */}
+        {/* Chat history messages rendered first (older) */}
+        {messages.map((message, idx) => {
+          const isAssistant = message.role === 'assistant';
+          const showAvatar = isAssistant && (idx === 0 || messages[idx - 1]?.role !== 'assistant');
+          return (
+            <div key={message.id} className={`chat-msg ${message.role}`}>
+              {isAssistant && (
+                <div className={`chat-msg-avatar${showAvatar ? '' : ' invisible'}`}>T</div>
+              )}
+              <div className="chat-msg-bubble">
+                {message.role === 'user' ? (
+                  <p>{message.content}</p>
+                ) : (
+                  <AIResponse content={message.content} intent={message.intent} showDisclaimer={message.showDisclaimer} sourceTier={message.sourceTier} />
+                )}
+                <span className="chat-msg-time">
+                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Proactive advisor messages — shown after chat history (newer session messages) */}
         {proactiveMessages.filter((m) => !m.dismissed).length > 0 && (
           <div className="chat-proactive-section">
-            {proactiveMessages.filter((m) => !m.dismissed).slice(-5).map((pm) => (
+            {proactiveMessages.filter((m) => !m.dismissed).slice(-5)
+              .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+              .map((pm) => {
+              const linkActions = getProactiveLinkActions(pm);
+
+              return (
               <div key={pm.id} className="chat-msg assistant chat-proactive-bubble">
                 <div className="chat-msg-avatar">T</div>
-                <div className="chat-msg-bubble" style={{ position: 'relative' }}>
+                <div className="chat-msg-bubble">
                   <button
                     type="button"
                     className="chat-proactive-dismiss"
                     onClick={() => dismissMessage(pm.id)}
                     aria-label={t('common.close')}
-                    style={{ position: 'absolute', top: 4, right: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5, padding: '2px', lineHeight: 1 }}
                   >
                     <XMark size={12} />
                   </button>
                   {pm.content.split('\n').map((line, i) => (
-                    <p key={i} style={{ margin: '0 0 4px', fontSize: '0.84rem', lineHeight: 1.55 }}>{line}</p>
+                    <p key={i} className="chat-proactive-line">{line}</p>
                   ))}
 
                   {/* Recurring transaction confirmation card */}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.monthly_rent && (
                           <div className="chat-recurring-row">
                             <span>{t('documents.ocr.monthlyRent', 'Monthly rent')}</span>
                             <span className="chat-recurring-value">
-                              € {Number(pm.actionData.monthly_rent).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              € {Number(pm.actionData.monthly_rent).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
                         )}
@@ -510,7 +569,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <div className="chat-recurring-row">
                             <span>{t('common.amount', 'Amount')}</span>
                             <span className="chat-recurring-value">
-                              € {Number(pm.actionData.amount).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              € {Number(pm.actionData.amount).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
                         )}
@@ -530,7 +589,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <div className="chat-recurring-row">
                             <span>{t('documents.ocr.startDate', 'Start date')}</span>
                             <span className="chat-recurring-value">
-                              {(() => { try { return new Date(pm.actionData.start_date).toLocaleDateString('de-AT'); } catch { return pm.actionData.start_date; } })()}
+                              {(() => { try { return new Date(pm.actionData.start_date).toLocaleDateString(getLocaleForLanguage(i18n.language)); } catch { return pm.actionData.start_date; } })()}
                             </span>
                           </div>
                         )}
@@ -538,7 +597,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <div className="chat-recurring-row">
                             <span>{t('recurring.form.endDate', 'End date')}</span>
                             <span className="chat-recurring-value">
-                              {(() => { try { return new Date(pm.actionData.end_date).toLocaleDateString('de-AT'); } catch { return pm.actionData.end_date; } })()}
+                              {(() => { try { return new Date(pm.actionData.end_date).toLocaleDateString(getLocaleForLanguage(i18n.language)); } catch { return pm.actionData.end_date; } })()}
                             </span>
                           </div>
                         )}
@@ -561,29 +620,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <span>{t('ai.proactive.skip', 'Skip')}</span>
                         </button>
                       </div>
+                      {linkActions.length > 0 && (
+                        <div className="chat-inline-link-actions">
+                          {linkActions.map((action) => (
+                            <button
+                              key={`${pm.id}-${action.href}`}
+                              type="button"
+                              className="chat-recurring-btn dismiss chat-inline-link-btn"
+                              onClick={() => navigate(action.href)}
+                            >
+                              <ArrowRight size={14} />
+                              <span>{action.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Show result after action */}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.recurringConfirmed')}
                     </div>
                   )}
-                  {pm.type === 'recurring_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'recurring_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.recurringDismissed')}
                     </div>
                   )}
 
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.year_month && (
                           <div className="chat-recurring-row">
                             <span>{t('common.month', 'Month')}</span>
                             <span className="chat-recurring-value">
-                              {formatEmployerMonthLabel(pm.actionData.year_month)}
+                              {formatEmployerMonthLabel(pm.actionData.year_month, getLocaleForLanguage(i18n.language))}
                             </span>
                           </div>
                         )}
@@ -628,26 +702,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <span>{t('ai.proactive.noPayrollThisMonth', 'No employees this month')}</span>
                         </button>
                       </div>
+                      {linkActions.length > 0 && (
+                        <div className="chat-inline-link-actions">
+                          {linkActions.map((action) => (
+                            <button
+                              key={`${pm.id}-${action.href}`}
+                              type="button"
+                              className="chat-recurring-btn dismiss chat-inline-link-btn"
+                              onClick={() => navigate(action.href)}
+                            >
+                              <ArrowRight size={14} />
+                              <span>{action.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />{' '}
                       {t('ai.proactive.employerMonthConfirmed', {
                         defaultValue: '{{month}} is now recorded as a payroll month.',
-                        month: formatEmployerMonthLabel(pm.actionData?.year_month),
+                        month: formatEmployerMonthLabel(pm.actionData?.year_month, getLocaleForLanguage(i18n.language)),
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_month_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'employer_month_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.employerMonthNoPayroll', {
                         defaultValue: '{{month}} has been marked as a month without employees.',
-                        month: formatEmployerMonthLabel(pm.actionData?.year_month),
+                        month: formatEmployerMonthLabel(pm.actionData?.year_month, getLocaleForLanguage(i18n.language)),
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.tax_year && (
@@ -695,9 +784,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           <span>{t('ai.proactive.later', 'Later')}</span>
                         </button>
                       </div>
+                      {linkActions.length > 0 && (
+                        <div className="chat-inline-link-actions">
+                          {linkActions.map((action) => (
+                            <button
+                              key={`${pm.id}-${action.href}`}
+                              type="button"
+                              className="chat-recurring-btn dismiss chat-inline-link-btn"
+                              onClick={() => navigate(action.href)}
+                            >
+                              <ArrowRight size={14} />
+                              <span>{action.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />{' '}
                       {t('ai.proactive.employerAnnualArchiveConfirmed', {
@@ -706,7 +810,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       })}
                     </div>
                   )}
-                  {pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'employer_annual_archive_confirm' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.laterSaved', {
                         defaultValue: 'No problem. You can archive this payroll year later.',
@@ -715,20 +819,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                   )}
 
                   {/* Contract expired — action buttons: upload renewal or go to manual add */}
-                  {pm.type === 'contract_expired' && pm.actionStatus === 'pending' && (
+                  {!pm.bucket && pm.type === 'contract_expired' && pm.actionStatus === 'pending' && (
                     <div className="chat-recurring-actions" style={{ marginTop: '8px' }}>
                       <button
                         className="chat-recurring-btn confirm"
                         onClick={() => { navigate('/documents'); updateMessageAction(pm.id, 'confirmed'); }}
                       >
-                        <span>📄 {t('ai.proactive.uploadRenewal')}</span>
+                        <FileText size={14} />
+                        <span>{t('ai.proactive.uploadRenewal')}</span>
                       </button>
                       {pm.actionData?.property_id && (
                         <button
                           className="chat-recurring-btn confirm"
                           onClick={() => { navigate(`/properties/${pm.actionData!.property_id}?addContract=1`); updateMessageAction(pm.id, 'confirmed'); }}
                         >
-                          <span>➕ {t('ai.proactive.addContractManually')}</span>
+                          <Plus size={14} />
+                          <span>{t('ai.proactive.addContractManually')}</span>
                         </button>
                       )}
                       <button
@@ -740,14 +846,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </button>
                     </div>
                   )}
-                  {pm.type === 'contract_expired' && pm.actionStatus !== 'pending' && (
+                  {!pm.bucket && pm.type === 'contract_expired' && pm.actionStatus !== 'pending' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} />
                     </div>
                   )}
 
                   {/* Unit percentage prompt — inline input in chat */}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'pending' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'pending' && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         <div className="chat-recurring-row">
@@ -788,19 +894,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </div>
                     </div>
                   )}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.unitPercentageSaved', { percentage: percentageInputs[pm.id] || '' })}
                     </div>
                   )}
-                  {pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'dismissed' && (
+                  {!pm.bucket && pm.type === 'unit_percentage_prompt' && pm.actionStatus === 'dismissed' && (
                     <div className="chat-recurring-result dismissed">
                       {t('ai.proactive.skipped')}
                     </div>
                   )}
 
                   {/* Tax form review — show extracted data summary + view button */}
-                  {pm.type === 'tax_form_review' && pm.actionStatus === 'pending' && pm.actionData && (
+                  {!pm.bucket && pm.type === 'tax_form_review' && pm.actionStatus === 'pending' && pm.actionData && (
                     <div className="chat-recurring-card">
                       <div className="chat-recurring-details">
                         {pm.actionData.suggestion_type && (
@@ -830,7 +936,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                           className="chat-recurring-btn confirm"
                           onClick={() => { if (pm.link) navigate(pm.link); updateMessageAction(pm.id, 'confirmed'); }}
                         >
-                          <span>📋 {t('ai.proactive.viewAndConfirm', 'View & Confirm')}</span>
+                          <ClipboardList size={14} />
+                          <span>{t('ai.proactive.viewAndConfirm', 'View & Confirm')}</span>
                         </button>
                         <button
                           className="chat-recurring-btn dismiss"
@@ -842,7 +949,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                       </div>
                     </div>
                   )}
-                  {pm.type === 'tax_form_review' && pm.actionStatus === 'confirmed' && (
+                  {!pm.bucket && pm.type === 'tax_form_review' && pm.actionStatus === 'confirmed' && (
                     <div className="chat-recurring-result confirmed">
                       <Check size={14} /> {t('ai.proactive.taxFormViewed', 'Navigated to document for review.')}
                     </div>
@@ -853,15 +960,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                     <ChatProactiveAction message={pm} />
                   )}
 
-                  {/* Generic link button for messages with a link but no special card */}
-                  {pm.link && !isActionableProactive(pm) && !['recurring_confirm', 'employer_month_confirm', 'employer_annual_archive_confirm', 'contract_expired', 'unit_percentage_prompt', 'tax_form_review'].includes(pm.type) && (
-                    <button
-                      className="chat-recurring-btn confirm"
-                      style={{ marginTop: '6px', display: 'inline-flex' }}
-                      onClick={() => { dismissMessage(pm.id); navigate(pm.link!); }}
-                    >
-                      <span>👉 {t('ai.proactive.viewDetails', 'View details')}</span>
-                    </button>
+                  {/* Generic link buttons for messages with navigation but no special card-level CTA */}
+                  {linkActions.length > 0 && !isActionableProactive(pm) && !['recurring_confirm', 'employer_month_confirm', 'employer_annual_archive_confirm', 'contract_expired', 'unit_percentage_prompt', 'tax_form_review'].includes(pm.type) && (
+                    <div className="chat-inline-link-actions">
+                      {linkActions.map((action) => (
+                        <button
+                          key={`${pm.id}-${action.href}`}
+                          className="chat-recurring-btn confirm chat-inline-link-btn"
+                          onClick={() => navigate(action.href)}
+                          type="button"
+                        >
+                          <ArrowRight size={14} />
+                          <span>{action.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   )}
 
                   <span className="chat-msg-time">
@@ -869,11 +982,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                   </span>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
 
-        {/* Structured AI messages — processing indicators, suggestions, follow-ups */}
+        {/* Structured AI messages — after Q&A so they appear at the bottom */}
         {structuredMessages.length > 0 && structuredMessages.map((sm) => {
           if (sm.type === 'processing_update') {
             return <ChatProcessingIndicator key={sm.id} message={sm as ProcessingUpdateMessage} />;
@@ -885,28 +999,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
             return <ChatFollowUpQuestion key={sm.id} message={sm as FollowUpChatMessage} />;
           }
           return null;
-        })}
-
-        {messages.map((message, idx) => {
-          const isAssistant = message.role === 'assistant';
-          const showAvatar = isAssistant && (idx === 0 || messages[idx - 1]?.role !== 'assistant');
-          return (
-            <div key={message.id} className={`chat-msg ${message.role}`}>
-              {isAssistant && (
-                <div className={`chat-msg-avatar${showAvatar ? '' : ' invisible'}`}>T</div>
-              )}
-              <div className="chat-msg-bubble">
-                {message.role === 'user' ? (
-                  <p>{message.content}</p>
-                ) : (
-                  <AIResponse content={message.content} />
-                )}
-                <span className="chat-msg-time">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            </div>
-          );
         })}
 
         {isLoading && (
@@ -938,13 +1030,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
             <strong>{creditDisplay}</strong>
           </span>
         </div>
-
-        {messages.length > 0 && (
-          <button className="chat-clear-btn" onClick={handleClearHistory} title={t('ai.clearHistory')}>
-            <Trash2 size={14} />
-            <span>{t('ai.clearHistory')}</span>
-          </button>
-        )}
 
         {attachedFile && (
           <div className="chat-file-preview">
@@ -978,6 +1063,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
                 <Paperclip size={18} />
               </button>
             </>
+          )}
+          {messages.length > 0 && (
+            <button
+              className="chat-action-btn chat-action-btn--clear"
+              onClick={handleClearHistory}
+              disabled={isLoading}
+              aria-label={t('ai.clearHistory')}
+              title={t('ai.clearHistory')}
+            >
+              <Trash2 size={16} />
+            </button>
           )}
           <textarea
             ref={inputRef}

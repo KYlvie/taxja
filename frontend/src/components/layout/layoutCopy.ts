@@ -9,7 +9,7 @@ interface LayoutCopy {
   advancedLabel: string;
 }
 
-const layoutCopyByLanguage: Record<SupportedLanguage, LayoutCopy> = {
+const layoutCopyByLanguage: Partial<Record<SupportedLanguage, LayoutCopy>> = {
   de: {
     appCaption: 'Oesterreichische Steuerzentrale',
     contextKicker: 'Aktive Flaeche',
@@ -34,7 +34,23 @@ const layoutCopyByLanguage: Record<SupportedLanguage, LayoutCopy> = {
     openNavigation: '打开导航',
     advancedLabel: '高级管理',
   },
+  fr: {
+    appCaption: 'Centre fiscal autrichien',
+    contextKicker: 'Surface active',
+    sidebarSubtitle: 'Grille des opérations fiscales',
+    sidebarStatus: 'Sync en direct',
+    openNavigation: 'Ouvrir la navigation',
+    advancedLabel: 'Gestion avancée',
+  },
+  ru: {
+    appCaption: 'Австрийский налоговый центр',
+    contextKicker: 'Активная область',
+    sidebarSubtitle: 'Панель налоговых операций',
+    sidebarStatus: 'Синхронизация',
+    openNavigation: 'Открыть навигацию',
+    advancedLabel: 'Расширенное управление',
+  },
 };
 
 export const getLayoutCopy = (language?: string | null): LayoutCopy =>
-  layoutCopyByLanguage[normalizeLanguage(language)];
+  layoutCopyByLanguage[normalizeLanguage(language)] ?? layoutCopyByLanguage.en!;

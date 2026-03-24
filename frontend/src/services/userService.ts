@@ -92,7 +92,7 @@ export const userService = {
     return response.data.industries;
   },
 
-  deleteAccount: async (): Promise<void> => {
-    await api.delete('/users/account');
+  deleteAccount: async (password: string): Promise<void> => {
+    await api.post('/users/account/delete', { password });
   },
 };

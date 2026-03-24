@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 
 from app.models.transaction import Transaction, TransactionType
+from app.models.transaction_line_item import LineItemPostingType
 from app.models.document import Document
 from app.models.user import User, UserType
 from app.models.tax_report import TaxReport
+from app.services.posting_line_utils import sum_postings, transaction_has_deductible_expense
 from app.services.vat_calculator import VATCalculator
 from app.services.deductibility_checker import DeductibilityChecker
 
@@ -128,7 +130,7 @@ class AuditChecklistService:
         transactions = self.db.query(Transaction).filter(
             and_(
                 Transaction.user_id == user_id,
-                func.extract('year', Transaction.date) == tax_year
+                func.extract('year', Transaction.transaction_date) == tax_year
             )
         ).all()
         
@@ -161,7 +163,7 @@ class AuditChecklistService:
             if not txn.document_id:
                 missing_docs.append({
                     'transaction_id': txn.id,
-                    'date': txn.date.isoformat(),
+                    'date': txn.transaction_date.isoformat(),
                     'amount': float(txn.amount),
                     'description': txn.description,
                     'type': txn.type.value
@@ -188,17 +190,19 @@ class AuditChecklistService:
         undocumented_deductions = []
         
         for txn in transactions:
-            if txn.type == TransactionType.EXPENSE and txn.is_deductible:
+            if txn.type == TransactionType.EXPENSE and transaction_has_deductible_expense(txn):
                 # Check if deduction is valid for user type
-                is_valid, reason = self.deductibility_checker.is_deductible(
-                    txn.expense_category,
-                    user.user_type
+                result = self.deductibility_checker.check(
+                    (txn.expense_category.value if txn.expense_category else "other"),
+                    user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type),
                 )
+                is_valid = result.is_deductible
+                reason = result.reason
                 
                 if not is_valid:
                     undocumented_deductions.append({
                         'transaction_id': txn.id,
-                        'date': txn.date.isoformat(),
+                        'date': txn.transaction_date.isoformat(),
                         'amount': float(txn.amount),
                         'category': txn.expense_category.value if txn.expense_category else 'unknown',
                         'reason': reason
@@ -208,7 +212,7 @@ class AuditChecklistService:
                 if txn.amount > Decimal('500.00') and not txn.document_id:
                     undocumented_deductions.append({
                         'transaction_id': txn.id,
-                        'date': txn.date.isoformat(),
+                        'date': txn.transaction_date.isoformat(),
                         'amount': float(txn.amount),
                         'category': txn.expense_category.value if txn.expense_category else 'unknown',
                         'reason': 'High-value deduction (>€500) requires supporting document'
@@ -285,7 +289,7 @@ class AuditChecklistService:
                 if abs(expected_vat - actual_vat) > Decimal('0.01'):
                     vat_issues.append({
                         'transaction_id': txn.id,
-                        'date': txn.date.isoformat(),
+                        'date': txn.transaction_date.isoformat(),
                         'amount': float(txn.amount),
                         'expected_vat': float(expected_vat),
                         'actual_vat': float(actual_vat),
@@ -326,7 +330,7 @@ class AuditChecklistService:
             if issues:
                 incomplete_transactions.append({
                     'transaction_id': txn.id,
-                    'date': txn.date.isoformat(),
+                    'date': txn.transaction_date.isoformat(),
                     'amount': float(txn.amount),
                     'issues': issues
                 })
@@ -352,7 +356,7 @@ class AuditChecklistService:
         groups = defaultdict(list)
         
         for txn in transactions:
-            key = (txn.date, txn.amount, txn.type)
+            key = (txn.transaction_date, txn.amount, txn.type)
             groups[key].append(txn)
         
         duplicates = []
@@ -408,16 +412,21 @@ class AuditChecklistService:
         """Calculate summary statistics for the audit"""
         total_transactions = len(transactions)
         transactions_with_docs = sum(1 for t in transactions if t.document_id)
-        
-        total_income = sum(
-            t.amount for t in transactions if t.type == TransactionType.INCOME
+
+        total_income = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.INCOME},
         )
-        total_expenses = sum(
-            t.amount for t in transactions if t.type == TransactionType.EXPENSE
+        total_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            include_private_use=False,
         )
-        deductible_expenses = sum(
-            t.amount for t in transactions
-            if t.type == TransactionType.EXPENSE and t.is_deductible
+        deductible_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            deductible_only=True,
+            include_private_use=False,
         )
         
         return {

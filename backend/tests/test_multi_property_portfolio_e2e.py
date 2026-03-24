@@ -13,9 +13,10 @@ Comprehensive E2E tests covering:
 Task: D.4.4 Test multi-property portfolio
 """
 import pytest
+import uuid
 from datetime import date
 from decimal import Decimal
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine, func, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from app.db.base import Base
@@ -46,20 +47,23 @@ def db_session():
         docker-compose up -d postgres
     """
     engine = create_engine(TEST_DATABASE_URL)
-    
-    # Create all tables
+
     Base.metadata.create_all(bind=engine)
-    
+    table_names = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+
+    def reset_database_state():
+        with engine.begin() as connection:
+            connection.execute(text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE"))
+
+    reset_database_state()
+
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
-    
+
     yield session
-    
-    # Cleanup
+
     session.close()
-    
-    # Drop all tables to ensure clean state for next test
-    Base.metadata.drop_all(bind=engine)
+    reset_database_state()
     engine.dispose()
 
 
@@ -67,7 +71,7 @@ def db_session():
 def test_user(db_session: Session) -> User:
     """Create a test landlord user"""
     user = User(
-        email="portfolio_landlord@example.com",
+        email=f"portfolio_landlord_{uuid.uuid4().hex[:8]}@example.com",
         name="Portfolio Test Landlord",
         hashed_password="hashed_password_123",
         user_type=UserType.LANDLORD
@@ -238,7 +242,7 @@ class TestE2E_MultiPropertyPortfolioManagement:
         
         expense_categories = [
             ExpenseCategory.PROPERTY_INSURANCE,
-            ExpenseCategory.MAINTENANCE_REPAIRS,
+            ExpenseCategory.MAINTENANCE,
             ExpenseCategory.PROPERTY_TAX,
             ExpenseCategory.UTILITIES,
         ]
@@ -532,7 +536,7 @@ class TestE2E_MultiPropertyPortfolioManagement:
                 amount=Decimal("500.00"),
                 transaction_date=date(2025, 8, 15),
                 description=f"Unlinked expense {i+1}",
-                expense_category=ExpenseCategory.MAINTENANCE_REPAIRS,
+                expense_category=ExpenseCategory.MAINTENANCE,
                 is_deductible=True,
             )
             db_session.add(txn)
@@ -573,9 +577,9 @@ class TestE2E_MultiPropertyPortfolioManagement:
         assert depreciation_txn is not None
         
         # Calculate expected depreciation (70% of full amount)
-        # Full: 360000 * 0.02 = 7200
-        # Mixed-use (70%): 7200 * 0.70 = 5040
-        expected_depreciation = Decimal("5040.00")
+        # Current residential baseline: 360000 * 0.015 = 5400
+        # Mixed-use (70%): 5400 * 0.70 = 3780
+        expected_depreciation = Decimal("3780.00")
         assert depreciation_txn.amount == expected_depreciation
         print(f"✓ Mixed-use property depreciation: €{depreciation_txn.amount} (70% of full amount)")
         

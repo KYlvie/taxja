@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.error_messages import get_error_message
 from app.core.security import get_current_user, get_password_hash, verify_password
 from app.db.base import get_db
 from app.models.user import User
@@ -139,27 +141,86 @@ class PasswordChange(BaseModel):
 
 
 @router.post("/change-password")
-def change_password(
+async def change_password(
     data: PasswordChange,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Change user password."""
+    """Change user password. Invalidates all existing sessions and issues fresh tokens."""
     from fastapi import HTTPException
+    from app.core.token_blacklist import blacklist_all_user_tokens
+    from app.core.security import create_access_token, create_refresh_token, generate_csrf_token, decode_token_payload
 
     if not verify_password(data.current_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+        language = getattr(current_user, 'language', 'de') or 'de'
+        raise HTTPException(status_code=400, detail=get_error_message("current_password_incorrect", language))
     current_user.password_hash = get_password_hash(data.new_password)
     db.commit()
-    return {"message": "Password changed successfully"}
+
+    # Revoke all existing sessions
+    await blacklist_all_user_tokens(current_user.id)
+
+    # Issue a fresh token pair for the current session
+    access_token = create_access_token(data={"sub": current_user.email})
+    refresh_token = create_refresh_token(data={"sub": current_user.email})
+
+    # Set cookies
+    cookie_kwargs: dict = {
+        "httponly": True,
+        "secure": settings.COOKIE_SECURE,
+        "samesite": settings.COOKIE_SAMESITE,
+    }
+    if settings.COOKIE_DOMAIN:
+        cookie_kwargs["domain"] = settings.COOKIE_DOMAIN
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path=settings.COOKIE_PATH,
+        **cookie_kwargs,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path=f"{settings.COOKIE_PATH}/auth/refresh",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="strict",
+        **({"domain": settings.COOKIE_DOMAIN} if settings.COOKIE_DOMAIN else {}),
+    )
+
+    payload = decode_token_payload(access_token)
+    jti = payload.get("jti", "") if payload else ""
+    csrf_token = generate_csrf_token(jti)
+    response.headers["X-CSRF-Token"] = csrf_token
+
+    return {
+        "message": "Password changed successfully",
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
 
 
-@router.delete("/account")
+class AccountDeleteConfirmation(BaseModel):
+    password: str
+
+
+@router.post("/account/delete")
 def delete_account(
+    confirmation: AccountDeleteConfirmation,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete user account."""
+    """Delete user account. Requires password confirmation."""
+    from fastapi import HTTPException
+
+    if not verify_password(confirmation.password, current_user.password_hash):
+        language = getattr(current_user, 'language', 'de') or 'de'
+        raise HTTPException(status_code=400, detail=get_error_message("incorrect_password", language))
     db.delete(current_user)
     db.commit()
     return {"message": "Account deleted successfully"}

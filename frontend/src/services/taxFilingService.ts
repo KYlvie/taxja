@@ -8,6 +8,22 @@ export interface TaxFilingEntry {
   data: Record<string, any>;
 }
 
+export interface TransactionCategorySummary {
+  type: string;
+  category: string;
+  count: number;
+  total: number;
+  deductible_total: number;
+}
+
+export interface TransactionsSummary {
+  transaction_count: number;
+  income_total: number;
+  expense_total: number;
+  deductible_total: number;
+  by_category: TransactionCategorySummary[];
+}
+
 export interface TaxFilingSummary {
   year: number;
   income: TaxFilingEntry[];
@@ -25,6 +41,7 @@ export interface TaxFilingSummary {
   };
   conflicts: any[];
   record_count: number;
+  transactions?: TransactionsSummary;
 }
 
 export const taxFilingService = {

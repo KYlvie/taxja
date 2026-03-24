@@ -4,18 +4,26 @@ Dashboard API Endpoints
 Provides dashboard data, suggestions, and calendar.
 """
 
+import logging
 from typing import Optional
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.services.dashboard_service import DashboardService
+from app.services.proactive_reminder_service import ProactiveReminderService
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ReminderSnoozeRequest(BaseModel):
+    days: Optional[int] = None
 
 
 @router.get("/dashboard")
@@ -67,13 +75,14 @@ async def get_dashboard(
 
         return data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load dashboard data")
+        raise HTTPException(status_code=500, detail="dashboard_error")
 
 
 @router.get("/dashboard/suggestions")
 def get_savings_suggestions(
     tax_year: Optional[int] = Query(None, description="Tax year"),
-    language: str = Query("de", description="Language (de, en, zh)"),
+    language: str = Query("de", description="Language (de, en, zh, fr, ru, hu, pl, tr, bs)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -83,13 +92,14 @@ def get_savings_suggestions(
         dashboard_service = DashboardService(db)
         return dashboard_service.get_suggestions(current_user.id, resolved_year, language)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load savings suggestions")
+        raise HTTPException(status_code=500, detail="dashboard_error")
 
 
 @router.get("/dashboard/income-profile")
 def get_income_profile(
     tax_year: Optional[int] = Query(None, description="Tax year"),
-    language: str = Query("de", description="Language (de, en, zh)"),
+    language: str = Query("de", description="Language (de, en, zh, fr, ru, hu, pl, tr, bs)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -101,13 +111,14 @@ def get_income_profile(
             current_user.id, resolved_year, language
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load income profile")
+        raise HTTPException(status_code=500, detail="dashboard_error")
 
 
 @router.get("/dashboard/calendar")
 def get_tax_calendar(
     tax_year: Optional[int] = Query(None, description="Tax year"),
-    language: str = Query("de", description="Language (de, en, zh)"),
+    language: str = Query("de", description="Language (de, en, zh, fr, ru, hu, pl, tr, bs)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -117,7 +128,8 @@ def get_tax_calendar(
         dashboard_service = DashboardService(db)
         return dashboard_service.get_calendar(resolved_year, language)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load tax calendar")
+        raise HTTPException(status_code=500, detail="dashboard_error")
 
 
 @router.get("/dashboard/property-metrics")
@@ -132,7 +144,8 @@ def get_property_metrics(
         dashboard_service = DashboardService(db)
         return dashboard_service.get_property_metrics(current_user.id, resolved_year)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Failed to load property metrics")
+        raise HTTPException(status_code=500, detail="dashboard_error")
 
 
 @router.get("/dashboard/alerts")
@@ -300,3 +313,56 @@ def get_health_check(
             "items": [],
             "summary": {"high": 0, "medium": 0, "low": 0},
         }
+
+
+@router.get("/dashboard/proactive-reminders")
+def get_proactive_reminders(
+    tax_year: Optional[int] = Query(None, alias="tax_year"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return unified proactive reminders with persisted lifecycle state."""
+    try:
+        service = ProactiveReminderService(db)
+        return {
+            "items": service.get_reminders(current_user, tax_year=tax_year),
+            "tax_year": tax_year or (datetime.now().year - 1),
+        }
+    except Exception as exc:
+        logger.exception("Failed to load proactive reminders")
+        raise HTTPException(status_code=500, detail="proactive_reminders_error") from exc
+
+
+@router.post("/dashboard/proactive-reminders/{reminder_id}/snooze")
+def snooze_proactive_reminder(
+    reminder_id: str,
+    body: ReminderSnoozeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Snooze a stateful proactive reminder."""
+    service = ProactiveReminderService(db)
+    try:
+        return service.snooze_reminder(current_user.id, reminder_id, body.days)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to snooze proactive reminder %s", reminder_id)
+        raise HTTPException(status_code=500, detail="proactive_reminder_snooze_error") from exc
+
+
+@router.post("/dashboard/proactive-reminders/{reminder_id}/ack")
+def acknowledge_proactive_reminder(
+    reminder_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark a stateful proactive reminder as resolved."""
+    service = ProactiveReminderService(db)
+    try:
+        return service.acknowledge_reminder(current_user.id, reminder_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Failed to acknowledge proactive reminder %s", reminder_id)
+        raise HTTPException(status_code=500, detail="proactive_reminder_ack_error") from exc

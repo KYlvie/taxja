@@ -122,7 +122,7 @@ const UpgradePrompt: React.FC<UpgradePromptProps> = ({
         </div>
         
         <p className="trial-note">
-          {t('upgrade.trial_note', '✨ Start with a 14-day free trial of Pro plan')}
+          {t('upgrade.trial_note', 'Start with a 14-day free trial of Pro plan')}
         </p>
       </div>
     </>

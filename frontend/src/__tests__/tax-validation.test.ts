@@ -902,6 +902,11 @@ describe('Edge cases and integration', () => {
   it('should have TransactionType enum values matching expected strings', () => {
     expect(TransactionType.INCOME).toBe('income');
     expect(TransactionType.EXPENSE).toBe('expense');
+    expect(TransactionType.ASSET_ACQUISITION).toBe('asset_acquisition');
+    expect(TransactionType.LIABILITY_DRAWDOWN).toBe('liability_drawdown');
+    expect(TransactionType.LIABILITY_REPAYMENT).toBe('liability_repayment');
+    expect(TransactionType.TAX_PAYMENT).toBe('tax_payment');
+    expect(TransactionType.TRANSFER).toBe('transfer');
   });
 
   it('should have valid VAT rates as numbers between 0 and 100', () => {

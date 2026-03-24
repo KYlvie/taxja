@@ -520,6 +520,28 @@ def test_create_monthly_interest_transactions_full_year(db, test_user, test_prop
     assert abs(total_interest - expected_interest) < Decimal("0.01")
 
 
+def test_create_monthly_interest_transactions_uses_installment_overrides(db, test_user, test_property, test_loan):
+    service = LoanService(db)
+
+    service.generate_installment_plan(test_loan.id, test_user.id)
+    service.apply_annual_interest_certificate(
+        test_loan.id,
+        test_user.id,
+        2024,
+        Decimal("7146.54"),
+    )
+
+    transactions = service.create_monthly_interest_transactions(
+        loan_id=test_loan.id,
+        user_id=test_user.id,
+        year=2024,
+    )
+
+    assert len(transactions) == 12
+    total_interest = sum(t.amount for t in transactions)
+    assert total_interest == Decimal("7146.54")
+
+
 def test_create_monthly_interest_transactions_single_month(db, test_user, test_property, test_loan):
     """Test creating interest transactions for single month"""
     service = LoanService(db)

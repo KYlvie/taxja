@@ -4,7 +4,7 @@ Chat history management service for AI Tax Assistant.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import asc, desc
 
 from app.models.chat_message import ChatMessage, MessageRole
 
@@ -197,6 +197,19 @@ class ChatHistoryService:
         )
         
         return messages
+
+
+    def get_first_user_message(self, user_id: int) -> Optional[ChatMessage]:
+        """Get the very first user message in the conversation."""
+        return (
+            self.db.query(ChatMessage)
+            .filter(
+                ChatMessage.user_id == user_id,
+                ChatMessage.role == MessageRole.USER,
+            )
+            .order_by(asc(ChatMessage.created_at))
+            .first()
+        )
 
 
 def get_chat_history_service(db: Session) -> ChatHistoryService:

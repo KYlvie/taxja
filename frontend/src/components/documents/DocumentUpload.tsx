@@ -1,13 +1,15 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Camera, FolderUp, ScanSearch, GripVertical, Trash2, Layers, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Camera, FolderUp, ScanSearch, GripVertical, Trash2, Layers, Upload, X } from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { employerService } from '../../services/employerService';
+import { getLocaleForLanguage } from '../../utils/locale';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useRefreshStore } from '../../stores/refreshStore';
-import { UploadProgress } from '../../types/document';
+import { Document, UploadProgress } from '../../types/document';
 import {
   capturePhotoAsFile,
   pickNativeFiles,
@@ -35,6 +37,40 @@ const shouldEnableEmployerDetection = (
       EMPLOYER_ELIGIBLE_USER_TYPES.has(user.user_type)
   );
 
+const parseDocumentOcrResult = (document: Partial<Document> | null | undefined) => {
+  if (!document?.ocr_result) return null;
+  if (typeof document.ocr_result === 'string') {
+    try {
+      return JSON.parse(document.ocr_result) as Record<string, any>;
+    } catch {
+      return null;
+    }
+  }
+  return document.ocr_result as Record<string, any>;
+};
+
+const getDocumentPollingState = (document: Partial<Document> | null | undefined) => {
+  const ocrData = parseDocumentOcrResult(document);
+  const pipelineState = ocrData?._pipeline?.current_state;
+  const ocrStatus = document?.ocr_status;
+  const isTerminal = Boolean(
+    document?.processed_at
+      || ocrStatus === 'completed'
+      || ocrStatus === 'failed'
+      || pipelineState === 'completed'
+      || pipelineState === 'phase_2_failed'
+  );
+  const hasSnapshot = Boolean(
+    ocrData
+      || (document?.confidence_score ?? 0) > 0
+      || ocrStatus
+      || pipelineState
+      || document?.processed_at
+  );
+
+  return { ocrData, isTerminal, hasSnapshot };
+};
+
 interface StagedFile {
   id: string;
   file: File;
@@ -43,10 +79,12 @@ interface StagedFile {
 
 interface DocumentUploadProps {
   propertyId?: string | null;
+  onDocumentsSubmitted?: (documents: Document[]) => void;
 }
 
-const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
-  const { t } = useTranslation();
+const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocumentsSubmitted }) => {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
@@ -63,6 +101,21 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
   const removeProcessingMessage = useAIAdvisorStore((s) => s.removeProcessingMessage);
   const currentUser = useAuthStore((state) => state.user);
   const nativeActionsEnabled = useMemo(() => supportsNativeFileActions(), []);
+
+  const getDocumentLink = useCallback(
+    (documentId?: number | null) => (documentId ? `/documents/${documentId}` : undefined),
+    []
+  );
+
+  const handleCompletedUploadOpen = useCallback(
+    (documentId?: number | null) => {
+      const link = getDocumentLink(documentId);
+      if (link) {
+        navigate(link);
+      }
+    },
+    [getDocumentLink, navigate]
+  );
 
   // --- Staging area helpers ---
 
@@ -124,6 +177,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
 
   const pollForProcessing = useCallback(
     async (documentId: number, uploadIndex: number, fallbackDocument: any) => {
+      let latestDocument = fallbackDocument;
+
       // Task 14: Push processing indicator to chat panel
       pushProcessingMessage({
         idempotencyKey: `${documentId}:none:processing_phase_1`,
@@ -147,26 +202,27 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                 message: fallbackDocument.message,
               }
             : updatedDocument;
-          const ocrDone =
-            updatedDocument.ocr_result ||
-            updatedDocument.confidence_score > 0 ||
-            (updatedDocument as any).processed_at;
+          latestDocument = resolvedDocument;
+          const { ocrData, isTerminal, hasSnapshot } = getDocumentPollingState(updatedDocument);
 
-          if (ocrDone) {
+          if (hasSnapshot) {
             setUploads((previous) =>
               previous.map((upload, index) =>
                 index === uploadIndex
-                  ? { ...upload, status: 'completed', document: resolvedDocument }
+                  ? {
+                      ...upload,
+                      status: isTerminal ? 'completed' : 'processing',
+                      document: resolvedDocument,
+                    }
                   : upload
               )
             );
             addDocument(resolvedDocument);
+          }
 
+          if (isTerminal) {
             // Proactive AI notification
             const fileName = resolvedDocument.file_name || `#${documentId}`;
-            const ocrData = typeof resolvedDocument.ocr_result === 'string'
-              ? (() => { try { return JSON.parse(resolvedDocument.ocr_result as string); } catch { return null; } })()
-              : resolvedDocument.ocr_result;
             const suggestion = ocrData?.import_suggestion;
             let handledPrimaryNotification = Boolean(resolvedDocument.deduplicated);
             let employerMonthPrompted = false;
@@ -175,10 +231,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
               pushAIMessage({
                 type: 'upload_success',
                 content: t('ai.proactive.duplicateUploadReused', {
-                  defaultValue: '{{name}} 已经上传过，系统已复用现有文档。',
                   name: fileName,
                 }),
-                link: `/documents/${documentId}`,
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             }
 
@@ -188,7 +244,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
               pushAIMessage({
                 type: 'upload_success',
                 content: t('ai.proactive.multiReceiptDetected', { count: receiptCount, name: fileName }),
-                link: `/documents/${documentId}`,
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             }
 
@@ -210,6 +267,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                       price: d.purchase_price || ocrData?.purchase_price || '?',
                     }),
                     link: '/properties',
+                    secondaryLink: getDocumentLink(documentId),
+                    secondaryLinkLabel: t('ai.proactive.viewDocument', 'View document'),
                   });
                 } else if (suggestion.type === 'create_recurring_income') {
                   refreshProperties();
@@ -223,6 +282,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                       rent: d.monthly_rent || ocrData?.monthly_rent || '?',
                     }),
                     link: '/recurring',
+                    secondaryLink: getDocumentLink(documentId),
+                    secondaryLinkLabel: t('ai.proactive.viewDocument', 'View document'),
                   });
                 }
                 if (suggestion.type === 'create_transaction' || suggestion.type === 'create_recurring_expense') {
@@ -240,6 +301,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                   type: 'upload_success',
                   content: t('ai.proactive.transactionAutoCreated'),
                   link: '/transactions',
+                  secondaryLink: getDocumentLink(documentId),
+                  secondaryLinkLabel: t('ai.proactive.viewDocument', 'View document'),
                 });
               }
             }
@@ -259,6 +322,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                   documentId: documentId,
                   actionData: { ...d, suggestion_type: 'create_recurring_income' },
                   actionStatus: 'pending',
+                  link: getDocumentLink(documentId),
+                  linkLabel: t('ai.proactive.viewDocument', 'View document'),
                 });
               } else if (d.is_partial_match) {
                 pushAIMessage({
@@ -270,6 +335,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                   documentId: documentId,
                   actionData: { ...d, suggestion_type: 'create_recurring_income' },
                   actionStatus: 'pending',
+                  link: getDocumentLink(documentId),
+                  linkLabel: t('ai.proactive.viewDocument', 'View document'),
                 });
               } else {
                 pushAIMessage({
@@ -281,6 +348,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                   documentId: documentId,
                   actionData: { ...d, suggestion_type: 'create_recurring_income' },
                   actionStatus: 'pending',
+                  link: getDocumentLink(documentId),
+                  linkLabel: t('ai.proactive.viewDocument', 'View document'),
                 });
               }
             } else if (suggestion?.type === 'create_recurring_expense' && suggestion?.status === 'pending') {
@@ -296,6 +365,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                 documentId: documentId,
                 actionData: { ...d, suggestion_type: 'create_recurring_expense' },
                 actionStatus: 'pending',
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             } else if (suggestion?.type === 'create_asset' && suggestion?.status === 'pending') {
               handledPrimaryNotification = true;
@@ -307,28 +378,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                   price: d.purchase_price,
                 }),
                 documentId: documentId,
-                link: `/documents/${documentId}`,
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             } else if (suggestion?.status === 'pending' && suggestion?.type?.startsWith('import_')) {
               handledPrimaryNotification = true;
               const formData = suggestion.data || {};
               const summaryParts: string[] = [];
-              if (formData.kz_245) summaryParts.push(`${t('taxFiling.kz.kz_245', 'KZ245')}: €${Number(formData.kz_245).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.kz_260) summaryParts.push(`${t('taxFiling.kz.kz_260', 'KZ260')}: €${Number(formData.kz_260).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.betriebseinnahmen) summaryParts.push(`${t('taxFiling.fields.betriebseinnahmen', 'Revenue')}: €${Number(formData.betriebseinnahmen).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.gewinn_verlust != null) summaryParts.push(`${t('taxFiling.fields.gewinnVerlust', 'Profit/Loss')}: €${Number(formData.gewinn_verlust).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.mieteinnahmen) summaryParts.push(`${t('taxFiling.fields.mieteinnahmen', 'Rental income')}: €${Number(formData.mieteinnahmen).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.gesamtumsatz) summaryParts.push(`${t('taxFiling.fields.gesamtumsatz', 'Total revenue')}: €${Number(formData.gesamtumsatz).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.zahllast != null) summaryParts.push(`${t('taxFiling.fields.zahllast', 'VAT payable')}: €${Number(formData.zahllast).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
-              if (formData.total_amount) summaryParts.push(`${t('taxFiling.fields.totalAmount', 'Total')}: €${Number(formData.total_amount).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
+              if (formData.kz_245) summaryParts.push(`${t('taxFiling.kz.kz_245', 'KZ245')}: €${Number(formData.kz_245).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.kz_260) summaryParts.push(`${t('taxFiling.kz.kz_260', 'KZ260')}: €${Number(formData.kz_260).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.betriebseinnahmen) summaryParts.push(`${t('taxFiling.fields.betriebseinnahmen', 'Revenue')}: €${Number(formData.betriebseinnahmen).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.gewinn_verlust != null) summaryParts.push(`${t('taxFiling.fields.gewinnVerlust', 'Profit/Loss')}: €${Number(formData.gewinn_verlust).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.mieteinnahmen) summaryParts.push(`${t('taxFiling.fields.mieteinnahmen', 'Rental income')}: €${Number(formData.mieteinnahmen).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.gesamtumsatz) summaryParts.push(`${t('taxFiling.fields.gesamtumsatz', 'Total revenue')}: €${Number(formData.gesamtumsatz).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.zahllast != null) summaryParts.push(`${t('taxFiling.fields.zahllast', 'VAT payable')}: €${Number(formData.zahllast).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
+              if (formData.total_amount) summaryParts.push(`${t('taxFiling.fields.totalAmount', 'Total')}: €${Number(formData.total_amount).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
               if (formData.transaction_count) summaryParts.push(`${t('taxFiling.fields.transactionCount', 'Transactions')}: ${formData.transaction_count}`);
-              if (formData.kapitalertraege) summaryParts.push(`${t('taxFiling.fields.kapitalertraege', 'Capital income')}: €${Number(formData.kapitalertraege).toLocaleString('de-AT', { minimumFractionDigits: 2 })}`);
+              if (formData.kapitalertraege) summaryParts.push(`${t('taxFiling.fields.kapitalertraege', 'Capital income')}: €${Number(formData.kapitalertraege).toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}`);
 
               pushAIMessage({
                 type: 'tax_form_review',
                 content: t('ai.proactive.taxFormDetected', { name: fileName }),
                 documentId: documentId,
-                link: `/documents/${documentId}`,
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
                 actionData: {
                   suggestion_type: suggestion.type,
                   tax_year: formData.tax_year,
@@ -363,7 +436,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                       lohnsteuer: employerDetection.month.lohnsteuer,
                     },
                     actionStatus: 'pending',
-                    link: `/documents/${documentId}`,
+                    link: getDocumentLink(documentId),
+                    linkLabel: t('ai.proactive.viewDocument', 'View document'),
                   });
                 } else if (employerDetection.reason === 'not_monthly_payroll_document') {
                   const annualDetection = await employerService.detectAnnualArchiveFromDocument(documentId);
@@ -386,7 +460,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                         withheld_tax: annualDetection.archive.withheld_tax,
                       },
                       actionStatus: 'pending',
-                      link: `/documents/${documentId}`,
+                      link: getDocumentLink(documentId),
+                      linkLabel: t('ai.proactive.viewDocument', 'View document'),
                     });
                   }
                 }
@@ -399,7 +474,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
               pushAIMessage({
                 type: 'upload_review',
                 content: t('ai.proactive.uploadNeedsReview', { name: fileName }),
-                link: `/documents/${documentId}`,
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             } else if (
               !handledPrimaryNotification &&
@@ -410,6 +486,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
               pushAIMessage({
                 type: 'upload_success',
                 content: t('ai.proactive.uploadSuccess', { name: fileName }),
+                link: getDocumentLink(documentId),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
               });
             }
 
@@ -421,32 +499,65 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             removeProcessingMessage(documentId);
 
             if (suggestion && suggestion.status === 'pending') {
+              // Bug #6 fix: Get backend-generated idempotencyKey + action descriptor
+              // instead of self-generating. Backend is source of truth (NFR-7).
+              let backendKey = `${documentId}:${suggestion.type || 'none'}:completed`; // fallback
+              let backendAction: any = null;
+              try {
+                const processStatus = await documentService.getProcessStatus(documentId);
+                if (processStatus.idempotency_key) {
+                  backendKey = processStatus.idempotency_key;
+                }
+                if (processStatus.action) {
+                  backendAction = {
+                    kind: processStatus.action.kind as any,
+                    targetId: processStatus.action.target_id,
+                    endpoint: processStatus.action.endpoint,
+                    method: processStatus.action.method || 'POST',
+                    confirmLabel: processStatus.action.confirm_label,
+                    dismissLabel: processStatus.action.dismiss_label,
+                  };
+                }
+              } catch {
+                // Fallback: use self-generated key if process-status fails
+              }
+
               const suggestionType = suggestion.type || '';
               const suggestionData = suggestion.data || {};
               const followUpQuestions = suggestion.follow_up_questions || [];
               const hasFollowUps = followUpQuestions.length > 0;
 
-              // Build action descriptor for generic dispatch
-              const actionKindMap: Record<string, string> = {
-                create_property: 'confirm_property',
-                create_asset: 'confirm_asset',
-                create_recurring_income: 'confirm_recurring',
-                create_recurring_expense: 'confirm_recurring_expense',
-                create_loan: 'confirm_loan',
-              };
-              const actionEndpointMap: Record<string, string> = {
-                create_property: 'confirm-property',
-                create_asset: 'confirm-asset',
-                create_recurring_income: 'confirm-recurring',
-                create_recurring_expense: 'confirm-recurring-expense',
-                create_loan: 'confirm-loan',
-              };
-              const isImport = suggestionType.startsWith('import_');
-              const actionKind = isImport ? 'confirm_tax_data' : (actionKindMap[suggestionType] || suggestionType);
-              const actionSuffix = isImport ? 'confirm-tax-data' : (actionEndpointMap[suggestionType] || suggestionType);
+              // Fallback action descriptor if backend didn't provide one
+              if (!backendAction) {
+                const actionKindMap: Record<string, string> = {
+                  create_property: 'confirm_property',
+                  create_asset: 'confirm_asset',
+                  create_recurring_income: 'confirm_recurring',
+                  create_recurring_expense: 'confirm_recurring_expense',
+                  create_loan: 'confirm_loan',
+                  create_loan_repayment: 'confirm_loan_repayment',
+                };
+                const actionEndpointMap: Record<string, string> = {
+                  create_property: 'confirm-property',
+                  create_asset: 'confirm-asset',
+                  create_recurring_income: 'confirm-recurring',
+                  create_recurring_expense: 'confirm-recurring-expense',
+                  create_loan: 'confirm-loan',
+                  create_loan_repayment: 'confirm-loan-repayment',
+                };
+                const isImport = suggestionType.startsWith('import_');
+                const actionKind = isImport ? 'confirm_tax_data' : (actionKindMap[suggestionType] || suggestionType);
+                const actionSuffix = isImport ? 'confirm-tax-data' : (actionEndpointMap[suggestionType] || suggestionType);
+                backendAction = {
+                  kind: actionKind as any,
+                  targetId: String(documentId),
+                  endpoint: `/api/v1/documents/${documentId}/${actionSuffix}`,
+                  method: 'POST',
+                };
+              }
 
               pushSuggestionMessage({
-                idempotencyKey: `${documentId}:${suggestionType}:completed`,
+                idempotencyKey: backendKey,
                 type: 'suggestion',
                 suggestionType,
                 documentId,
@@ -454,18 +565,13 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                 followUpQuestions: followUpQuestions as any,
                 status: hasFollowUps ? 'needs_input' : 'pending',
                 suggestionVersion: suggestion.version || 0,
-                action: {
-                  kind: actionKind as any,
-                  targetId: String(documentId),
-                  endpoint: `/api/v1/documents/${documentId}/${actionSuffix}`,
-                  method: 'POST',
-                },
+                action: backendAction,
               });
 
               // Push follow-up questions as separate chat message
               if (hasFollowUps) {
                 pushFollowUpMessage({
-                  idempotencyKey: `${documentId}:${suggestionType}:follow_up`,
+                  idempotencyKey: `${backendKey}:follow_up`,
                   type: 'follow_up',
                   documentId,
                   questions: followUpQuestions.map((q: any) => ({
@@ -496,10 +602,20 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
 
       setUploads((previous) =>
         previous.map((upload, index) =>
-          index === uploadIndex ? { ...upload, status: 'completed', document: fallbackDocument } : upload
+          index === uploadIndex
+            ? {
+                ...upload,
+                status: 'error',
+                document: latestDocument,
+                error: t(
+                  'documents.reprocessTimeout',
+                  'Reprocessing is taking too long. Please try again later.'
+                ),
+              }
+            : upload
         )
       );
-      addDocument(fallbackDocument);
+      addDocument(latestDocument);
     },
     [addDocument, currentUser, pushAIMessage, pushSuggestionMessage, pushFollowUpMessage, pushProcessingMessage, removeProcessingMessage, t]
   );
@@ -524,6 +640,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
       }));
 
       let startIndex = 0;
+      const submittedDocuments: Document[] = [];
       setUploads((previous) => {
         startIndex = previous.length;
         return [...previous, ...queuedUploads];
@@ -589,13 +706,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             );
 
             addDocument(existingDocument);
+            submittedDocuments.push(existingDocument as Document);
             pushAIMessage({
               type: 'upload_success',
               content: t('ai.proactive.duplicateUploadReused', {
-                defaultValue: '{{name}} 已经上传过，系统已复用现有文档。',
                 name: displayName,
               }),
-              link: `/documents/${document.id}`,
+                link: getDocumentLink(document.id),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
             });
             continue;
           }
@@ -613,6 +731,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             )
           );
 
+          submittedDocuments.push(document as Document);
           void pollForProcessing(document.id, uploadIndex, document);
         } catch (error: any) {
           setUploads((previous) =>
@@ -633,8 +752,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
           });
         }
       }
+
+      if (submittedDocuments.length > 0) {
+        onDocumentsSubmitted?.(submittedDocuments);
+      }
     },
-    [pollForProcessing, propertyId, pushAIMessage, t]
+    [addDocument, getDocumentLink, onDocumentsSubmitted, pollForProcessing, propertyId, pushAIMessage, t]
   );
 
   /** Upload from staging: merge all staged files into one document */
@@ -701,13 +824,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             )
           );
           addDocument(existingDocument);
+          onDocumentsSubmitted?.([existingDocument as Document]);
           pushAIMessage({
             type: 'upload_success',
             content: t('ai.proactive.duplicateUploadReused', {
-              defaultValue: '{{name}} 已经上传过，系统已复用现有文档。',
               name: entry.displayFile.name,
             }),
-            link: `/documents/${document.id}`,
+                link: getDocumentLink(document.id),
+                linkLabel: t('ai.proactive.viewDocument', 'View document'),
           });
           return;
         }
@@ -717,6 +841,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             i === uploadIndex ? { ...u, status: 'processing', progress: 100, document } : u
           )
         );
+        onDocumentsSubmitted?.([document as Document]);
         void pollForProcessing(document.id, uploadIndex, document);
       } catch (error: any) {
         setUploads((prev) =>
@@ -734,7 +859,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
     };
 
     void queueMerged();
-  }, [stagedFiles, clearStaging, propertyId, pollForProcessing, pushAIMessage, t, addDocument]);
+  }, [stagedFiles, clearStaging, propertyId, pollForProcessing, pushAIMessage, t, addDocument, onDocumentsSubmitted, getDocumentLink]);
 
   /** Upload from staging: each file as a separate document */
   const uploadStagedIndividually = useCallback(() => {
@@ -826,6 +951,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
     setUploads((previous) => previous.filter((upload) => upload.status !== 'completed'));
   };
 
+  const removeUpload = (index: number) => {
+    setUploads((previous) => previous.filter((_, i) => i !== index));
+  };
+
   const uploadCapturedPages = () => {
     if (capturedPages.length === 0) return;
     const pages = [...capturedPages];
@@ -912,14 +1041,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             <strong>
               {t('documents.upload.stagingTitle', {
                 count: stagedFiles.length,
-                defaultValue: '{{count}} 张照片待处理',
               })}
             </strong>
             <p className="upload-staging-hint">
-              {t(
-                'documents.upload.stagingHint',
-                '拖拽调整顺序，然后选择合并为一个文档上传，或分别上传。'
-              )}
+              {stagedFiles.length === 1
+                ? t('documents.upload.stagingHintSingle', 'Review the file below, then click Upload.')
+                : t('documents.upload.stagingHint', 'Drag to reorder, then choose to merge into one document or upload separately.')}
             </p>
           </div>
 
@@ -960,35 +1087,47 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
           </div>
 
           <div className="upload-staging-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={uploadStagedMerged}
-              disabled={stagedFiles.length < 2}
-            >
-              <Layers size={16} />
-              <span>
-                {t('documents.upload.mergeUpload', {
-                  count: stagedFiles.length,
-                  defaultValue: '合并为 1 个文档上传 ({{count}} 页)',
-                })}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={uploadStagedIndividually}
-            >
-              <Upload size={16} />
-              <span>
-                {t('documents.upload.uploadSeparately', {
-                  count: stagedFiles.length,
-                  defaultValue: '分别上传 ({{count}} 个文档)',
-                })}
-              </span>
-            </button>
+            {stagedFiles.length === 1 ? (
+              /* Single file — just one upload button */
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={uploadStagedIndividually}
+              >
+                <Upload size={16} />
+                <span>{t('documents.upload.uploadButton', 'Upload')}</span>
+              </button>
+            ) : (
+              /* Multiple files — offer merge or separate */
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={uploadStagedMerged}
+                >
+                  <Layers size={16} />
+                  <span>
+                    {t('documents.upload.mergeUpload', {
+                      count: stagedFiles.length,
+                    })}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={uploadStagedIndividually}
+                >
+                  <Upload size={16} />
+                  <span>
+                    {t('documents.upload.uploadSeparately', {
+                      count: stagedFiles.length,
+                    })}
+                  </span>
+                </button>
+              </>
+            )}
             <button type="button" className="btn-link" onClick={clearStaging}>
-              {t('documents.upload.clearStaging', '清空')}
+              {t('documents.upload.clearStaging', 'Clear')}
             </button>
           </div>
         </div>
@@ -1002,30 +1141,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                 count: capturedPages.length,
                 defaultValue:
                   capturedPages.length === 1
-                    ? '已拍 1 页，可继续拍摄或直接上传'
-                    : '已拍 {{count}} 页，将合并为 1 个文档上传',
+                    ? '1 page captured, continue or upload now'
+                    : '{{count}} pages captured, will be merged into 1 document',
               })}
             </strong>
             <p>
               {t(
                 'documents.upload.captureSessionSubtitle',
-                '同一组照片会先合并成一个文档，再进入识别流程。'
+                'Photos in the same group will be merged into one document before processing.'
               )}
             </p>
           </div>
           <div className="upload-capture-session-actions">
             <button type="button" className="btn btn-secondary" onClick={() => void handleCameraCapture()}>
-              {t('documents.upload.addPage', '继续拍照')}
+              {t('documents.upload.addPage', 'Continue capturing')}
             </button>
             <button type="button" className="btn btn-primary" onClick={uploadCapturedPages}>
-              {t('documents.upload.uploadGrouped', '上传这个文档')}
+              {t('documents.upload.uploadGrouped', 'Upload this document')}
             </button>
             <button
               type="button"
               className="btn-link"
               onClick={() => setCapturedPages([])}
             >
-              {t('documents.upload.clearCaptureSession', '清空')}
+              {t('documents.upload.clearCaptureSession', 'Clear')}
             </button>
           </div>
         </div>
@@ -1044,8 +1183,25 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
             ) : null}
           </div>
 
-          {uploads.map((upload, index) => (
-            <div key={`${upload.file.name}-${index}`} className={`upload-item ${upload.status}`}>
+          {uploads.map((upload, index) => {
+            const completedDocumentId = upload.document?.id;
+            const isClickableCompleted = upload.status === 'completed' && Boolean(completedDocumentId);
+
+            return (
+            <div
+              key={`${upload.file.name}-${index}`}
+              className={`upload-item ${upload.status}${isClickableCompleted ? ' clickable' : ''}`}
+              onClick={isClickableCompleted ? () => handleCompletedUploadOpen(completedDocumentId) : undefined}
+              onKeyDown={isClickableCompleted ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleCompletedUploadOpen(completedDocumentId);
+                }
+              } : undefined}
+              role={isClickableCompleted ? 'button' : undefined}
+              tabIndex={isClickableCompleted ? 0 : undefined}
+              aria-label={isClickableCompleted ? t('ai.proactive.viewDocument', 'View document') : undefined}
+            >
               <div className="upload-item-info">
                 <span className="file-name">{upload.file.name}</span>
                 <span className="file-size">
@@ -1053,7 +1209,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                     ? t('documents.upload.groupedPagesMeta', {
                         count: upload.page_count,
                         size: (upload.file.size / 1024).toFixed(1),
-                        defaultValue: '{{count}} 页 · {{size}} KB',
                       })
                     : `${(upload.file.size / 1024).toFixed(1)} KB`}
                 </span>
@@ -1072,8 +1227,21 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
               {upload.status === 'completed' ? (
                 <div className="status-message completed">
                   ✓ {upload.document?.deduplicated
-                    ? t('documents.upload.duplicateReused', '重复文件，已复用现有文档')
+                    ? t('documents.upload.duplicateReused', 'Duplicate file, reused existing document')
                     : t('documents.upload.completed')}
+                  {isClickableCompleted ? (
+                    <span className="upload-item-action-link">
+                      {t('ai.proactive.viewDocument', 'View document')}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="upload-item-remove-btn"
+                    onClick={(e) => { e.stopPropagation(); removeUpload(index); }}
+                    aria-label={t('common.delete', 'Remove')}
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ) : null}
 
@@ -1086,7 +1254,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId }) => {
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
     </div>

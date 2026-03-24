@@ -2,8 +2,10 @@ import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LogOut, UserRound, X } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { authService } from '../../services/authService';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import { getLayoutCopy } from './layoutCopy';
+import { useCyberTilt } from '../../hooks/useCyberTilt';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -18,6 +20,7 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
   const copy = getLayoutCopy(i18n.resolvedLanguage || i18n.language);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const tilt = useCyberTilt(5);
 
   const menuItems = [
     { path: '/dashboard', label: t('nav.dashboard'), icon: '\u25A7' },
@@ -57,15 +60,19 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
   const userEmail = user?.email || '';
   const userInitial = (userName || 'T').trim().charAt(0).toUpperCase() || 'T';
 
-  const handleLogout = () => {
-    logout();
-    window.location.href = '/login';
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } finally {
+      logout();
+      window.location.href = '/login';
+    }
   };
 
   return (
     <>
       {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
-      <aside className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <aside ref={tilt.ref} className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`} onMouseMove={tilt.onMove} onMouseLeave={tilt.onLeave}>
         <div className="sidebar-mobile-controls">
           <LanguageSwitcher />
           <button
@@ -79,7 +86,7 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
         </div>
 
         <Link to="/" className="sidebar-brand" onClick={onClose}>
-          <span className="sidebar-brand-mark">TJ</span>
+          <span className="sidebar-brand-mark">T</span>
           <div className="sidebar-brand-copy">
             <strong>{t('common.appName')}</strong>
             <span>{copy.sidebarSubtitle}</span>

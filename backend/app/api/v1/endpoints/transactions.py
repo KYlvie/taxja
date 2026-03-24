@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status, 
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, extract
 from app.db.base import get_db
 from app.models.transaction import Transaction, TransactionType, IncomeCategory, ExpenseCategory
 from app.models.user import User
@@ -22,12 +22,197 @@ from app.core.transaction_enum_coercion import (
     coerce_transaction_type,
 )
 from app.core.security import get_current_user
+from app.core.error_messages import get_error_message
 from app.services.transaction_classifier import TransactionClassifier
 from app.services.deductibility_checker import DeductibilityChecker
 from app.services.credit_service import CreditService, InsufficientCreditsError
+from app.services.posting_line_utils import (
+    derive_parent_deductibility,
+    normalize_line_item_payloads,
+    replace_transaction_line_items,
+)
+from app.services.transaction_rule_materializer import (
+    build_auto_materialized_line_items,
+    get_transaction_rule_context,
+    recompute_rule_bucket,
+)
+from app.services.user_classification_service import normalize_description
+from app.services.user_deductibility_service import (
+    UserDeductibilityService,
+    compose_deductibility_rule_description,
+)
 import math
 
 router = APIRouter()
+
+TRANSACTION_EXPORT_LABELS = {
+    "en": {
+        "title": "Transaction export",
+        "generated": "Generated",
+        "filters": "Filters",
+        "date": "Date",
+        "type": "Type",
+        "description": "Description",
+        "category": "Category",
+        "amount": "Amount",
+        "deductible": "Deductible",
+        "yes": "Yes",
+        "no": "No",
+        "no_transactions": "No transactions matched the selected filters.",
+    },
+    "de": {
+        "title": "Transaktions-Export",
+        "generated": "Erstellt",
+        "filters": "Filter",
+        "date": "Datum",
+        "type": "Typ",
+        "description": "Beschreibung",
+        "category": "Kategorie",
+        "amount": "Betrag",
+        "deductible": "Absetzbar",
+        "yes": "Ja",
+        "no": "Nein",
+        "no_transactions": "Keine Transaktionen entsprechen den gewählten Filtern.",
+    },
+    "zh": {
+        "title": "交易导出",
+        "generated": "生成时间",
+        "filters": "筛选条件",
+        "date": "日期",
+        "type": "类型",
+        "description": "描述",
+        "category": "分类",
+        "amount": "金额",
+        "deductible": "可抵扣",
+        "yes": "是",
+        "no": "否",
+        "no_transactions": "没有符合当前筛选条件的交易。",
+    },
+    "fr": {
+        "title": "Export des transactions",
+        "generated": "Généré le",
+        "filters": "Filtres",
+        "date": "Date",
+        "type": "Type",
+        "description": "Description",
+        "category": "Catégorie",
+        "amount": "Montant",
+        "deductible": "Déductible",
+        "yes": "Oui",
+        "no": "Non",
+        "no_transactions": "Aucune transaction ne correspond aux filtres sélectionnés.",
+    },
+    "ru": {
+        "title": "Экспорт операций",
+        "generated": "Создано",
+        "filters": "Фильтры",
+        "date": "Дата",
+        "type": "Тип",
+        "description": "Описание",
+        "category": "Категория",
+        "amount": "Сумма",
+        "deductible": "Вычитается",
+        "yes": "Да",
+        "no": "Нет",
+        "no_transactions": "Нет операций, соответствующих выбранным фильтрам.",
+    },
+    "hu": {
+        "title": "Tranzakcióexport",
+        "generated": "Létrehozva",
+        "filters": "Szűrők",
+        "date": "Dátum",
+        "type": "Típus",
+        "description": "Leírás",
+        "category": "Kategória",
+        "amount": "Összeg",
+        "deductible": "Levonható",
+        "yes": "Igen",
+        "no": "Nem",
+        "no_transactions": "Nincs tranzakció a kiválasztott szűrőkhöz.",
+    },
+    "pl": {
+        "title": "Eksport transakcji",
+        "generated": "Wygenerowano",
+        "filters": "Filtry",
+        "date": "Data",
+        "type": "Typ",
+        "description": "Opis",
+        "category": "Kategoria",
+        "amount": "Kwota",
+        "deductible": "Odliczalne",
+        "yes": "Tak",
+        "no": "Nie",
+        "no_transactions": "Brak transakcji spełniających wybrane filtry.",
+    },
+    "tr": {
+        "title": "İşlem dışa aktarımı",
+        "generated": "Oluşturulma",
+        "filters": "Filtreler",
+        "date": "Tarih",
+        "type": "Tür",
+        "description": "Açıklama",
+        "category": "Kategori",
+        "amount": "Tutar",
+        "deductible": "İndirilebilir",
+        "yes": "Evet",
+        "no": "Hayır",
+        "no_transactions": "Seçili filtrelere uyan işlem bulunamadı.",
+    },
+    "bs": {
+        "title": "Izvoz transakcija",
+        "generated": "Generisano",
+        "filters": "Filteri",
+        "date": "Datum",
+        "type": "Tip",
+        "description": "Opis",
+        "category": "Kategorija",
+        "amount": "Iznos",
+        "deductible": "Odbitno",
+        "yes": "Da",
+        "no": "Ne",
+        "no_transactions": "Nema transakcija za odabrane filtere.",
+    },
+}
+
+ALLOWED_SORT_FIELDS = {"transaction_date", "amount", "created_at", "description"}
+CLASSIFIED_TRANSACTION_TYPES = {
+    TransactionType.INCOME,
+    TransactionType.EXPENSE,
+}
+
+
+def _build_recurring_blueprint(
+    transaction: Transaction,
+):
+    """Map a transaction to its recurring template semantics."""
+    from app.models.recurring_transaction import RecurringTransactionType
+
+    if transaction.type == TransactionType.INCOME:
+        category = (
+            transaction.income_category.value
+            if transaction.income_category
+            else "other_income"
+        )
+        return RecurringTransactionType.OTHER_INCOME, category
+
+    if transaction.type == TransactionType.EXPENSE:
+        category = (
+            transaction.expense_category.value
+            if transaction.expense_category
+            else "other"
+        )
+        return RecurringTransactionType.OTHER_EXPENSE, category
+
+    return RecurringTransactionType.MANUAL, transaction.type.value
+
+
+def _transaction_category_token(transaction: Transaction) -> Optional[str]:
+    """Return the category token that should be exposed for exports/UI bridges."""
+    if transaction.income_category:
+        return transaction.income_category.value
+    if transaction.expense_category:
+        return transaction.expense_category.value
+    return transaction.type.value if transaction.type not in CLASSIFIED_TRANSACTION_TYPES else None
 
 
 async def _invalidate_dashboard_cache(user_id: int) -> None:
@@ -37,6 +222,305 @@ async def _invalidate_dashboard_cache(user_id: int) -> None:
         await cache.delete_pattern(f"dashboard:{user_id}:*")
     except Exception:
         pass  # cache miss is acceptable
+
+
+def _sync_parent_line_item_flags(
+    transaction: Transaction,
+    normalized_line_items: list[dict],
+) -> None:
+    """Derive compatibility flags on the parent transaction from canonical lines."""
+    is_deductible, deduction_reason = derive_parent_deductibility(normalized_line_items)
+    transaction.is_deductible = is_deductible
+    transaction.deduction_reason = deduction_reason
+
+
+def _replace_transaction_line_items(
+    db: Session,
+    transaction: Transaction,
+    normalized_line_items: list[dict],
+) -> None:
+    """Replace all stored line items for a transaction with canonical rows."""
+    replace_transaction_line_items(db, transaction, normalized_line_items)
+
+
+def _unique_rule_contexts(contexts):
+    """Deduplicate rule recomputation scopes while preserving order."""
+    seen = set()
+    ordered = []
+    for context in contexts:
+        if context is None:
+            continue
+        key = (context.tax_year, context.rule_bucket)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(context)
+    return ordered
+
+
+def _expense_category_value(transaction: Transaction) -> Optional[str]:
+    category = getattr(transaction, "expense_category", None)
+    normalized = coerce_expense_category(getattr(category, "value", category))
+    return normalized.value if normalized is not None else getattr(category, "value", category)
+
+
+def _income_category_value(transaction: Transaction) -> Optional[str]:
+    category = getattr(transaction, "income_category", None)
+    normalized = coerce_income_category(getattr(category, "value", category))
+    return normalized.value if normalized is not None else getattr(category, "value", category)
+
+
+def _line_item_posting_type_value(item: dict) -> Optional[str]:
+    posting_type = item.get("posting_type")
+    raw_value = getattr(posting_type, "value", posting_type)
+    if raw_value is None:
+        return None
+    token = str(raw_value).strip()
+    return token.lower() or None
+
+
+def _line_item_category_value(item: dict) -> Optional[str]:
+    category = item.get("category")
+    if category is None:
+        return None
+
+    posting_type = _line_item_posting_type_value(item)
+    raw_value = getattr(category, "value", category)
+    token = str(raw_value).strip()
+    if not token:
+        return None
+
+    if posting_type == TransactionType.EXPENSE.value:
+        normalized = coerce_expense_category(token)
+        if normalized is not None:
+            return normalized.value
+    elif posting_type == TransactionType.INCOME.value:
+        normalized = coerce_income_category(token)
+        if normalized is not None:
+            return normalized.value
+    else:
+        normalized_expense = coerce_expense_category(token)
+        if normalized_expense is not None:
+            return normalized_expense.value
+        normalized_income = coerce_income_category(token)
+        if normalized_income is not None:
+            return normalized_income.value
+
+    return token.lower()
+
+
+def _cascade_parent_category_to_line_items(
+    transaction_type: TransactionType,
+    normalized_line_items: list[dict],
+    previous_category: Optional[str],
+    next_category: Optional[str],
+) -> None:
+    """Keep mirrored line-item categories aligned with a manual parent correction."""
+    if not next_category or next_category == previous_category:
+        return
+
+    expected_posting_type = (
+        TransactionType.INCOME.value
+        if transaction_type == TransactionType.INCOME
+        else TransactionType.EXPENSE.value
+        if transaction_type == TransactionType.EXPENSE
+        else None
+    )
+    if expected_posting_type is None:
+        return
+
+    candidate_items = [
+        item
+        for item in normalized_line_items
+        if _line_item_posting_type_value(item) in (None, expected_posting_type)
+    ]
+    if not candidate_items:
+        return
+
+    previous_token = str(previous_category or "").strip()
+    category_tokens = [str(_line_item_category_value(item) or "").strip() for item in candidate_items]
+    if not all((not token) or token == previous_token for token in category_tokens):
+        return
+
+    for item in candidate_items:
+        item["category"] = next_category
+
+
+def _derive_parent_category_from_line_items(
+    transaction_type: TransactionType,
+    normalized_line_items: list[dict],
+    fallback_category: Optional[str],
+) -> Optional[str]:
+    """Derive a stable parent category from edited line items."""
+    expected_posting_type = (
+        TransactionType.INCOME.value
+        if transaction_type == TransactionType.INCOME
+        else TransactionType.EXPENSE.value
+        if transaction_type == TransactionType.EXPENSE
+        else None
+    )
+    if expected_posting_type is None:
+        return fallback_category
+
+    categories = [
+        category
+        for category in (
+            _line_item_category_value(item)
+            for item in normalized_line_items
+            if _line_item_posting_type_value(item) in (None, expected_posting_type)
+        )
+        if category
+    ]
+
+    if not categories:
+        return fallback_category
+
+    unique_categories = []
+    for category in categories:
+        if category not in unique_categories:
+            unique_categories.append(category)
+
+    if len(unique_categories) == 1:
+        return unique_categories[0]
+
+    if fallback_category and fallback_category in unique_categories:
+        return fallback_category
+
+    return unique_categories[0]
+
+
+def _learn_parent_deductibility_override(
+    db: Session,
+    transaction: Transaction,
+    user_id: int,
+) -> None:
+    if transaction.type != TransactionType.EXPENSE or not transaction.description:
+        return
+
+    category = _expense_category_value(transaction)
+    if not category:
+        return
+
+    UserDeductibilityService(db).upsert_rule(
+        user_id=user_id,
+        description=transaction.description,
+        expense_category=category,
+        is_deductible=bool(transaction.is_deductible),
+        reason=transaction.deduction_reason,
+    )
+
+
+def _learn_line_item_deductibility_overrides(
+    db: Session,
+    transaction: Transaction,
+    user_id: int,
+    normalized_line_items: list[dict],
+) -> None:
+    if transaction.type != TransactionType.EXPENSE:
+        return
+
+    fallback_category = _expense_category_value(transaction)
+    parent_description = transaction.description or ""
+    service = UserDeductibilityService(db)
+
+    expense_items = [
+        item
+        for item in normalized_line_items
+        if getattr(item.get("posting_type"), "value", item.get("posting_type")) in (None, "expense")
+    ]
+
+    service.learn_from_line_items(
+        user_id=user_id,
+        parent_description=parent_description,
+        fallback_category=fallback_category,
+        line_items=expense_items,
+    )
+
+    if (
+        parent_description
+        and fallback_category
+        and expense_items
+        and len({bool(item.get("is_deductible")) for item in expense_items}) == 1
+    ):
+        parent_norm = normalize_description(parent_description)
+        parent_category = service._normalize_expense_category(fallback_category)
+        has_parent_like_item_rule = any(
+            normalize_description(
+                compose_deductibility_rule_description(
+                    parent_description,
+                    str(item.get("description") or "").strip(),
+                )
+            )
+            == parent_norm
+            and service._normalize_expense_category(
+                str(item.get("category") or fallback_category or "").strip()
+            )
+            == parent_category
+            for item in expense_items
+            if str(item.get("description") or "").strip()
+        )
+        if has_parent_like_item_rule:
+            return
+
+        first_item = expense_items[0]
+        service.upsert_rule(
+            user_id=user_id,
+            description=parent_description,
+            expense_category=fallback_category,
+            is_deductible=bool(first_item.get("is_deductible")),
+            reason=str(first_item.get("deduction_reason") or transaction.deduction_reason or "").strip() or None,
+        )
+
+
+def _auto_materialize_transaction_without_explicit_lines(
+    db: Session,
+    transaction: Transaction,
+    current_user: User,
+):
+    """Apply automatic split rules or fall back to a canonical mirror line."""
+    normalized_line_items, rule_context = build_auto_materialized_line_items(
+        transaction,
+        current_user,
+    )
+    if normalized_line_items is not None:
+        _replace_transaction_line_items(db, transaction, normalized_line_items)
+        return rule_context
+
+    if rule_context is not None:
+        recompute_rule_bucket(db, current_user.id, rule_context)
+        return rule_context
+
+    normalized_line_items = normalize_line_item_payloads(
+        transaction_type=transaction.type,
+        transaction_amount=transaction.amount,
+        description=transaction.description,
+        income_category=transaction.income_category,
+        expense_category=transaction.expense_category,
+        is_deductible=bool(transaction.is_deductible),
+        deduction_reason=transaction.deduction_reason,
+        vat_rate=transaction.vat_rate,
+        vat_amount=transaction.vat_amount,
+        line_items=None,
+    )
+    _replace_transaction_line_items(db, transaction, normalized_line_items)
+    return None
+
+
+def _transaction_can_refresh_auto_rules(transaction: Transaction) -> bool:
+    """Only replace existing multi-line transactions when rules created them."""
+    line_items = list(getattr(transaction, "line_items", []) or [])
+    if not line_items or len(line_items) <= 1:
+        return True
+
+    auto_sources = {
+        "percentage_rule",
+        "cap_rule",
+    }
+    return all(
+        getattr(getattr(li, "allocation_source", None), "value", getattr(li, "allocation_source", None))
+        in auto_sources
+        for li in line_items
+    )
 
 
 def format_validation_error(exc: ValidationError) -> dict:
@@ -61,6 +545,144 @@ def format_validation_error(exc: ValidationError) -> dict:
         "detail": "Validation failed",
         "errors": errors
     }
+
+
+def _apply_transaction_non_date_filters(
+    query,
+    *,
+    type: Optional[TransactionType] = None,
+    income_category: Optional[IncomeCategory] = None,
+    expense_category: Optional[ExpenseCategory] = None,
+    is_deductible: Optional[bool] = None,
+    is_recurring: Optional[bool] = None,
+    needs_review: Optional[bool] = None,
+    min_amount: Optional[Decimal] = None,
+    max_amount: Optional[Decimal] = None,
+    search: Optional[str] = None,
+):
+    """Apply transaction filters that should not affect year quick-filter boundaries."""
+    if type:
+        query = query.filter(Transaction.type == type)
+
+    if income_category:
+        query = query.filter(Transaction.income_category == income_category)
+
+    if expense_category:
+        query = query.filter(Transaction.expense_category == expense_category)
+
+    if is_deductible is not None:
+        query = query.filter(Transaction.is_deductible == is_deductible)
+
+    if is_recurring is not None:
+        query = query.filter(Transaction.is_recurring == is_recurring)
+
+    if needs_review is not None:
+        if needs_review:
+            query = query.filter(Transaction.needs_review == True, Transaction.reviewed == False)
+        else:
+            query = query.filter(
+                (Transaction.needs_review == False) | (Transaction.reviewed == True)
+            )
+
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
+
+    if search:
+        query = query.filter(Transaction.description.ilike(f"%{search}%"))
+
+    return query
+
+
+def _apply_transaction_date_filters(
+    query,
+    *,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    tax_year: Optional[int] = None,
+):
+    """Apply date-specific filters to an existing transaction query."""
+    if date_from:
+        query = query.filter(Transaction.transaction_date >= date_from)
+
+    if date_to:
+        query = query.filter(Transaction.transaction_date <= date_to)
+
+    if tax_year is not None:
+        year_start = date(tax_year, 1, 1)
+        year_end = date(tax_year, 12, 31)
+        query = query.filter(
+            Transaction.transaction_date >= year_start,
+            Transaction.transaction_date <= year_end,
+        )
+
+    return query
+
+
+def _get_available_transaction_years(query) -> list[int]:
+    """Return distinct transaction years present in the filtered dataset."""
+    year_expr = extract("year", Transaction.transaction_date)
+    rows = (
+        query.with_entities(year_expr.label("year"))
+        .distinct()
+        .order_by(year_expr.desc())
+        .all()
+    )
+
+    years: list[int] = []
+    for row in rows:
+        raw_year = getattr(row, "year", row[0] if row else None)
+        if raw_year is None:
+            continue
+        year = int(raw_year)
+        if year not in years:
+            years.append(year)
+    return years
+
+
+def _query_transactions_for_export(
+    db: Session,
+    current_user: User,
+    *,
+    type: Optional[TransactionType] = None,
+    income_category: Optional[IncomeCategory] = None,
+    expense_category: Optional[ExpenseCategory] = None,
+    is_deductible: Optional[bool] = None,
+    is_recurring: Optional[bool] = None,
+    needs_review: Optional[bool] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    min_amount: Optional[Decimal] = None,
+    max_amount: Optional[Decimal] = None,
+    search: Optional[str] = None,
+    tax_year: Optional[int] = None,
+):
+    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    query = _apply_transaction_non_date_filters(
+        query,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+    )
+    query = _apply_transaction_date_filters(
+        query,
+        date_from=date_from,
+        date_to=date_to,
+        tax_year=tax_year,
+    )
+    return query.order_by(Transaction.transaction_date.desc()).all()
+
+
+def _get_transaction_export_labels(language: Optional[str]) -> dict[str, str]:
+    return TRANSACTION_EXPORT_LABELS.get(language or "en", TRANSACTION_EXPORT_LABELS["en"])
 
 
 @router.post(
@@ -119,7 +741,8 @@ async def create_transaction(
 
     # Initialize classifiers
     classifier = TransactionClassifier(db=db)
-    deductibility_checker = DeductibilityChecker()
+    deductibility_checker = DeductibilityChecker(db=db)
+    pending_rule_contexts = []
     
     # Create a temporary transaction object for classification
     temp_transaction = Transaction(
@@ -133,6 +756,15 @@ async def create_transaction(
     classification_confidence = None
     classification_method = None
     needs_review = False
+    explicit_is_deductible = "is_deductible" in transaction_data.model_fields_set
+    provided_line_items = (
+        [
+            li.model_dump(exclude_unset=True)
+            for li in (transaction_data.line_items or [])
+        ]
+        if transaction_data.line_items is not None
+        else None
+    )
     
     if transaction_data.type == TransactionType.INCOME:
         if not transaction_data.income_category:
@@ -153,7 +785,7 @@ async def create_transaction(
                 needs_review = True
         else:
             classification_method = "manual"
-    else:
+    elif transaction_data.type == TransactionType.EXPENSE:
         if not transaction_data.expense_category:
             # Auto-classify expense (pass user context for LLM fallback)
             result = classifier.classify_transaction(temp_transaction, current_user)
@@ -172,10 +804,14 @@ async def create_transaction(
                 needs_review = True
         else:
             classification_method = "manual"
-    
+    else:
+        transaction_data.income_category = None
+        transaction_data.expense_category = None
+        classification_method = "manual"
+
     # Auto-determine deductibility if not provided
     if transaction_data.type == TransactionType.EXPENSE:
-        if transaction_data.is_deductible is None:
+        if provided_line_items is None and not explicit_is_deductible:
             # Check deductibility
             category = transaction_data.expense_category.value
             user_type = current_user.user_type.value
@@ -186,6 +822,7 @@ async def create_transaction(
                 description=transaction_data.description,
                 business_type=getattr(current_user, 'business_type', None),
                 business_industry=getattr(current_user, 'business_industry', None),
+                user_id=current_user.id,
             )
             transaction_data.is_deductible = deductibility_result.is_deductible
             
@@ -195,6 +832,9 @@ async def create_transaction(
             # Mark for review if deductibility requires review
             if deductibility_result.requires_review:
                 needs_review = True
+    elif provided_line_items is None:
+        transaction_data.is_deductible = False
+        transaction_data.deduction_reason = None
     
     # Create transaction
     db_transaction = Transaction(
@@ -226,11 +866,27 @@ async def create_transaction(
     )
     
     db.add(db_transaction)
-    db.commit()
-    db.refresh(db_transaction)
+    db.flush()
+
+    explicit_rule_context = None
+    if provided_line_items is not None:
+        normalized_line_items = normalize_line_item_payloads(
+            transaction_type=db_transaction.type,
+            transaction_amount=db_transaction.amount,
+            description=db_transaction.description,
+            income_category=db_transaction.income_category,
+            expense_category=db_transaction.expense_category,
+            is_deductible=bool(transaction_data.is_deductible),
+            deduction_reason=transaction_data.deduction_reason,
+            vat_rate=db_transaction.vat_rate,
+            vat_amount=db_transaction.vat_amount,
+            line_items=provided_line_items,
+        )
+        _replace_transaction_line_items(db, db_transaction, normalized_line_items)
+        explicit_rule_context = get_transaction_rule_context(db_transaction, current_user)
 
     # Sync line items from linked document OCR data (if document has multi-item receipt)
-    if transaction_data.document_id:
+    if transaction_data.document_id and provided_line_items is None:
         try:
             from app.services.ocr_transaction_service import OCRTransactionService
             ocr_svc = OCRTransactionService(db)
@@ -242,6 +898,27 @@ async def create_transaction(
             logging.getLogger(__name__).debug(
                 "Line item sync skipped for transaction %s", db_transaction.id, exc_info=True
             )
+
+    if provided_line_items is None and not db_transaction.line_items:
+        _auto_materialize_transaction_without_explicit_lines(
+            db,
+            db_transaction,
+            current_user,
+        )
+    elif explicit_rule_context is not None:
+        recompute_rule_bucket(db, current_user.id, explicit_rule_context)
+
+    db.commit()
+    db.refresh(db_transaction)
+
+    if (
+        db_transaction.type == TransactionType.EXPENSE
+        and provided_line_items is None
+        and explicit_is_deductible
+    ):
+        _learn_parent_deductibility_override(db, db_transaction, current_user.id)
+        db.commit()
+        db.refresh(db_transaction)
 
     # If recurring is enabled, also create a RecurringTransaction entry
     # so it appears in the "高级管理" recurring transactions list
@@ -260,12 +937,7 @@ async def create_transaction(
             }
             freq = freq_map.get(transaction_data.recurring_frequency or "monthly", RecurrenceFrequency.MONTHLY)
 
-            if db_transaction.type == TransactionType.INCOME:
-                rec_type = RecurringTransactionType.OTHER_INCOME
-                category = db_transaction.income_category.value if db_transaction.income_category else "other_income"
-            else:
-                rec_type = RecurringTransactionType.OTHER_EXPENSE
-                category = db_transaction.expense_category.value if db_transaction.expense_category else "other"
+            rec_type, category = _build_recurring_blueprint(db_transaction)
 
             start = transaction_data.recurring_start_date or db_transaction.transaction_date
             recurring_entry = RT(
@@ -360,62 +1032,37 @@ def get_transactions(
     This ensures proper year boundary isolation for tax calculations and reporting.
     """
     
-    # Build query
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
-    
-    # Apply filters
-    if type:
-        query = query.filter(Transaction.type == type)
-    
-    if income_category:
-        query = query.filter(Transaction.income_category == income_category)
-    
-    if expense_category:
-        query = query.filter(Transaction.expense_category == expense_category)
-    
-    if is_deductible is not None:
-        query = query.filter(Transaction.is_deductible == is_deductible)
-    
-    if is_recurring is not None:
-        query = query.filter(Transaction.is_recurring == is_recurring)
+    base_query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    base_query = _apply_transaction_non_date_filters(
+        base_query,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+    )
 
-    if needs_review is not None:
-        if needs_review:
-            query = query.filter(Transaction.needs_review == True, Transaction.reviewed == False)
-        else:
-            query = query.filter(
-                (Transaction.needs_review == False) | (Transaction.reviewed == True)
-            )
-
-    if date_from:
-        query = query.filter(Transaction.transaction_date >= date_from)
-    
-    if date_to:
-        query = query.filter(Transaction.transaction_date <= date_to)
-    
-    if min_amount is not None:
-        query = query.filter(Transaction.amount >= min_amount)
-    
-    if max_amount is not None:
-        query = query.filter(Transaction.amount <= max_amount)
-    
-    if search:
-        query = query.filter(Transaction.description.ilike(f"%{search}%"))
-    
-    # Multi-year data isolation: Filter by tax year if specified
-    if tax_year is not None:
-        # Tax year boundaries: January 1 to December 31 of the specified year
-        year_start = date(tax_year, 1, 1)
-        year_end = date(tax_year, 12, 31)
-        query = query.filter(
-            Transaction.transaction_date >= year_start,
-            Transaction.transaction_date <= year_end
-        )
+    available_years = _get_available_transaction_years(base_query)
+    query = _apply_transaction_date_filters(
+        base_query,
+        date_from=date_from,
+        date_to=date_to,
+        tax_year=tax_year,
+    )
     
     # Get total count before pagination
     total = query.count()
-    
-    # Apply sorting
+
+    # Apply sorting (whitelist to prevent column enumeration)
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_by field. Allowed: {', '.join(sorted(ALLOWED_SORT_FIELDS))}",
+        )
     sort_field = getattr(Transaction, sort_by, Transaction.transaction_date)
     if sort_order.lower() == "asc":
         query = query.order_by(sort_field.asc())
@@ -434,7 +1081,8 @@ def get_transactions(
         transactions=transactions,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=total_pages,
+        available_years=available_years,
     )
 
 
@@ -461,9 +1109,10 @@ async def import_transactions_csv(
     errors_list = []
     duplicates = 0
     row_num = 0
+    pending_rule_contexts = []
 
     classifier = TransactionClassifier(db=db)
-    deductibility_checker = DeductibilityChecker()
+    deductibility_checker = DeductibilityChecker(db=db)
 
     for row in reader:
         row_num += 1
@@ -505,12 +1154,12 @@ async def import_transactions_csv(
                     income_cat = coerce_income_category(category_str)
                     if income_cat:
                         cls_method = "csv"
-                else:
+                elif txn_type == TransactionType.EXPENSE:
                     expense_cat = coerce_expense_category(category_str)
                     if expense_cat:
                         cls_method = "csv"
 
-            if not income_cat and not expense_cat:
+            if txn_type in CLASSIFIED_TRANSACTION_TYPES and not income_cat and not expense_cat:
                 temp = Transaction(
                     type=txn_type, amount=amount,
                     transaction_date=txn_date, description=description,
@@ -519,28 +1168,29 @@ async def import_transactions_csv(
                 if result and result.category:
                     if txn_type == TransactionType.INCOME:
                         income_cat = coerce_income_category(result.category)
-                    else:
+                    elif txn_type == TransactionType.EXPENSE:
                         expense_cat = coerce_expense_category(result.category)
                     confidence = result.confidence
                     cls_method = result.method
 
             cat_value = (income_cat.value if income_cat else expense_cat.value if expense_cat else None)
-            if cat_value:
+            if txn_type == TransactionType.EXPENSE and cat_value:
                 user_type = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
                 deduct = deductibility_checker.check(
                     cat_value, user_type,
                     business_type=getattr(current_user, 'business_type', None),
                     business_industry=getattr(current_user, 'business_industry', None),
+                    user_id=current_user.id,
                 )
                 is_deductible = deduct.is_deductible
 
             # Determine review flag based on confidence (matching manual creation logic)
             needs_review = False
             ai_review_notes = None
-            if confidence is not None and confidence < Decimal("0.7"):
+            if txn_type in CLASSIFIED_TRANSACTION_TYPES and confidence is not None and confidence < Decimal("0.7"):
                 needs_review = True
                 ai_review_notes = f"CSV import: low classification confidence ({float(confidence):.0%})"
-            elif not cat_value:
+            elif txn_type in CLASSIFIED_TRANSACTION_TYPES and not cat_value:
                 needs_review = True
                 ai_review_notes = "CSV import: could not determine category"
 
@@ -561,13 +1211,28 @@ async def import_transactions_csv(
             )
             db.add(transaction)
             db.flush()
+            if not transaction.line_items:
+                normalized_line_items, rule_context = build_auto_materialized_line_items(
+                    transaction,
+                    current_user,
+                )
+                if normalized_line_items is not None:
+                    _replace_transaction_line_items(db, transaction, normalized_line_items)
+                elif rule_context is not None:
+                    pending_rule_contexts.append(rule_context)
+                else:
+                    _auto_materialize_transaction_without_explicit_lines(
+                        db,
+                        transaction,
+                        current_user,
+                    )
             imported.append({
                 "id": transaction.id,
                 "type": txn_type.value,
                 "amount": float(amount),
                 "date": txn_date.isoformat(),
                 "description": description,
-                "category": cat_value or "other",
+                "category": cat_value or txn_type.value,
                 "is_deductible": is_deductible,
             })
         except Exception as e:
@@ -589,6 +1254,9 @@ async def import_transactions_csv(
                 detail=f"Insufficient credits: {e.required} required, {e.available} available",
             ) from e
 
+    for rule_context in _unique_rule_contexts(pending_rule_contexts):
+        recompute_rule_bucket(db, current_user.id, rule_context)
+
     db.commit()
 
     if response is not None and deduction is not None:
@@ -607,9 +1275,18 @@ async def import_transactions_csv(
 
 @router.get("/export")
 def export_transactions_csv(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
     type: Optional[TransactionType] = Query(None),
+    income_category: Optional[IncomeCategory] = Query(None),
+    expense_category: Optional[ExpenseCategory] = Query(None),
+    is_deductible: Optional[bool] = Query(None),
+    is_recurring: Optional[bool] = Query(None),
+    needs_review: Optional[bool] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, ge=0),
+    max_amount: Optional[Decimal] = Query(None, ge=0),
+    search: Optional[str] = Query(None, max_length=100),
+    tax_year: Optional[int] = Query(None, ge=1900, le=2100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -617,26 +1294,29 @@ def export_transactions_csv(
     import csv
     import io
 
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
-    if start_date:
-        query = query.filter(Transaction.transaction_date >= start_date)
-    if end_date:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    if type:
-        query = query.filter(Transaction.type == type)
-
-    transactions = query.order_by(Transaction.transaction_date.desc()).all()
+    transactions = _query_transactions_for_export(
+        db,
+        current_user,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+        tax_year=tax_year,
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["date", "type", "amount", "description", "category", "is_deductible"])
 
     for t in transactions:
-        cat = (
-            t.income_category.value if t.income_category
-            else t.expense_category.value if t.expense_category
-            else "other"
-        )
+        cat = _transaction_category_token(t) or ""
         writer.writerow([
             t.transaction_date.isoformat(),
             t.type.value,
@@ -651,6 +1331,137 @@ def export_transactions_csv(
         io.BytesIO(output.getvalue().encode("utf-8")),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+    )
+
+
+@router.get("/export/pdf")
+def export_transactions_pdf(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    type: Optional[TransactionType] = Query(None),
+    income_category: Optional[IncomeCategory] = Query(None),
+    expense_category: Optional[ExpenseCategory] = Query(None),
+    is_deductible: Optional[bool] = Query(None),
+    is_recurring: Optional[bool] = Query(None),
+    needs_review: Optional[bool] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, ge=0),
+    max_amount: Optional[Decimal] = Query(None, ge=0),
+    search: Optional[str] = Query(None, max_length=100),
+    tax_year: Optional[int] = Query(None, ge=1900, le=2100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Export transactions as PDF."""
+    import io
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    transactions = _query_transactions_for_export(
+        db,
+        current_user,
+        type=type,
+        income_category=income_category,
+        expense_category=expense_category,
+        is_deductible=is_deductible,
+        is_recurring=is_recurring,
+        needs_review=needs_review,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        search=search,
+        tax_year=tax_year,
+    )
+
+    labels = _get_transaction_export_labels(getattr(current_user, "language", "en"))
+    styles = getSampleStyleSheet()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=14 * mm,
+        leftMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
+    )
+
+    filter_bits: list[str] = []
+    if tax_year is not None:
+        filter_bits.append(f"{labels['filters']}: {tax_year}")
+    elif date_from or date_to:
+        range_text = f"{date_from.isoformat() if date_from else '…'} - {date_to.isoformat() if date_to else '…'}"
+        filter_bits.append(f"{labels['filters']}: {range_text}")
+    if type:
+        filter_bits.append(f"{labels['type']}: {type.value}")
+    if search:
+        filter_bits.append(f"Search: {search}")
+
+    story = [
+        Paragraph(labels["title"], styles["Title"]),
+        Paragraph(
+            f"{labels['generated']}: {date.today().isoformat()}",
+            styles["Normal"],
+        ),
+    ]
+
+    if filter_bits:
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(" | ".join(filter_bits), styles["Italic"]))
+
+    story.append(Spacer(1, 6 * mm))
+
+    if not transactions:
+        story.append(Paragraph(labels["no_transactions"], styles["Normal"]))
+    else:
+        table_data = [[
+            labels["date"],
+            labels["type"],
+            labels["description"],
+            labels["category"],
+            labels["amount"],
+            labels["deductible"],
+        ]]
+
+        for txn in transactions:
+            table_data.append([
+                txn.transaction_date.isoformat(),
+                txn.type.value,
+                (txn.description or "")[:70],
+                _transaction_category_token(txn) or "",
+                f"{txn.amount:.2f}",
+                labels["yes"] if txn.is_deductible else labels["no"],
+            ])
+
+        table = Table(
+            table_data,
+            repeatRows=1,
+            colWidths=[28 * mm, 32 * mm, 85 * mm, 40 * mm, 28 * mm, 24 * mm],
+        )
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#141127")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f6ff")]),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d9d5f7")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        story.append(table)
+
+    doc.build(story)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=transactions.pdf"},
     )
 
 
@@ -680,10 +1491,12 @@ async def batch_delete_transactions(
     ids = body.get("ids", [])
     force = body.get("force", False)
 
+    language = getattr(current_user, 'language', 'de') or 'de'
+
     if not ids or not isinstance(ids, list):
-        raise HTTPException(status_code=400, detail="ids must be a non-empty list")
+        raise HTTPException(status_code=400, detail=get_error_message("ids_must_be_non_empty", language))
     if len(ids) > 500:
-        raise HTTPException(status_code=400, detail="Cannot delete more than 500 at once")
+        raise HTTPException(status_code=400, detail=get_error_message("cannot_delete_more_than_limit", language, limit=500))
 
     txns = db.query(Transaction).filter(
         Transaction.id.in_(ids),
@@ -726,10 +1539,12 @@ async def batch_delete_transactions(
     # --- Force mode (force=True): delete safe + needs_confirmation ---
     deletable_ids = set(safe_ids) | {item["id"] for item in needs_confirmation}
     deleted_ids = []
+    affected_rule_contexts = []
 
     for txn in txns:
         if txn.id not in deletable_ids:
             continue
+        affected_rule_contexts.append(get_transaction_rule_context(txn, current_user))
         docs = db.query(Document).filter(Document.transaction_id == txn.id).all()
         for doc in docs:
             doc.transaction_id = None
@@ -737,6 +1552,10 @@ async def batch_delete_transactions(
         db.flush()
         db.delete(txn)
         deleted_ids.append(txn.id)
+
+    db.flush()
+    for rule_context in _unique_rule_contexts(affected_rule_contexts):
+        recompute_rule_bucket(db, current_user.id, rule_context)
 
     db.commit()
     await _invalidate_dashboard_cache(current_user.id)
@@ -786,6 +1605,7 @@ async def update_transaction(
         )
 
     update_data = transaction_data.model_dump(exclude_unset=True)
+    suppress_rule_learning = bool(update_data.pop("suppress_rule_learning", False))
 
     # Snapshot original category before applying changes (for learning)
     original_expense_cat = (
@@ -798,6 +1618,9 @@ async def update_transaction(
         if transaction.income_category and hasattr(transaction.income_category, "value")
         else str(transaction.income_category) if transaction.income_category else None
     )
+    original_is_deductible = bool(transaction.is_deductible)
+    original_deduction_reason = transaction.deduction_reason
+    original_rule_context = get_transaction_rule_context(transaction, current_user)
 
     # Extract line_items from update_data (handled separately)
     line_items_data = update_data.pop("line_items", None)
@@ -828,9 +1651,21 @@ async def update_transaction(
             )
         if 'income_category' not in update_data:
             update_data['income_category'] = None
+    else:
+        if 'income_category' not in update_data:
+            update_data['income_category'] = None
+        if 'expense_category' not in update_data:
+            update_data['expense_category'] = None
 
     for field, value in update_data.items():
         setattr(transaction, field, value)
+
+    # When marking as reviewed, automatically clear needs_review
+    if update_data.get('reviewed') is True:
+        transaction.needs_review = False
+    # When explicitly clearing needs_review, mark as reviewed
+    if update_data.get('needs_review') is False and 'reviewed' not in update_data:
+        transaction.reviewed = True
 
     # Handle recurring activation/deactivation
     if 'is_recurring' in update_data:
@@ -866,12 +1701,7 @@ async def update_transaction(
                     freq_str = update_data.get('recurring_frequency') or transaction.recurring_frequency or "monthly"
                     freq = freq_map.get(freq_str, RecurrenceFrequency.MONTHLY)
 
-                    if transaction.type == TransactionType.INCOME:
-                        rec_type = RecurringTransactionType.OTHER_INCOME
-                        category = transaction.income_category.value if transaction.income_category else "other_income"
-                    else:
-                        rec_type = RecurringTransactionType.OTHER_EXPENSE
-                        category = transaction.expense_category.value if transaction.expense_category else "other"
+                    rec_type, category = _build_recurring_blueprint(transaction)
 
                     start = (
                         update_data.get('recurring_start_date')
@@ -921,80 +1751,190 @@ async def update_transaction(
             transaction.recurring_next_date = None
 
     # ── Learn from category correction ──────────────────────────────
-    try:
-        new_expense_cat = (
-            transaction.expense_category.value
-            if transaction.expense_category and hasattr(transaction.expense_category, "value")
-            else str(transaction.expense_category) if transaction.expense_category else None
-        )
-        new_income_cat = (
-            transaction.income_category.value
-            if transaction.income_category and hasattr(transaction.income_category, "value")
-            else str(transaction.income_category) if transaction.income_category else None
-        )
-        category_changed = (
-            (new_expense_cat != original_expense_cat and original_expense_cat is not None)
-            or (new_income_cat != original_income_cat and original_income_cat is not None)
-        )
-        if category_changed and transaction.description:
-            classifier = TransactionClassifier(db=db)
-            correct_cat = new_expense_cat or new_income_cat
-            if correct_cat:
-                classifier.learn_from_correction(
-                    transaction, correct_cat, current_user.id,
-                )
-    except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to store classification correction for txn %s", transaction_id, exc_info=True,
-        )
+    if not suppress_rule_learning:
+        try:
+            new_expense_cat = (
+                transaction.expense_category.value
+                if transaction.expense_category and hasattr(transaction.expense_category, "value")
+                else str(transaction.expense_category) if transaction.expense_category else None
+            )
+            new_income_cat = (
+                transaction.income_category.value
+                if transaction.income_category and hasattr(transaction.income_category, "value")
+                else str(transaction.income_category) if transaction.income_category else None
+            )
+            category_changed = (
+                (new_expense_cat is not None and new_expense_cat != original_expense_cat)
+                or (new_income_cat is not None and new_income_cat != original_income_cat)
+            )
+            if category_changed and transaction.description and line_items_data is None:
+                classifier = TransactionClassifier(db=db)
+                correct_cat = new_expense_cat or new_income_cat
+                if correct_cat:
+                    classifier.learn_from_correction(
+                        transaction, correct_cat, current_user.id,
+                    )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to store classification correction for txn %s", transaction_id, exc_info=True,
+            )
 
     # ── Handle line item updates (full replacement) ─────────────────
+    pending_rule_context = None
+
     if line_items_data is not None:
-        from app.models.transaction_line_item import TransactionLineItem
-
-        # Delete existing line items
-        db.query(TransactionLineItem).filter(
-            TransactionLineItem.transaction_id == transaction.id,
-        ).delete()
-        db.flush()
-
-        # Create new line items
-        for idx, li_data in enumerate(line_items_data):
-            li = TransactionLineItem(
-                transaction_id=transaction.id,
-                description=li_data["description"],
-                amount=li_data["amount"],
-                quantity=li_data.get("quantity", 1),
-                category=li_data.get("category"),
-                is_deductible=li_data.get("is_deductible", False),
-                deduction_reason=li_data.get("deduction_reason"),
-                vat_rate=li_data.get("vat_rate"),
-                vat_amount=li_data.get("vat_amount"),
-                sort_order=li_data.get("sort_order", idx),
+        current_parent_category = (
+            _income_category_value(transaction)
+            if transaction.type == TransactionType.INCOME
+            else _expense_category_value(transaction)
+            if transaction.type == TransactionType.EXPENSE
+            else None
+        )
+        previous_parent_category = (
+            original_income_cat
+            if transaction.type == TransactionType.INCOME
+            else original_expense_cat
+            if transaction.type == TransactionType.EXPENSE
+            else None
+        )
+        normalized_line_items = normalize_line_item_payloads(
+            transaction_type=transaction.type,
+            transaction_amount=transaction.amount,
+            description=transaction.description,
+            income_category=transaction.income_category,
+            expense_category=transaction.expense_category,
+            is_deductible=bool(transaction.is_deductible),
+            deduction_reason=transaction.deduction_reason,
+            vat_rate=transaction.vat_rate,
+            vat_amount=transaction.vat_amount,
+            line_items=line_items_data,
+        )
+        _cascade_parent_category_to_line_items(
+            transaction.type,
+            normalized_line_items,
+            previous_parent_category,
+            current_parent_category,
+        )
+        derived_parent_category = _derive_parent_category_from_line_items(
+            transaction.type,
+            normalized_line_items,
+            current_parent_category,
+        )
+        if transaction.type == TransactionType.EXPENSE:
+            coerced_expense_category = coerce_expense_category(
+                derived_parent_category,
+                default=transaction.expense_category,
             )
-            db.add(li)
+            if coerced_expense_category is not None:
+                transaction.expense_category = coerced_expense_category
+            transaction.income_category = None
+        elif transaction.type == TransactionType.INCOME:
+            coerced_income_category = coerce_income_category(
+                derived_parent_category,
+                default=transaction.income_category,
+            )
+            if coerced_income_category is not None:
+                transaction.income_category = coerced_income_category
+            transaction.expense_category = None
+        _sync_parent_line_item_flags(transaction, normalized_line_items)
+        _replace_transaction_line_items(db, transaction, normalized_line_items)
+        if not suppress_rule_learning:
+            _learn_line_item_deductibility_overrides(
+                db,
+                transaction,
+                current_user.id,
+                normalized_line_items,
+            )
+    elif _transaction_can_refresh_auto_rules(transaction):
+        auto_line_items, pending_rule_context = build_auto_materialized_line_items(
+            transaction,
+            current_user,
+        )
+        if auto_line_items is not None:
+            _replace_transaction_line_items(db, transaction, auto_line_items)
+        elif pending_rule_context is None:
+            normalized_line_items = normalize_line_item_payloads(
+                transaction_type=transaction.type,
+                transaction_amount=transaction.amount,
+                description=transaction.description,
+                income_category=transaction.income_category,
+                expense_category=transaction.expense_category,
+                is_deductible=bool(transaction.is_deductible),
+                deduction_reason=transaction.deduction_reason,
+                vat_rate=transaction.vat_rate,
+                vat_amount=transaction.vat_amount,
+                line_items=None,
+            )
+            _replace_transaction_line_items(db, transaction, normalized_line_items)
+    else:
+        existing_line_items = [
+            {
+                "description": li.description,
+                "amount": li.amount,
+                "quantity": li.quantity,
+                "posting_type": li.posting_type,
+                "allocation_source": li.allocation_source,
+                "category": li.category,
+                "is_deductible": li.is_deductible,
+                "deduction_reason": li.deduction_reason,
+                "vat_rate": li.vat_rate,
+                "vat_amount": li.vat_amount,
+                "vat_recoverable_amount": li.vat_recoverable_amount,
+                "rule_bucket": li.rule_bucket,
+                "sort_order": li.sort_order,
+            }
+            for li in transaction.line_items
+        ]
+        _sync_parent_line_item_flags(transaction, existing_line_items)
 
-        deductible_items = [li for li in line_items_data if li.get("is_deductible") is True]
-        non_deductible_items = [li for li in line_items_data if li.get("is_deductible") is False]
+    final_expense_cat = _expense_category_value(transaction)
+    final_income_cat = _income_category_value(transaction)
+    category_changed = (
+        (final_expense_cat is not None and final_expense_cat != original_expense_cat)
+        or (final_income_cat is not None and final_income_cat != original_income_cat)
+    )
+    deductibility_changed = bool(transaction.is_deductible) != original_is_deductible
+    deduction_reason_changed = (
+        (transaction.deduction_reason or None) != (original_deduction_reason or None)
+    )
 
-        transaction.is_deductible = bool(deductible_items)
+    if line_items_data is not None or category_changed or deductibility_changed or deduction_reason_changed:
         transaction.reviewed = True
         transaction.locked = True
         transaction.needs_review = False
 
-        if deductible_items and non_deductible_items:
-            transaction.deduction_reason = "Mixed deductibility confirmed at line-item level"
-        elif deductible_items:
-            transaction.deduction_reason = next(
-                (li.get("deduction_reason") for li in deductible_items if li.get("deduction_reason")),
-                transaction.deduction_reason,
+    if (
+        not suppress_rule_learning
+        and category_changed
+        and transaction.description
+        and line_items_data is not None
+    ):
+        try:
+            classifier = TransactionClassifier(db=db)
+            correct_cat = final_expense_cat or final_income_cat
+            if correct_cat:
+                classifier.learn_from_correction(
+                    transaction,
+                    correct_cat,
+                    current_user.id,
+                )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to store classification correction for txn %s", transaction_id, exc_info=True,
             )
-        elif non_deductible_items:
-            transaction.deduction_reason = next(
-                (li.get("deduction_reason") for li in non_deductible_items if li.get("deduction_reason")),
-                transaction.deduction_reason,
-            )
+
+    updated_rule_context = pending_rule_context or get_transaction_rule_context(transaction, current_user)
+    for rule_context in _unique_rule_contexts([original_rule_context, updated_rule_context]):
+        recompute_rule_bucket(db, current_user.id, rule_context)
+
+    if (
+        not suppress_rule_learning
+        and line_items_data is None
+        and (deductibility_changed or deduction_reason_changed)
+    ):
+        _learn_parent_deductibility_override(db, transaction, current_user.id)
 
     db.commit()
     db.refresh(transaction)
@@ -1175,6 +2115,8 @@ async def delete_transaction(
 
     # --- proceed with deletion (no association, or force=True) ---
 
+    affected_rule_context = get_transaction_rule_context(transaction, current_user)
+
     # Clear document references to this transaction to avoid FK violation
     docs = db.query(Document).filter(Document.transaction_id == transaction_id).all()
     for doc in docs:
@@ -1185,6 +2127,9 @@ async def delete_transaction(
     db.flush()
 
     db.delete(transaction)
+    db.flush()
+    for rule_context in _unique_rule_contexts([affected_rule_context]):
+        recompute_rule_bucket(db, current_user.id, rule_context)
     db.commit()
     await _invalidate_dashboard_cache(current_user.id)
     return None
@@ -1204,7 +2149,7 @@ def reclassify_transactions(
     Processes both income and expense transactions.
     """
     classifier = TransactionClassifier(db=db)
-    deductibility_checker = DeductibilityChecker()
+    deductibility_checker = DeductibilityChecker(db=db)
 
     query = db.query(Transaction).filter(
         Transaction.user_id == current_user.id,
@@ -1228,7 +2173,7 @@ def reclassify_transactions(
                     t.classification_confidence = result.confidence
                     t.classification_method = result.method
                     updated += 1
-        else:
+        elif t.type == TransactionType.EXPENSE:
             # Re-classify expense
             new_category = coerce_expense_category(result.category)
 
@@ -1245,12 +2190,15 @@ def reclassify_transactions(
                 description=t.description,
                 business_type=getattr(current_user, 'business_type', None),
                 business_industry=getattr(current_user, 'business_industry', None),
+                user_id=current_user.id,
             )
             t.is_deductible = deduct_result.is_deductible
             t.deduction_reason = deduct_result.reason
             if deduct_result.requires_review:
                 t.needs_review = True
             updated += 1
+        else:
+            continue
 
     db.commit()
 
@@ -1271,15 +2219,16 @@ def pause_recurring_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Pause a recurring transaction"""
+    language = getattr(current_user, 'language', 'de') or 'de'
     transaction = db.query(Transaction).filter(
         Transaction.id == transaction_id,
         Transaction.user_id == current_user.id,
         Transaction.is_recurring == True,
     ).first()
-    
+
     if not transaction:
-        raise HTTPException(status_code=404, detail="Recurring transaction not found")
-    
+        raise HTTPException(status_code=404, detail=get_error_message("recurring_transaction_not_found", language))
+
     transaction.recurring_is_active = False
     db.commit()
     db.refresh(transaction)
@@ -1293,15 +2242,16 @@ def resume_recurring_transaction(
     current_user: User = Depends(get_current_user),
 ):
     """Resume a paused recurring transaction"""
+    language = getattr(current_user, 'language', 'de') or 'de'
     transaction = db.query(Transaction).filter(
         Transaction.id == transaction_id,
         Transaction.user_id == current_user.id,
         Transaction.is_recurring == True,
     ).first()
-    
+
     if not transaction:
-        raise HTTPException(status_code=404, detail="Recurring transaction not found")
-    
+        raise HTTPException(status_code=404, detail=get_error_message("recurring_transaction_not_found", language))
+
     transaction.recurring_is_active = True
     db.commit()
     db.refresh(transaction)

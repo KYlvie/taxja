@@ -121,6 +121,14 @@ def decimal_strategy(min_value=0, max_value=1000000, places=2):
     )
 
 
+def reset_loss_state(loss_service):
+    """Reset loss records so each Hypothesis example starts from clean state."""
+    from app.models.loss_carryforward import LossCarryforward as AppLossCarryforward
+
+    loss_service.db.query(AppLossCarryforward).delete()
+    loss_service.db.commit()
+
+
 class TestProperty21LossCarryforwardPropagation:
     """
     **Property 21: Loss carryforward correct propagation**
@@ -138,7 +146,14 @@ class TestProperty21LossCarryforwardPropagation:
         loss_amount=decimal_strategy(min_value=1, max_value=100000),
         used_amount=decimal_strategy(min_value=0, max_value=100000)
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=100,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_remaining_loss_calculation_correctness(
         self,
         loss_amount: Decimal,
@@ -154,6 +169,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.1, 36.2**
         """
+        reset_loss_state(loss_service)
+
         # Ensure used amount doesn't exceed loss amount
         assume(used_amount <= loss_amount)
         
@@ -179,7 +196,14 @@ class TestProperty21LossCarryforwardPropagation:
         loss_amount=decimal_strategy(min_value=1, max_value=50000),
         current_income=decimal_strategy(min_value=1, max_value=50000)
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=100,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_loss_application_reduces_taxable_income(
         self,
         loss_amount: Decimal,
@@ -195,6 +219,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.2**
         """
+        reset_loss_state(loss_service)
+
         # Record a loss from previous year
         loss_service.record_loss(
             user_id=test_user.id,
@@ -209,14 +235,15 @@ class TestProperty21LossCarryforwardPropagation:
             current_tax_year=2025
         )
         
-        # Calculate expected values
-        expected_loss_applied = min(loss_amount, current_income)
+        # Calculate expected values (75% Verrechnungsgrenze per §18 Abs. 6 EStG)
+        max_offset = (current_income * Decimal('0.75')).quantize(Decimal('0.01'))
+        expected_loss_applied = min(loss_amount, max_offset)
         expected_taxable_income = current_income - expected_loss_applied
-        
+
         # Verify the results
         assert result.loss_applied == expected_loss_applied.quantize(Decimal('0.01')), \
             f"Loss applied should be {expected_loss_applied}, got {result.loss_applied}"
-        
+
         assert result.taxable_income_after_loss == expected_taxable_income.quantize(Decimal('0.01')), \
             f"Taxable income after loss should be {expected_taxable_income}, got {result.taxable_income_after_loss}"
         
@@ -228,7 +255,14 @@ class TestProperty21LossCarryforwardPropagation:
         loss_amount=decimal_strategy(min_value=1, max_value=50000),
         current_income=decimal_strategy(min_value=1, max_value=50000)
     )
-    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=100,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_excess_loss_is_tracked_as_remaining(
         self,
         loss_amount: Decimal,
@@ -238,13 +272,18 @@ class TestProperty21LossCarryforwardPropagation:
     ):
         """
         Property: When loss exceeds income, excess is tracked as remaining
-        
-        For any loss > income:
-        remaining_loss = loss_amount - income
-        taxable_income_after_loss = 0
-        
+
+        With the 75% Verrechnungsgrenze (§18 Abs. 6 EStG), only up to 75%
+        of current income can be offset by losses. For any loss > income:
+        max_offset = income * 0.75
+        loss_applied = min(loss, max_offset)
+        remaining_loss = loss - loss_applied
+        taxable_income_after_loss = income - loss_applied  (i.e. >= 25% of income)
+
         **Validates: Requirements 36.5**
         """
+        reset_loss_state(loss_service)
+
         # Only test cases where loss exceeds income
         assume(loss_amount > current_income)
         
@@ -262,23 +301,33 @@ class TestProperty21LossCarryforwardPropagation:
             current_tax_year=2025
         )
         
-        # Calculate expected values
-        expected_remaining = loss_amount - current_income
-        
+        # Calculate expected values (75% Verrechnungsgrenze per §18 Abs. 6 EStG)
+        max_offset = (current_income * Decimal('0.75')).quantize(Decimal('0.01'))
+        expected_applied = min(loss_amount, max_offset)
+        expected_remaining = loss_amount - expected_applied
+        expected_taxable = current_income - expected_applied
+
         # Verify the results
-        assert result.taxable_income_after_loss == Decimal('0.00'), \
-            f"When loss exceeds income, taxable income should be €0, got {result.taxable_income_after_loss}"
-        
+        assert result.taxable_income_after_loss == expected_taxable.quantize(Decimal('0.01')), \
+            f"Taxable income after loss should be {expected_taxable}, got {result.taxable_income_after_loss}"
+
         assert result.remaining_loss == expected_remaining.quantize(Decimal('0.01')), \
             f"Remaining loss should be {expected_remaining}, got {result.remaining_loss}"
-        
-        assert result.loss_applied == current_income.quantize(Decimal('0.01')), \
-            f"Loss applied should equal current income {current_income}, got {result.loss_applied}"
+
+        assert result.loss_applied == expected_applied.quantize(Decimal('0.01')), \
+            f"Loss applied should be {expected_applied}, got {result.loss_applied}"
     
     @given(
         taxable_income=decimal_strategy(min_value=-50000, max_value=-1)
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_negative_income_produces_zero_tax_and_records_loss(
         self,
         taxable_income: Decimal,
@@ -294,6 +343,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 16.5, 36.5**
         """
+        reset_loss_state(loss_service)
+
         # Calculate loss from negative income
         loss_result = loss_service.calculate_loss(
             taxable_income=taxable_income,
@@ -328,7 +379,14 @@ class TestProperty21LossCarryforwardPropagation:
         ),
         current_income=decimal_strategy(min_value=1, max_value=50000)
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_multi_year_loss_carryforward_consistency(
         self,
         losses: list,
@@ -347,6 +405,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.1, 36.2**
         """
+        reset_loss_state(loss_service)
+
         # Sort losses by year (oldest first)
         sorted_losses = sorted(losses, key=lambda x: x[0])
         
@@ -367,14 +427,16 @@ class TestProperty21LossCarryforwardPropagation:
             current_tax_year=2025
         )
         
-        # Verify consistency properties
-        # 1. Total loss applied should not exceed sum of all losses
+        # Verify consistency properties (75% Verrechnungsgrenze per §18 Abs. 6 EStG)
+        max_offset = (current_income * Decimal('0.75')).quantize(Decimal('0.01'))
+
+        # 1. Total loss applied should not exceed 75% cap
+        assert result.loss_applied <= max_offset + Decimal('0.01'), \
+            f"Loss applied ({result.loss_applied}) cannot exceed 75% cap ({max_offset})"
+
+        # 2. Total loss applied should not exceed sum of all losses
         assert result.loss_applied <= total_loss, \
             f"Loss applied ({result.loss_applied}) cannot exceed total losses ({total_loss})"
-        
-        # 2. Total loss applied should not exceed current income
-        assert result.loss_applied <= current_income, \
-            f"Loss applied ({result.loss_applied}) cannot exceed current income ({current_income})"
         
         # 3. Remaining loss should equal total losses minus applied
         expected_remaining = total_loss - result.loss_applied
@@ -399,7 +461,14 @@ class TestProperty21LossCarryforwardPropagation:
         income_year1=decimal_strategy(min_value=1, max_value=20000),
         income_year2=decimal_strategy(min_value=1, max_value=20000)
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_sequential_year_loss_application_consistency(
         self,
         loss_amount: Decimal,
@@ -418,6 +487,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.1, 36.2**
         """
+        reset_loss_state(loss_service)
+
         # Record a loss in 2023
         loss_service.record_loss(
             user_id=test_user.id,
@@ -439,10 +510,12 @@ class TestProperty21LossCarryforwardPropagation:
             current_tax_year=2025
         )
         
-        # Calculate expected values
-        loss_applied_year1 = min(loss_amount, income_year1)
+        # Calculate expected values (75% Verrechnungsgrenze per §18 Abs. 6 EStG)
+        max_offset_year1 = (income_year1 * Decimal('0.75')).quantize(Decimal('0.01'))
+        loss_applied_year1 = min(loss_amount, max_offset_year1)
         remaining_after_year1 = loss_amount - loss_applied_year1
-        loss_applied_year2 = min(remaining_after_year1, income_year2)
+        max_offset_year2 = (income_year2 * Decimal('0.75')).quantize(Decimal('0.01'))
+        loss_applied_year2 = min(remaining_after_year1, max_offset_year2)
         total_loss_applied = loss_applied_year1 + loss_applied_year2
         final_remaining = loss_amount - total_loss_applied
         
@@ -469,7 +542,14 @@ class TestProperty21LossCarryforwardPropagation:
     @given(
         current_income=decimal_strategy(min_value=-50000, max_value=0)
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_no_loss_applied_to_zero_or_negative_income(
         self,
         current_income: Decimal,
@@ -486,6 +566,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.2**
         """
+        reset_loss_state(loss_service)
+
         # Record a loss from previous year
         original_loss = Decimal('10000.00')
         loss_service.record_loss(
@@ -520,7 +602,14 @@ class TestProperty21LossCarryforwardPropagation:
     @given(
         loss_amount=decimal_strategy(min_value=1, max_value=50000)
     )
-    @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=50,
+        deadline=None,
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.too_slow,
+        ],
+    )
     def test_loss_amounts_never_negative(
         self,
         loss_amount: Decimal,
@@ -538,6 +627,8 @@ class TestProperty21LossCarryforwardPropagation:
         
         **Validates: Requirements 36.1, 36.2, 36.5**
         """
+        reset_loss_state(loss_service)
+
         # Record a loss (even if negative input, should be converted to positive)
         loss_record = loss_service.record_loss(
             user_id=test_user.id,

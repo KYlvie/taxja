@@ -17,6 +17,9 @@
 }
 
 .breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   background: none;
   border: none;
   color: #2563eb;
@@ -89,6 +92,16 @@
   color: #4b5563;
 }
 
+.status-badge.scrapped {
+  background-color: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+.status-badge.withdrawn {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
 .type-badge.rental {
   background-color: #dbeafe;
   color: #1e40af;
@@ -111,7 +124,26 @@
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.75rem;
+}
+
+.header-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  text-decoration: none;
+}
+
+.btn-icon .f-icon {
+  flex-shrink: 0;
 }
 
 /* Property Information Section */
@@ -182,6 +214,10 @@
 }
 
 .sale-notice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
   background-color: #fef3c7;
   border: 1px solid #fbbf24;
   border-radius: 0.5rem;
@@ -253,7 +289,8 @@
 }
 
 .empty-icon {
-  font-size: 3rem;
+  display: flex;
+  justify-content: center;
   margin-bottom: 1rem;
 }
 
@@ -463,11 +500,16 @@
 
   .header-actions {
     width: 100%;
+    flex-direction: column;
   }
 
   .header-actions .btn {
     flex: 1;
     justify-content: center;
+  }
+
+  .header-action-group {
+    width: 100%;
   }
 
   .info-grid {
@@ -574,7 +616,17 @@
 }
 
 .warning-icon {
-  font-size: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.warning-banner-icon,
+.inline-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.45rem;
 }
 
 .warning-level {

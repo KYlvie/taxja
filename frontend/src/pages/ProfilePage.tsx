@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { userService, type UserProfile } from '../services/userService';
 import { aiToast } from '../stores/aiToastStore';
+import Select from '../components/common/Select';
 import DataExport from '../components/reports/DataExport';
 import AccountManagementSection from '../components/account/AccountManagementSection';
 import './ProfilePage.css';
@@ -49,6 +50,7 @@ const ProfilePage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [industries, setIndustries] = useState<IndustryOption[]>([]);
+  const [industriesLoading, setIndustriesLoading] = useState(false);
   const [taxProfileCompleteness, setTaxProfileCompleteness] = useState<UserProfile['tax_profile_completeness'] | null>(null);
   
   const [formData, setFormData] = useState<ProfileFormData>({
@@ -108,14 +110,18 @@ const ProfilePage = () => {
 
     if (nextFormData.business_type) {
       try {
+        setIndustriesLoading(true);
         const nextIndustries = await userService.getIndustries(nextFormData.business_type);
         setIndustries(nextIndustries);
       } catch (err) {
         console.error('Failed to fetch industries for', nextFormData.business_type, err);
         setIndustries([]);
+      } finally {
+        setIndustriesLoading(false);
       }
     } else {
       setIndustries([]);
+      setIndustriesLoading(false);
     }
   };
 
@@ -150,12 +156,29 @@ const ProfilePage = () => {
   useEffect(() => {
     // Skip the initial render (profile fetch handles that)
     if (formData.business_type) {
-      userService.getIndustries(formData.business_type).then(setIndustries).catch((err) => {
+      let isActive = true;
+      setIndustriesLoading(true);
+      userService.getIndustries(formData.business_type).then((nextIndustries) => {
+        if (isActive) {
+          setIndustries(nextIndustries);
+        }
+      }).catch((err) => {
         console.error('Failed to fetch industries:', err);
-        setIndustries([]);
+        if (isActive) {
+          setIndustries([]);
+        }
+      }).finally(() => {
+        if (isActive) {
+          setIndustriesLoading(false);
+        }
       });
+
+      return () => {
+        isActive = false;
+      };
     } else {
       setIndustries([]);
+      setIndustriesLoading(false);
     }
   }, [formData.business_type]);
 
@@ -184,6 +207,14 @@ const ProfilePage = () => {
       setFormData({ ...formData, [name]: value });
     }
   };
+
+  const handleSelectChange = useCallback((field: string) => (value: string) => {
+    if (field === 'business_type') {
+      setFormData(prev => ({ ...prev, business_type: value, business_industry: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+  }, []);
 
   const handleRoleToggle = (role: string) => {
     // GmbH is mutually exclusive with all other roles
@@ -249,6 +280,21 @@ const ProfilePage = () => {
     gewinnermittlungsart: t('profile.gewinnermittlungsartLabel', 'Profit determination method'),
   };
   const needsAssetTaxProfile = formData.user_roles.includes('self_employed') || formData.user_type === 'gmbh';
+  const needsBusinessIndustry = isSelfEmployed && Boolean(formData.business_type) && industries.length > 0;
+  const businessIndustryPlaceholder = !formData.business_type
+    ? t('profile.selectBusinessTypeFirst', '请先选择上面的经营类型')
+    : industriesLoading
+      ? t('profile.loadingIndustryOptions', '正在加载营业子类...')
+      : industries.length > 0
+        ? t('profile.selectIndustry')
+        : t('profile.noIndustryOptions', 'No subcategories available for this business type.');
+  const businessIndustryHelpText = !formData.business_type
+    ? t('profile.businessIndustryStepHelp', 'First select the business type, then choose a more specific industry subcategory.')
+    : industriesLoading
+      ? t('profile.businessIndustryLoadingHelp', 'The system is loading industry options for this business type.')
+      : industries.length > 0
+        ? t('profile.businessIndustryHelp')
+        : t('profile.businessIndustryUnavailableHelp', 'This business type currently has no available subcategories. You can add this later.');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -257,6 +303,14 @@ const ProfilePage = () => {
     setLoading(true);
 
     try {
+      if (needsBusinessIndustry && !formData.business_industry) {
+        const message = t('profile.businessIndustryRequired', 'Please select a specific industry/business subcategory.');
+        setError(message);
+        aiToast(message, 'error');
+        setLoading(false);
+        return;
+      }
+
       await userService.updateProfile(formData);
       const confirmedProfile = await userService.getProfile();
       await applyProfile(confirmedProfile);
@@ -351,7 +405,7 @@ const ProfilePage = () => {
                 {t('profile.gmbh')} <span style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: 600, marginLeft: '0.5rem' }}>{t('common.comingSoon')}</span>
               </label>
               <small style={{ display: 'block', color: 'var(--text-secondary, #6b7280)', marginTop: '0.25rem', fontSize: '0.8rem' }}>
-                {t('auth.gmbhComingSoon', 'GmbH（有限责任公司）申报功能即将上线')}
+                {t('auth.gmbhComingSoon', 'GmbH tax filing coming soon')}
               </small>
             </div>
           </div>
@@ -360,17 +414,14 @@ const ProfilePage = () => {
             <>
               <div className="form-group">
                 <label>{t('profile.businessType')}</label>
-                <select
+                <Select
                   name="business_type"
                   value={formData.business_type}
-                  onChange={handleChange}
+                  onChange={handleSelectChange('business_type')}
                   disabled={!isEditing || loading}
-                >
-                  <option value="">{t('profile.selectBusinessType')}</option>
-                  {businessTypes.map(bt => (
-                    <option key={bt.value} value={bt.value}>{bt.label}</option>
-                  ))}
-                </select>
+                  placeholder={t('profile.selectBusinessType')}
+                  options={businessTypes}
+                />
                 {formData.business_type && (
                   <small style={{ display: 'block', color: 'var(--text-secondary, #6b7280)', marginTop: '0.25rem' }}>
                     {t(`profile.businessTypeHints.${formData.business_type}`)}
@@ -378,71 +429,69 @@ const ProfilePage = () => {
                 )}
               </div>
 
-              {industries.length > 0 && (
-                <div className="form-group">
-                  <label>{t('profile.businessIndustry')}</label>
-                  <select
-                    name="business_industry"
-                    value={formData.business_industry}
-                    onChange={handleChange}
-                    disabled={!isEditing || loading}
-                  >
-                    <option value="">{t('profile.selectIndustry')}</option>
-                    {industries.map(ind => (
-                      <option key={ind.value} value={ind.value}>{getIndustryLabel(ind)}</option>
-                    ))}
-                  </select>
-                  <small>{t('profile.businessIndustryHelp')}</small>
+              <div className="form-group profile-business-subtype-group">
+                <label>
+                  {t('profile.businessIndustry')}
+                  {needsBusinessIndustry && <span className="field-required-marker"> *</span>}
+                </label>
+                <Select
+                  name="business_industry"
+                  value={formData.business_industry}
+                  onChange={handleSelectChange('business_industry')}
+                  disabled={!isEditing || loading || !formData.business_type || industriesLoading || industries.length === 0}
+                  placeholder={businessIndustryPlaceholder}
+                  options={industries.map(ind => ({ value: ind.value, label: getIndustryLabel(ind) }))}
+                />
+                <small>{businessIndustryHelpText}</small>
 
-                  {/* Industry-specific deductibility guidance */}
-                  {formData.business_industry && industriesWithExamples.includes(formData.business_industry) && (
-                    <div style={{
-                      marginTop: '0.75rem',
-                      padding: '0.75rem 1rem',
-                      borderRadius: '8px',
-                      background: 'var(--bg-secondary, #f8f9fa)',
-                      border: '1px solid var(--border-color, #e5e7eb)',
-                      fontSize: '0.85rem',
-                      lineHeight: '1.5',
-                    }}>
-                      <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary, #1f2937)' }}>
-                        {t('profile.industryDeductibilityTitle')}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        <div>
-                          <span style={{ color: '#16a34a', fontWeight: 500 }}>
-                            {t('profile.deductibleLabel')}:
-                          </span>{' '}
-                          <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
-                            {t(`profile.industryExamples.${formData.business_industry}.deductible`)}
-                          </span>
-                        </div>
-                        <div>
-                          <span style={{ color: '#dc2626', fontWeight: 500 }}>
-                            {t('profile.notDeductibleLabel')}:
-                          </span>{' '}
-                          <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
-                            {t(`profile.industryExamples.${formData.business_industry}.notDeductible`)}
-                          </span>
-                        </div>
-                        {(() => {
-                          const needsAI = t(`profile.industryExamples.${formData.business_industry}.needsAI`, '');
-                          return needsAI && !needsAI.startsWith('profile.industryExamples.') ? (
-                          <div>
-                            <span style={{ color: '#d97706', fontWeight: 500 }}>
-                              {t('profile.needsAILabel')}:
-                            </span>{' '}
-                            <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
-                              {needsAI}
-                            </span>
-                          </div>
-                          ) : null;
-                        })()}
-                      </div>
+                {/* Industry-specific deductibility guidance */}
+                {formData.business_industry && industriesWithExamples.includes(formData.business_industry) && (
+                  <div style={{
+                    marginTop: '0.75rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    background: 'var(--bg-secondary, #f8f9fa)',
+                    border: '1px solid var(--border-color, #e5e7eb)',
+                    fontSize: '0.85rem',
+                    lineHeight: '1.5',
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: '0.5rem', color: 'var(--text-primary, #1f2937)' }}>
+                      {t('profile.industryDeductibilityTitle')}
                     </div>
-                  )}
-                </div>
-              )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div>
+                        <span style={{ color: '#16a34a', fontWeight: 500 }}>
+                          {t('profile.deductibleLabel')}:
+                        </span>{' '}
+                        <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
+                          {t(`profile.industryExamples.${formData.business_industry}.deductible`)}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ color: '#dc2626', fontWeight: 500 }}>
+                          {t('profile.notDeductibleLabel')}:
+                        </span>{' '}
+                        <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
+                          {t(`profile.industryExamples.${formData.business_industry}.notDeductible`)}
+                        </span>
+                      </div>
+                      {(() => {
+                        const needsAI = t(`profile.industryExamples.${formData.business_industry}.needsAI`, '');
+                        return needsAI && !needsAI.startsWith('profile.industryExamples.') ? (
+                        <div>
+                          <span style={{ color: '#d97706', fontWeight: 500 }}>
+                            {t('profile.needsAILabel')}:
+                          </span>{' '}
+                          <span style={{ color: 'var(--text-secondary, #4b5563)' }}>
+                            {needsAI}
+                          </span>
+                        </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="form-group">
                 <label>{t('profile.businessName')}</label>
@@ -463,16 +512,17 @@ const ProfilePage = () => {
             <>
               <div className="form-group">
                 <label>{t('profile.employerMode', 'Employee-related payroll documents')}</label>
-                <select
+                <Select
                   name="employer_mode"
                   value={formData.employer_mode}
-                  onChange={handleChange}
+                  onChange={handleSelectChange('employer_mode')}
                   disabled={!isEditing || loading}
-                >
-                  <option value="none">{t('profile.employerModes.none', 'No')}</option>
-                  <option value="occasional">{t('profile.employerModes.occasional', 'Occasionally')}</option>
-                  <option value="regular">{t('profile.employerModes.regular', 'Regularly')}</option>
-                </select>
+                  options={[
+                    { value: 'none', label: t('profile.employerModes.none', 'No') },
+                    { value: 'occasional', label: t('profile.employerModes.occasional', 'Occasionally') },
+                    { value: 'regular', label: t('profile.employerModes.regular', 'Regularly') },
+                  ]}
+                />
                 <small>
                   {t(
                     'profile.employerModeHelp',
@@ -550,19 +600,14 @@ const ProfilePage = () => {
             <>
               <div className="form-group">
                 <label>{t('profile.vatStatusLabel', 'VAT status')}</label>
-                <select
+                <Select
                   name="vat_status"
                   value={formData.vat_status}
-                  onChange={handleChange}
+                  onChange={handleSelectChange('vat_status')}
                   disabled={!isEditing || loading}
-                >
-                  <option value="">{t('profile.selectVatStatus', 'Select VAT status')}</option>
-                  {vatStatusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={t('profile.selectVatStatus', 'Select VAT status')}
+                  options={vatStatusOptions}
+                />
                 <small>
                   {t(
                     'profile.vatStatusHelp',
@@ -573,19 +618,14 @@ const ProfilePage = () => {
 
               <div className="form-group">
                 <label>{t('profile.gewinnermittlungsartLabel', 'Profit determination method')}</label>
-                <select
+                <Select
                   name="gewinnermittlungsart"
                   value={formData.gewinnermittlungsart}
-                  onChange={handleChange}
+                  onChange={handleSelectChange('gewinnermittlungsart')}
                   disabled={!isEditing || loading}
-                >
-                  <option value="">{t('profile.selectGewinnermittlungsart', 'Select profit determination method')}</option>
-                  {gewinnermittlungsartOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={t('profile.selectGewinnermittlungsart', 'Select profit determination method')}
+                  options={gewinnermittlungsartOptions}
+                />
                 <small>
                   {t(
                     'profile.gewinnermittlungsartHelp',
@@ -696,7 +736,7 @@ const ProfilePage = () => {
           </div>
 
           <div className="form-group checkbox-group">
-            <label>
+            <label className="profile-inline-checkbox">
               <input
                 type="checkbox"
                 name="is_single_parent"
@@ -704,7 +744,7 @@ const ProfilePage = () => {
                 onChange={handleChange}
                 disabled={!isEditing || loading}
               />
-              {t('profile.singleParent')}
+              <span>{t('profile.singleParent')}</span>
             </label>
           </div>
         </section>

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Download, Plus, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import Select from '../components/common/Select';
+import { ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useTransactionStore } from '../stores/transactionStore';
 import { transactionService } from '../services/transactionService';
 import { saveBlobWithNativeShare } from '../mobile/files';
@@ -48,6 +50,12 @@ const TransactionsPage = () => {
   const [sortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const exportDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [exportMenuPos, setExportMenuPos] = useState<{ top: number; left: number; minWidth: number }>({ top: 0, left: 0, minWidth: 180 });
 
   const setTransactionQueryParam = (transactionId: number | null) => {
     const next = new URLSearchParams(searchParams);
@@ -106,6 +114,51 @@ const TransactionsPage = () => {
     };
   }, [transactionIdParam]);
 
+  useEffect(() => {
+    if (!exportMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        exportMenuRef.current?.contains(event.target as Node) ||
+        exportDropdownRef.current?.contains(event.target as Node)
+      ) {
+        return;
+      }
+      setExportMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [exportMenuOpen]);
+
+  // Position the portal dropdown relative to the trigger button
+  useEffect(() => {
+    if (!exportMenuOpen || !exportTriggerRef.current) return;
+
+    const updatePos = () => {
+      const rect = exportTriggerRef.current!.getBoundingClientRect();
+      setExportMenuPos({
+        top: rect.bottom + 8,
+        left: rect.right - 180,
+        minWidth: Math.max(180, rect.width),
+      });
+    };
+
+    updatePos();
+
+    // Reposition on scroll (any scrollable ancestor) and resize
+    const mainContent = document.querySelector('.main-content');
+    const onScroll = () => { updatePos(); };
+    window.addEventListener('resize', onScroll);
+    mainContent?.addEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('resize', onScroll);
+      mainContent?.removeEventListener('scroll', onScroll);
+    };
+  }, [exportMenuOpen]);
+
   // Clear selection when filters change (but NOT on page change — keep cross-page selection)
   useEffect(() => {
     setSelectedIds(new Set());
@@ -122,6 +175,7 @@ const TransactionsPage = () => {
       });
 
       setTransactions(response.items);
+      setAvailableYears(response.available_years || []);
       setPagination({
         total: response.total,
         page: response.page,
@@ -173,7 +227,7 @@ const TransactionsPage = () => {
       if (check.warning_type === 'document_only') {
         const goToDoc = await aiConfirm(
           t('transactions.deleteCheck.documentOnly', { name: check.document_name }),
-          { variant: 'info', confirmText: t('transactions.deleteCheck.goToDocument', '查看文档'), cancelText: t('common.close', '关闭') }
+          { variant: 'info', confirmText: t('transactions.deleteCheck.goToDocument', 'View Document'), cancelText: t('common.close', 'Close') }
         );
         if (goToDoc && check.document_id) {
           navigate(`/documents/${check.document_id}`);
@@ -314,9 +368,24 @@ const TransactionsPage = () => {
   const handleExportCSV = async () => {
     try {
       const blob = await transactionService.exportCSV(filters);
+      setExportMenuOpen(false);
       await saveBlobWithNativeShare(
         blob,
         `transactions_${new Date().toISOString().split('T')[0]}.csv`,
+        t('common.export')
+      );
+    } catch (err: any) {
+      setError(err.response?.data?.detail || t('transactions.exportError'));
+    }
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const blob = await transactionService.exportPDF(filters);
+      setExportMenuOpen(false);
+      await saveBlobWithNativeShare(
+        blob,
+        `transactions_${new Date().toISOString().split('T')[0]}.pdf`,
         t('common.export')
       );
     } catch (err: any) {
@@ -362,12 +431,62 @@ const TransactionsPage = () => {
   return (
     <div className="transactions-page">
       <div className="page-header">
-        <h1>{t('transactions.title')}</h1>
+        <div className="transactions-header-copy">
+          <h1>{t('transactions.title')}</h1>
+          <p className="transactions-header-subtitle">
+            {t(
+              'classificationRules.transactionsSubtitle',
+              'View transactions, recurring bookings, and the classification memory your corrections teach the system.'
+            )}
+          </p>
+        </div>
         <div className="header-actions">
-          <button type="button" className="btn btn-secondary" onClick={handleExportCSV}>
-            <Download size={16} />
-            <span>{t('common.export')}</span>
-          </button>
+          <Link to="/recurring" className="btn btn-secondary">
+            <RefreshCw size={16} />
+            <span>{t('recurring.title', 'Recurring Transactions')}</span>
+          </Link>
+          <Link to="/classification-rules" className="btn btn-secondary">
+            <Sparkles size={16} />
+            <span>{t('classificationRules.navLabel', 'Classification Memory')}</span>
+          </Link>
+          <div className={`export-menu ${exportMenuOpen ? 'is-open' : ''}`} ref={exportMenuRef}>
+            <button
+              type="button"
+              ref={exportTriggerRef}
+              className="btn btn-secondary export-menu__trigger"
+              onClick={() => setExportMenuOpen((open) => !open)}
+              aria-expanded={exportMenuOpen}
+              aria-haspopup="menu"
+            >
+              <Download size={16} />
+              <span>{t('common.export')}</span>
+              <ChevronDown size={14} />
+            </button>
+            {exportMenuOpen ? createPortal(
+              <div
+                ref={exportDropdownRef}
+                className="export-menu__dropdown"
+                role="menu"
+                style={{
+                  position: 'fixed',
+                  top: exportMenuPos.top,
+                  left: exportMenuPos.left,
+                  minWidth: exportMenuPos.minWidth,
+                  zIndex: 99999,
+                }}
+              >
+                <button type="button" className="export-menu__item" onClick={handleExportCSV} role="menuitem">
+                  <FileSpreadsheet size={16} />
+                  <span>{t('transactions.exportCsv', 'Export CSV')}</span>
+                </button>
+                <button type="button" className="export-menu__item" onClick={handleExportPDF} role="menuitem">
+                  <FileText size={16} />
+                  <span>{t('transactions.exportPdf', 'Export PDF')}</span>
+                </button>
+              </div>,
+              document.body
+            ) : null}
+          </div>
           <button
             type="button"
             className="btn btn-primary"
@@ -390,6 +509,7 @@ const TransactionsPage = () => {
 
       <TransactionFilters
         filters={filters}
+        availableYears={availableYears}
         onFilterChange={setFilters}
         onClear={clearFilters}
       />
@@ -423,7 +543,7 @@ const TransactionsPage = () => {
               <span>
                 {t('transactions.selectedCount', { count: selectedIds.size })}
                 {selectedIds.size > sortedTransactions.filter((t) => selectedIds.has(t.id)).length && (
-                  <> ({t('transactions.acrossPages', '跨页')})</>
+                  <> ({t('transactions.acrossPages', 'across pages')})</>
                 )}
               </span>
               <button
@@ -450,17 +570,15 @@ const TransactionsPage = () => {
           {pagination.total > 0 && (
             <div className="pagination">
               <div className="pagination-page-size">
-                <label htmlFor="page-size-select">{t('transactions.perPage', '每页')}</label>
-                <select
-                  id="page-size-select"
-                  value={pagination.pageSize}
-                  onChange={(e) => setPagination({ pageSize: Number(e.target.value), page: 1 })}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
+                <label htmlFor="page-size-select">{t('transactions.perPage', 'Per page')}</label>
+                <Select id="page-size-select" value={String(pagination.pageSize)}
+                  onChange={v => setPagination({ pageSize: Number(v), page: 1 })} size="sm"
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                    { value: '100', label: '100' },
+                  ]} />
               </div>
               {pagination.total > pagination.pageSize && (
                 <>

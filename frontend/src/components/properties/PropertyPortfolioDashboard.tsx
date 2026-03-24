@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { usePropertyStore } from '../../stores/propertyStore';
 import { PropertyStatus } from '../../types/property';
 import SubpageBackLink from '../common/SubpageBackLink';
+import { getLocaleForLanguage } from '../../utils/locale';
 import {
   BarChart,
   Bar,
@@ -39,7 +40,7 @@ interface DepreciationScheduleData {
 }
 
 export const PropertyPortfolioDashboard: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { properties, isLoading, fetchProperties } = usePropertyStore();
 
   useEffect(() => {
@@ -139,7 +140,7 @@ export const PropertyPortfolioDashboard: React.FC = () => {
 
   // Format currency
   const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 2,

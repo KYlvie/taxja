@@ -24,6 +24,7 @@ from app.schemas.property import (
     AssetCreate,
     AssetResponse,
     AssetListResponse,
+    DisposalRequest,
 )
 from app.services.property_service import PropertyService
 from app.services.historical_depreciation_service import HistoricalDepreciationService
@@ -228,8 +229,8 @@ def create_asset(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Asset creation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Asset creation failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 
 @router.get(
@@ -520,10 +521,54 @@ def archive_property(
     ```
     """
     service = PropertyService(db)
-    
+
     try:
         property = service.archive_property(property_id, current_user.id, sale_date)
         return property
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/{property_id}/dispose", response_model=PropertyResponse)
+def dispose_property(
+    property_id: UUID,
+    disposal: DisposalRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Dispose of an asset or property with a specific reason.
+
+    **Path Parameters:**
+    - **property_id**: UUID of the property/asset to dispose
+
+    **Body Parameters (JSON):**
+    - **disposal_reason**: One of: sold, scrapped, fully_depreciated, private_withdrawal
+    - **disposal_date**: Date of the disposal
+    - **sale_price**: Sale price (required when disposal_reason is 'sold')
+
+    **Behaviour:**
+    - For real_estate properties, only disposal_reason="sold" is allowed.
+    - For other asset types, all four disposal reasons are permitted.
+    - Maps disposal_reason to PropertyStatus:
+      sold -> SOLD, scrapped -> SCRAPPED,
+      fully_depreciated -> ARCHIVED, private_withdrawal -> WITHDRAWN
+    - Creates an AssetEvent record for sold/scrapped/private_withdrawal disposals.
+    """
+    service = PropertyService(db)
+
+    try:
+        result = service.dispose_property(
+            property_id=property_id,
+            user_id=current_user.id,
+            disposal_reason=disposal.disposal_reason,
+            disposal_date=disposal.disposal_date,
+            sale_price=disposal.sale_price,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1037,9 +1082,10 @@ def backfill_historical_depreciation(
         )
     except RuntimeError as e:
         # Database error during backfill
+        logger.exception("Historical depreciation backfill failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="property_operation_failed"
         )
 
 
@@ -1145,9 +1191,10 @@ def generate_annual_depreciation(
         
     except RuntimeError as e:
         # Database error during generation
+        logger.exception("Annual depreciation generation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="property_operation_failed"
         )
 
 
@@ -1240,9 +1287,10 @@ def extract_kaufvertrag_from_text(
             detail=str(e)
         )
     except Exception as e:
+        logger.exception("Kaufvertrag text extraction failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Extraction failed: {str(e)}"
+            detail="property_operation_failed"
         )
 
 
@@ -1328,11 +1376,10 @@ def get_income_statement(
             detail=str(e)
         )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Income statement generation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating income statement: {str(e)}"
+            detail="property_operation_failed"
         )
 
 
@@ -1444,11 +1491,10 @@ def get_depreciation_schedule(
             detail=str(e)
         )
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Depreciation schedule generation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating depreciation schedule: {str(e)}"
+            detail="property_operation_failed"
         )
 
 
@@ -1768,8 +1814,8 @@ def compare_portfolio(
         )
         return comparisons
     except Exception as e:
-        logger.error(f"Portfolio comparison failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to compare portfolio: {str(e)}")
+        logger.exception("Portfolio comparison failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 
 @router.get("/portfolio/summary", response_model=Dict[str, Any])
@@ -1801,8 +1847,8 @@ def get_portfolio_summary(
         )
         return summary
     except Exception as e:
-        logger.error(f"Portfolio summary failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get portfolio summary: {str(e)}")
+        logger.exception("Portfolio summary failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 
 # Bulk Operations Endpoints
@@ -1844,8 +1890,8 @@ def bulk_generate_depreciation(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid UUID format: {str(e)}")
     except Exception as e:
-        logger.error(f"Bulk depreciation generation failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate depreciation: {str(e)}")
+        logger.exception("Bulk depreciation generation failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 
 @router.post("/bulk/archive", response_model=Dict[str, Any])
@@ -1882,8 +1928,8 @@ def bulk_archive(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid UUID format: {str(e)}")
     except Exception as e:
-        logger.error(f"Bulk archive failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to archive properties: {str(e)}")
+        logger.exception("Bulk archive failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 
 @router.post("/{property_id}/bulk/link-transactions", response_model=Dict[str, Any])
@@ -1921,7 +1967,7 @@ def bulk_link_transactions(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid UUID format: {str(e)}")
     except Exception as e:
-        logger.error(f"Bulk transaction linking failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to link transactions: {str(e)}")
+        logger.exception("Bulk transaction linking failed")
+        raise HTTPException(status_code=500, detail="property_operation_failed")
 
 

@@ -7,9 +7,24 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, and_
 
+from app.models.loan_installment import (
+    LoanInstallment,
+    LoanInstallmentSource,
+    LoanInstallmentStatus,
+)
 from app.models.property_loan import PropertyLoan
 from app.models.property import Property
 from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+from app.services.liability_service import LiabilityService
+
+
+MONEY_QUANTUM = Decimal("0.01")
+INSTALLMENT_SOURCE_PRIORITY = {
+    LoanInstallmentSource.ESTIMATED: 0,
+    LoanInstallmentSource.MANUAL: 1,
+    LoanInstallmentSource.BANK_STATEMENT: 2,
+    LoanInstallmentSource.ZINSBESCHEINIGUNG: 3,
+}
 
 
 class AmortizationScheduleEntry:
@@ -46,7 +61,184 @@ class LoanService:
     
     def __init__(self, db: Session):
         self.db = db
-    
+
+    @staticmethod
+    def _quantize_money(value: Decimal) -> Decimal:
+        return (value or Decimal("0")).quantize(MONEY_QUANTUM)
+
+    @staticmethod
+    def _normalize_installment_source(source) -> LoanInstallmentSource:
+        if isinstance(source, LoanInstallmentSource):
+            return source
+        if hasattr(source, "value"):
+            source = source.value
+        return LoanInstallmentSource(source)
+
+    @classmethod
+    def should_replace_installment_source(cls, existing_source, incoming_source) -> bool:
+        """Apply authoritative-source precedence for installment updates."""
+        existing = cls._normalize_installment_source(existing_source)
+        incoming = cls._normalize_installment_source(incoming_source)
+        return INSTALLMENT_SOURCE_PRIORITY[incoming] >= INSTALLMENT_SOURCE_PRIORITY[existing]
+
+    def _upsert_installment_record(
+        self,
+        loan: PropertyLoan,
+        *,
+        due_date: date,
+        scheduled_payment: Decimal,
+        principal_amount: Decimal,
+        interest_amount: Decimal,
+        remaining_balance_after: Decimal,
+        source: LoanInstallmentSource,
+        status: LoanInstallmentStatus,
+        existing: Optional[LoanInstallment] = None,
+        source_document_id: Optional[int] = None,
+        actual_payment_date: Optional[date] = None,
+    ) -> LoanInstallment:
+        if existing and not self.should_replace_installment_source(existing.source, source):
+            return existing
+
+        installment = existing
+        if installment is None:
+            installment = LoanInstallment(
+                loan_id=loan.id,
+                user_id=loan.user_id,
+                due_date=due_date,
+                tax_year=due_date.year,
+            )
+            self.db.add(installment)
+
+        installment.scheduled_payment = self._quantize_money(scheduled_payment)
+        installment.principal_amount = self._quantize_money(principal_amount)
+        installment.interest_amount = self._quantize_money(interest_amount)
+        installment.remaining_balance_after = self._quantize_money(
+            max(remaining_balance_after, Decimal("0"))
+        )
+        installment.source = source
+        installment.status = status
+        installment.tax_year = due_date.year
+        installment.actual_payment_date = actual_payment_date
+        installment.source_document_id = source_document_id
+        installment.updated_at = datetime.utcnow()
+        return installment
+
+    def _get_existing_installments(
+        self,
+        loan_id: int,
+        user_id: int,
+    ) -> List[LoanInstallment]:
+        return (
+            self.db.query(LoanInstallment)
+            .filter(
+                LoanInstallment.loan_id == loan_id,
+                LoanInstallment.user_id == user_id,
+            )
+            .order_by(LoanInstallment.due_date.asc())
+            .all()
+        )
+
+    def _get_balance_before_index(
+        self,
+        loan: PropertyLoan,
+        installments: List[LoanInstallment],
+        index: int,
+    ) -> Decimal:
+        if index <= 0:
+            return self._quantize_money(loan.loan_amount)
+        previous_balance = installments[index - 1].remaining_balance_after
+        return self._quantize_money(previous_balance)
+
+    def _allocate_annual_interest_amounts(
+        self,
+        installments: List[LoanInstallment],
+        annual_interest_amount: Decimal,
+    ) -> List[Decimal]:
+        total_estimated_interest = sum(
+            (self._quantize_money(installment.interest_amount) for installment in installments),
+            Decimal("0"),
+        )
+        target_total = self._quantize_money(annual_interest_amount)
+        if not installments:
+            return []
+
+        if total_estimated_interest > Decimal("0"):
+            allocated = []
+            consumed = Decimal("0")
+            for installment in installments[:-1]:
+                proportional = (
+                    target_total
+                    * self._quantize_money(installment.interest_amount)
+                    / total_estimated_interest
+                ).quantize(MONEY_QUANTUM)
+                allocated.append(proportional)
+                consumed += proportional
+            allocated.append((target_total - consumed).quantize(MONEY_QUANTUM))
+            return allocated
+
+        even_split = (target_total / Decimal(len(installments))).quantize(MONEY_QUANTUM)
+        allocated = [even_split for _ in installments]
+        rounding_delta = target_total - sum(allocated, Decimal("0"))
+        allocated[-1] = (allocated[-1] + rounding_delta).quantize(MONEY_QUANTUM)
+        return allocated
+
+    def _reflow_installments_from(
+        self,
+        loan: PropertyLoan,
+        installments: List[LoanInstallment],
+        start_index: int,
+    ) -> None:
+        monthly_rate = loan.interest_rate / Decimal(12)
+        running_balance = self._get_balance_before_index(loan, installments, start_index)
+        installments_to_delete: List[LoanInstallment] = []
+
+        for index in range(start_index, len(installments)):
+            installment = installments[index]
+            source = self._normalize_installment_source(installment.source)
+
+            if running_balance <= Decimal("0"):
+                if source == LoanInstallmentSource.ESTIMATED:
+                    installments_to_delete.append(installment)
+                    continue
+
+                installment.remaining_balance_after = Decimal("0.00")
+                installment.updated_at = datetime.utcnow()
+                continue
+
+            if source == LoanInstallmentSource.ESTIMATED:
+                interest_amount = (running_balance * monthly_rate).quantize(MONEY_QUANTUM)
+                principal_amount = (
+                    self._quantize_money(installment.scheduled_payment) - interest_amount
+                ).quantize(MONEY_QUANTUM)
+                if principal_amount < Decimal("0"):
+                    principal_amount = Decimal("0.00")
+                if principal_amount > running_balance:
+                    principal_amount = running_balance
+                    installment.scheduled_payment = self._quantize_money(
+                        principal_amount + interest_amount
+                    )
+                installment.interest_amount = self._quantize_money(interest_amount)
+                installment.principal_amount = self._quantize_money(principal_amount)
+            else:
+                installment.interest_amount = self._quantize_money(installment.interest_amount)
+                installment.principal_amount = self._quantize_money(installment.principal_amount)
+                if installment.principal_amount > running_balance:
+                    installment.principal_amount = self._quantize_money(running_balance)
+                    installment.scheduled_payment = self._quantize_money(
+                        installment.principal_amount + installment.interest_amount
+                    )
+
+            running_balance = self._quantize_money(
+                max(running_balance - installment.principal_amount, Decimal("0"))
+            )
+            installment.remaining_balance_after = running_balance
+            installment.updated_at = datetime.utcnow()
+
+        for installment in installments_to_delete:
+            self.db.delete(installment)
+
+        installments[:] = [i for i in installments if i not in installments_to_delete]
+
     def create_loan(
         self,
         user_id: int,
@@ -108,6 +300,8 @@ class LoanService:
         )
         
         self.db.add(loan)
+        self.db.flush()
+        LiabilityService(self.db).ensure_property_loan_liability(loan)
         self.db.commit()
         self.db.refresh(loan)
         
@@ -188,6 +382,8 @@ class LoanService:
                 setattr(loan, field, value)
         
         loan.updated_at = datetime.utcnow()
+        self.db.flush()
+        LiabilityService(self.db).ensure_property_loan_liability(loan)
         self.db.commit()
         self.db.refresh(loan)
         
@@ -208,7 +404,7 @@ class LoanService:
         
         if not loan:
             return False
-        
+        LiabilityService(self.db).detach_property_loan(loan)
         self.db.delete(loan)
         self.db.commit()
         
@@ -310,6 +506,14 @@ class LoanService:
         Raises:
             ValueError: If loan not found
         """
+        installments = self.list_installments(loan_id, user_id, tax_year=year)
+        if installments:
+            total_interest = sum(
+                (self._quantize_money(installment.interest_amount) for installment in installments),
+                Decimal("0"),
+            )
+            return total_interest.quantize(Decimal("0.01"))
+
         schedule = self.generate_amortization_schedule(loan_id, user_id)
         
         total_interest = Decimal("0")
@@ -340,6 +544,16 @@ class LoanService:
         Raises:
             ValueError: If loan not found
         """
+        installments = self.list_installments(loan_id, user_id)
+        if installments:
+            for installment in reversed(installments):
+                comparison_date = installment.actual_payment_date or installment.due_date
+                if comparison_date <= as_of_date:
+                    return self._quantize_money(installment.remaining_balance_after)
+
+            loan = self.get_loan(loan_id, user_id)
+            return self._quantize_money(loan.loan_amount) if loan else Decimal("0")
+
         schedule = self.generate_amortization_schedule(loan_id, user_id)
         
         # Find the last payment before or on as_of_date
@@ -375,12 +589,31 @@ class LoanService:
             raise ValueError("Loan not found or does not belong to user")
         
         # Generate schedule for calculations
-        schedule = self.generate_amortization_schedule(loan_id, user_id)
-        
-        # Calculate totals
-        total_payments = sum(entry.payment_amount for entry in schedule)
-        total_interest = sum(entry.interest_amount for entry in schedule)
-        total_principal = sum(entry.principal_amount for entry in schedule)
+        installments = self.list_installments(loan_id, user_id)
+        if installments:
+            total_payments = sum(
+                (self._quantize_money(installment.scheduled_payment) for installment in installments),
+                Decimal("0"),
+            )
+            total_interest = sum(
+                (self._quantize_money(installment.interest_amount) for installment in installments),
+                Decimal("0"),
+            )
+            total_principal = sum(
+                (self._quantize_money(installment.principal_amount) for installment in installments),
+                Decimal("0"),
+            )
+            number_of_payments = len(installments)
+            payments_remaining = sum(
+                1 for installment in installments if installment.remaining_balance_after > Decimal("0")
+            )
+        else:
+            schedule = self.generate_amortization_schedule(loan_id, user_id)
+            total_payments = sum(entry.payment_amount for entry in schedule)
+            total_interest = sum(entry.interest_amount for entry in schedule)
+            total_principal = sum(entry.principal_amount for entry in schedule)
+            number_of_payments = len(schedule)
+            payments_remaining = sum(1 for entry in schedule if entry.remaining_balance > 0)
         
         # Current balance
         current_balance = self.calculate_remaining_balance(loan_id, user_id, date.today())
@@ -404,9 +637,158 @@ class LoanService:
             "total_interest": float(total_interest),
             "total_principal": float(total_principal),
             "current_year_interest": float(current_year_interest),
-            "number_of_payments": len(schedule),
-            "payments_remaining": sum(1 for entry in schedule if entry.remaining_balance > 0)
+            "number_of_payments": number_of_payments,
+            "payments_remaining": payments_remaining,
         }
+
+    def list_installments(
+        self,
+        loan_id: int,
+        user_id: int,
+        tax_year: Optional[int] = None,
+    ) -> List[LoanInstallment]:
+        """List installment rows for a loan."""
+        loan = self.get_loan(loan_id, user_id)
+        if not loan:
+            raise ValueError("Loan not found or does not belong to user")
+
+        query = self.db.query(LoanInstallment).filter(
+            LoanInstallment.loan_id == loan.id,
+            LoanInstallment.user_id == user_id,
+        )
+        if tax_year is not None:
+            query = query.filter(LoanInstallment.tax_year == tax_year)
+
+        return query.order_by(LoanInstallment.due_date.asc()).all()
+
+    def generate_installment_plan(
+        self,
+        loan_id: int,
+        user_id: int,
+        replace_existing_estimates: bool = True,
+        commit_changes: bool = True,
+    ) -> List[LoanInstallment]:
+        """Persist the estimated amortization schedule as loan_installments rows."""
+        loan = self.get_loan(loan_id, user_id)
+        if not loan:
+            raise ValueError("Loan not found or does not belong to user")
+
+        schedule = self.generate_amortization_schedule(loan_id, user_id)
+        existing_installments = {
+            installment.due_date: installment
+            for installment in self.db.query(LoanInstallment).filter(
+                LoanInstallment.loan_id == loan.id,
+                LoanInstallment.user_id == user_id,
+            ).all()
+        }
+
+        generated_due_dates = set()
+        generated_installments: List[LoanInstallment] = []
+
+        try:
+            for entry in schedule:
+                generated_due_dates.add(entry.payment_date)
+                installment = self._upsert_installment_record(
+                    loan,
+                    due_date=entry.payment_date,
+                    scheduled_payment=entry.payment_amount,
+                    principal_amount=entry.principal_amount,
+                    interest_amount=entry.interest_amount,
+                    remaining_balance_after=entry.remaining_balance,
+                    source=LoanInstallmentSource.ESTIMATED,
+                    status=LoanInstallmentStatus.SCHEDULED,
+                    existing=existing_installments.get(entry.payment_date),
+                )
+                existing_installments[entry.payment_date] = installment
+                generated_installments.append(installment)
+
+            if replace_existing_estimates:
+                for due_date, installment in list(existing_installments.items()):
+                    if (
+                        due_date not in generated_due_dates
+                        and self._normalize_installment_source(installment.source)
+                        == LoanInstallmentSource.ESTIMATED
+                    ):
+                        self.db.delete(installment)
+
+            if commit_changes:
+                self.db.commit()
+            else:
+                self.db.flush()
+
+            refreshed_installments = []
+            for installment in generated_installments:
+                if commit_changes:
+                    self.db.refresh(installment)
+                refreshed_installments.append(installment)
+
+            return sorted(refreshed_installments, key=lambda installment: installment.due_date)
+        except Exception as exc:
+            self.db.rollback()
+            raise ValueError(f"Failed to generate installment plan: {str(exc)}") from exc
+
+    def apply_annual_interest_certificate(
+        self,
+        loan_id: int,
+        user_id: int,
+        tax_year: int,
+        annual_interest_amount: Decimal,
+        *,
+        source_document_id: Optional[int] = None,
+        actual_payment_date: Optional[date] = None,
+    ) -> List[LoanInstallment]:
+        """Override a year's installment interest using a bank-issued annual certificate."""
+        loan = self.get_loan(loan_id, user_id)
+        if not loan:
+            raise ValueError("Loan not found or does not belong to user")
+
+        target_total = self._quantize_money(Decimal(str(annual_interest_amount)))
+        if target_total <= 0:
+            raise ValueError("Annual interest amount must be greater than zero")
+
+        all_installments = self.list_installments(loan_id, user_id)
+        if not all_installments:
+            all_installments = self.generate_installment_plan(loan_id, user_id)
+
+        year_installments = [i for i in all_installments if i.tax_year == tax_year]
+        if not year_installments:
+            raise ValueError(f"No loan installments found for tax year {tax_year}")
+
+        allocated_interest = self._allocate_annual_interest_amounts(
+            year_installments,
+            target_total,
+        )
+        start_index = all_installments.index(year_installments[0])
+        year_installment_ids = {installment.id for installment in year_installments}
+
+        for installment, interest_amount in zip(year_installments, allocated_interest):
+            scheduled_payment = self._quantize_money(installment.scheduled_payment)
+            if interest_amount > scheduled_payment:
+                raise ValueError(
+                    "Annual interest certificate exceeds scheduled payments for the selected year"
+                )
+            installment.interest_amount = self._quantize_money(interest_amount)
+            installment.principal_amount = self._quantize_money(
+                scheduled_payment - installment.interest_amount
+            )
+            installment.source = LoanInstallmentSource.ZINSBESCHEINIGUNG
+            installment.status = LoanInstallmentStatus.RECONCILED
+            installment.source_document_id = source_document_id
+            installment.actual_payment_date = actual_payment_date
+            installment.updated_at = datetime.utcnow()
+
+        self._reflow_installments_from(loan, all_installments, start_index)
+        for installment in all_installments:
+            if installment.id in year_installment_ids:
+                installment.status = LoanInstallmentStatus.RECONCILED
+                installment.source = LoanInstallmentSource.ZINSBESCHEINIGUNG
+                installment.source_document_id = source_document_id
+                installment.actual_payment_date = actual_payment_date
+
+        self.db.commit()
+
+        refreshed = self.list_installments(loan_id, user_id, tax_year=tax_year)
+        return refreshed
     
     def create_interest_payment_transaction(
         self,
@@ -498,15 +880,34 @@ class LoanService:
         if not loan:
             raise ValueError("Loan not found or does not belong to user")
         
-        # Generate amortization schedule
-        schedule = self.generate_amortization_schedule(loan_id, user_id)
-        
-        # Filter schedule entries for the specified period
+        installment_rows = self.list_installments(loan_id, user_id, tax_year=year)
         entries_to_process = []
-        for entry in schedule:
-            if entry.payment_date.year == year:
-                if month is None or entry.payment_date.month == month:
-                    entries_to_process.append(entry)
+        if installment_rows:
+            for installment in installment_rows:
+                payment_date = installment.actual_payment_date or installment.due_date
+                if month is None or payment_date.month == month:
+                    entries_to_process.append(
+                        {
+                            "payment_number": len(entries_to_process) + 1,
+                            "payment_date": payment_date,
+                            "interest_amount": self._quantize_money(installment.interest_amount),
+                        }
+                    )
+        else:
+            # Generate amortization schedule
+            schedule = self.generate_amortization_schedule(loan_id, user_id)
+            
+            # Filter schedule entries for the specified period
+            for entry in schedule:
+                if entry.payment_date.year == year:
+                    if month is None or entry.payment_date.month == month:
+                        entries_to_process.append(
+                            {
+                                "payment_number": entry.payment_number,
+                                "payment_date": entry.payment_date,
+                                "interest_amount": self._quantize_money(entry.interest_amount),
+                            }
+                        )
         
         if not entries_to_process:
             raise ValueError(f"No loan payments found for the specified period")
@@ -535,18 +936,18 @@ class LoanService:
         
         try:
             for entry in entries_to_process:
-                if entry.interest_amount > 0:
+                if entry["interest_amount"] > 0:
                     description = (
                         f"Loan interest payment - {loan.lender_name} "
-                        f"(Payment #{entry.payment_number}, {entry.payment_date.strftime('%B %Y')})"
+                        f"(Payment #{entry['payment_number']}, {entry['payment_date'].strftime('%B %Y')})"
                     )
                     
                     transaction = Transaction(
                         user_id=user_id,
                         property_id=loan.property_id,
                         type=TransactionType.EXPENSE,
-                        amount=entry.interest_amount,
-                        transaction_date=entry.payment_date,
+                        amount=entry["interest_amount"],
+                        transaction_date=entry["payment_date"],
                         description=description,
                         expense_category=ExpenseCategory.LOAN_INTEREST,
                         is_deductible=True,

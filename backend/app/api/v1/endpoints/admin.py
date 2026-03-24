@@ -1,9 +1,12 @@
 """Admin endpoints for subscription management and account cancellation"""
+import logging
 from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
+
+logger = logging.getLogger(__name__)
 
 from app.db.base import get_db
 from app.api.deps import get_current_admin

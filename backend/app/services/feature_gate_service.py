@@ -102,11 +102,12 @@ class FeatureGateService:
     # Legacy plan-hierarchy mapping (fallback during transition)
     # ------------------------------------------------------------------
     _FEATURE_MIN_PLAN = {
-        # Free tier — everyone gets these
+        # Free tier — everyone gets these (quota-limited)
         Feature.BASIC_TAX_CALC: PlanType.FREE,
         Feature.TRANSACTION_ENTRY: PlanType.FREE,
-        Feature.OCR_SCANNING: PlanType.FREE,
+        Feature.OCR_SCANNING: PlanType.FREE,      # 5 scans/month
         Feature.MULTI_LANGUAGE: PlanType.FREE,
+        Feature.AI_ASSISTANT: PlanType.FREE,       # 10 conversations/month
         # Plus tier
         Feature.UNLIMITED_TRANSACTIONS: PlanType.PLUS,
         Feature.FULL_TAX_CALC: PlanType.PLUS,
@@ -117,7 +118,6 @@ class FeatureGateService:
         Feature.RECURRING_SUGGESTIONS: PlanType.PLUS,
         # Pro tier
         Feature.UNLIMITED_OCR: PlanType.PRO,
-        Feature.AI_ASSISTANT: PlanType.PRO,
         Feature.E1_GENERATION: PlanType.PRO,
         Feature.ADVANCED_REPORTS: PlanType.PRO,
         Feature.PRIORITY_SUPPORT: PlanType.PRO,

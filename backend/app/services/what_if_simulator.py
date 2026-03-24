@@ -5,24 +5,84 @@ Simulates tax impact of adding/removing transactions or changing income.
 Validates Requirement 34.4.
 """
 
-from decimal import Decimal
-from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
+from typing import Any, Dict
 
+from sqlalchemy import extract
 from sqlalchemy.orm import Session
 
-from app.models.transaction import Transaction, TransactionType
-from app.models.user import User
-from app.services.tax_calculation_engine import TaxCalculationEngine
+from app.models.transaction import IncomeCategory, Transaction, TransactionType
+from app.models.transaction_line_item import LineItemPostingType
 from app.schemas.transaction import TransactionCreate
+from app.services.posting_line_utils import sum_postings, transaction_has_deductible_expense
+from app.services.tax_calculation_engine import TaxCalculationEngine
+
+
+@dataclass
+class SimulationSnapshot:
+    """Minimal snapshot for what-if comparisons."""
+
+    total_tax: Decimal
+    total_income: Decimal
+    deductible_expenses: Decimal
+    vat: Decimal = Decimal("0.00")
+    svs: Decimal = Decimal("0.00")
 
 
 class WhatIfSimulator:
-    """Simulates tax scenarios for what-if analysis"""
+    """Simulates tax scenarios for what-if analysis."""
 
     def __init__(self, db: Session):
         self.db = db
         self.tax_engine = TaxCalculationEngine(db)
+
+    def _calculate_snapshot(
+        self,
+        user_id: int,
+        tax_year: int,
+        *,
+        additional_transactions: list[Transaction] | None = None,
+        exclude_transaction_ids: list[int] | None = None,
+        income_adjustment: Decimal = Decimal("0.00"),
+    ) -> SimulationSnapshot:
+        """Calculate a lightweight income-tax-only snapshot for a user/year."""
+        query = self.db.query(Transaction).filter(
+            Transaction.user_id == user_id,
+            extract("year", Transaction.transaction_date) == tax_year,
+        )
+        if exclude_transaction_ids:
+            query = query.filter(~Transaction.id.in_(exclude_transaction_ids))
+
+        transactions = list(query.all())
+        if additional_transactions:
+            transactions.extend(additional_transactions)
+
+        total_income = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.INCOME},
+            include_private_use=False,
+        ) + Decimal(str(income_adjustment))
+        if total_income < Decimal("0.00"):
+            total_income = Decimal("0.00")
+
+        deductible_expenses = sum_postings(
+            transactions,
+            posting_types={LineItemPostingType.EXPENSE},
+            deductible_only=True,
+            include_private_use=False,
+        )
+
+        taxable_income = max(total_income - deductible_expenses, Decimal("0.00"))
+        income_tax_calc, _, _, _, _ = self.tax_engine._get_calculators_for_year(tax_year)
+        income_tax = income_tax_calc.calculate_tax_with_exemption(taxable_income, tax_year)
+
+        return SimulationSnapshot(
+            total_tax=income_tax.total_tax,
+            total_income=total_income,
+            deductible_expenses=deductible_expenses,
+        )
 
     def simulate_add_expense(
         self,
@@ -41,15 +101,13 @@ class WhatIfSimulator:
         Returns:
             Simulation result with tax difference and explanation
         """
-        # Calculate current tax
-        current_result = self.tax_engine.calculate_total_tax(user_id, tax_year)
+        current_result = self._calculate_snapshot(user_id, tax_year)
 
-        # Create temporary expense (not saved to DB)
         temp_expense = Transaction(
             user_id=user_id,
             type=TransactionType.EXPENSE,
             amount=expense.amount,
-            date=expense.date,
+            transaction_date=expense.transaction_date,
             description=expense.description,
             expense_category=expense.expense_category,
             is_deductible=expense.is_deductible,
@@ -57,12 +115,12 @@ class WhatIfSimulator:
             vat_amount=expense.vat_amount,
         )
 
-        # Calculate tax with simulated expense
-        simulated_result = self.tax_engine.calculate_total_tax(
-            user_id, tax_year, additional_transactions=[temp_expense]
+        simulated_result = self._calculate_snapshot(
+            user_id,
+            tax_year,
+            additional_transactions=[temp_expense],
         )
 
-        # Calculate difference
         tax_difference = simulated_result.total_tax - current_result.total_tax
         savings = -tax_difference if tax_difference < 0 else Decimal("0")
 
@@ -78,14 +136,14 @@ class WhatIfSimulator:
             ),
             "breakdown": {
                 "current": {
-                    "income_tax": float(current_result.income_tax),
+                    "income_tax": float(current_result.total_tax),
                     "vat": float(current_result.vat),
-                    "svs": float(current_result.svs_contributions),
+                    "svs": float(current_result.svs),
                 },
                 "simulated": {
-                    "income_tax": float(simulated_result.income_tax),
+                    "income_tax": float(simulated_result.total_tax),
                     "vat": float(simulated_result.vat),
-                    "svs": float(simulated_result.svs_contributions),
+                    "svs": float(simulated_result.svs),
                 },
             },
         }
@@ -104,29 +162,28 @@ class WhatIfSimulator:
         Returns:
             Simulation result with tax difference and explanation
         """
-        # Get the transaction
         transaction = (
             self.db.query(Transaction)
             .filter(
                 Transaction.id == transaction_id,
                 Transaction.user_id == user_id,
-                Transaction.type == TransactionType.EXPENSE,
             )
             .first()
         )
 
-        if not transaction:
+        if not transaction or not (
+            transaction.type == TransactionType.EXPENSE
+            or transaction_has_deductible_expense(transaction)
+        ):
             raise ValueError("Transaction not found or not an expense")
 
-        # Calculate current tax
-        current_result = self.tax_engine.calculate_total_tax(user_id, tax_year)
-
-        # Calculate tax without this expense
-        simulated_result = self.tax_engine.calculate_total_tax(
-            user_id, tax_year, exclude_transaction_ids=[transaction_id]
+        current_result = self._calculate_snapshot(user_id, tax_year)
+        simulated_result = self._calculate_snapshot(
+            user_id,
+            tax_year,
+            exclude_transaction_ids=[transaction_id],
         )
 
-        # Calculate difference
         tax_difference = simulated_result.total_tax - current_result.total_tax
         additional_tax = tax_difference if tax_difference > 0 else Decimal("0")
 
@@ -142,14 +199,14 @@ class WhatIfSimulator:
             ),
             "breakdown": {
                 "current": {
-                    "income_tax": float(current_result.income_tax),
+                    "income_tax": float(current_result.total_tax),
                     "vat": float(current_result.vat),
-                    "svs": float(current_result.svs_contributions),
+                    "svs": float(current_result.svs),
                 },
                 "simulated": {
-                    "income_tax": float(simulated_result.income_tax),
+                    "income_tax": float(simulated_result.total_tax),
                     "vat": float(simulated_result.vat),
-                    "svs": float(simulated_result.svs_contributions),
+                    "svs": float(simulated_result.svs),
                 },
             },
         }
@@ -168,32 +225,28 @@ class WhatIfSimulator:
         Returns:
             Simulation result with tax difference and explanation
         """
-        # Calculate current tax
-        current_result = self.tax_engine.calculate_total_tax(user_id, tax_year)
+        current_result = self._calculate_snapshot(user_id, tax_year)
 
-        # Create temporary income transaction
         temp_income = Transaction(
             user_id=user_id,
             type=TransactionType.INCOME,
             amount=abs(income_change),
-            date=datetime(tax_year, 12, 31),
+            transaction_date=datetime(tax_year, 12, 31).date(),
             description=f"Simulated income change: {income_change:+.2f}",
-            income_category=None,  # Will be determined by classifier
+            income_category=IncomeCategory.OTHER_INCOME,
         )
 
-        # Calculate tax with simulated income change
         if income_change > 0:
-            simulated_result = self.tax_engine.calculate_total_tax(
-                user_id, tax_year, additional_transactions=[temp_income]
+            simulated_result = self._calculate_snapshot(
+                user_id,
+                tax_year,
+                additional_transactions=[temp_income],
             )
         else:
-            # For negative income change, we need to reduce income
-            # This is more complex and requires adjusting existing income
             simulated_result = self._simulate_income_reduction(
                 user_id, tax_year, abs(income_change)
             )
 
-        # Calculate difference
         tax_difference = simulated_result.total_tax - current_result.total_tax
 
         return {
@@ -209,68 +262,66 @@ class WhatIfSimulator:
             ),
             "breakdown": {
                 "current": {
-                    "income_tax": float(current_result.income_tax),
+                    "income_tax": float(current_result.total_tax),
                     "vat": float(current_result.vat),
-                    "svs": float(current_result.svs_contributions),
+                    "svs": float(current_result.svs),
                 },
                 "simulated": {
-                    "income_tax": float(simulated_result.income_tax),
+                    "income_tax": float(simulated_result.total_tax),
                     "vat": float(simulated_result.vat),
-                    "svs": float(simulated_result.svs_contributions),
+                    "svs": float(simulated_result.svs),
                 },
             },
         }
 
     def _simulate_income_reduction(
         self, user_id: int, tax_year: int, reduction_amount: Decimal
-    ):
-        """Simulate income reduction by proportionally reducing all income transactions"""
-        # This is a simplified implementation
-        # In practice, you might want to reduce specific income sources
-        return self.tax_engine.calculate_total_tax(
-            user_id, tax_year, income_adjustment=-reduction_amount
+    ) -> SimulationSnapshot:
+        """Simulate income reduction by lowering the current-year income base."""
+        return self._calculate_snapshot(
+            user_id,
+            tax_year,
+            income_adjustment=-reduction_amount,
         )
 
     def _generate_expense_explanation(
         self, expense: TransactionCreate, tax_difference: Decimal, savings: Decimal
     ) -> str:
-        """Generate explanation for expense simulation"""
+        """Generate explanation for expense simulation."""
         if savings > 0:
             return (
-                f"Adding this €{expense.amount:.2f} expense would save you "
-                f"€{savings:.2f} in taxes. "
+                f"Adding this â‚¬{expense.amount:.2f} expense would save you "
+                f"â‚¬{savings:.2f} in taxes. "
                 f"{'This expense is tax-deductible.' if expense.is_deductible else 'This expense is not deductible but may affect VAT calculations.'}"
             )
-        else:
-            return (
-                f"Adding this €{expense.amount:.2f} expense would not reduce your taxes. "
-                f"{'Consider if this expense is correctly categorized as deductible.' if expense.is_deductible else 'This expense is not tax-deductible.'}"
-            )
+        return (
+            f"Adding this â‚¬{expense.amount:.2f} expense would not reduce your taxes. "
+            f"{'Consider if this expense is correctly categorized as deductible.' if expense.is_deductible else 'This expense is not tax-deductible.'}"
+        )
 
     def _generate_remove_explanation(
         self, transaction: Transaction, tax_difference: Decimal, additional_tax: Decimal
     ) -> str:
-        """Generate explanation for expense removal simulation"""
+        """Generate explanation for expense removal simulation."""
         if additional_tax > 0:
             return (
-                f"Removing this €{transaction.amount:.2f} expense would increase "
-                f"your taxes by €{additional_tax:.2f}. "
+                f"Removing this â‚¬{transaction.amount:.2f} expense would increase "
+                f"your taxes by â‚¬{additional_tax:.2f}. "
                 f"This expense is currently reducing your tax liability."
             )
-        else:
-            return (
-                f"Removing this €{transaction.amount:.2f} expense would not affect "
-                f"your taxes. This expense is not currently providing tax benefits."
-            )
+        return (
+            f"Removing this â‚¬{transaction.amount:.2f} expense would not affect "
+            f"your taxes. This expense is not currently providing tax benefits."
+        )
 
     def _generate_income_change_explanation(
         self,
         income_change: Decimal,
         tax_difference: Decimal,
-        current_result,
-        simulated_result,
+        current_result: SimulationSnapshot,
+        simulated_result: SimulationSnapshot,
     ) -> str:
-        """Generate explanation for income change simulation"""
+        """Generate explanation for income change simulation."""
         if income_change > 0:
             effective_rate = (
                 (tax_difference / income_change * 100)
@@ -278,14 +329,13 @@ class WhatIfSimulator:
                 else Decimal("0")
             )
             return (
-                f"Increasing your income by €{income_change:.2f} would increase "
-                f"your taxes by €{tax_difference:.2f} "
+                f"Increasing your income by â‚¬{income_change:.2f} would increase "
+                f"your taxes by â‚¬{tax_difference:.2f} "
                 f"(effective rate: {effective_rate:.1f}%). "
-                f"Your net gain would be €{income_change - tax_difference:.2f}."
+                f"Your net gain would be â‚¬{income_change - tax_difference:.2f}."
             )
-        else:
-            return (
-                f"Decreasing your income by €{abs(income_change):.2f} would decrease "
-                f"your taxes by €{abs(tax_difference):.2f}. "
-                f"Your net loss would be €{abs(income_change) - abs(tax_difference):.2f}."
-            )
+        return (
+            f"Decreasing your income by â‚¬{abs(income_change):.2f} would decrease "
+            f"your taxes by â‚¬{abs(tax_difference):.2f}. "
+            f"Your net loss would be â‚¬{abs(income_change) - abs(tax_difference):.2f}."
+        )

@@ -27,6 +27,12 @@ const AccountManagementSection: React.FC = () => {
     subscription.status !== 'canceled' &&
     !subscription.cancel_at_period_end;
 
+  // Only show cancel option for paid plans (not free tier or trial)
+  const hasPaidSubscription =
+    hasActiveSubscription &&
+    subscription.status === 'active' &&
+    subscription.stripe_subscription_id;
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '';
     return new Intl.DateTimeFormat(getLocaleForLanguage(i18n.resolvedLanguage || i18n.language)).format(
@@ -38,38 +44,40 @@ const AccountManagementSection: React.FC = () => {
     <section className="profile-section danger-zone">
       <h2>{t('account.management.title', 'Account Management')}</h2>
 
-      {/* Cancel Subscription */}
-      <div className="account-action-block">
-        <div className="account-action-info">
-          <h3>{t('account.management.cancelSubscription', 'Cancel Subscription')}</h3>
-          <p className="text-muted">
-            {hasActiveSubscription
-              ? t(
-                  'account.management.cancelSubscriptionDesc',
-                  'Cancel your paid subscription. You will retain access until the end of the current billing period.'
-                )
-              : subscription?.cancel_at_period_end
-                ? t('account.management.subscriptionCancelPending', 'Your subscription is set to cancel on {{date}}.', {
-                    date: formatDate(subscription.current_period_end),
-                  })
-                : t('account.management.noActiveSubscription', 'You do not have an active paid subscription.')}
-          </p>
-          {cancelSuccess && (
-            <p className="success-message">
-              {t('account.management.cancelSuccess', 'Subscription cancelled successfully. Access continues until {{date}}.', {
-                date: formatDate(subscription?.current_period_end ?? null),
-              })}
+      {/* Cancel Subscription — only visible for paid subscribers */}
+      {(hasPaidSubscription || subscription?.cancel_at_period_end || cancelSuccess) && (
+        <div className="account-action-block">
+          <div className="account-action-info">
+            <h3>{t('account.management.cancelSubscription', 'Cancel Subscription')}</h3>
+            <p className="text-muted">
+              {hasActiveSubscription
+                ? t(
+                    'account.management.cancelSubscriptionDesc',
+                    'Cancel your paid subscription. You will retain access until the end of the current billing period.'
+                  )
+                : subscription?.cancel_at_period_end
+                  ? t('account.management.subscriptionCancelPending', 'Your subscription is set to cancel on {{date}}.', {
+                      date: formatDate(subscription.current_period_end),
+                    })
+                  : t('account.management.noActiveSubscription', 'You do not have an active paid subscription.')}
             </p>
-          )}
+            {cancelSuccess && (
+              <p className="success-message">
+                {t('account.management.cancelSuccess', 'Subscription cancelled successfully. Access continues until {{date}}.', {
+                  date: formatDate(subscription?.current_period_end ?? null),
+                })}
+              </p>
+            )}
+          </div>
+          <button
+            className="btn-warning"
+            onClick={() => setShowCancelModal(true)}
+            disabled={!hasActiveSubscription}
+          >
+            {t('account.management.cancelSubscriptionBtn', 'Cancel Subscription')}
+          </button>
         </div>
-        <button
-          className="btn-warning"
-          onClick={() => setShowCancelModal(true)}
-          disabled={!hasActiveSubscription}
-        >
-          {t('account.management.cancelSubscriptionBtn', 'Cancel Subscription')}
-        </button>
-      </div>
+      )}
 
       {/* Delete Account */}
       <div className="account-action-block">

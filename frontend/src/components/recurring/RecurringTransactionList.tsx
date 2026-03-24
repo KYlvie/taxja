@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ClipboardList, Plus, Repeat2 } from 'lucide-react';
 import { useConfirm } from '../../hooks/useConfirm';
 import { RecurringTransaction } from '../../types/recurring';
 import { recurringService } from '../../services/recurringService';
+import FuturisticIcon from '../common/FuturisticIcon';
 import { RecurringTransactionCard } from './RecurringTransactionCard';
 import { CreateRecurringModal } from './CreateRecurringModal';
 import { EditRecurringModal } from './EditRecurringModal';
@@ -33,18 +35,18 @@ export const RecurringTransactionList: React.FC = () => {
   };
 
   useEffect(() => {
-    loadTransactions();
+    void loadTransactions();
   }, [recurringVersion]);
 
   const handlePause = async (id: number) => {
     const ok = await showConfirm(t('recurring.confirmPause'), { variant: 'warning' });
-    if (ok) {
-      try {
-        await recurringService.pause(id);
-        await loadTransactions();
-      } catch (error) {
-        console.error('Failed to pause transaction:', error);
-      }
+    if (!ok) return;
+
+    try {
+      await recurringService.pause(id);
+      await loadTransactions();
+    } catch (error) {
+      console.error('Failed to pause transaction:', error);
     }
   };
 
@@ -58,20 +60,24 @@ export const RecurringTransactionList: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    const ok2 = await showConfirm(t('recurring.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });
-    if (ok2) {
-      try {
-        await recurringService.delete(id);
-        await loadTransactions();
-      } catch (error) {
-        console.error('Failed to delete transaction:', error);
-      }
+    const ok = await showConfirm(t('recurring.confirmDelete'), {
+      variant: 'danger',
+      confirmText: t('common.delete'),
+    });
+
+    if (!ok) return;
+
+    try {
+      await recurringService.delete(id);
+      await loadTransactions();
+    } catch (error) {
+      console.error('Failed to delete transaction:', error);
     }
   };
 
-  const filteredTransactions = transactions.filter(t => {
-    if (filter === 'active') return t.is_active;
-    if (filter === 'paused') return !t.is_active;
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (filter === 'active') return transaction.is_active;
+    if (filter === 'paused') return !transaction.is_active;
     return true;
   });
 
@@ -95,7 +101,8 @@ export const RecurringTransactionList: React.FC = () => {
             onClick={() => setShowCreateModal(true)}
             className="btn-create-rental"
           >
-            ➕ {t('recurring.create.title')}
+            <FuturisticIcon icon={Plus} tone="violet" size="xs" />
+            <span>{t('recurring.create.title')}</span>
           </button>
         </div>
       </div>
@@ -111,30 +118,34 @@ export const RecurringTransactionList: React.FC = () => {
           onClick={() => setFilter('active')}
           className={`filter-btn ${filter === 'active' ? 'active' : ''}`}
         >
-          {t('recurring.filter.active')} ({transactions.filter(t => t.is_active).length})
+          {t('recurring.filter.active')} ({transactions.filter((transaction) => transaction.is_active).length})
         </button>
         <button
           onClick={() => setFilter('paused')}
           className={`filter-btn ${filter === 'paused' ? 'active' : ''}`}
         >
-          {t('recurring.filter.paused')} ({transactions.filter(t => !t.is_active).length})
+          {t('recurring.filter.paused')} ({transactions.filter((transaction) => !transaction.is_active).length})
         </button>
       </div>
 
       {filteredTransactions.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state-icon">📋</div>
+          <div className="empty-state-icon">
+            <FuturisticIcon icon={ClipboardList} tone="slate" size="xl" />
+          </div>
           <div className="empty-state-text">{t('recurring.noTransactions')}</div>
           <div className="empty-state-hint">
-            {filter === 'all' 
+            {filter === 'all'
               ? '点击上方按钮创建您的第一个定期交易'
-              : `当前没有${filter === 'active' ? '活跃' : '已暂停'}的定期交易`
-            }
+              : `当前没有${filter === 'active' ? '活跃' : '已暂停'}的定期交易`}
+          </div>
+          <div className="empty-state-orbit">
+            <FuturisticIcon icon={Repeat2} tone="cyan" size="sm" />
           </div>
         </div>
       ) : (
         <div className="recurring-list">
-          {filteredTransactions.map(transaction => (
+          {filteredTransactions.map((transaction) => (
             <RecurringTransactionCard
               key={transaction.id}
               transaction={transaction}
@@ -152,7 +163,7 @@ export const RecurringTransactionList: React.FC = () => {
           onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false);
-            loadTransactions();
+            void loadTransactions();
           }}
         />
       )}
@@ -163,7 +174,7 @@ export const RecurringTransactionList: React.FC = () => {
           onClose={() => setEditingTransaction(null)}
           onSuccess={() => {
             setEditingTransaction(null);
-            loadTransactions();
+            void loadTransactions();
           }}
         />
       )}

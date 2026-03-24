@@ -23,6 +23,7 @@ from app.core.transaction_enum_coercion import (
     coerce_income_category,
     coerce_transaction_type,
 )
+from app.core.error_messages import get_error_message
 from app.core.security import get_current_user
 from app.schemas.historical_import import HistoricalImportReviewRequest
 from app.services.storage_service import StorageService
@@ -48,7 +49,7 @@ HISTORICAL_TO_DOCUMENT_TYPE = {
 }
 
 
-def validate_historical_file(file: UploadFile, document_type: str) -> None:
+def validate_historical_file(file: UploadFile, document_type: str, language: str = "de") -> None:
     """Validate uploaded file format and size for historical import"""
     # Check MIME type
     if file.content_type not in ALLOWED_MIME_TYPES:
@@ -56,12 +57,12 @@ def validate_historical_file(file: UploadFile, document_type: str) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file format. Allowed: PDF, CSV, Excel. Got: {file.content_type}",
         )
-    
+
     # Saldenliste must be CSV or Excel
     if document_type == "saldenliste" and file.content_type == "application/pdf":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Saldenliste must be CSV or Excel format, not PDF",
+            detail=get_error_message("saldenliste_must_be_csv_or_excel", language),
         )
 
 
@@ -88,17 +89,19 @@ async def upload_historical_document(
     - tax_year: Tax year for the document (2000-2030)
     - session_id: Optional session ID for multi-document imports
     """
+    language = getattr(current_user, 'language', 'de') or 'de'
+
     # Validate required parameters
     if not document_type:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="document_type is required",
+            detail=get_error_message("document_type_required", language),
         )
-    
+
     if not tax_year:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="tax_year is required",
+            detail=get_error_message("tax_year_required", language),
         )
     
     # Validate document type
@@ -131,7 +134,7 @@ async def upload_historical_document(
         )
     
     # Validate file
-    validate_historical_file(file, document_type)
+    validate_historical_file(file, document_type, language)
     
     # Read file content
     file_content = await file.read()
@@ -182,7 +185,7 @@ async def upload_historical_document(
     if not storage.upload_file(file_content, storage_path, file.content_type):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Failed to store uploaded file for historical import",
+            detail=get_error_message("failed_store_file", language),
         )
 
     document = Document(
@@ -340,11 +343,13 @@ def create_import_session(
     - tax_years: List of tax years to import (e.g., [2021, 2022, 2023])
     - document_types: Optional list of expected document types
     """
+    language = getattr(current_user, 'language', 'de') or 'de'
+
     # Validate tax years
     if not tax_years or len(tax_years) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one tax year is required",
+            detail=get_error_message("at_least_one_tax_year", language),
         )
     
     current_year = datetime.now().year

@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import Select from '../../common/Select';
+import DateInput from '../../common/DateInput';
+import { getLocaleForLanguage } from '../../../utils/locale';
 import type { AssetSuggestionConfirmationPayload } from '../../../services/documentService';
 import { SuggestionCardShell, Row, fmtEur, fmtDate, SuggestionCardProps } from './SuggestionCardBase';
 
@@ -43,7 +46,7 @@ const formatPercent = (value: number | null | undefined) => (
 );
 
 const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const d = props.suggestion.data || {};
   const icon = ASSET_ICONS[d.asset_type] || 'EQ';
 
@@ -139,25 +142,25 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
   const decisionLabel = (() => {
     switch (d.decision) {
       case 'gwg_suggestion':
-        return t('documents.suggestion.assetDecision.gwg', '建议按低值资产处理');
+        return t('documents.suggestion.assetDecision.gwg', 'Recommended as low-value asset');
       case 'create_asset_auto':
-        return t('documents.suggestion.assetDecision.auto', '系统可自动建资产');
+        return t('documents.suggestion.assetDecision.auto', 'System can create asset automatically');
       case 'create_asset_suggestion':
       default:
-        return t('documents.suggestion.assetDecision.asset', '建议建立固定资产');
+        return t('documents.suggestion.assetDecision.asset', 'Recommended as fixed asset');
     }
   })();
 
   const vatRecoverableLabel = (() => {
     switch (d.vat_recoverable_status) {
       case 'likely_yes':
-        return t('documents.suggestion.assetVat.likelyYes', '大概率可抵扣进项税');
+        return t('documents.suggestion.assetVat.likelyYes', 'Input VAT likely deductible');
       case 'likely_no':
-        return t('documents.suggestion.assetVat.likelyNo', '大概率不可抵扣进项税');
+        return t('documents.suggestion.assetVat.likelyNo', 'Input VAT likely not deductible');
       case 'partial':
-        return t('documents.suggestion.assetVat.partial', '可能部分可抵扣');
+        return t('documents.suggestion.assetVat.partial', 'Possibly partially deductible');
       default:
-        return t('documents.suggestion.assetVat.unclear', '进项税资格待确认');
+        return t('documents.suggestion.assetVat.unclear', 'Input VAT eligibility to be confirmed');
     }
   })();
 
@@ -165,13 +168,13 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
     setLocalError(null);
 
     if (showPutIntoUseDate && !putIntoUseDate) {
-      setLocalError(t('documents.suggestion.assetErrors.putIntoUseRequired', '请先确认投入使用日期。'));
+      setLocalError(t('documents.suggestion.assetErrors.putIntoUseRequired', 'Please confirm the date put into use first.'));
       return;
     }
 
     const businessUse = toNumber(businessUsePercentage);
     if (businessUse === null || businessUse < 0 || businessUse > 100) {
-      setLocalError(t('documents.suggestion.assetErrors.businessUse', '业务使用比例需要在 0 到 100 之间。'));
+      setLocalError(t('documents.suggestion.assetErrors.businessUse', 'Business use percentage must be between 0 and 100.'));
       return;
     }
 
@@ -179,7 +182,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
       setLocalError(
         t(
           'documents.suggestion.assetErrors.vehicleHistory',
-          '二手车辆需要首次登记日期或前任使用年限，才能正确计算折旧。'
+          'Used vehicles require the first registration date or prior usage years to correctly calculate depreciation.'
         )
       );
       return;
@@ -187,7 +190,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
 
     const usefulLife = usefulLifeYears.trim() ? toNumber(usefulLifeYears) : null;
     if (usefulLife !== null && (!Number.isInteger(usefulLife) || usefulLife < 1 || usefulLife > 50)) {
-      setLocalError(t('documents.suggestion.assetErrors.usefulLife', '使用年限需要是 1 到 50 之间的整数。'));
+      setLocalError(t('documents.suggestion.assetErrors.usefulLife', 'Useful life must be a whole number between 1 and 50.'));
       return;
     }
 
@@ -224,7 +227,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
         setLocalError(
           t(
             'documents.suggestion.assetErrors.degressiveRate',
-            '递减折旧比例超出了当前允许范围。'
+            'Declining-balance rate is outside the allowed range.'
           )
         );
         return;
@@ -242,60 +245,60 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
   return (
     <SuggestionCardShell
       icon={icon}
-      title={t('documents.suggestion.createAsset', '创建资产')}
+      title={t('documents.suggestion.createAsset', 'Create depreciable asset from purchase contract?')}
       confirmResult={props.confirmResult}
       confirmingAction={props.confirmingAction}
       confirmActionKey={props.confirmActionKey || 'asset'}
       onConfirm={handleSubmit}
       onDismiss={props.onDismiss}
-      confirmLabel={t('documents.suggestion.assetConfirm', '确认并创建资产')}
+      confirmLabel={t('documents.suggestion.assetConfirm', 'Confirm and create asset')}
     >
       <div className="suggestion-details">
-        {d.name && <Row label={String(t('documents.suggestion.assetName', '资产名称'))} value={d.name} />}
+        {d.name && <Row label={String(t('documents.suggestion.assetName', 'Asset name'))} value={d.name} />}
         {d.asset_type && (
           <Row
-            label={String(t('documents.suggestion.assetType', '资产类型'))}
+            label={String(t('documents.suggestion.assetType', 'Asset type'))}
             value={String(t(`documents.suggestion.assetTypes.${d.asset_type}`, d.asset_type))}
           />
         )}
-        <Row label={String(t('documents.ocr.purchasePrice', '购置金额'))} value={fmtEur(d.purchase_price)} />
-        {d.purchase_date && <Row label={String(t('documents.ocr.purchaseDate', '购置日期'))} value={fmtDate(d.purchase_date)} />}
-        {d.supplier && <Row label={String(t('documents.suggestion.supplier', '供应商'))} value={d.supplier} />}
-        <Row label={String(t('documents.suggestion.assetDecisionLabel', '系统建议'))} value={decisionLabel} />
+        <Row label={String(t('documents.ocr.purchasePrice', 'Purchase Price'))} value={fmtEur(d.purchase_price)} />
+        {d.purchase_date && <Row label={String(t('documents.ocr.purchaseDate', 'Purchase Date'))} value={fmtDate(d.purchase_date)} />}
+        {d.supplier && <Row label={String(t('documents.suggestion.supplier', 'Supplier'))} value={d.supplier} />}
+        <Row label={String(t('documents.suggestion.assetDecisionLabel', 'System recommendation'))} value={decisionLabel} />
         <Row
-          label={String(t('documents.suggestion.assetVatLabel', '进项税预判'))}
+          label={String(t('documents.suggestion.assetVatLabel', 'Input VAT assessment'))}
           value={vatRecoverableLabel}
         />
         {d.ifb_candidate !== undefined && (
           <Row
-            label={String(t('documents.suggestion.assetIfbLabel', 'IFB 候选'))}
+            label={String(t('documents.suggestion.assetIfbLabel', 'IFB candidate'))}
             value={
               d.ifb_candidate
-                ? t('documents.suggestion.assetIfbYes', '是')
-                : t('documents.suggestion.assetIfbNo', '否')
+                ? t('documents.suggestion.assetIfbYes', 'Yes')
+                : t('documents.suggestion.assetIfbNo', 'No')
             }
           />
         )}
         {d.useful_life_years && (
           <Row
-            label={String(t('documents.suggestion.usefulLife', '建议使用年限'))}
-            value={`${d.useful_life_years} ${String(t('documents.suggestion.years', '年'))}`}
+            label={String(t('documents.suggestion.usefulLife', 'Useful life'))}
+            value={`${d.useful_life_years} ${String(t('documents.suggestion.years', 'years'))}`}
           />
         )}
       </div>
 
       <div className="asset-suggestion-badges">
         <span className="asset-suggestion-badge">
-          {t('documents.suggestion.assetBasis', '比较基数')} {String(d.comparison_basis || '—')}
+          {t('documents.suggestion.assetBasis', 'Comparison basis')} {String(d.comparison_basis || '—')}
         </span>
         {d.policy_confidence != null && (
           <span className="asset-suggestion-badge">
-            {t('documents.suggestion.assetConfidence', '规则置信度')} {formatPercent(Math.round(Number(d.policy_confidence) * 100))}
+            {t('documents.suggestion.assetConfidence', 'Rule confidence')} {formatPercent(Math.round(Number(d.policy_confidence) * 100))}
           </span>
         )}
         {d.duplicate?.duplicate_status && d.duplicate.duplicate_status !== 'none' && (
           <span className="asset-suggestion-badge warning">
-            {t('documents.suggestion.assetDuplicateWarning', '检测到疑似重复资产')}
+            {t('documents.suggestion.assetDuplicateWarning', 'Possible duplicate asset detected')}
           </span>
         )}
       </div>
@@ -303,25 +306,26 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
       <div className="asset-confirmation-hint">
         {t(
           'documents.suggestion.assetHint',
-          '系统已经先做了税务预判。这里只补真正会影响折旧和税务结论的关键信息。'
+          'The system has pre-assessed the tax treatment. Only provide key information that affects depreciation and tax conclusions.'
         )}
       </div>
 
       <div className="asset-confirmation-grid">
         {showPutIntoUseDate && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.putIntoUseDate', '投入使用日期')}</span>
-            <input
-              type="date"
+            <span>{t('documents.suggestion.assetFields.putIntoUseDate', 'Date put into use')}</span>
+            <DateInput
               value={putIntoUseDate}
-              onChange={(event) => setPutIntoUseDate(event.target.value)}
+              onChange={(val) => setPutIntoUseDate(val)}
               disabled={props.confirmingAction !== null}
+              locale={getLocaleForLanguage(i18n.language)}
+              todayLabel={String(t('common.today', 'Today'))}
             />
           </label>
         )}
 
         <label className="asset-confirmation-field">
-          <span>{t('documents.suggestion.assetFields.businessUse', '业务使用比例')}</span>
+          <span>{t('documents.suggestion.assetFields.businessUse', 'Business use percentage')}</span>
           <input
             type="number"
             min="0"
@@ -335,31 +339,30 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
 
         {showUsedAssetQuestion && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.condition', '资产状态')}</span>
-            <select
-              value={isUsedAsset ? 'used' : 'new'}
-              onChange={(event) => setIsUsedAsset(event.target.value === 'used')}
-              disabled={props.confirmingAction !== null}
-            >
-              <option value="new">{t('documents.suggestion.assetCondition.new', '全新')}</option>
-              <option value="used">{t('documents.suggestion.assetCondition.used', '二手')}</option>
-            </select>
+            <span>{t('documents.suggestion.assetFields.condition', 'Asset condition')}</span>
+            <Select value={isUsedAsset ? 'used' : 'new'} onChange={v => setIsUsedAsset(v === 'used')}
+              disabled={props.confirmingAction !== null} size="sm"
+              options={[
+                { value: 'new', label: t('documents.suggestion.assetCondition.new', 'New') },
+                { value: 'used', label: t('documents.suggestion.assetCondition.used', 'Used') },
+              ]} />
           </label>
         )}
 
         {showVehicleHistoryFields && (
           <>
             <label className="asset-confirmation-field">
-              <span>{t('documents.suggestion.assetFields.firstRegistrationDate', '首次登记日期')}</span>
-              <input
-                type="date"
+              <span>{t('documents.suggestion.assetFields.firstRegistrationDate', 'First registration date')}</span>
+              <DateInput
                 value={firstRegistrationDate}
-                onChange={(event) => setFirstRegistrationDate(event.target.value)}
+                onChange={(val) => setFirstRegistrationDate(val)}
                 disabled={props.confirmingAction !== null}
+                locale={getLocaleForLanguage(i18n.language)}
+                todayLabel={String(t('common.today', 'Today'))}
               />
             </label>
             <label className="asset-confirmation-field">
-              <span>{t('documents.suggestion.assetFields.priorUsageYears', '前任使用年限')}</span>
+              <span>{t('documents.suggestion.assetFields.priorUsageYears', 'Prior usage years')}</span>
               <input
                 type="number"
                 min="0"
@@ -374,40 +377,33 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
 
         {gwgElectionRequired && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.gwgElection', '税务处理方式')}</span>
-            <select
-              value={gwgTreatment}
-              onChange={(event) => setGwgTreatment(event.target.value as 'gwg' | 'asset')}
-              disabled={props.confirmingAction !== null}
-            >
-              <option value="gwg">{t('documents.suggestion.assetGwg', '按低值资产一次性费用化')}</option>
-              <option value="asset">{t('documents.suggestion.assetCapitalize', '作为固定资产折旧')}</option>
-            </select>
+            <span>{t('documents.suggestion.assetFields.gwgElection', 'Tax treatment method')}</span>
+            <Select value={gwgTreatment} onChange={v => setGwgTreatment(v as 'gwg' | 'asset')}
+              disabled={props.confirmingAction !== null} size="sm"
+              options={[
+                { value: 'gwg', label: t('documents.suggestion.assetGwg', 'Expense as low-value asset (one-off)') },
+                { value: 'asset', label: t('documents.suggestion.assetCapitalize', 'Capitalize as fixed asset (depreciate)') },
+              ]} />
           </label>
         )}
 
         {allowedDepreciationMethods.length > 0 && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.depreciationMethod', '折旧方法')}</span>
-            <select
-              value={depreciationMethod}
-              onChange={(event) => setDepreciationMethod(event.target.value)}
-              disabled={props.confirmingAction !== null || (gwgElectionRequired && gwgTreatment === 'gwg')}
-            >
-              {allowedDepreciationMethods.map((method) => (
-                <option key={method} value={method}>
-                  {method === 'degressive'
-                    ? t('documents.suggestion.assetDepreciation.degressive', '递减折旧')
-                    : t('documents.suggestion.assetDepreciation.linear', '线性折旧')}
-                </option>
-              ))}
-            </select>
+            <span>{t('documents.suggestion.assetFields.depreciationMethod', 'Depreciation method')}</span>
+            <Select value={depreciationMethod} onChange={setDepreciationMethod}
+              disabled={props.confirmingAction !== null || (gwgElectionRequired && gwgTreatment === 'gwg')} size="sm"
+              options={allowedDepreciationMethods.map(method => ({
+                value: method,
+                label: method === 'degressive'
+                  ? t('documents.suggestion.assetDepreciation.degressive', 'Declining-balance depreciation')
+                  : t('documents.suggestion.assetDepreciation.linear', 'Straight-line depreciation'),
+              }))} />
           </label>
         )}
 
         {depreciationMethod === 'degressive' && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.degressiveRate', '递减折旧比例')}</span>
+            <span>{t('documents.suggestion.assetFields.degressiveRate', 'Declining-balance rate')}</span>
             <input
               type="number"
               min="0.01"
@@ -422,7 +418,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
 
         {showUsefulLifeInput && (
           <label className="asset-confirmation-field">
-            <span>{t('documents.suggestion.assetFields.usefulLifeYears', '使用年限')}</span>
+            <span>{t('documents.suggestion.assetFields.usefulLifeYears', 'Useful life (years)')}</span>
             <input
               type="number"
               min="1"

@@ -232,11 +232,12 @@ class TestApplyLossCarryforward:
             current_tax_year=2025
         )
         
-        assert result.loss_applied == Decimal('6000.00')
-        assert result.taxable_income_after_loss == Decimal('0.00')
-        assert result.remaining_loss == Decimal('4000.00')
+        # 75% cap: 6000 * 0.75 = 4500
+        assert result.loss_applied == Decimal('4500.00')
+        assert result.taxable_income_after_loss == Decimal('1500.00')
+        assert result.remaining_loss == Decimal('5500.00')
         assert len(result.loss_breakdown) == 1
-        assert result.loss_breakdown[0]['remaining_after_application'] == Decimal('4000.00')
+        assert result.loss_breakdown[0]['remaining_after_application'] == Decimal('5500.00')
     
     def test_apply_multiple_losses_chronologically(self, loss_service, test_user):
         """Test that multiple losses are applied in chronological order (oldest first)"""
@@ -259,15 +260,16 @@ class TestApplyLossCarryforward:
             current_tax_year=2025
         )
         
-        # Should apply 2023 loss first (3000), then part of 2024 loss (2000)
-        assert result.loss_applied == Decimal('5000.00')
-        assert result.taxable_income_after_loss == Decimal('0.00')
-        assert result.remaining_loss == Decimal('2000.00')
+        # 75% cap: 5000 * 0.75 = 3750
+        # Should apply 2023 loss first (3000), then part of 2024 loss (750)
+        assert result.loss_applied == Decimal('3750.00')
+        assert result.taxable_income_after_loss == Decimal('1250.00')
+        assert result.remaining_loss == Decimal('3250.00')
         assert len(result.loss_breakdown) == 2
         assert result.loss_breakdown[0]['loss_year'] == 2023
         assert result.loss_breakdown[0]['applied_amount'] == Decimal('3000.00')
         assert result.loss_breakdown[1]['loss_year'] == 2024
-        assert result.loss_breakdown[1]['applied_amount'] == Decimal('2000.00')
+        assert result.loss_breakdown[1]['applied_amount'] == Decimal('750.00')
     
     def test_apply_loss_with_zero_income(self, loss_service, test_user):
         """Test that no loss is applied when current income is zero"""
@@ -336,6 +338,23 @@ class TestApplyLossCarryforward:
         assert result.loss_applied == Decimal('3000.00')
         assert len(result.loss_breakdown) == 1
         assert result.loss_breakdown[0]['loss_year'] == 2024
+
+    def test_apply_loss_respects_75_percent_cap(self, loss_service, test_user):
+        """Test that §18 Abs. 6 EStG 75% Verrechnungsgrenze is enforced"""
+        loss_service.record_loss(
+            user_id=test_user.id,
+            loss_amount=Decimal('100000.00'),
+            loss_year=2024
+        )
+        result = loss_service.apply_loss_carryforward(
+            user_id=test_user.id,
+            current_taxable_income=Decimal('100000.00'),
+            current_tax_year=2025
+        )
+        # Can only offset 75% = €75,000
+        assert result.loss_applied == Decimal('75000.00')
+        assert result.taxable_income_after_loss == Decimal('25000.00')
+        assert result.remaining_loss == Decimal('25000.00')
 
 
 class TestManualHistoricalLoss:
@@ -410,8 +429,9 @@ class TestLossSummary:
         summary = loss_service.get_loss_summary(test_user.id)
         
         assert summary['total_loss'] == Decimal('13000.00')
-        assert summary['total_used'] == Decimal('6000.00')
-        assert summary['total_remaining'] == Decimal('7000.00')
+        # 75% cap: 6000 * 0.75 = 4500
+        assert summary['total_used'] == Decimal('4500.00')
+        assert summary['total_remaining'] == Decimal('8500.00')
         assert len(summary['loss_details']) == 2
     
     def test_get_loss_summary_filtered_by_year(self, loss_service, test_user):
@@ -455,9 +475,10 @@ class TestLossCarryforwardIntegration:
             current_tax_year=2025
         )
         
-        assert result_2025.loss_applied == Decimal('8000.00')
-        assert result_2025.taxable_income_after_loss == Decimal('0.00')
-        assert result_2025.remaining_loss == Decimal('7000.00')  # 2000 from 2023 + 5000 from 2024
+        # 75% cap: 8000 * 0.75 = 6000
+        assert result_2025.loss_applied == Decimal('6000.00')
+        assert result_2025.taxable_income_after_loss == Decimal('2000.00')
+        assert result_2025.remaining_loss == Decimal('9000.00')  # 4000 from 2023 + 5000 from 2024
         
         # Year 2026: Profit of €10,000 (should use remaining 2023 loss, then 2024 loss)
         result_2026 = loss_service.apply_loss_carryforward(
@@ -466,9 +487,10 @@ class TestLossCarryforwardIntegration:
             current_tax_year=2026
         )
         
-        assert result_2026.loss_applied == Decimal('7000.00')
-        assert result_2026.taxable_income_after_loss == Decimal('3000.00')
-        assert result_2026.remaining_loss == Decimal('0.00')
+        # 75% cap: 10000 * 0.75 = 7500; remaining losses = 4000 + 5000 = 9000
+        assert result_2026.loss_applied == Decimal('7500.00')
+        assert result_2026.taxable_income_after_loss == Decimal('2500.00')
+        assert result_2026.remaining_loss == Decimal('1500.00')  # 5000 - 3500 from 2024
     
     def test_loss_carryforward_with_subsequent_loss(self, loss_service, test_user):
         """Test loss carryforward when a subsequent year also has a loss"""
@@ -482,7 +504,8 @@ class TestLossCarryforwardIntegration:
             current_tax_year=2024
         )
         
-        assert result_2024.remaining_loss == Decimal('2000.00')
+        # 75% cap: 3000 * 0.75 = 2250
+        assert result_2024.remaining_loss == Decimal('2750.00')
         
         # Year 2025: Loss of €4,000 (new loss, doesn't affect 2023 carryforward)
         loss_service.record_loss(test_user.id, Decimal('4000.00'), 2025)
@@ -494,6 +517,7 @@ class TestLossCarryforwardIntegration:
             current_tax_year=2026
         )
         
-        assert result_2026.loss_applied == Decimal('6000.00')  # 2000 from 2023 + 4000 from 2025
-        assert result_2026.taxable_income_after_loss == Decimal('4000.00')
+        # 75% cap: 10000 * 0.75 = 7500; remaining losses = 2750 + 4000 = 6750 < 7500
+        assert result_2026.loss_applied == Decimal('6750.00')  # 2750 from 2023 + 4000 from 2025
+        assert result_2026.taxable_income_after_loss == Decimal('3250.00')
         assert result_2026.remaining_loss == Decimal('0.00')

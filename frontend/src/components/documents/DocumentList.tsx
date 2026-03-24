@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import JSZip from 'jszip';
+import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
+import { aiToast } from '../../stores/aiToastStore';
 import { Document, DocumentType } from '../../types/document';
+import { canReprocessDocument } from '../../utils/documentReprocessing';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import { getLocaleForLanguage } from '../../utils/locale';
+import DateInput from '../common/DateInput';
 import DeleteDocumentDialog from './DeleteDocumentDialog';
 import './DocumentList.css';
 
@@ -130,6 +135,16 @@ const DeleteIcon = () => (
   </svg>
 );
 
+
+const RetryIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 12a8 8 0 0 1 14.93-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M20 12a8 8 0 0 1-14.93 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <path d="M18.5 4.5V8H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5.5 19.5V16H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const documentGroups: Array<{
   id: Exclude<DocumentGroupId, 'all'>;
   types: DocumentType[];
@@ -219,7 +234,8 @@ const sortDocumentsByDate = (items: Document[]) =>
 /**
  * Extract the document's own date(s) from OCR data for year grouping.
  * - Receipts/invoices: use ocr_result.date
- * - Contracts: use start_date..end_date range (may span years)
+ * - Contracts: use start_date only (NOT the full range — a 25-year loan
+ *   would otherwise appear duplicated in every year group)
  * - Fallback: created_at (upload date)
  * Returns an array of years this document belongs to.
  */
@@ -235,16 +251,11 @@ const getDocumentYears = (doc: Document): number[] => {
       if (!isNaN(parsed.getTime())) years.add(parsed.getFullYear());
     }
 
-    // For contracts: start_date / end_date may span years
+    // For contracts: only use start_date year (not the full span)
     const startStr = ocr.start_date || ocr.lease_start;
-    const endStr = ocr.end_date || ocr.lease_end;
     if (startStr && typeof startStr === 'string') {
       const s = new Date(startStr);
       if (!isNaN(s.getTime())) years.add(s.getFullYear());
-    }
-    if (endStr && typeof endStr === 'string') {
-      const e = new Date(endStr);
-      if (!isNaN(e.getTime())) years.add(e.getFullYear());
     }
 
     // For purchase contracts
@@ -252,17 +263,6 @@ const getDocumentYears = (doc: Document): number[] => {
     if (purchaseDate && typeof purchaseDate === 'string') {
       const p = new Date(purchaseDate);
       if (!isNaN(p.getTime())) years.add(p.getFullYear());
-    }
-
-    // Fill in-between years for contracts spanning multiple years
-    if (startStr && endStr) {
-      const s = new Date(startStr);
-      const e = new Date(endStr);
-      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
-        for (let y = s.getFullYear(); y <= e.getFullYear(); y++) {
-          years.add(y);
-        }
-      }
     }
   }
 
@@ -302,13 +302,13 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [confirmStage, setConfirmStage] = useState<'idle' | 'confirming'>('idle');
+  const [exporting, setExporting] = useState(false);
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
-  useEffect(() => {
-    loadDocuments();
-  }, [filters, page]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       setLoading(true);
       const result = await documentService.getDocuments(filters, page, pageSize);
@@ -318,7 +318,25 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, page, pageSize, setDocuments, setLoading]);
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  const hasProcessingDocuments = documents.some(
+    (doc) => doc.ocr_status === 'processing' || (!doc.processed_at && doc.ocr_status !== 'failed')
+  );
+
+  useEffect(() => {
+    if (!hasProcessingDocuments) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      void loadDocuments();
+    }, 5000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasProcessingDocuments, loadDocuments]);
 
   const handleFilterChange = (key: string, value: string | boolean | undefined) => {
     setFilters({ ...filters, [key]: value });
@@ -376,6 +394,100 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     }
   };
 
+  const handleRetry = async (document: Document, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (retryingId) return;
+    setRetryingId(document.id);
+    try {
+      await documentService.retryOcr(document.id);
+      aiToast(t('documents.reprocessStarted'), 'success');
+      // Poll for completion, then refresh the list
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const updated = await documentService.getDocument(document.id);
+        const pipeline = (updated.ocr_result as any)?._pipeline;
+        const state = pipeline?.current_state;
+        if (!state || state === 'completed' || state === 'phase_2_failed') {
+          break;
+        }
+      }
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to retry OCR:', error);
+      aiToast(t('documents.reprocessFailed'), 'error');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const isPendingReview = (doc: Document): boolean => {
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    if (doc.ocr_status === 'failed' || doc.ocr_status === 'processing' || !doc.processed_at) {
+      return false;
+    }
+
+    return Boolean(doc.needs_review || (doc.ocr_result && !ocr.confirmed));
+  };
+
+  const needsConfirmation = (doc: Document): boolean => {
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    return Boolean(isPendingReview(doc) && doc.ocr_result && !ocr.confirmed);
+  };
+
+  const handleReviewClick = async (doc: Document, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (confirmStage === 'idle' || confirmingId !== doc.id) {
+      // First click: show "confirm?" state
+      setConfirmingId(doc.id);
+      setConfirmStage('confirming');
+      // Auto-reset after 3 seconds if user doesn't click again
+      setTimeout(() => {
+        setConfirmStage((prev) => {
+          if (prev === 'confirming') { setConfirmingId(null); return 'idle'; }
+          return prev;
+        });
+      }, 3000);
+    } else {
+      // Second click: actually confirm
+      setConfirmStage('idle');
+      try {
+        await documentService.confirmOCR(doc.id);
+        aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+        loadDocuments();
+      } catch {
+        aiToast(t('documents.reviewActionFailed', 'Review failed'), 'error');
+      } finally {
+        setConfirmingId(null);
+      }
+    }
+  };
+
+  const handleExportFiltered = async () => {
+    if (exporting || yearFilteredDocuments.length === 0) return;
+    setExporting(true);
+    try {
+      const zip = new JSZip();
+      for (const doc of yearFilteredDocuments) {
+        try {
+          const blob = await documentService.downloadDocument(doc.id);
+          zip.file(doc.file_name, blob);
+        } catch {
+          // skip failed downloads
+        }
+      }
+      const content = await zip.generateAsync({ type: 'blob' });
+      const groupLabel = activeGroup === 'all' ? 'all' : activeGroup;
+      const yearLabel = activeYear ? `_${activeYear}` : '';
+      const fileName = `taxja-documents_${groupLabel}${yearLabel}.zip`;
+      await saveBlobWithNativeShare(content, fileName, t('common.export'));
+      aiToast(t('documents.exportSuccess', { count: yearFilteredDocuments.length }), 'success');
+    } catch {
+      aiToast(t('documents.exportError'), 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return '—';
     const d = new Date(dateString);
@@ -405,25 +517,51 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
     return 'DOC';
   };
 
-  const getStatusLabel = (document: Document) => {
-    if (document.transaction_id) {
-      return t('documents.statusTransactionCreated', {
-        defaultValue: '已生成交易',
-      });
+  const getDocumentStatusInfo = (doc: Document): { label: string; tone: string } => {
+    const ocr = (doc.ocr_result || {}) as Record<string, any>;
+    const isConfirmed = ocr.confirmed === true;
+    const hasTransaction = !!doc.transaction_id;
+
+    // Failed / processing take priority
+    if (doc.ocr_status === 'failed') {
+      return { label: t('documents.failed'), tone: 'failed' };
     }
-    if (document.needs_review) return t('documents.needsReview');
-    if (document.ocr_status === 'processing') return t('documents.processing');
-    if (document.ocr_status === 'failed') return t('documents.failed');
-    return t('documents.statusReady');
+    if (doc.ocr_status === 'processing' || !doc.processed_at) {
+      return { label: t('documents.status.processing', 'Processing'), tone: 'processing' };
+    }
+
+    if (isPendingReview(doc)) {
+      return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
+    }
+
+    // Confirmed states — vary by document type
+    const docType = doc.document_type;
+    const receiptTypes = ['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note'];
+    const contractTypes = [
+      'rental_contract', 'mietvertrag', 'purchase_contract', 'loan_contract',
+      'kreditvertrag', 'versicherungsbestaetigung', 'insurance_confirmation',
+    ];
+
+    if (receiptTypes.includes(docType)) {
+      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
+    }
+    if (contractTypes.includes(docType)) {
+      return { label: t('documents.status.contractProcessed', 'Contract processed'), tone: 'linked' };
+    }
+    if (isConfirmed) {
+      return { label: t('documents.status.reviewed', 'Reviewed'), tone: 'ready' };
+    }
+
+    // Fallback — has transaction but not explicitly confirmed
+    if (hasTransaction) {
+      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
+    }
+
+    return { label: t('documents.status.recognized', 'Recognized'), tone: 'ready' };
   };
 
-  const getStatusTone = (document: Document) => {
-    if (document.transaction_id) return 'linked';
-    if (document.needs_review) return 'review';
-    if (document.ocr_status === 'processing') return 'processing';
-    if (document.ocr_status === 'failed') return 'failed';
-    return 'ready';
-  };
+  const getStatusLabel = (document: Document) => getDocumentStatusInfo(document).label;
+  const getStatusTone = (document: Document) => getDocumentStatusInfo(document).tone;
 
   const sortedDocuments = sortDocumentsByDate(documents);
   const groupedDocuments = documentGroups.map((group) => ({
@@ -459,7 +597,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       ? t('documents.groups.all')
       : t(`documents.groups.${activeGroup}`);
 
-  const reviewCount = yearFilteredDocuments.filter((document) => document.needs_review).length;
+  const reviewCount = yearFilteredDocuments.filter((document) => isPendingReview(document)).length;
   const totalPages = Math.ceil(total / pageSize);
   const hasActiveFilters = Boolean(
     filters.search || filters.start_date || filters.end_date || filters.needs_review
@@ -468,14 +606,26 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderGridItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-card ${document.needs_review ? 'needs-review' : ''}`}
+      className={`document-card ${isPendingReview(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-card-top">
         <div className="document-card-icon">{getDocumentIconLabel(document)}</div>
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
-          {getStatusLabel(document)}
-        </span>
+        {needsConfirmation(document) ? (
+          <button
+            type="button"
+            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+            onClick={(event) => handleReviewClick(document, event)}
+          >
+            {confirmingId === document.id && confirmStage === 'confirming'
+              ? t('documents.confirmReview', 'Confirm review?')
+              : t('documents.status.pendingReview', 'Pending review')}
+          </button>
+        ) : (
+          <span className={`document-status-badge ${getStatusTone(document)}`}>
+            {getStatusLabel(document)}
+          </span>
+        )}
       </div>
 
       <div className="document-card-body">
@@ -493,26 +643,40 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
         </span>
       </div>
 
-      <div className="document-row-actions">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={(event) => handleDownload(document, event)}
-          title={t('documents.download')}
-          aria-label={t('documents.download')}
-        >
-          <DownloadIcon />
-        </button>
-        <button
-          type="button"
-          className="delete-btn"
-          onClick={(event) => handleDelete(document, event)}
-          disabled={deletingId === document.id}
-          title={t('common.delete')}
-          aria-label={t('common.delete')}
-        >
-          <DeleteIcon />
-        </button>
+      <div className="document-row-actions document-row-actions-card">
+        <div className="document-utility-actions">
+          <button
+            type="button"
+            className="download-btn"
+            onClick={(event) => handleDownload(document, event)}
+            title={t('documents.download')}
+            aria-label={t('documents.download')}
+          >
+            <DownloadIcon />
+          </button>
+          <button
+            type="button"
+            className="delete-btn"
+            onClick={(event) => handleDelete(document, event)}
+            disabled={deletingId === document.id}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
+          >
+            <DeleteIcon />
+          </button>
+          {canReprocessDocument(document) && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={(event) => handleRetry(document, event)}
+              disabled={retryingId === document.id}
+              title={t('documents.reprocess')}
+              aria-label={t('documents.reprocess')}
+            >
+              <RetryIcon />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -520,7 +684,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
   const renderListItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-row ${document.needs_review ? 'needs-review' : ''}`}
+      className={`document-row ${isPendingReview(document) ? 'pending-review-row' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-main-cell">
@@ -549,31 +713,57 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
       </div>
 
       <div className="document-col document-col-status">
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
-          {getStatusLabel(document)}
-        </span>
+        {needsConfirmation(document) ? (
+          <button
+            type="button"
+            className={`document-status-badge pending review-status-btn ${confirmingId === document.id && confirmStage === 'confirming' ? 'confirm-pulse' : ''}`}
+            onClick={(event) => handleReviewClick(document, event)}
+          >
+            {confirmingId === document.id && confirmStage === 'confirming'
+              ? t('documents.confirmReview', 'Confirm review?')
+              : t('documents.status.pendingReview', 'Pending review')}
+          </button>
+        ) : (
+          <span className={`document-status-badge ${getStatusTone(document)}`}>
+            {getStatusLabel(document)}
+          </span>
+        )}
       </div>
 
       <div className="document-row-actions">
-        <button
-          type="button"
-          className="download-btn"
-          onClick={(event) => handleDownload(document, event)}
-          title={t('documents.download')}
-          aria-label={t('documents.download')}
-        >
-          <DownloadIcon />
-        </button>
-        <button
-          type="button"
-          className="delete-btn"
-          onClick={(event) => handleDelete(document, event)}
-          disabled={deletingId === document.id}
-          title={t('common.delete')}
-          aria-label={t('common.delete')}
-        >
-          <DeleteIcon />
-        </button>
+        <div className="document-utility-actions">
+          <button
+            type="button"
+            className="download-btn"
+            onClick={(event) => handleDownload(document, event)}
+            title={t('documents.download')}
+            aria-label={t('documents.download')}
+          >
+            <DownloadIcon />
+          </button>
+          <button
+            type="button"
+            className="delete-btn"
+            onClick={(event) => handleDelete(document, event)}
+            disabled={deletingId === document.id}
+            title={t('common.delete')}
+            aria-label={t('common.delete')}
+          >
+            <DeleteIcon />
+          </button>
+          {canReprocessDocument(document) && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={(event) => handleRetry(document, event)}
+              disabled={retryingId === document.id}
+              title={t('documents.reprocess')}
+              aria-label={t('documents.reprocess')}
+            >
+              <RetryIcon />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -668,18 +858,20 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
           </div>
 
           <div className="date-and-review-filters">
-            <input
-              type="date"
+            <DateInput
               value={filters.start_date || ''}
-              onChange={(event) => handleFilterChange('start_date', event.target.value)}
+              onChange={(val) => handleFilterChange('start_date', val)}
               placeholder={t('documents.filters.startDate')}
+              locale={getLocaleForLanguage(i18n.language)}
+              todayLabel={String(t('common.today', 'Today'))}
             />
 
-            <input
-              type="date"
+            <DateInput
               value={filters.end_date || ''}
-              onChange={(event) => handleFilterChange('end_date', event.target.value)}
+              onChange={(val) => handleFilterChange('end_date', val)}
               placeholder={t('documents.filters.endDate')}
+              locale={getLocaleForLanguage(i18n.language)}
+              todayLabel={String(t('common.today', 'Today'))}
             />
 
             <label className="checkbox-label">
@@ -737,21 +929,25 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect }) => {
                     {t('documents.filters.needsReview')}: {reviewCount}
                   </span>
                 )}
-                <select
-                  className="page-size-select"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  aria-label={t('documents.pageSize')}
+                <button
+                  type="button"
+                  className="download-btn export-zip-btn"
+                  onClick={handleExportFiltered}
+                  disabled={exporting || yearFilteredDocuments.length === 0}
+                  title={t('documents.exportZip', { count: yearFilteredDocuments.length })}
+                  aria-label={t('documents.exportZip', { count: yearFilteredDocuments.length })}
                 >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
-                    <option key={size} value={size}>
-                      {size} {t('documents.perPage')}
-                    </option>
-                  ))}
-                </select>
+                  {exporting ? (
+                    <span className="icon-svg spinner-inline" />
+                  ) : (
+                    <DownloadIcon />
+                  )}
+                  <span>{t('common.export')}</span>
+                  <span className="export-zip-btn__format" aria-hidden="true">ZIP</span>
+                </button>
+                <Select value={String(pageSize)} onChange={v => { setPageSize(Number(v)); setPage(1); }}
+                  aria-label={t('documents.pageSize')} size="sm"
+                  options={PAGE_SIZE_OPTIONS.map(s => ({ value: String(s), label: `${s} ${t('documents.perPage')}` }))} />
               </div>
             </div>
 

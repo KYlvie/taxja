@@ -177,7 +177,7 @@ def request_data_export(
         logger.exception("Sync data export failed for user %s", current_user.id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Data export failed: {str(e)}",
+            detail="account_operation_failed",
         )
 
 

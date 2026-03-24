@@ -1,0 +1,192 @@
+{
+  "pricing": {
+    "title": "Wybierz plan",
+    "subtitle": "Zacznij od 14-dniowego okresu probnego Pro, a nastepnie wybierz plan dopasowany do Twoich potrzeb",
+    "free": "Bezplatny",
+    "recommended": "Polecany",
+    "per_month": "/miesiac",
+    "per_month_billed_yearly": "/miesiac, rozliczany rocznie",
+    "billed_as": "Rozliczany jako {{amount}} EUR/rok",
+    "trial_info": "Nowi uzytkownicy otrzymuja 14-dniowy okres probny Pro. Karta kredytowa nie jest wymagana na start.",
+    "support": "Pytania? Skontaktuj sie z nami: support@taxja.com",
+    "billing": {
+      "monthly": "Miesiecznie",
+      "yearly": "Rocznie",
+      "save": "Oszczedz {{percent}}%"
+    },
+    "plans": {
+      "free": {
+        "name": "Bezplatny"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "30 transakcji/miesiac",
+      "basic_tax_calc": "Podstawowe obliczenia podatkowe",
+      "unlimited_transactions": "Nieograniczone transakcje",
+      "ocr_limit": "20 skanow dokumentow/miesiac",
+      "full_tax_calc": "Pelne obliczenia podatkowe",
+      "multi_language": "Wielojezycznosc (DE, EN, ZH)",
+      "vat_svs": "Obliczenia VAT i SVS",
+      "property_management": "Zarzadzanie nieruchomosciami",
+      "bank_import": "Import wyciagu bankowego",
+      "recurring_suggestions": "Inteligentne sugestie cykliczne",
+      "everything_plus": "Wszystko z planu Plus",
+      "unlimited_ocr": "Nieograniczone skanowanie dokumentow",
+      "ai_assistant": "Asystent podatkowy AI",
+      "e1_generation": "Generowanie formularza E1",
+      "advanced_reports": "Zaawansowane raporty (EA, Bilanz)",
+      "priority_support": "Priorytetowe wsparcie",
+      "ocr": "Skanowanie dokumentow"
+    },
+    "buttons": {
+      "get_started": "Rozpocznij",
+      "subscribe": "Subskrybuj",
+      "upgrade": "Ulepsz",
+      "start_trial": "Rozpocznij 14-dniowy okres probny Pro",
+      "loading": "Ladowanie..."
+    },
+    "errors": {
+      "checkout_failed": "Nie udalo sie rozpoczac platnosci. Sprobuj ponownie."
+    }
+  },
+  "subscription": {
+    "loading": "Ladowanie szczegolow subskrypcji...",
+    "manage": "Zarzadzaj subskrypcja",
+    "manage_title": "Zarzadzaj subskrypcja",
+    "current_plan": "Aktualny plan",
+    "free": "Bezplatny",
+    "per_month": "/miesiac",
+    "per_year": "/rok",
+    "not_applicable": "Nie dotyczy",
+    "trial_days_remaining": "Pozostalo {{days}} dni",
+    "trial_message": "w okresie probnym Pro. Ulepsz, aby zachowac wszystkie funkcje!",
+    "trial_active": "Jestes na bezplatnym okresie probnym do {{date}}",
+    "period_start": "Poczatek okresu",
+    "period_end": "Koniec okresu",
+    "billing_cycle": "Cykl rozliczeniowy",
+    "next_billing": "Data nastepnego rozliczenia",
+    "canceling": "Anulowanie",
+    "ends_on": "Konczy sie {{date}}",
+    "cancel_notice": "Twoja subskrypcja zostanie anulowana na koniec biezacego okresu",
+    "credits_title": "Kredyty",
+    "credits_available": "Dostepne kredyty",
+    "overage_mode": "Przekroczenie limitu",
+    "overage_on": "Wlaczone",
+    "overage_off": "Wylaczone",
+    "overage_unavailable": "Niedostepne",
+    "overage_suspended": "Wstrzymane",
+    "overage_rate": "{{rate}} / kredyt",
+    "overage_estimate": "Szacunkowo {{amount}}",
+    "overage_toggle_error": "Nie udalo sie zaktualizowac trybu przekroczenia limitu.",
+    "overage_payment_due_title": "Przekroczenie wstrzymane",
+    "overage_payment_due_message": "Przekroczenie jest wstrzymane do momentu uregulowania niezaplaconej faktury w Stripe.",
+    "resolve_billing": "Rozwiaz problem z rozliczeniem",
+    "billing_portal_error": "Nie udalo sie otworzyc portalu rozliczeniowego.",
+    "usage_title": "Uzycie w tym okresie",
+    "unlimited": "Nieograniczone",
+    "quota_exceeded": "Przekroczono",
+    "change_plan": "Zmien plan",
+    "reactivate": "Reaktywuj subskrypcje",
+    "cancel": "Anuluj subskrypcje",
+    "payment_method": "Metoda platnosci",
+    "payment_managed": "Metoda platnosci jest zarzadzana przez Stripe.",
+    "manage_payment": "Zarzadzaj metoda platnosci",
+    "billing_history": "Historia rozliczen",
+    "no_history": "Brak historii rozliczen.",
+    "cancel_confirm_title": "Anulowac subskrypcje?",
+    "cancel_confirm_message": "Twoja subskrypcja pozostanie aktywna do {{date}}. Po tym czasie zostaniesz przeniesiony na plan Bezplatny.",
+    "confirm_cancel": "Tak, anuluj",
+    "change_plan_title": "Zmien plan",
+    "change_plan_message": "Zostaniesz przekierowany na strone cennika, aby wybrac nowy plan.",
+    "continue": "Kontynuuj",
+    "cancel_success": "Twoja subskrypcja zostanie anulowana na koniec biezacego okresu.",
+    "cancel_error": "Nie udalo sie anulowac subskrypcji. Sprobuj ponownie.",
+    "reactivate_success": "Twoja subskrypcja zostala reaktywowana!",
+    "reactivate_error": "Nie udalo sie reaktywowac subskrypcji. Sprobuj ponownie.",
+    "status": {
+      "active": "Aktywna",
+      "trialing": "Okres probny",
+      "past_due": "Zalegla",
+      "canceled": "Anulowana"
+    },
+    "billing": {
+      "monthly": "Miesiecznie",
+      "yearly": "Rocznie"
+    },
+    "resources": {
+      "transactions": "Transakcje",
+      "ocr_scans": "Skany dokumentow",
+      "ai_conversations": "Rozmowy z AI"
+    }
+  },
+  "usage": {
+    "title": "Uzycie zasobow",
+    "resets_on": "Resetuje sie: {{date}}",
+    "unlimited": "Nieograniczone",
+    "quota_exceeded": "Limit przekroczony",
+    "quota_warning": "Zblizasz sie do limitu ({{percent}}%)",
+    "transactions": "Transakcje",
+    "ocr_scans": "Skany dokumentow",
+    "ai_conversations": "Rozmowy z AI"
+  },
+  "upgrade": {
+    "title": "Ulepsz do {{plan}}",
+    "description": "{{feature}} jest dostepna w planie {{plan}}. Ulepsz teraz, aby odblokowac te funkcje i wiele wiecej!",
+    "benefits_title": "Co otrzymasz:",
+    "button": "Ulepsz teraz",
+    "cancel": "Moze pozniej",
+    "trial_note": "Zacznij od 14-dniowego bezplatnego okresu probnego planu Pro",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "Skanowanie dokumentow",
+      "unlimited_ocr": "Nieograniczone skanowanie dokumentow",
+      "ai_assistant": "Asystent podatkowy AI",
+      "e1_generation": "Generowanie formularza E1",
+      "advanced_reports": "Zaawansowane raporty",
+      "api_access": "Dostep do API",
+      "unlimited_transactions": "Nieograniczone transakcje"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Nieograniczone transakcje",
+        "2": "20 skanow dokumentow miesiecznie",
+        "3": "Pelne obliczenia podatkowe",
+        "4": "Obsluga wielu jezykow",
+        "5": "Obliczenia VAT i SVS"
+      },
+      "pro": {
+        "1": "Nieograniczone skanowanie dokumentow",
+        "2": "Pomoc podatkowa oparta na AI",
+        "3": "Automatyczne generowanie formularza E1",
+        "4": "Zaawansowane analizy i raporty",
+        "5": "Priorytetowa obsluga klienta"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Platnosc zakonczona sukcesem!",
+    "success_message": "Dziekujemy za subskrypcje! Twoja platnosc zostala przetworzona pomyslnie.",
+    "plan_activated": "Twoj plan {{plan}} jest teraz aktywny!",
+    "detail_1": "Pelny dostep do wszystkich funkcji",
+    "detail_2": "Rozliczenie zaczyna sie dzisiaj",
+    "detail_3": "Anuluj w dowolnym momencie",
+    "session_id": "Identyfikator sesji",
+    "continue_dashboard": "Przejdz do panelu",
+    "view_subscription": "Wyswietl szczegoly subskrypcji",
+    "support": "Pytania? Skontaktuj sie z nami: support@taxja.com"
+  },
+  "common": {
+    "back": "Wstecz",
+    "cancel": "Anuluj",
+    "nevermind": "Nieważne"
+  }
+}

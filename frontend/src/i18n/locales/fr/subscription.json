@@ -1,0 +1,192 @@
+{
+  "pricing": {
+    "title": "Choisissez votre plan",
+    "subtitle": "Commencez avec un essai Pro de 14 jours, puis choisissez le plan qui vous convient",
+    "free": "Gratuit",
+    "recommended": "Recommandé",
+    "per_month": "/mois",
+    "per_month_billed_yearly": "/mois, facturé annuellement",
+    "billed_as": "Facturé {{amount}} €/an",
+    "trial_info": "Les nouveaux utilisateurs bénéficient d'un essai Pro de 14 jours. Aucune carte de crédit requise.",
+    "support": "Des questions ? Contactez-nous à support@taxja.com",
+    "billing": {
+      "monthly": "Mensuel",
+      "yearly": "Annuel",
+      "save": "Économisez {{percent}} %"
+    },
+    "plans": {
+      "free": {
+        "name": "Gratuit"
+      },
+      "plus": {
+        "name": "Plus"
+      },
+      "pro": {
+        "name": "Pro"
+      }
+    },
+    "features": {
+      "transactions_limit": "30 transactions/mois",
+      "basic_tax_calc": "Calcul fiscal de base",
+      "unlimited_transactions": "Transactions illimitées",
+      "ocr_limit": "20 numérisations de documents/mois",
+      "full_tax_calc": "Calcul fiscal complet",
+      "multi_language": "Multilingue (DE, EN, ZH, FR, RU)",
+      "vat_svs": "Calculs TVA & SVS",
+      "property_management": "Gestion immobilière",
+      "bank_import": "Import de relevés bancaires",
+      "recurring_suggestions": "Suggestions récurrentes intelligentes",
+      "everything_plus": "Tout ce qui est dans Plus",
+      "unlimited_ocr": "Numérisation illimitée de documents",
+      "ai_assistant": "Assistant fiscal IA",
+      "e1_generation": "Génération du formulaire E1",
+      "advanced_reports": "Rapports avancés (EA, Bilanz)",
+      "priority_support": "Support prioritaire",
+      "ocr": "Numérisation de documents"
+    },
+    "buttons": {
+      "get_started": "Commencer",
+      "subscribe": "S'abonner",
+      "upgrade": "Mettre à niveau",
+      "start_trial": "Essai Pro gratuit de 14 jours",
+      "loading": "Chargement..."
+    },
+    "errors": {
+      "checkout_failed": "Impossible de démarrer le paiement. Veuillez réessayer."
+    }
+  },
+  "subscription": {
+    "loading": "Chargement des détails de l'abonnement...",
+    "manage": "Gérer l'abonnement",
+    "manage_title": "Gérer l'abonnement",
+    "current_plan": "Plan actuel",
+    "free": "Gratuit",
+    "per_month": "/mois",
+    "per_year": "/an",
+    "not_applicable": "N/A",
+    "trial_days_remaining": "{{days}} jours restants",
+    "trial_message": "dans votre essai Pro. Passez au niveau supérieur pour garder toutes les fonctionnalités !",
+    "trial_active": "Vous êtes en essai gratuit jusqu'au {{date}}",
+    "period_start": "Début de la période",
+    "period_end": "Fin de la période",
+    "billing_cycle": "Cycle de facturation",
+    "next_billing": "Prochaine date de facturation",
+    "canceling": "Annulation en cours",
+    "ends_on": "Se termine le {{date}}",
+    "cancel_notice": "Votre abonnement sera annulé à la fin de la période en cours",
+    "credits_title": "Crédits",
+    "credits_available": "Crédits disponibles",
+    "overage_mode": "Dépassement",
+    "overage_on": "Activé",
+    "overage_off": "Désactivé",
+    "overage_unavailable": "Indisponible",
+    "overage_suspended": "En pause",
+    "overage_rate": "{{rate}} / crédit",
+    "overage_estimate": "Estimation {{amount}}",
+    "overage_toggle_error": "Impossible de mettre à jour le mode de dépassement.",
+    "overage_payment_due_title": "Dépassement en pause",
+    "overage_payment_due_message": "Le dépassement est en pause jusqu'au règlement de votre facture impayée dans Stripe.",
+    "resolve_billing": "Résoudre la facturation",
+    "billing_portal_error": "Impossible d'ouvrir le portail de facturation.",
+    "usage_title": "Utilisation cette période",
+    "unlimited": "Illimité",
+    "quota_exceeded": "Dépassé",
+    "change_plan": "Changer de plan",
+    "reactivate": "Réactiver l'abonnement",
+    "cancel": "Annuler l'abonnement",
+    "payment_method": "Moyen de paiement",
+    "payment_managed": "Le moyen de paiement est géré via Stripe.",
+    "manage_payment": "Gérer le moyen de paiement",
+    "billing_history": "Historique de facturation",
+    "no_history": "Aucun historique de facturation disponible.",
+    "cancel_confirm_title": "Annuler l'abonnement ?",
+    "cancel_confirm_message": "Votre abonnement restera actif jusqu'au {{date}}. Après cela, vous serez rétrogradé au plan Gratuit.",
+    "confirm_cancel": "Oui, annuler",
+    "change_plan_title": "Changer de plan",
+    "change_plan_message": "Vous serez redirigé vers la page de tarification pour sélectionner un nouveau plan.",
+    "continue": "Continuer",
+    "cancel_success": "Votre abonnement sera annulé à la fin de la période en cours.",
+    "cancel_error": "Impossible d'annuler l'abonnement. Veuillez réessayer.",
+    "reactivate_success": "Votre abonnement a été réactivé !",
+    "reactivate_error": "Impossible de réactiver l'abonnement. Veuillez réessayer.",
+    "status": {
+      "active": "Actif",
+      "trialing": "Essai",
+      "past_due": "En retard",
+      "canceled": "Annulé"
+    },
+    "billing": {
+      "monthly": "Mensuel",
+      "yearly": "Annuel"
+    },
+    "resources": {
+      "transactions": "Transactions",
+      "ocr_scans": "Numérisations de documents",
+      "ai_conversations": "Conversations IA"
+    }
+  },
+  "usage": {
+    "title": "Utilisation des ressources",
+    "resets_on": "Réinitialisation : {{date}}",
+    "unlimited": "Illimité",
+    "quota_exceeded": "Quota dépassé",
+    "quota_warning": "Limite bientôt atteinte ({{percent}} %)",
+    "transactions": "Transactions",
+    "ocr_scans": "Numérisations de documents",
+    "ai_conversations": "Conversations IA"
+  },
+  "upgrade": {
+    "title": "Passer à {{plan}}",
+    "description": "{{feature}} est disponible avec le plan {{plan}}. Passez au niveau supérieur pour débloquer cette fonctionnalité et plus encore !",
+    "benefits_title": "Ce que vous obtiendrez :",
+    "button": "Mettre à niveau maintenant",
+    "cancel": "Peut-être plus tard",
+    "trial_note": "✨ Commencez avec un essai gratuit de 14 jours du plan Pro",
+    "plans": {
+      "plus": "Plus",
+      "pro": "Pro"
+    },
+    "features": {
+      "ocr_scanning": "Numérisation de documents",
+      "unlimited_ocr": "Numérisation illimitée de documents",
+      "ai_assistant": "Assistant fiscal IA",
+      "e1_generation": "Génération du formulaire E1",
+      "advanced_reports": "Rapports avancés",
+      "api_access": "Accès API",
+      "unlimited_transactions": "Transactions illimitées"
+    },
+    "benefits": {
+      "plus": {
+        "1": "Transactions illimitées",
+        "2": "20 numérisations de documents par mois",
+        "3": "Calculs fiscaux complets",
+        "4": "Support multilingue",
+        "5": "Calculs TVA & SVS"
+      },
+      "pro": {
+        "1": "Numérisation illimitée de documents",
+        "2": "Assistance fiscale par IA",
+        "3": "Génération automatique du formulaire E1",
+        "4": "Analyses et rapports avancés",
+        "5": "Support client prioritaire"
+      }
+    }
+  },
+  "checkout": {
+    "success_title": "Paiement réussi !",
+    "success_message": "Merci pour votre abonnement ! Votre paiement a été traité avec succès.",
+    "plan_activated": "Votre plan {{plan}} est maintenant actif !",
+    "detail_1": "Accès complet à toutes les fonctionnalités",
+    "detail_2": "La facturation commence aujourd'hui",
+    "detail_3": "Annulez à tout moment",
+    "session_id": "ID de session",
+    "continue_dashboard": "Continuer vers le tableau de bord",
+    "view_subscription": "Voir les détails de l'abonnement",
+    "support": "Des questions ? Contactez-nous à support@taxja.com"
+  },
+  "common": {
+    "back": "Retour",
+    "cancel": "Annuler",
+    "nevermind": "Peu importe"
+  }
+}

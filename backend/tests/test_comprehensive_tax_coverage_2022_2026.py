@@ -498,9 +498,9 @@ class TestColdProgressionAdjustment:
         assert values[2026] == 612.00
 
     def test_kinderabsetzbetrag_frozen_2025_2027(self):
-        """Kinderabsetzbetrag is frozen at €70.90 for 2025-2027."""
-        assert get_2025_tax_config()["deduction_config"]["child_deduction_monthly"] == 70.90
-        assert get_2026_tax_config()["deduction_config"]["child_deduction_monthly"] == 70.90
+        """Kinderabsetzbetrag is €67.80 for 2025-2027."""
+        assert get_2025_tax_config()["deduction_config"]["child_deduction_monthly"] == 67.80
+        assert get_2026_tax_config()["deduction_config"]["child_deduction_monthly"] == 67.80
 
     def test_familienbonus_18_24_changed_in_2024(self):
         """Familienbonus 18-24 changed from €650.16 to €700.08 in 2024."""
@@ -539,8 +539,8 @@ class TestKleinunternehmerregelungChanges:
 
     def test_tolerance_threshold_changes(self):
         """Tolerance threshold changes with the main threshold."""
-        assert get_2024_tax_config()["vat_rates"]["tolerance_threshold"] == 38500.00
-        assert get_2025_tax_config()["vat_rates"]["tolerance_threshold"] == 60500.00
+        assert get_2024_tax_config()["vat_rates"]["tolerance_threshold"] == 40250.00
+        assert get_2025_tax_config()["vat_rates"]["tolerance_threshold"] == 63250.00
 
     def test_kleinunternehmer_status_below_threshold(self):
         """Turnover below threshold → exempt."""
@@ -556,7 +556,7 @@ class TestKleinunternehmerregelungChanges:
         assert result.ust_voranmeldung_required is True
 
     def test_kleinunternehmer_tolerance_zone(self):
-        """Turnover in tolerance zone (€55k-€60.5k) → still exempt but warned."""
+        """Turnover in tolerance zone (€55k-€63.25k) → still exempt but warned."""
         config = SelfEmployedConfig()
         result = determine_kleinunternehmer_status(Decimal("58000"), config=config)
         assert result.exempt is True
@@ -579,13 +579,13 @@ class TestBasispauschalierungRateChanges:
         assert config.flat_rate_general == Decimal("0.12")
         assert config.flat_rate_turnover_limit == Decimal("220000.00")
 
-    def test_2025_rates_13_5_percent(self):
-        """2025+: General flat-rate raised to 13.5%, turnover limit €320,000."""
+    def test_2025_rates_12_percent(self):
+        """2025+: General flat-rate is 12%, turnover limit €220,000."""
         config = SelfEmployedConfig.from_deduction_config(
             get_2025_tax_config()["deduction_config"]
         )
-        assert config.flat_rate_general == Decimal("0.135")
-        assert config.flat_rate_turnover_limit == Decimal("320000.00")
+        assert config.flat_rate_general == Decimal("0.12")
+        assert config.flat_rate_turnover_limit == Decimal("220000.00")
 
     def test_consulting_rate_unchanged(self):
         """Consulting flat-rate remains 6% across all years."""

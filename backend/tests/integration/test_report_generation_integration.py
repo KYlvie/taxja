@@ -13,6 +13,11 @@ from app.models.credit_cost_config import CreditCostConfig
 from app.models.document import Document, DocumentType
 from app.models.plan import BillingCycle, Plan, PlanType
 from app.models.subscription import Subscription, SubscriptionStatus
+from app.models.recurring_transaction import (
+    RecurrenceFrequency,
+    RecurringTransaction,
+    RecurringTransactionType,
+)
 from app.models.transaction import ExpenseCategory, IncomeCategory, Transaction, TransactionType
 from app.models.user import User
 from app.api.deps import get_redis_client
@@ -269,6 +274,58 @@ class TestCurrentReportEndpoints:
         assert "overall_status" in data
         assert "missing_documents" in data
         assert any("transactions recorded" in item["message"] for item in data["items"])
+
+    def test_audit_checklist_ignores_legacy_loan_repayment_for_category_warning(
+        self,
+        reporting_authenticated_client,
+        reporting_enabled_user,
+        db,
+    ):
+        recurring = RecurringTransaction(
+            user_id=reporting_enabled_user.id,
+            recurring_type=RecurringTransactionType.LOAN_REPAYMENT,
+            description="Legacy principal repayment",
+            amount=Decimal("1508.33"),
+            transaction_type=TransactionType.EXPENSE.value,
+            category="loan_repayment",
+            frequency=RecurrenceFrequency.MONTHLY,
+            start_date=date(2026, 1, 1),
+            day_of_month=1,
+        )
+        db.add(recurring)
+        db.flush()
+
+        db.add(
+            Transaction(
+                user_id=reporting_enabled_user.id,
+                type=TransactionType.LIABILITY_REPAYMENT,
+                amount=Decimal("602.08"),
+                transaction_date=date(2026, 2, 3),
+                description="Loan principal repayment",
+            )
+        )
+        db.add(
+            Transaction(
+                user_id=reporting_enabled_user.id,
+                type=TransactionType.EXPENSE,
+                amount=Decimal("1508.33"),
+                transaction_date=date(2026, 2, 3),
+                description="Legacy loan repayment",
+                source_recurring_id=recurring.id,
+            )
+        )
+        db.commit()
+
+        response = reporting_authenticated_client.get(
+            "/api/v1/reports/audit-checklist?tax_year=2026"
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        completeness_item = next(
+            item for item in payload["items"] if item["category"] == "completeness"
+        )
+        assert completeness_item["status"] == "pass"
 
     def test_report_generation_requires_authentication(self, client):
         response = client.post(

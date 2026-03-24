@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { ArrowDownLeft, ArrowUpRight, CircleAlert, Landmark, Wallet, Waves } from 'lucide-react';
+import FuturisticIcon from '../common/FuturisticIcon';
 import { formatCurrency } from '../../utils/locale';
 import './DashboardOverview.css';
 
@@ -32,7 +34,9 @@ const DashboardOverview = ({
     <div className="dashboard-overview">
       <div className="overview-grid">
         <div className="overview-card income">
-          <div className="card-icon">IN</div>
+          <div className="card-icon">
+            <FuturisticIcon icon={ArrowUpRight} tone="emerald" size="md" />
+          </div>
           <div className="card-content">
             <h3>{t('dashboard.yearToDateIncome')}</h3>
             <p className="amount">{formatCurrency(yearToDateIncome, currentLanguage)}</p>
@@ -40,7 +44,9 @@ const DashboardOverview = ({
         </div>
 
         <div className="overview-card expenses">
-          <div className="card-icon">EX</div>
+          <div className="card-icon">
+            <FuturisticIcon icon={ArrowDownLeft} tone="rose" size="md" />
+          </div>
           <div className="card-content">
             <h3>{t('dashboard.yearToDateExpenses')}</h3>
             <p className="amount">{formatCurrency(yearToDateExpenses, currentLanguage)}</p>
@@ -48,7 +54,9 @@ const DashboardOverview = ({
         </div>
 
         <div className="overview-card tax">
-          <div className="card-icon">TX</div>
+          <div className="card-icon">
+            <FuturisticIcon icon={Landmark} tone="amber" size="md" />
+          </div>
           <div className="card-content">
             <h3>{t('dashboard.estimatedTax')}</h3>
             <p className="amount">{formatCurrency(estimatedTax, currentLanguage)}</p>
@@ -64,7 +72,9 @@ const DashboardOverview = ({
         </div>
 
         <div className="overview-card net-income">
-          <div className="card-icon">NET</div>
+          <div className="card-icon">
+            <FuturisticIcon icon={Wallet} tone="violet" size="md" />
+          </div>
           <div className="card-content">
             <h3>{t('dashboard.netIncome')}</h3>
             <p className="amount highlight">{formatCurrency(netIncome, currentLanguage)}</p>
@@ -74,7 +84,9 @@ const DashboardOverview = ({
 
         {vatThresholdDistance !== undefined && vatThresholdDistance !== null && (
           <div className="overview-card vat-threshold">
-            <div className="card-icon">VAT</div>
+            <div className="card-icon">
+              <FuturisticIcon icon={Waves} tone="cyan" size="md" />
+            </div>
             <div className="card-content">
               <h3>{t('dashboard.vatThresholdDistance')}</h3>
               <p className="amount">
@@ -95,7 +107,9 @@ const DashboardOverview = ({
             onClick={() => navigate('/transactions?needs_review=true')}
             style={{ cursor: 'pointer' }}
           >
-            <div className="card-icon">!</div>
+            <div className="card-icon">
+              <FuturisticIcon icon={CircleAlert} tone="amber" size="md" />
+            </div>
             <div className="card-content">
               <h3>{t('transactions.needsReview')}</h3>
               <p className="amount">{pendingReviewCount}</p>

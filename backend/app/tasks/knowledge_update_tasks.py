@@ -76,8 +76,8 @@ class _DBTask(Task):
 # ------------------------------------------------------------------
 
 def _file_hash(path: str) -> str:
-    """Return MD5 hex of a file's contents."""
-    h = hashlib.md5()
+    """Return SHA-256 hex of a file's contents."""
+    h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
@@ -268,7 +268,7 @@ def _ingest_file(filepath: str, filename: str, ext: str, kb_service) -> int:
         return 0
 
     ids = [
-        f"ku_{hashlib.md5(f'{filename}:{i}'.encode()).hexdigest()[:16]}"
+        f"ku_{hashlib.sha256(f'{filename}:{i}'.encode()).hexdigest()[:16]}"
         for i in range(len(documents))
     ]
 

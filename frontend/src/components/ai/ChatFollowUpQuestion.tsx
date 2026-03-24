@@ -10,6 +10,9 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, SkipForward, Loader2 } from 'lucide-react';
+import Select from '../common/Select';
+import DateInput from '../common/DateInput';
+import { getLocaleForLanguage } from '../../utils/locale';
 import { documentService } from '../../services/documentService';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
 import AIAvatar from './AIAvatar';
@@ -80,18 +83,18 @@ export default function ChatFollowUpQuestion({ message }: ChatFollowUpQuestionPr
     setLoading(true);
     setError(null);
     try {
-      const result = await documentService.submitFollowUp(message.documentId, answers, {
+      await documentService.submitFollowUp(message.documentId, answers, {
         suggestionVersion: message.suggestionVersion,
       });
       markFollowUpAnswered(message.documentId);
       setSubmitted(true);
-      if (result.ui_state === 'ready_to_confirm') {
-        updateSuggestionStatus(message.documentId, 'pending');
-      }
+      // Always update suggestion to pending (ready to confirm)
+      // Backend auto-applies defaults for non-required remaining questions
+      updateSuggestionStatus(message.documentId, 'pending');
     } catch (err: any) {
       if (err?.response?.status === 409) {
         setError(t('ai.followUp.versionMismatch', 'This was modified elsewhere. Please refresh.'));
-        setVersionConflict(true); // Disable retry until user refreshes or edits
+        setVersionConflict(true);
       } else {
         setError(err?.response?.data?.detail || t('ai.followUp.submitError', 'Failed to submit answers'));
       }
@@ -104,15 +107,13 @@ export default function ChatFollowUpQuestion({ message }: ChatFollowUpQuestionPr
     setLoading(true);
     setError(null);
     try {
-      const result = await documentService.submitFollowUp(message.documentId, answers, {
+      await documentService.submitFollowUp(message.documentId, answers, {
         useDefaults: true,
         suggestionVersion: message.suggestionVersion,
       });
       markFollowUpAnswered(message.documentId);
       setSubmitted(true);
-      if (result.ui_state === 'ready_to_confirm') {
-        updateSuggestionStatus(message.documentId, 'pending');
-      }
+      updateSuggestionStatus(message.documentId, 'pending');
     } catch (err: any) {
       setError(err?.response?.data?.detail || t('ai.followUp.submitError', 'Failed to apply defaults'));
     } finally {
@@ -205,6 +206,7 @@ interface FollowUpFieldProps {
 }
 
 function FollowUpField({ question, lang, value, onChange }: FollowUpFieldProps) {
+  const { t } = useTranslation();
   const questionText = localize(question.question, lang);
   const helpText = question.helpText ? localize(question.helpText, lang) : undefined;
 
@@ -227,11 +229,11 @@ function FollowUpField({ question, lang, value, onChange }: FollowUpFieldProps) 
       </label>
 
       {question.inputType === 'date' && (
-        <input
-          type="date"
-          style={inputStyle}
+        <DateInput
           value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(val) => onChange(val)}
+          locale={getLocaleForLanguage(lang)}
+          todayLabel={t('common.today', 'Today')}
         />
       )}
 
@@ -257,17 +259,15 @@ function FollowUpField({ question, lang, value, onChange }: FollowUpFieldProps) 
       )}
 
       {question.inputType === 'select' && question.options && (
-        <select
-          style={inputStyle}
-          value={value ?? question.defaultValue ?? ''}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {question.options.map((opt) => (
-            <option key={typeof opt.value === 'string' ? opt.value : JSON.stringify(opt.value)} value={opt.value}>
-              {typeof opt.label === 'string' ? opt.label : localize(opt.label, lang)}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={String(value ?? question.defaultValue ?? '')}
+          onChange={onChange}
+          size="sm"
+          options={question.options.map(opt => ({
+            value: typeof opt.value === 'string' ? opt.value : JSON.stringify(opt.value),
+            label: typeof opt.label === 'string' ? opt.label : localize(opt.label, lang),
+          }))}
+        />
       )}
 
       {question.inputType === 'boolean' && (
@@ -279,7 +279,7 @@ function FollowUpField({ question, lang, value, onChange }: FollowUpFieldProps) 
               checked={value === true}
               onChange={() => onChange(true)}
             />
-            {lang === 'de' ? 'Ja' : lang === 'zh' ? '是' : 'Yes'}
+            {t('common.yes', 'Yes')}
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
             <input
@@ -288,7 +288,7 @@ function FollowUpField({ question, lang, value, onChange }: FollowUpFieldProps) 
               checked={value === false}
               onChange={() => onChange(false)}
             />
-            {lang === 'de' ? 'Nein' : lang === 'zh' ? '否' : 'No'}
+            {t('common.no', 'No')}
           </label>
         </div>
       )}

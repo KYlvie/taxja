@@ -4,7 +4,10 @@
  */
 export const translateDeductionReason = (reason: string, language: string): string => {
   if (!reason || language.startsWith('de')) return reason;
-  const lang = language.startsWith('zh') ? 'zh' : 'en';
+  const lang = language.startsWith('zh') ? 'zh'
+    : language.startsWith('fr') ? 'fr'
+    : language.startsWith('ru') ? 'ru'
+    : 'en';
 
   const trimmed = reason.trim();
 

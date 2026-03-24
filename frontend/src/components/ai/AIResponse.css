@@ -93,6 +93,19 @@
   font-style: italic;
 }
 
+.ai-source-tier-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
+  background: var(--color-bg, #f9fafb);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin-bottom: 4px;
+}
+
 .ai-disclaimer {
   display: flex;
   gap: 12px;

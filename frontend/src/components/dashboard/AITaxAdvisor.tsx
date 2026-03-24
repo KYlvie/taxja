@@ -66,10 +66,10 @@ const AITaxAdvisor = () => {
       <div className="ai-advisor-header">
         <h3>
           <Sparkles size={20} />
-          {t('ai.taxAdvisorTitle', 'AI 税务优化建议')}
+          {t('ai.taxAdvisorTitle', 'AI Tax Optimization')}
         </h3>
         <p className="ai-advisor-description">
-          {t('ai.taxAdvisorDesc', '基于您的收支数据，获取个性化的税务优化建议')}
+          {t('ai.taxAdvisorDesc', 'Get personalized tax optimization suggestions based on your data')}
         </p>
       </div>
 
@@ -84,7 +84,7 @@ const AITaxAdvisor = () => {
             {renderContent(suggestions)}
           </ul>
           <p className="ai-advisor-disclaimer">
-            {t('ai.disclaimer', '⚠️ 以上建议仅供参考，不构成税务建议。')}
+            {t('ai.disclaimer', 'This answer is for general reference only and does not constitute tax advice.')}
           </p>
         </div>
       )}

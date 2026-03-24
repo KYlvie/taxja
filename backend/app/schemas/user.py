@@ -88,7 +88,7 @@ class UserProfileUpdate(BaseModel):
     employer_telearbeit_pauschale: Optional[Decimal] = Field(None, ge=0)
     employer_mode: Optional[str] = Field(None, pattern="^(none|occasional|regular)$")
     employer_region: Optional[str] = Field(None, max_length=100)
-    language: Optional[str] = Field(None, pattern="^(de|en|zh)$")
+    language: Optional[str] = Field(None, pattern="^(de|en|zh|fr|ru|hu|pl|tr|bs)$")
 
     @field_validator("user_roles")
     @classmethod

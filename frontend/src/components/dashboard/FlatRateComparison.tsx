@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dashboardService } from '../../services/dashboardService';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './FlatRateComparison.css';
 
 interface ComparisonData {
@@ -15,6 +16,7 @@ interface ComparisonData {
     grossIncome: number;
     flatRateDeduction: number;
     flatRatePercentage: number;
+    basicExemption: number;
     taxableIncome: number;
     incomeTax: number;
     netIncome: number;
@@ -38,7 +40,7 @@ const reasonKeys: Record<string, string> = {
 };
 
 const FlatRateComparison = ({ year }: { year?: number }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [data, setData] = useState<ComparisonData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +63,18 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
   }, [year, t]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-AT', {
+    return new Intl.NumberFormat(getLocaleForLanguage(i18n.language), {
       style: 'currency',
       currency: 'EUR',
     }).format(amount);
   };
+
+  const showsBasicExemption = !!data?.flatRate && Math.abs(data.flatRate.basicExemption || 0) > 0.004;
+  const sameIncomeTax = !!data
+    && Math.abs(data.actualAccounting.incomeTax - data.flatRate.incomeTax) < 0.01;
+  const lowerTaxableIncomeWithoutTaxChange = !!data
+    && Math.abs(data.actualAccounting.taxableIncome - data.flatRate.taxableIncome) > 0.01
+    && sameIncomeTax;
 
   if (isLoading) {
     return (
@@ -197,6 +206,14 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
                 -{formatCurrency(data.flatRate.flatRateDeduction)}
               </span>
             </div>
+            {showsBasicExemption && (
+              <div className="calc-row deduction secondary">
+                <span>{t('dashboard.basicExemption', 'Basic exemption')} (15%):</span>
+                <span className="amount">
+                  -{formatCurrency(data.flatRate.basicExemption)}
+                </span>
+              </div>
+            )}
             <div className="calc-row total">
               <span>{t('dashboard.taxableIncome')}:</span>
               <span className="amount">
@@ -216,13 +233,21 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
               </span>
             </div>
           </div>
+          {showsBasicExemption && (
+            <p className="calculation-note">
+              {t(
+                'dashboard.flatRateBasicExemptionNote',
+                'Taxable income here already reflects both the flat-rate deduction and the 15% basic exemption (Grundfreibetrag).'
+              )}
+            </p>
+          )}
         </div>
       </div>
 
       {/* Savings Summary */}
       <div className={`savings-summary ${data.savings > 0 ? 'positive' : 'neutral'}`}>
         <div className="savings-content">
-          <h4>{t('dashboard.potentialSavings')}</h4>
+          <h4>{t('dashboard.potentialTaxSavings', 'Potential tax savings')}</h4>
           <p className="savings-amount">
             {data.savings > 0
               ? formatCurrency(Math.abs(data.savings))
@@ -233,6 +258,14 @@ const FlatRateComparison = ({ year }: { year?: number }) => {
               {data.recommendation === 'flat_rate'
                 ? t('dashboard.flatRateSavesMore')
                 : t('dashboard.actualAccountingSavesMore')}
+            </p>
+          )}
+          {lowerTaxableIncomeWithoutTaxChange && (
+            <p className="savings-note">
+              {t(
+                'dashboard.sameTaxDespiteLowerTaxableIncome',
+                'The flat-rate method lowers taxable income here, but both methods currently lead to the same income tax.'
+              )}
             </p>
           )}
         </div>

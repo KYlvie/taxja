@@ -7,27 +7,33 @@ import AdvancedManagementPage from '../pages/AdvancedManagementPage';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string) => (typeof fallback === 'string' ? fallback : key),
     i18n: { language: 'en', resolvedLanguage: 'en' },
   }),
 }));
 
 describe('AdvancedManagementPage', () => {
-  it('shows four standard cards and routes payroll-related work through tax tools', () => {
+  it('exposes asset and liability management as separate actions inside one card', () => {
     render(
       <MemoryRouter>
         <AdvancedManagementPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Asset Management')).toBeInTheDocument();
-    expect(screen.getByText('Automatic Rules')).toBeInTheDocument();
-    expect(screen.getByText('AI Classification Rules')).toBeInTheDocument();
-    expect(screen.getByText('Tax Tools')).toBeInTheDocument();
-    expect(screen.queryByText('Payroll Files')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Asset & Liability Management' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Assets, loans, borrowings, and clear module boundaries'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage Assets' })).toHaveAttribute('href', '/properties');
+    expect(screen.getByRole('link', { name: 'Manage Liabilities' })).toHaveAttribute(
+      'href',
+      '/liabilities',
+    );
+    expect(screen.queryByRole('link', { name: 'Overview & Compare' })).not.toBeInTheDocument();
 
-    const taxToolsLink = screen.getByRole('link', { name: 'Open' });
-    expect(taxToolsLink).toHaveAttribute('href', '/tax-tools');
-    expect(screen.getByText('Tax position, AI guidance, payroll files and asset reports')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tax Workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Workspace' })).toHaveAttribute(
+      'href',
+      '/tax-tools',
+    );
   });
 });

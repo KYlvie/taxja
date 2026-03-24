@@ -23,6 +23,7 @@ from sqlalchemy import extract, and_
 
 from app.models.transaction import Transaction, TransactionType, VatType
 from app.models.user import User
+from app.services.posting_line_utils import recoverable_input_vat_for_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -198,9 +199,9 @@ def generate_uva_data(
     # ── Vorsteuer (input VAT from expenses) ──
     vorsteuer = Decimal("0")
     for t in transactions:
-        if t.type != TransactionType.EXPENSE:
+        if t.type not in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
             continue
-        vat_amt = t.vat_amount or Decimal("0")
+        vat_amt = recoverable_input_vat_for_transaction(t)
         vat_type = getattr(t, "vat_type", None)
         if vat_type:
             vat_type = vat_type.upper()

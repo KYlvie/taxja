@@ -4,6 +4,29 @@ import { normalizeLanguage } from '../utils/locale';
 
 const getCurrentLanguage = () => normalizeLanguage(i18n.resolvedLanguage || i18n.language);
 
+export interface ProactiveReminderDto {
+  id: string;
+  kind: string;
+  bucket: 'terminal_action' | 'snoozeable_condition' | 'time_based_repeat';
+  title_key?: string;
+  body_key: string;
+  params?: Record<string, unknown>;
+  severity?: 'high' | 'medium' | 'low';
+  primary_action?: Record<string, unknown> | null;
+  secondary_action?: Record<string, unknown> | null;
+  link?: string | null;
+  source_type?: string;
+  document_id?: number | null;
+  recurring_id?: number | null;
+  property_id?: string | null;
+  tax_year?: number | null;
+  snoozed_until?: string | null;
+  next_due_at?: string | null;
+  legacy_type?: string;
+  action_data?: Record<string, unknown>;
+  action?: Record<string, unknown>;
+}
+
 export const dashboardService = {
   getDashboardData: async (year?: number) => {
     const response = await api.get('/dashboard', { params: { year } });
@@ -59,6 +82,25 @@ export const dashboardService = {
     const response = await api.get('/dashboard/health-check', {
       params: { tax_year: year },
     });
+    return response.data;
+  },
+
+  getProactiveReminders: async (year?: number): Promise<{ items: ProactiveReminderDto[]; tax_year?: number }> => {
+    const response = await api.get('/dashboard/proactive-reminders', {
+      params: { tax_year: year },
+    });
+    return response.data;
+  },
+
+  snoozeProactiveReminder: async (id: string, days?: number) => {
+    const response = await api.post(`/dashboard/proactive-reminders/${encodeURIComponent(id)}/snooze`, {
+      days,
+    });
+    return response.data;
+  },
+
+  acknowledgeProactiveReminder: async (id: string) => {
+    const response = await api.post(`/dashboard/proactive-reminders/${encodeURIComponent(id)}/ack`);
     return response.data;
   },
 };

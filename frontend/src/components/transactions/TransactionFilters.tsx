@@ -1,23 +1,26 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TransactionFilters as Filters, TransactionType } from '../../types/transaction';
+import Select from '../common/Select';
+import DateInput from '../common/DateInput';
+import { getLocaleForLanguage } from '../../utils/locale';
 import './TransactionFilters.css';
 
 interface TransactionFiltersProps {
   filters: Filters;
+  availableYears?: number[];
   onFilterChange: (filters: Filters) => void;
   onClear: () => void;
 }
 
 const TransactionFilters = ({
   filters,
+  availableYears = [],
   onFilterChange,
   onClear,
 }: TransactionFiltersProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [localFilters, setLocalFilters] = useState<Filters>(filters);
-  const currentYear = new Date().getFullYear();
-  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
   // Derive active year from date filters
   const activeYear = (() => {
@@ -60,52 +63,55 @@ const TransactionFilters = ({
 
   return (
     <div className="transaction-filters">
-      <div className="year-quick-filter">
-        {yearOptions.map((year) => (
-          <button
-            key={year}
-            type="button"
-            className={`year-pill ${activeYear === year ? 'active' : ''}`}
-            onClick={() => handleYearClick(year)}
-          >
-            {year}
-          </button>
-        ))}
-      </div>
+      {availableYears.length > 0 ? (
+        <div className="year-quick-filter">
+          {availableYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              className={`year-pill ${activeYear === year ? 'active' : ''}`}
+              onClick={() => handleYearClick(year)}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="filters-grid">
         <div className="filter-group">
           <label>{t('transactions.filters.startDate')}</label>
-          <input
-            type="date"
+          <DateInput
             value={localFilters.start_date || ''}
-            onChange={(e) => handleChange('start_date', e.target.value)}
+            onChange={(val) => handleChange('start_date', val)}
+            locale={getLocaleForLanguage(i18n.language)}
+            todayLabel={String(t('common.today', 'Today'))}
           />
         </div>
 
         <div className="filter-group">
           <label>{t('transactions.filters.endDate')}</label>
-          <input
-            type="date"
+          <DateInput
             value={localFilters.end_date || ''}
-            onChange={(e) => handleChange('end_date', e.target.value)}
+            onChange={(val) => handleChange('end_date', val)}
+            locale={getLocaleForLanguage(i18n.language)}
+            todayLabel={String(t('common.today', 'Today'))}
           />
         </div>
 
         <div className="filter-group">
           <label>{t('transactions.type')}</label>
-          <select
-            value={localFilters.type || ''}
-            onChange={(e) => handleChange('type', e.target.value)}
-          >
-            <option value="">{t('transactions.filters.allTypes')}</option>
-            <option value={TransactionType.INCOME}>
-              {t('transactions.types.income')}
-            </option>
-            <option value={TransactionType.EXPENSE}>
-              {t('transactions.types.expense')}
-            </option>
-          </select>
+          <Select value={localFilters.type || ''} onChange={v => handleChange('type', v)}
+            placeholder={t('transactions.filters.allTypes')} size="sm"
+            options={[
+              { value: TransactionType.INCOME, label: t('transactions.types.income') },
+              { value: TransactionType.EXPENSE, label: t('transactions.types.expense') },
+              { value: TransactionType.ASSET_ACQUISITION, label: t('transactions.types.asset_acquisition') },
+              { value: TransactionType.LIABILITY_DRAWDOWN, label: t('transactions.types.liability_drawdown') },
+              { value: TransactionType.LIABILITY_REPAYMENT, label: t('transactions.types.liability_repayment') },
+              { value: TransactionType.TAX_PAYMENT, label: t('transactions.types.tax_payment') },
+              { value: TransactionType.TRANSFER, label: t('transactions.types.transfer') },
+            ]} />
         </div>
 
         <div className="filter-group">
@@ -120,64 +126,37 @@ const TransactionFilters = ({
 
         <div className="filter-group">
           <label>{t('transactions.deductible')}</label>
-          <select
-            value={
-              localFilters.is_deductible === undefined
-                ? ''
-                : localFilters.is_deductible.toString()
-            }
-            onChange={(e) =>
-              handleChange(
-                'is_deductible',
-                e.target.value === '' ? undefined : e.target.value === 'true'
-              )
-            }
-          >
-            <option value="">{t('transactions.filters.all')}</option>
-            <option value="true">{t('transactions.filters.deductibleOnly')}</option>
-            <option value="false">{t('transactions.filters.nonDeductible')}</option>
-          </select>
+          <Select
+            value={localFilters.is_deductible === undefined ? '' : localFilters.is_deductible.toString()}
+            onChange={v => handleChange('is_deductible', v === '' ? undefined : v === 'true')}
+            placeholder={t('transactions.filters.all')} size="sm"
+            options={[
+              { value: 'true', label: t('transactions.filters.deductibleOnly') },
+              { value: 'false', label: t('transactions.filters.nonDeductible') },
+            ]} />
         </div>
 
         <div className="filter-group">
           <label>{t('transactions.filters.recurring')}</label>
-          <select
-            value={
-              localFilters.is_recurring === undefined
-                ? ''
-                : localFilters.is_recurring.toString()
-            }
-            onChange={(e) =>
-              handleChange(
-                'is_recurring',
-                e.target.value === '' ? undefined : e.target.value === 'true'
-              )
-            }
-          >
-            <option value="">{t('transactions.filters.all')}</option>
-            <option value="true">{t('transactions.filters.recurringOnly')}</option>
-            <option value="false">{t('transactions.filters.oneTimeOnly')}</option>
-          </select>
+          <Select
+            value={localFilters.is_recurring === undefined ? '' : localFilters.is_recurring.toString()}
+            onChange={v => handleChange('is_recurring', v === '' ? undefined : v === 'true')}
+            placeholder={t('transactions.filters.all')} size="sm"
+            options={[
+              { value: 'true', label: t('transactions.filters.recurringOnly') },
+              { value: 'false', label: t('transactions.filters.oneTimeOnly') },
+            ]} />
         </div>
 
         <div className="filter-group">
           <label>{t('transactions.needsReview')}</label>
-          <select
-            value={
-              localFilters.needs_review === undefined
-                ? ''
-                : localFilters.needs_review.toString()
-            }
-            onChange={(e) =>
-              handleChange(
-                'needs_review',
-                e.target.value === '' ? undefined : e.target.value === 'true'
-              )
-            }
-          >
-            <option value="">{t('transactions.filters.all')}</option>
-            <option value="true">{t('transactions.filters.needsReviewOnly')}</option>
-          </select>
+          <Select
+            value={localFilters.needs_review === undefined ? '' : localFilters.needs_review.toString()}
+            onChange={v => handleChange('needs_review', v === '' ? undefined : v === 'true')}
+            placeholder={t('transactions.filters.all')} size="sm"
+            options={[
+              { value: 'true', label: t('transactions.filters.needsReviewOnly') },
+            ]} />
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { useConfirmStore } from '../../hooks/useConfirm';
 
 const GlobalConfirmDialog = () => {
-  const { isOpen, title, message, confirmText, cancelText, variant, showCancel, close } =
+  const { isOpen, title, message, messageNode, confirmText, cancelText, variant, showCancel, close } =
     useConfirmStore();
 
   return (
@@ -10,6 +10,7 @@ const GlobalConfirmDialog = () => {
       isOpen={isOpen}
       title={title}
       message={message}
+      messageNode={messageNode}
       confirmText={confirmText}
       cancelText={cancelText}
       variant={variant}

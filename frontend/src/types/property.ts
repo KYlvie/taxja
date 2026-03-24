@@ -37,6 +37,16 @@ export enum PropertyStatus {
   ACTIVE = 'active',
   SOLD = 'sold',
   ARCHIVED = 'archived',
+  SCRAPPED = 'scrapped',
+  WITHDRAWN = 'withdrawn',
+}
+
+export type DisposalReason = 'sold' | 'scrapped' | 'fully_depreciated' | 'private_withdrawal';
+
+export interface DisposalRequest {
+  disposal_reason: DisposalReason;
+  disposal_date: string;
+  sale_price?: number;
 }
 
 export type ComparisonBasis = 'net' | 'gross';
@@ -97,8 +107,10 @@ export interface Property {
   policy_confidence?: number;
   supplier?: string;
   accumulated_depreciation?: number;
+  disposal_reason?: string;
   status: PropertyStatus;
   sale_date?: string; // ISO date string
+  sale_price?: number;
   kaufvertrag_document_id?: number; // Purchase contract document
   mietvertrag_document_id?: number; // Rental contract document
   annual_depreciation?: number;
