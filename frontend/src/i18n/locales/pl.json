@@ -4009,7 +4009,7 @@
     }
   },
   "subscription": {
-    "featureRequiresPlan": "Ta funkcja wymaga planu {{plan}}",
+    "featureRequiresPlan": "Ta funkcja wymaga planu {{plan}} lub wyższego. Proszę ulepszyć subskrypcję.",
     "upgradeNow": "Ulepsz teraz",
     "upgrade": "Ulepsz",
     "loading": "Ładowanie szczegółów subskrypcji...",

@@ -4009,7 +4009,7 @@
     }
   },
   "subscription": {
-    "featureRequiresPlan": "Bu ozellik {{plan}} planini gerektirir",
+    "featureRequiresPlan": "Bu özellik {{plan}} planı veya üstünü gerektirir. Lütfen aboneliğinizi yükseltin.",
     "upgradeNow": "Simdi Yukselt",
     "upgrade": "Yukselt",
     "loading": "Abonelik ayrintilari yukleniyor...",

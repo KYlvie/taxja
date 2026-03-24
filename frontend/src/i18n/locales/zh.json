@@ -2811,7 +2811,7 @@
     "confirm_cancel": "是的，取消",
     "change_plan_title": "更改方案",
     "continue": "继续",
-    "featureRequiresPlan": "此功能需要 {{plan}} 方案",
+    "featureRequiresPlan": "此功能需要 {{plan}} 或更高方案，请升级订阅。",
     "upgradeNow": "立即升级",
     "upgrade": "升级",
     "manage": "管理订阅",

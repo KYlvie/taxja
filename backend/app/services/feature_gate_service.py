@@ -119,7 +119,7 @@ class FeatureGateService:
         # Pro tier
         Feature.UNLIMITED_OCR: PlanType.PRO,
         Feature.E1_GENERATION: PlanType.PRO,
-        Feature.ADVANCED_REPORTS: PlanType.PRO,
+        Feature.ADVANCED_REPORTS: PlanType.PLUS,
         Feature.PRIORITY_SUPPORT: PlanType.PRO,
         Feature.API_ACCESS: PlanType.PRO,
     }

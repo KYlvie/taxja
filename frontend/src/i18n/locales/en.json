@@ -3182,7 +3182,7 @@
     "current_plan": "Current Plan"
   },
   "subscription": {
-    "featureRequiresPlan": "This feature requires {{plan}} plan",
+    "featureRequiresPlan": "This feature requires the {{plan}} plan or higher. Please upgrade your subscription.",
     "upgradeNow": "Upgrade Now",
     "upgrade": "Upgrade",
     "loading": "Loading subscription details...",

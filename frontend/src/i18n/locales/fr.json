@@ -4009,7 +4009,7 @@
     }
   },
   "subscription": {
-    "featureRequiresPlan": "Cette fonctionnalité nécessite le forfait {{plan}}",
+    "featureRequiresPlan": "Cette fonctionnalité nécessite le forfait {{plan}} ou supérieur. Veuillez mettre à niveau votre abonnement.",
     "upgradeNow": "Mettre à niveau maintenant",
     "upgrade": "Mettre à niveau",
     "loading": "Chargement des détails de l'abonnement...",

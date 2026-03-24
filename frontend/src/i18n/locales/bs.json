@@ -4023,7 +4023,7 @@
     }
   },
   "subscription": {
-    "featureRequiresPlan": "Ova funkcija zahtijeva {{plan}} plan",
+    "featureRequiresPlan": "Ova funkcija zahtijeva {{plan}} plan ili viši. Molimo nadogradite pretplatu.",
     "upgradeNow": "Nadogradite sada",
     "upgrade": "Nadogradnja",
     "loading": "Ucitavanje detalja pretplate...",

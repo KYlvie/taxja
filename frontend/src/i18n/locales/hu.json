@@ -4023,7 +4023,7 @@
     }
   },
   "subscription": {
-    "featureRequiresPlan": "Ehhez a funkcióhoz {{plan}} csomag szükséges",
+    "featureRequiresPlan": "Ehhez a funkcióhoz {{plan}} vagy magasabb csomag szükséges. Kérjük, frissítse előfizetését.",
     "upgradeNow": "Frissítés most",
     "upgrade": "Frissítés",
     "loading": "Előfizetési adatok betöltése...",

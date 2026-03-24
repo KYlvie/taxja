@@ -3172,7 +3172,7 @@
     "current_plan": "Aktueller Plan"
   },
   "subscription": {
-    "featureRequiresPlan": "Diese Funktion erfordert den {{plan}}-Plan",
+    "featureRequiresPlan": "Diese Funktion erfordert den {{plan}}-Plan oder höher. Bitte upgraden Sie Ihr Abonnement.",
     "upgradeNow": "Jetzt upgraden",
     "upgrade": "Upgrade",
     "loading": "Abonnement-Details werden geladen...",
