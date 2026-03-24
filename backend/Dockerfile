@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements-minimal.txt requirements.txt
+COPY requirements.txt requirements.txt
 
 # Install Python dependencies with increased timeout
 RUN pip install --no-cache-dir --timeout=300 -r requirements.txt
