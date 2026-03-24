@@ -22,6 +22,7 @@ class ProcessingAction(str, Enum):
     RENTAL_CONTRACT = "rental_contract"
     LOAN_CONTRACT = "loan_contract"
     INSURANCE_RECURRING = "insurance_recurring"
+    BANK_STATEMENT_IMPORT = "bank_statement_import"
     TAX_FORM_IMPORT = "tax_form_import"
     TRANSACTION_SUGGESTIONS = "transaction_suggestions"
     ASSET_SUGGESTION = "asset_suggestion"
@@ -66,6 +67,8 @@ class ProcessingDecisionService:
             primary_actions = [ProcessingAction.LOAN_CONTRACT]
         elif db_type == DBDocumentType.VERSICHERUNGSBESTAETIGUNG:
             primary_actions = [ProcessingAction.INSURANCE_RECURRING]
+        elif db_type == DBDocumentType.BANK_STATEMENT:
+            primary_actions = [ProcessingAction.BANK_STATEMENT_IMPORT]
         elif db_type in tax_form_types:
             primary_actions = [ProcessingAction.TAX_FORM_IMPORT]
         else:

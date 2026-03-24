@@ -75,7 +75,7 @@ def _make_document(
 
 
 @patch("sqlalchemy.orm.attributes.flag_modified")
-def test_bank_statement_tax_form_suggestion_persists_direction_metadata_without_polluting_payload(
+def test_bank_statement_import_suggestion_persists_direction_metadata_without_polluting_payload(
     _mock_flag_modified,
 ):
     orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
@@ -106,11 +106,7 @@ def test_bank_statement_tax_form_suggestion_persists_direction_metadata_without_
             "is_reversal": False,
         },
     ):
-        suggestion = orchestrator._build_tax_form_suggestion(
-            document,
-            DBDocumentType.BANK_STATEMENT,
-            result,
-        )
+        suggestion = orchestrator._build_bank_statement_import_suggestion(document, result)
 
     assert suggestion is not None
     assert suggestion["type"] == "import_bank_statement"
@@ -118,6 +114,55 @@ def test_bank_statement_tax_form_suggestion_persists_direction_metadata_without_
     assert "document_transaction_direction" not in suggestion["data"]
     assert document.ocr_result["document_transaction_direction"] == "unknown"
     assert document.ocr_result["transaction_direction_resolution"]["gate_enabled"] is False
+
+
+def test_finalize_keeps_bank_statement_import_out_of_transaction_tax_analysis():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    document = _make_document(
+        file_name="kontoauszug.pdf",
+        doc_type=DBDocumentType.BANK_STATEMENT,
+        ocr_result={
+            "transaction_suggestion": {"type": "create_transaction"},
+            "tax_analysis": {"items": [{"description": "stale"}]},
+        },
+    )
+    result = PipelineResult(
+        document_id=1,
+        stage_reached=PipelineStage.SUGGEST,
+        classification=ClassificationResult(
+            document_type="bank_statement",
+            confidence=0.82,
+            method="regex",
+        ),
+        extracted_data={"transactions": [{"date": "2025-01-01", "amount": "-12.50"}]},
+        raw_text="Kontoauszug Soll Haben",
+        confidence_level=ConfidenceLevel.MEDIUM,
+        suggestions=[
+            {
+                "type": "import_bank_statement",
+                "status": "pending",
+                "data": {
+                    "transactions": [
+                        {"date": "2025-01-01", "amount": "-12.50", "counterparty": "Utility"}
+                    ]
+                },
+            }
+        ],
+        current_state="completed",
+        needs_review=False,
+    )
+
+    orchestrator._finalize(
+        result=result,
+        document=document,
+        start_time=datetime.utcnow(),
+    )
+
+    assert document.ocr_result["import_suggestion"]["type"] == "import_bank_statement"
+    assert "transaction_suggestion" not in document.ocr_result
+    assert "tax_analysis" not in document.ocr_result
 
 
 # ---------------------------------------------------------------------------

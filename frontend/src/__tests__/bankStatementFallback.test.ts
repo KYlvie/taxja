@@ -127,4 +127,14 @@ describe('bankStatementFallback', () => {
     expect(lines[0].direction).toBe('debit');
     expect(lines[0].amount).toBe(-2.03);
   });
+
+  it('marks fallback rows as imported when their fingerprint was already confirmed', () => {
+    const rows = __test__.extractFromRawText(MONTH_GROUPED_STATEMENT_TEXT);
+    const importedFingerprint = rows[0].fingerprint;
+
+    const lines = buildFallbackBankStatementLines([], MONTH_GROUPED_STATEMENT_TEXT, importedFingerprint ? [importedFingerprint] : []);
+
+    expect(lines[0].is_imported).toBe(true);
+    expect(lines[1].is_imported).toBeFalsy();
+  });
 });

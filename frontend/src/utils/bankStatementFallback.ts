@@ -7,6 +7,8 @@ export interface FallbackBankStatementLine {
   counterparty?: string | null;
   purpose?: string | null;
   raw_reference?: string | null;
+  fingerprint?: string | null;
+  is_imported?: boolean;
   direction: FallbackTransactionDirection;
 }
 
@@ -64,6 +66,18 @@ const normalizeCounterparty = (value: string | null | undefined) => (value || ''
   .replace(/\s+/g, '')
   .trim();
 
+const buildFingerprint = (
+  lineDate: string | null | undefined,
+  amount: string | number | null | undefined,
+  counterparty: string | null | undefined,
+  reference: string | null | undefined,
+) => [
+  lineDate || '',
+  parseAmount(amount)?.toFixed(2) ?? String(amount ?? ''),
+  (counterparty || '').trim().toLowerCase(),
+  (reference || '').trim().toLowerCase(),
+].join('|');
+
 const parseAmount = (value: string | number | null | undefined): number | null => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') {
@@ -101,7 +115,10 @@ const getDirection = (
 
 const isMonthSummaryLine = (value: string) => normalizeToken(value).includes('kontoausgang');
 
-const mapOcrTransactions = (rawTransactions: unknown[]): FallbackBankStatementLine[] => rawTransactions
+const mapOcrTransactions = (
+  rawTransactions: unknown[],
+  importedFingerprints: Set<string>,
+): FallbackBankStatementLine[] => rawTransactions
   .filter((transaction): transaction is Record<string, unknown> => Boolean(transaction) && typeof transaction === 'object')
   .map((transaction, index) => {
     const amount = transaction.amount as string | number | null | undefined;
@@ -122,6 +139,12 @@ const mapOcrTransactions = (rawTransactions: unknown[]): FallbackBankStatementLi
       ?? transaction.merchant
       ?? ''
     ).trim() || null;
+    const fingerprint = buildFingerprint(
+      String(transaction.date ?? '').trim() || null,
+      amount,
+      counterparty,
+      reference,
+    );
 
     return {
       id: `fallback-ocr-${index}`,
@@ -130,11 +153,16 @@ const mapOcrTransactions = (rawTransactions: unknown[]): FallbackBankStatementLi
       counterparty,
       purpose,
       raw_reference: reference,
+      fingerprint,
+      is_imported: importedFingerprints.has(fingerprint),
       direction: getDirection(transaction.transaction_type ?? transaction.direction, amount),
     };
   });
 
-const extractFromRawText = (rawText: string | null | undefined): FallbackBankStatementLine[] => {
+const extractFromRawText = (
+  rawText: string | null | undefined,
+  importedFingerprints: Set<string> = new Set(),
+): FallbackBankStatementLine[] => {
   if (!rawText) return [];
 
   let currentYear: number | null = null;
@@ -220,12 +248,12 @@ const extractFromRawText = (rawText: string | null | undefined): FallbackBankSta
     const counterparty = detailLines[0] || null;
     const rawReference = detailLines.slice(1).join(' ').trim() || null;
     const purpose = rawReference || null;
-    const fingerprint = [
+    const fingerprint = buildFingerprint(
       block.date,
-      amount.toFixed(2),
-      counterparty || '',
-      rawReference || '',
-    ].join('|');
+      amount,
+      counterparty,
+      rawReference,
+    );
 
     if (seen.has(fingerprint)) {
       continue;
@@ -239,6 +267,8 @@ const extractFromRawText = (rawText: string | null | undefined): FallbackBankSta
       counterparty,
       purpose,
       raw_reference: rawReference,
+      fingerprint,
+      is_imported: importedFingerprints.has(fingerprint),
       direction: getDirection(null, amount),
     });
   }
@@ -259,9 +289,11 @@ const scoreLines = (lines: FallbackBankStatementLine[]) => lines.reduce((score, 
 export const buildFallbackBankStatementLines = (
   rawTransactions: unknown[],
   rawText?: string | null,
+  importedFallbackFingerprints: string[] = [],
 ): FallbackBankStatementLine[] => {
-  const ocrLines = mapOcrTransactions(rawTransactions);
-  const rawTextLines = extractFromRawText(rawText);
+  const importedFingerprints = new Set(importedFallbackFingerprints);
+  const ocrLines = mapOcrTransactions(rawTransactions, importedFingerprints);
+  const rawTextLines = extractFromRawText(rawText, importedFingerprints);
 
   if (!rawTextLines.length) {
     return ocrLines;

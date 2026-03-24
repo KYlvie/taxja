@@ -251,7 +251,6 @@ class DocumentPipelineOrchestrator:
         DBDocumentType.JAHRESABSCHLUSS,
         DBDocumentType.SVS_NOTICE,
         DBDocumentType.PROPERTY_TAX,
-        DBDocumentType.BANK_STATEMENT,
     }
 
     # Map DB type to import_suggestion type string
@@ -268,8 +267,8 @@ class DocumentPipelineOrchestrator:
         DBDocumentType.JAHRESABSCHLUSS: "import_jahresabschluss",
         DBDocumentType.SVS_NOTICE: "import_svs",
         DBDocumentType.PROPERTY_TAX: "import_grundsteuer",
-        DBDocumentType.BANK_STATEMENT: "import_bank_statement",
     }
+    BANK_STATEMENT_SUGGESTION_TYPE = "import_bank_statement"
 
     def __init__(self, db: Session):
         self.db = db
@@ -1589,6 +1588,17 @@ Antworte NUR mit JSON:
                 )
             return
 
+        if action == ProcessingAction.BANK_STATEMENT_IMPORT:
+            suggestion = self._build_bank_statement_import_suggestion(document, result)
+            if suggestion:
+                result.suggestions.append(suggestion)
+                self._log_audit(
+                    result,
+                    "suggest",
+                    "Built bank statement import suggestion",
+                )
+            return
+
         if action == ProcessingAction.TAX_FORM_IMPORT:
             suggestion = self._build_tax_form_suggestion(document, db_type, result)
             if suggestion:
@@ -1784,6 +1794,72 @@ Antworte NUR mit JSON:
             logger.warning(f"Asset suggestion failed: {e}")
             return None
 
+    def _extract_structured_import_data(self, ocr_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Collect persisted structured fields for import suggestions."""
+        extracted_data = ocr_result.get("extracted_data", {})
+
+        # Fallback: some OCR extractors store fields at top level of ocr_result
+        # instead of nesting under "extracted_data". Collect non-internal fields.
+        if not extracted_data:
+            _internal_keys = {
+                "_pipeline",
+                "_validation",
+                "confidence",
+                "matched_existing",
+                "import_suggestion",
+                "asset_outcome",
+                "transaction_suggestion",
+                "tax_analysis",
+                "_additional_receipts",
+                "document_transaction_direction",
+                "document_transaction_direction_source",
+                "document_transaction_direction_confidence",
+                "transaction_direction_resolution",
+                "commercial_document_semantics",
+                "is_reversal",
+            }
+            extracted_data = {
+                k: v for k, v in ocr_result.items() if k not in _internal_keys and not k.startswith("_")
+            }
+
+        return extracted_data or {}
+
+    def _build_bank_statement_import_suggestion(
+        self, document: Document, result: PipelineResult
+    ) -> Optional[Dict[str, Any]]:
+        """Build import suggestion for bank statements without tax-form routing semantics."""
+        try:
+            ocr_result = document.ocr_result or {}
+            extracted_data = self._extract_structured_import_data(ocr_result)
+            if not extracted_data:
+                return None
+
+            suggestion = {
+                "type": self.BANK_STATEMENT_SUGGESTION_TYPE,
+                "status": "pending",
+                "data": extracted_data,
+                "confidence": ocr_result.get("confidence_score", 0.0),
+            }
+
+            import json as _json
+            updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+            updated_ocr.update(
+                self._build_bank_statement_direction_metadata(
+                    document=document,
+                    ocr_data=updated_ocr,
+                    raw_text=result.raw_text,
+                )
+            )
+            updated_ocr["import_suggestion"] = suggestion
+            document.ocr_result = updated_ocr
+            from sqlalchemy.orm.attributes import flag_modified
+
+            flag_modified(document, "ocr_result")
+            return suggestion
+        except Exception as e:
+            logger.warning(f"Bank statement import suggestion failed: {e}")
+            return None
+
     def _build_tax_form_suggestion(
         self, document: Document, db_type: DBDocumentType, result: PipelineResult
     ) -> Optional[Dict[str, Any]]:
@@ -1794,25 +1870,7 @@ Antworte NUR mit JSON:
         """
         try:
             ocr_result = document.ocr_result or {}
-            extracted_data = ocr_result.get("extracted_data", {})
-
-            # Fallback: some OCR extractors store fields at top level of ocr_result
-            # instead of nesting under "extracted_data". Collect non-internal fields.
-            if not extracted_data:
-                _internal_keys = {"_pipeline", "_validation", "confidence", "matched_existing",
-                                  "import_suggestion", "asset_outcome", "transaction_suggestion",
-                                  "tax_analysis", "_additional_receipts",
-                                  "document_transaction_direction",
-                                  "document_transaction_direction_source",
-                                  "document_transaction_direction_confidence",
-                                  "transaction_direction_resolution",
-                                  "commercial_document_semantics",
-                                  "is_reversal"}
-                extracted_data = {
-                    k: v for k, v in ocr_result.items()
-                    if k not in _internal_keys and not k.startswith("_")
-                }
-
+            extracted_data = self._extract_structured_import_data(ocr_result)
             if not extracted_data:
                 return None
 
@@ -1830,14 +1888,6 @@ Antworte NUR mit JSON:
             # Store in document.ocr_result.import_suggestion
             import json as _json
             updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
-            if db_type == DBDocumentType.BANK_STATEMENT:
-                updated_ocr.update(
-                    self._build_bank_statement_direction_metadata(
-                        document=document,
-                        ocr_data=updated_ocr,
-                        raw_text=result.raw_text,
-                    )
-                )
             updated_ocr["import_suggestion"] = suggestion
             document.ocr_result = updated_ocr
             from sqlalchemy.orm.attributes import flag_modified
@@ -2437,6 +2487,7 @@ Antworte NUR mit JSON:
                     "create_recurring_expense",
                     "create_insurance_recurring",
                     "link_to_existing",
+                    self.BANK_STATEMENT_SUGGESTION_TYPE,
                     # All import_* types (tax forms, payslips, etc.)
                     *(v for v in self.TAX_FORM_SUGGESTION_TYPE_MAP.values()),
                 }
@@ -2521,6 +2572,9 @@ Antworte NUR mit JSON:
                             for s in tx_suggestions if not s.get("is_deductible")
                         ),
                     }
+                else:
+                    ocr_result.pop("transaction_suggestion", None)
+                    ocr_result.pop("tax_analysis", None)
 
             document.ocr_result = self._make_json_safe(ocr_result)
             try:

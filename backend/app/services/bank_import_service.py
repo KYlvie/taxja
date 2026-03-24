@@ -79,7 +79,7 @@ class BankImportService:
     AUTO_CREATE_THRESHOLD = Decimal("0.90")
     AUTO_MATCH_SIMILARITY = 0.82
     SUGGEST_MATCH_SIMILARITY = 0.55
-    DATE_TOLERANCE_DAYS = 3
+    DATE_TOLERANCE_DAYS = 7
 
     def __init__(
         self,

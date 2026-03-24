@@ -8,7 +8,10 @@ import type {
   BankStatementLineStatus,
 } from '../../types/bankImport';
 import { bankImportService } from '../../services/bankImportService';
-import { documentService } from '../../services/documentService';
+import {
+  documentService,
+  type ConfirmBankTransactionPayload,
+} from '../../services/documentService';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import { getLocaleForLanguage } from '../../utils/locale';
 import { useRefreshStore } from '../../stores/refreshStore';
@@ -32,6 +35,7 @@ interface BankStatementWorkbenchProps {
 }
 
 type BankStatementWorkbenchMode = 'remote' | 'fallback';
+type BankWorkbenchFilter = 'all' | BankStatementLineStatus;
 type AmountTone = 'credit' | 'debit' | 'neutral';
 
 interface FallbackBankStatementSummary {
@@ -46,6 +50,7 @@ interface FallbackBankStatementSummary {
   total_count: number;
   credit_count: number;
   debit_count: number;
+  imported_count: number;
 }
 
 const parseLooseDate = (value: string): Date | null => {
@@ -103,6 +108,18 @@ const formatDate = (value: string | null | undefined, language: string) => {
   if (!parsed) return value;
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString(getLocaleForLanguage(language));
+};
+
+const getDateDistanceDays = (
+  left: string | null | undefined,
+  right: string | null | undefined,
+): number | null => {
+  if (!left || !right) return null;
+  const leftDate = parseLooseDate(left);
+  const rightDate = parseLooseDate(right);
+  if (!leftDate || !rightDate) return null;
+  const diffMs = Math.abs(leftDate.getTime() - rightDate.getTime());
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
 };
 
 const parseOcrResult = (ocrResult: unknown): Record<string, unknown> => {
@@ -173,13 +190,22 @@ const buildFallbackState = (document: Document): {
   const suggestionData = suggestion?.data && typeof suggestion.data === 'object'
     ? suggestion.data as Record<string, unknown>
     : {};
+  const importedFallbackFingerprints = Array.isArray(suggestion?.fallback_imported_fingerprints)
+    ? suggestion.fallback_imported_fingerprints
+      .map((value) => toNullableString(value))
+      .filter((value): value is string => Boolean(value))
+    : [];
   const sourceData = Object.keys(suggestionData).length > 0 ? suggestionData : ocrData;
   const rawTransactions = Array.isArray(sourceData.transactions)
     ? sourceData.transactions
     : Array.isArray(ocrData.transactions)
       ? ocrData.transactions
       : [];
-  const lines = buildFallbackBankStatementLines(rawTransactions, document.raw_text);
+  const lines = buildFallbackBankStatementLines(
+    rawTransactions,
+    document.raw_text,
+    importedFallbackFingerprints,
+  );
 
   return {
     summary: {
@@ -202,6 +228,7 @@ const buildFallbackState = (document: Document): {
       total_count: lines.length,
       credit_count: lines.filter((line) => line.direction === 'credit').length,
       debit_count: lines.filter((line) => line.direction === 'debit').length,
+      imported_count: lines.filter((line) => line.is_imported).length,
     },
     lines,
   };
@@ -233,6 +260,26 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actingLineId, setActingLineId] = useState<number | null>(null);
+  const [fallbackActingId, setFallbackActingId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<BankWorkbenchFilter>('all');
+  const [bulkActing, setBulkActing] = useState(false);
+
+  const refreshDocumentSnapshot = useCallback(async () => {
+    try {
+      const updatedDocument = await documentService.getDocument(document.id);
+      onDocumentUpdated?.(updatedDocument);
+      return updatedDocument;
+    } catch (documentError) {
+      console.warn('Failed to refresh bank statement document after workbench action', documentError);
+      return null;
+    }
+  }, [document.id, onDocumentUpdated]);
+
+  const syncFallbackStateFromDocument = useCallback((sourceDocument: Document) => {
+    const fallbackState = buildFallbackState(sourceDocument);
+    setFallbackSummary(fallbackState.summary);
+    setFallbackLines(fallbackState.lines);
+  }, []);
 
   const refreshWorkbench = useCallback(async (importId: number, refreshDocument = false) => {
     const [nextImport, nextLines] = await Promise.all([
@@ -243,14 +290,9 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     setLines(nextLines);
 
     if (refreshDocument) {
-      try {
-        const updatedDocument = await documentService.getDocument(document.id);
-        onDocumentUpdated?.(updatedDocument);
-      } catch (documentError) {
-        console.warn('Failed to refresh bank statement document after workbench action', documentError);
-      }
+      await refreshDocumentSnapshot();
     }
-  }, [document.id, onDocumentUpdated]);
+  }, [refreshDocumentSnapshot]);
 
   useEffect(() => {
     let disposed = false;
@@ -292,10 +334,8 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
             loadError?.response?.status === 404
             && loadError?.response?.data?.detail === 'Not Found'
           ) {
-            const fallbackState = buildFallbackState(document);
             setMode('fallback');
-            setFallbackSummary(fallbackState.summary);
-            setFallbackLines(fallbackState.lines);
+            syncFallbackStateFromDocument(document);
             return;
           }
 
@@ -323,19 +363,37 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       disposed = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [document, t]);
+  }, [document, syncFallbackStateFromDocument, t]);
 
   const pendingLines = useMemo(
     () => lines.filter((line) => lineMatchesStatus(line.review_status, 'pending_review')),
     [lines]
   );
-  const autoProcessedLines = useMemo(
-    () => lines.filter((line) => lineMatchesStatus(line.review_status, ['auto_created', 'matched_existing'])),
+  const matchedLines = useMemo(
+    () => lines.filter((line) => lineMatchesStatus(line.review_status, 'matched_existing')),
+    [lines]
+  );
+  const createdLines = useMemo(
+    () => lines.filter((line) => lineMatchesStatus(line.review_status, 'auto_created')),
     [lines]
   );
   const ignoredLines = useMemo(
     () => lines.filter((line) => lineMatchesStatus(line.review_status, 'ignored_duplicate')),
     [lines]
+  );
+  const filteredRemoteLines = useMemo(
+    () => activeFilter === 'all'
+      ? lines
+      : lines.filter((line) => lineMatchesStatus(line.review_status, activeFilter)),
+    [activeFilter, lines]
+  );
+  const actionablePendingLines = useMemo(
+    () => pendingLines.filter((line) => (
+      line.suggested_action === 'create_new'
+      || (line.suggested_action === 'match_existing' && Boolean(line.linked_transaction_id))
+      || line.suggested_action === 'ignore'
+    )),
+    [pendingLines]
   );
 
   const handleDownload = useCallback(async () => {
@@ -380,6 +438,122 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     }
   }, [refreshWorkbench, statementImport, t]);
 
+  const runSuggestedAction = useCallback(async (line: BankStatementLine) => {
+    if (line.suggested_action === 'match_existing' && line.linked_transaction_id) {
+      await runLineAction(line.id, 'match');
+      return;
+    }
+    if (line.suggested_action === 'ignore') {
+      await runLineAction(line.id, 'ignore');
+      return;
+    }
+    await runLineAction(line.id, 'create');
+  }, [runLineAction]);
+
+  const handleBulkConfirm = useCallback(async () => {
+    if (!statementImport || actionablePendingLines.length === 0) {
+      return;
+    }
+
+    setBulkActing(true);
+    setError(null);
+    try {
+      for (const line of actionablePendingLines) {
+        if (line.suggested_action === 'match_existing' && line.linked_transaction_id) {
+          await bankImportService.matchExistingLine(line.id, line.linked_transaction_id);
+        } else if (line.suggested_action === 'ignore') {
+          await bankImportService.ignoreLine(line.id);
+        } else {
+          await bankImportService.confirmCreateLine(line.id);
+        }
+      }
+
+      await refreshWorkbench(statementImport.id, true);
+      useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+    } catch (bulkError: any) {
+      console.error('Failed to bulk confirm bank statement lines', bulkError);
+      setError(
+        bulkError?.response?.data?.detail
+        || bulkError?.message
+        || t('documents.bankWorkbench.actionFailed', 'The bank statement action could not be completed.')
+      );
+    } finally {
+      setBulkActing(false);
+    }
+  }, [actionablePendingLines, refreshWorkbench, statementImport, t]);
+
+  const confirmFallbackLines = useCallback(async (targetLines: FallbackBankStatementLine[]) => {
+    if (targetLines.length === 0) {
+      return;
+    }
+
+    setFallbackActingId(targetLines.length === 1 ? targetLines[0].id : '__all__');
+    setError(null);
+    try {
+      const selectedLineIds = new Set(targetLines.map((line) => line.id));
+      const allFallbackPayload: ConfirmBankTransactionPayload[] = fallbackLines.map((line) => ({
+        date: line.line_date ?? null,
+        amount: line.amount ?? null,
+        counterparty: line.counterparty ?? null,
+        purpose: line.purpose ?? null,
+        raw_reference: line.raw_reference ?? null,
+        fingerprint: line.fingerprint ?? null,
+      }));
+      const selectedIndices = fallbackLines.reduce<number[]>((indices, line, index) => {
+        if (selectedLineIds.has(line.id)) {
+          indices.push(index);
+        }
+        return indices;
+      }, []);
+      const result = await documentService.confirmBankTransactions(
+        document.id,
+        selectedIndices,
+        allFallbackPayload,
+      );
+      const updatedDocument = await refreshDocumentSnapshot();
+      if (updatedDocument) {
+        syncFallbackStateFromDocument(updatedDocument);
+      }
+      useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+      if (result.imported > 0) {
+        aiToast(
+          result.imported === 1
+            ? t('documents.bankWorkbench.fallback.createdOne', 'Created 1 transaction.')
+            : t('documents.bankWorkbench.fallback.createdMany', 'Created {{count}} transactions.', { count: result.imported }),
+          'success',
+        );
+      } else if (result.skipped_duplicates > 0) {
+        aiToast(
+          targetLines.length === 1
+            ? t('documents.bankWorkbench.fallback.alreadyImportedOne', 'This statement line was already imported.')
+            : t('documents.bankWorkbench.fallback.alreadyImportedMany', 'These statement lines were already imported.'),
+          'info',
+        );
+      } else {
+        aiToast(
+          t('documents.bankWorkbench.fallback.noTransactionsCreated', 'No new transactions were created.'),
+          'warning',
+        );
+      }
+    } catch (fallbackError: any) {
+      console.error('Failed to confirm fallback bank statement lines', fallbackError);
+      setError(
+        fallbackError?.response?.data?.detail
+        || fallbackError?.message
+        || t('documents.bankWorkbench.actionFailed', 'The bank statement action could not be completed.')
+      );
+    } finally {
+      setFallbackActingId(null);
+    }
+  }, [document.id, fallbackLines, refreshDocumentSnapshot, syncFallbackStateFromDocument, t]);
+
+  const handleFallbackConfirmAll = useCallback(async () => {
+    const pendingFallbackLines = fallbackLines.filter((line) => !line.is_imported);
+    await confirmFallbackLines(pendingFallbackLines);
+  }, [confirmFallbackLines, fallbackLines]);
+
   const renderLineStatus = useCallback((status: BankStatementLine['review_status']) => {
     switch (status) {
       case 'auto_created':
@@ -403,6 +577,16 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       default:
         return t('documents.bankWorkbench.direction.unknown', 'Detected');
     }
+  }, [t]);
+
+  const getSuggestedActionLabel = useCallback((line: BankStatementLine) => {
+    if (line.suggested_action === 'match_existing') {
+      return t('documents.bankWorkbench.actions.match', 'Match existing');
+    }
+    if (line.suggested_action === 'ignore') {
+      return t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate');
+    }
+    return t('documents.bankWorkbench.actions.create', 'Create transaction');
   }, [t]);
 
   const fallbackSummaryRows = useMemo(() => {
@@ -450,201 +634,297 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     );
   };
 
-  const renderRemoteTable = (
-    title: string,
-    description: string,
-    groupLines: BankStatementLine[],
-    variant: 'pending' | 'resolved' | 'ignored'
-  ) => (
-    <section className={`bank-workbench-group bank-workbench-group--${variant}`}>
-      <div className="bank-workbench-group__header">
-        <div>
-          <h4>{title}</h4>
-          <p>{description}</p>
-        </div>
-        <span className="bank-workbench-group__count">{groupLines.length}</span>
-      </div>
-      {groupLines.length === 0 ? (
-        <div className="bank-workbench-empty">
-          {variant === 'pending'
-            ? t('documents.bankWorkbench.emptyPending', 'No bank statement lines need confirmation right now.')
-            : variant === 'resolved'
-              ? t('documents.bankWorkbench.emptyResolved', 'No automatically processed statement lines yet.')
-              : t('documents.bankWorkbench.emptyIgnored', 'No ignored duplicate lines yet.')}
-        </div>
-      ) : (
-        <>
-          <div className="bank-workbench-table-shell">
-            <table className="bank-workbench-table">
-              <thead>
-                <tr>
-                  <th>{t('transactions.date', 'Date')}</th>
-                  <th>{t('documents.fields.counterparty', 'Counterparty')}</th>
-                  <th>{t('documents.fields.purpose', 'Purpose')}</th>
-                  <th>{t('transactions.amount', 'Amount')}</th>
-                  <th>{t('common.status', 'Status')}</th>
-                  <th>{t('common.actions', 'Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupLines.map((line) => {
-                  const disabled = actingLineId === line.id;
-                  const confidenceLabel = formatConfidence(line.confidence_score);
-                  const linkedTransaction = line.linked_transaction || line.created_transaction;
-                  const linkedDescription = linkedTransaction?.description || null;
-                  const linkedReference = linkedTransaction?.id
-                    ? `${t('documents.bankWorkbench.linkedTransaction', 'Transaction')} #${linkedTransaction.id}`
-                    : null;
+  const renderRemoteTable = () => {
+    const filterOptions: Array<{
+      key: BankWorkbenchFilter;
+      label: string;
+      count: number;
+    }> = [
+      { key: 'all', label: t('documents.bankWorkbench.totalCount', 'Total lines'), count: lines.length },
+      { key: 'pending_review', label: t('documents.bankWorkbench.pendingReview', 'Pending review'), count: pendingLines.length },
+      { key: 'matched_existing', label: t('documents.bankWorkbench.status.matchedExisting', 'Matched existing'), count: matchedLines.length },
+      { key: 'auto_created', label: t('documents.bankWorkbench.status.autoCreated', 'Auto-created'), count: createdLines.length },
+      { key: 'ignored_duplicate', label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored duplicate'), count: ignoredLines.length },
+    ];
 
-                  return (
-                    <tr key={line.id}>
-                      <td>{formatDate(line.line_date, i18n.language)}</td>
-                      <td>
-                        <div className="bank-workbench-cell">
-                          <div className="bank-workbench-cell__primary">
-                            {line.counterparty || t('documents.bankWorkbench.noCounterparty', 'Unknown counterparty')}
-                          </div>
-                          {linkedReference && (
-                            <div className="bank-workbench-cell__secondary">{linkedReference}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td>{renderPurposeCell(line.purpose || line.raw_reference, line.raw_reference)}</td>
-                      <td>
-                        <span className={`bank-workbench-amount bank-workbench-amount--${getAmountTone(line.amount)}`}>
-                          {formatCurrency(line.amount, i18n.language)}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="bank-workbench-cell">
-                          <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
-                            {renderLineStatus(line.review_status)}
-                          </span>
-                          {confidenceLabel && (
-                            <div className="bank-workbench-cell__secondary">
-                              {t('documents.bankWorkbench.confidence', 'Confidence')}: {confidenceLabel}
+    return (
+      <section className="bank-workbench-group bank-workbench-group--pending">
+        <div className="bank-workbench-group__header">
+          <div>
+            <h4>{t('documents.bankWorkbench.title', 'Bank statement workbench')}</h4>
+            <p>
+              {t(
+                'documents.suggestion.bankWorkbenchHint',
+                'Open the bank statement workbench to review low-confidence items, match existing transactions, and confirm new transactions.'
+              )}
+            </p>
+          </div>
+          <div className="bank-workbench-toolbar__actions">
+            <button
+              type="button"
+              className="btn btn-primary bank-workbench-toolbar__button"
+              onClick={() => void handleBulkConfirm()}
+              disabled={bulkActing || actionablePendingLines.length === 0}
+            >
+              {t('common.confirm', 'Confirm')} {actionablePendingLines.length}
+            </button>
+          </div>
+        </div>
+
+        <div className="bank-workbench-toolbar">
+          <div className="bank-workbench-filter-grid">
+            {filterOptions.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`bank-workbench-filter-card ${activeFilter === option.key ? 'bank-workbench-filter-card--active' : ''}`}
+                onClick={() => setActiveFilter(option.key)}
+              >
+                <span>{option.label}</span>
+                <strong>{option.count}</strong>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {filteredRemoteLines.length === 0 ? (
+          <div className="bank-workbench-empty">
+            {t('documents.bankWorkbench.emptyPending', 'No bank statement lines need confirmation right now.')}
+          </div>
+        ) : (
+          <>
+            <div className="bank-workbench-table-shell">
+              <table className="bank-workbench-table bank-workbench-table--reconciliation">
+                <thead>
+                  <tr>
+                    <th>{t('transactions.date', 'Date')}</th>
+                    <th>{t('documents.fields.counterparty', 'Counterparty')}</th>
+                    <th>{t('documents.fields.purpose', 'Purpose')}</th>
+                    <th>{t('transactions.amount', 'Amount')}</th>
+                    <th>{t('documents.bankWorkbench.linkedTransaction', 'Transaction')}</th>
+                    <th>{t('common.status', 'Status')}</th>
+                    <th>{t('common.actions', 'Actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRemoteLines.map((line) => {
+                    const disabled = actingLineId === line.id || bulkActing;
+                    const confidenceLabel = formatConfidence(line.confidence_score);
+                    const linkedTransaction = line.linked_transaction || line.created_transaction;
+                    const linkedReference = linkedTransaction?.id
+                      ? `${t('documents.bankWorkbench.linkedTransaction', 'Transaction')} #${linkedTransaction.id}`
+                      : null;
+                    const dateDelta = getDateDistanceDays(line.line_date, linkedTransaction?.transaction_date);
+                    const isPending = line.review_status === 'pending_review';
+
+                    return (
+                      <tr key={line.id}>
+                        <td>
+                          <div className="bank-workbench-cell">
+                            <div className="bank-workbench-cell__primary">
+                              {formatDate(line.line_date, i18n.language)}
                             </div>
-                          )}
-                          {linkedDescription && (
-                            <div className="bank-workbench-cell__secondary">{linkedDescription}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="bank-workbench-table__actions">
-                        {variant === 'pending' ? (
-                          <div className="bank-workbench-line__actions">
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              onClick={() => void runLineAction(line.id, 'create')}
-                              disabled={disabled}
-                            >
-                              {t('documents.bankWorkbench.actions.create', 'Create transaction')}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() => void runLineAction(line.id, 'match')}
-                              disabled={disabled}
-                            >
-                              {t('documents.bankWorkbench.actions.match', 'Match existing')}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() => void runLineAction(line.id, 'ignore')}
-                              disabled={disabled}
-                            >
-                              {t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
-                            </button>
+                            {linkedTransaction?.transaction_date && (
+                              <div className="bank-workbench-cell__secondary">
+                                {formatDate(linkedTransaction.transaction_date, i18n.language)}
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <span className="bank-workbench-table__static-action">-</span>
+                        </td>
+                        <td>
+                          <div className="bank-workbench-cell">
+                            <div className="bank-workbench-cell__primary">
+                              {line.counterparty || t('documents.bankWorkbench.noCounterparty', 'Unknown counterparty')}
+                            </div>
+                            {linkedReference && (
+                              <div className="bank-workbench-cell__secondary">{linkedReference}</div>
+                            )}
+                          </div>
+                        </td>
+                        <td>{renderPurposeCell(line.purpose || line.raw_reference, line.raw_reference)}</td>
+                        <td>
+                          <span className={`bank-workbench-amount bank-workbench-amount--${getAmountTone(line.amount)}`}>
+                            {formatCurrency(line.amount, i18n.language)}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="bank-workbench-cell">
+                            <div className="bank-workbench-cell__primary">
+                              {linkedTransaction?.description || getSuggestedActionLabel(line)}
+                            </div>
+                            {linkedTransaction?.transaction_date && (
+                              <div className="bank-workbench-cell__secondary">
+                                {t('transactions.date', 'Date')}: {formatDate(linkedTransaction.transaction_date, i18n.language)}
+                              </div>
+                            )}
+                            {dateDelta !== null && dateDelta > 0 && (
+                              <div className="bank-workbench-cell__secondary">
+                                {dateDelta}d
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="bank-workbench-cell">
+                            <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
+                              {renderLineStatus(line.review_status)}
+                            </span>
+                            {confidenceLabel && (
+                              <div className="bank-workbench-cell__secondary">
+                                {t('documents.bankWorkbench.confidence', 'Confidence')}: {confidenceLabel}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="bank-workbench-table__actions">
+                          {isPending ? (
+                            <div className="bank-workbench-line__actions">
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => void runSuggestedAction(line)}
+                                disabled={disabled}
+                              >
+                                {getSuggestedActionLabel(line)}
+                              </button>
+                              {line.suggested_action !== 'match_existing' && line.linked_transaction_id && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => void runLineAction(line.id, 'match')}
+                                  disabled={disabled}
+                                >
+                                  {t('documents.bankWorkbench.actions.match', 'Match existing')}
+                                </button>
+                              )}
+                              {line.suggested_action !== 'create_new' && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => void runLineAction(line.id, 'create')}
+                                  disabled={disabled}
+                                >
+                                  {t('documents.bankWorkbench.actions.create', 'Create transaction')}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => void runLineAction(line.id, 'ignore')}
+                                disabled={disabled}
+                              >
+                                {t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="bank-workbench-table__static-action">
+                              {renderLineStatus(line.review_status)}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bank-workbench-mobile-list">
+              {filteredRemoteLines.map((line) => {
+                const disabled = actingLineId === line.id || bulkActing;
+                const confidenceLabel = formatConfidence(line.confidence_score);
+                const linkedTransaction = line.linked_transaction || line.created_transaction;
+                const dateDelta = getDateDistanceDays(line.line_date, linkedTransaction?.transaction_date);
+                const isPending = line.review_status === 'pending_review';
+
+                return (
+                  <article key={`mobile-${line.id}`} className="bank-workbench-mobile-card">
+                    <div className="bank-workbench-mobile-card__top">
+                      <div className="bank-workbench-cell">
+                        <div className="bank-workbench-cell__primary">
+                          {line.counterparty || t('documents.bankWorkbench.noCounterparty', 'Unknown counterparty')}
+                        </div>
+                        <div className="bank-workbench-cell__secondary">
+                          {formatDate(line.line_date, i18n.language)}
+                        </div>
+                      </div>
+                      <span className={`bank-workbench-amount bank-workbench-amount--${getAmountTone(line.amount)}`}>
+                        {formatCurrency(line.amount, i18n.language)}
+                      </span>
+                    </div>
+
+                    {renderPurposeCell(line.purpose || line.raw_reference, line.raw_reference)}
+
+                    <div className="bank-workbench-mobile-card__meta">
+                      <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
+                        {renderLineStatus(line.review_status)}
+                      </span>
+                      {linkedTransaction?.description && (
+                        <span className="bank-workbench-mobile-card__meta-item">
+                          {linkedTransaction.description}
+                        </span>
+                      )}
+                      {dateDelta !== null && dateDelta > 0 && (
+                        <span className="bank-workbench-mobile-card__meta-item">
+                          {dateDelta}d
+                        </span>
+                      )}
+                      {confidenceLabel && (
+                        <span className="bank-workbench-mobile-card__meta-item">
+                          {t('documents.bankWorkbench.confidence', 'Confidence')}: {confidenceLabel}
+                        </span>
+                      )}
+                    </div>
+
+                    {isPending && (
+                      <div className="bank-workbench-line__actions bank-workbench-line__actions--mobile">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => void runSuggestedAction(line)}
+                          disabled={disabled}
+                        >
+                          {getSuggestedActionLabel(line)}
+                        </button>
+                        {line.suggested_action !== 'create_new' && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void runLineAction(line.id, 'create')}
+                            disabled={disabled}
+                          >
+                            {t('documents.bankWorkbench.actions.create', 'Create transaction')}
+                          </button>
                         )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="bank-workbench-mobile-list">
-            {groupLines.map((line) => {
-              const disabled = actingLineId === line.id;
-              const confidenceLabel = formatConfidence(line.confidence_score);
-              const linkedTransaction = line.linked_transaction || line.created_transaction;
-
-              return (
-                <article key={`mobile-${line.id}`} className="bank-workbench-mobile-card">
-                  <div className="bank-workbench-mobile-card__top">
-                    <div className="bank-workbench-cell">
-                      <div className="bank-workbench-cell__primary">
-                        {line.counterparty || t('documents.bankWorkbench.noCounterparty', 'Unknown counterparty')}
+                        {line.suggested_action !== 'match_existing' && line.linked_transaction_id && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void runLineAction(line.id, 'match')}
+                            disabled={disabled}
+                          >
+                            {t('documents.bankWorkbench.actions.match', 'Match existing')}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => void runLineAction(line.id, 'ignore')}
+                          disabled={disabled}
+                        >
+                          {t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
+                        </button>
                       </div>
-                      <div className="bank-workbench-cell__secondary">
-                        {formatDate(line.line_date, i18n.language)}
-                      </div>
-                    </div>
-                    <span className={`bank-workbench-amount bank-workbench-amount--${getAmountTone(line.amount)}`}>
-                      {formatCurrency(line.amount, i18n.language)}
-                    </span>
-                  </div>
-
-                  {renderPurposeCell(line.purpose || line.raw_reference, line.raw_reference)}
-
-                  <div className="bank-workbench-mobile-card__meta">
-                    <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
-                      {renderLineStatus(line.review_status)}
-                    </span>
-                    {confidenceLabel && (
-                      <span className="bank-workbench-mobile-card__meta-item">
-                        {t('documents.bankWorkbench.confidence', 'Confidence')}: {confidenceLabel}
-                      </span>
                     )}
-                    {linkedTransaction?.description && (
-                      <span className="bank-workbench-mobile-card__meta-item">
-                        {linkedTransaction.description}
-                      </span>
-                    )}
-                  </div>
-
-                  {variant === 'pending' && (
-                    <div className="bank-workbench-line__actions bank-workbench-line__actions--mobile">
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => void runLineAction(line.id, 'create')}
-                        disabled={disabled}
-                      >
-                        {t('documents.bankWorkbench.actions.create', 'Create transaction')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => void runLineAction(line.id, 'match')}
-                        disabled={disabled}
-                      >
-                        {t('documents.bankWorkbench.actions.match', 'Match existing')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => void runLineAction(line.id, 'ignore')}
-                        disabled={disabled}
-                      >
-                        {t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
-                      </button>
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </section>
-  );
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </section>
+    );
+  };
 
   const renderFallbackTable = () => (
     <section className="bank-workbench-group bank-workbench-group--pending">
@@ -658,7 +938,17 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
             )}
           </p>
         </div>
-        <span className="bank-workbench-group__count">{fallbackLines.length}</span>
+        <div className="bank-workbench-toolbar__actions">
+          <span className="bank-workbench-group__count">{fallbackLines.length}</span>
+          <button
+            type="button"
+            className="btn btn-primary bank-workbench-toolbar__button"
+            onClick={() => void handleFallbackConfirmAll()}
+            disabled={fallbackActingId !== null || fallbackLines.every((line) => line.is_imported)}
+          >
+            {t('common.confirm', 'Confirm')}
+          </button>
+        </div>
       </div>
       {fallbackLines.length === 0 ? (
         <div className="bank-workbench-empty">
@@ -676,6 +966,8 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                   <th>{t('documents.fields.purpose', 'Purpose')}</th>
                   <th>{t('transactions.amount', 'Amount')}</th>
                   <th>{t('documents.bankWorkbench.direction.label', 'Direction')}</th>
+                  <th>{t('common.status', 'Status')}</th>
+                  <th>{t('common.actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -700,6 +992,27 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                       <span className={`bank-workbench-line__status bank-workbench-line__status--fallback-${line.direction}`}>
                         {renderFallbackDirection(line.direction)}
                       </span>
+                    </td>
+                    <td>
+                      <span className={`bank-workbench-line__status bank-workbench-line__status--${line.is_imported ? 'auto_created' : 'pending_review'}`}>
+                        {line.is_imported
+                          ? t('documents.bankWorkbench.status.autoCreated', 'Auto-created')
+                          : t('documents.bankWorkbench.status.pendingReview', 'Pending review')}
+                      </span>
+                    </td>
+                    <td className="bank-workbench-table__actions">
+                      <div className="bank-workbench-line__actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => void confirmFallbackLines([line])}
+                          disabled={Boolean(line.is_imported) || fallbackActingId !== null}
+                        >
+                          {line.is_imported
+                            ? t('documents.bankWorkbench.status.autoCreated', 'Auto-created')
+                            : t('documents.bankWorkbench.actions.create', 'Create transaction')}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -730,6 +1043,24 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                   <span className={`bank-workbench-line__status bank-workbench-line__status--fallback-${line.direction}`}>
                     {renderFallbackDirection(line.direction)}
                   </span>
+                  <span className={`bank-workbench-line__status bank-workbench-line__status--${line.is_imported ? 'auto_created' : 'pending_review'}`}>
+                    {line.is_imported
+                      ? t('documents.bankWorkbench.status.autoCreated', 'Auto-created')
+                      : t('documents.bankWorkbench.status.pendingReview', 'Pending review')}
+                  </span>
+                </div>
+
+                <div className="bank-workbench-line__actions bank-workbench-line__actions--mobile">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void confirmFallbackLines([line])}
+                    disabled={Boolean(line.is_imported) || fallbackActingId !== null}
+                  >
+                    {line.is_imported
+                      ? t('documents.bankWorkbench.status.autoCreated', 'Auto-created')
+                      : t('documents.bankWorkbench.actions.create', 'Create transaction')}
+                  </button>
                 </div>
               </article>
             ))}
@@ -878,38 +1209,19 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                 <span>
                   {mode === 'remote'
                     ? t('documents.bankWorkbench.ignoredCount', 'Ignored')
-                    : t('documents.bankWorkbench.readOnlyMode', 'Read-only mode')}
+                    : t('common.confirm', 'Confirm')}
                 </span>
                 <strong>
                   {mode === 'remote'
                     ? statementImport?.ignored_count ?? 0
-                    : t('documents.bankWorkbench.readOnlyShort', 'OCR')}
+                    : fallbackSummary?.imported_count ?? 0}
                 </strong>
               </div>
             </div>
           </div>
 
           {mode === 'remote' ? (
-            <>
-              {renderRemoteTable(
-                t('documents.bankWorkbench.groups.pending.title', 'Pending review'),
-                t('documents.bankWorkbench.groups.pending.description', 'Low-confidence items stay here until you confirm how they should be handled.'),
-                pendingLines,
-                'pending'
-              )}
-              {renderRemoteTable(
-                t('documents.bankWorkbench.groups.resolved.title', 'Automatically processed'),
-                t('documents.bankWorkbench.groups.resolved.description', 'These lines were auto-created or matched to an existing transaction.'),
-                autoProcessedLines,
-                'resolved'
-              )}
-              {renderRemoteTable(
-                t('documents.bankWorkbench.groups.ignored.title', 'Ignored duplicates'),
-                t('documents.bankWorkbench.groups.ignored.description', 'These lines were ignored as duplicates and will not create transactions.'),
-                ignoredLines,
-                'ignored'
-              )}
-            </>
+            renderRemoteTable()
           ) : (
             renderFallbackTable()
           )}

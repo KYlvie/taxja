@@ -13,6 +13,26 @@ export interface AssetSuggestionConfirmationPayload {
   useful_life_years?: number;
 }
 
+export interface ConfirmBankTransactionPayload {
+  date?: string | null;
+  amount?: string | number | null;
+  counterparty?: string | null;
+  purpose?: string | null;
+  raw_reference?: string | null;
+  fingerprint?: string | null;
+}
+
+export interface ConfirmBankTransactionsResponse {
+  message: string;
+  created_transaction_ids: number[];
+  imported: number;
+  imported_count: number;
+  remaining_count: number;
+  suggestion_status: 'pending' | 'confirmed';
+  skipped_duplicates: number;
+  classified: number;
+}
+
 export const documentService = {
   // Upload single document
   uploadDocument: async (
@@ -289,9 +309,14 @@ export const documentService = {
   },
 
   // Batch import selected bank transactions from Kontoauszug OCR
-  confirmBankTransactions: async (id: number, transactionIndices: number[]): Promise<any> => {
-    const response = await api.post(`/documents/${id}/confirm-bank-transactions`, {
+  confirmBankTransactions: async (
+    id: number,
+    transactionIndices: number[],
+    transactions?: ConfirmBankTransactionPayload[],
+  ): Promise<ConfirmBankTransactionsResponse> => {
+    const response = await api.post<ConfirmBankTransactionsResponse>(`/documents/${id}/confirm-bank-transactions`, {
       transaction_indices: transactionIndices,
+      transactions,
     });
     return response.data;
   },

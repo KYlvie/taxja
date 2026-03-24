@@ -20,9 +20,9 @@ class TestKontoauszugPipelineRouting:
 
 
 class TestKontoauszugPipelineSuggestion:
-    def test_in_tax_form_types(self):
-        assert DBDocumentType.BANK_STATEMENT in DocumentPipelineOrchestrator.TAX_FORM_DB_TYPES
-        assert DocumentPipelineOrchestrator.TAX_FORM_SUGGESTION_TYPE_MAP[DBDocumentType.BANK_STATEMENT] == "import_bank_statement"
+    def test_has_dedicated_bank_statement_import_route(self):
+        assert DBDocumentType.BANK_STATEMENT not in DocumentPipelineOrchestrator.TAX_FORM_DB_TYPES
+        assert DocumentPipelineOrchestrator.BANK_STATEMENT_SUGGESTION_TYPE == "import_bank_statement"
 
     @patch("sqlalchemy.orm.attributes.flag_modified", lambda *a, **kw: None)
     def test_build_suggestion(self):
@@ -36,5 +36,10 @@ class TestKontoauszugPipelineSuggestion:
             "confidence_score": 0.85,
         })
         result = PipelineResult(document_id=13)
-        suggestion = orch._build_tax_form_suggestion(doc, DBDocumentType.BANK_STATEMENT, result)
+        with patch.object(
+            orch,
+            "_build_bank_statement_direction_metadata",
+            return_value={"document_transaction_direction": "unknown"},
+        ):
+            suggestion = orch._build_bank_statement_import_suggestion(doc, result)
         assert suggestion["type"] == "import_bank_statement"

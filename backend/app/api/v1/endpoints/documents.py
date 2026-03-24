@@ -6618,6 +6618,55 @@ class BankTransactionImportRequest(BaseModel):
     """Request body for batch bank transaction import."""
 
     transaction_indices: List[int] = []  # indices into the extracted transactions array
+    transactions: List[Dict[str, Any]] = []
+
+
+def _build_bank_transaction_fingerprint(txn: Dict[str, Any]) -> str:
+    return "|".join([
+        str(txn.get("date") or "").strip(),
+        str(txn.get("amount") or "").strip(),
+        str(txn.get("counterparty") or "").strip().lower(),
+        str(
+            txn.get("raw_reference")
+            or txn.get("reference")
+            or txn.get("purpose")
+            or txn.get("description")
+            or ""
+        ).strip().lower(),
+    ])
+
+
+def _is_actionable_bank_transaction_candidate(txn: Any) -> bool:
+    if not isinstance(txn, dict):
+        return False
+    if txn.get("is_duplicate"):
+        return False
+    try:
+        return abs(float(txn.get("amount", 0) or 0)) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _count_actionable_bank_transaction_candidates(transactions: Any) -> int:
+    if not isinstance(transactions, list):
+        return 0
+    return sum(1 for txn in transactions if _is_actionable_bank_transaction_candidate(txn))
+
+
+def _collect_actionable_bank_transaction_fingerprints(transactions: Any) -> List[str]:
+    if not isinstance(transactions, list):
+        return []
+    fingerprints: List[str] = []
+    for txn in transactions:
+        if not _is_actionable_bank_transaction_candidate(txn):
+            continue
+        if not isinstance(txn, dict):
+            continue
+        fingerprint = str(txn.get("fingerprint") or _build_bank_transaction_fingerprint(txn)).strip()
+        if fingerprint:
+            fingerprints.append(fingerprint)
+    return fingerprints
+
 
 @router.post("/{document_id}/confirm-bank-transactions")
 
@@ -6667,7 +6716,7 @@ def confirm_bank_transactions(
 
         raise HTTPException(status_code=400, detail=get_error_message("document_not_bank_statement", _get_lang(request, current_user)))
 
-    extracted_txns = (suggestion.get("data") or {}).get("transactions", [])
+    extracted_txns = body.transactions or (suggestion.get("data") or {}).get("transactions", [])
 
     if not extracted_txns:
 
@@ -6683,6 +6732,12 @@ def confirm_bank_transactions(
 
         indices = list(range(len(extracted_txns)))
 
+    existing_fallback_imported_fingerprints = set(suggestion.get("fallback_imported_fingerprints") or [])
+    fallback_imported_fingerprints = set(existing_fallback_imported_fingerprints)
+    submitted_actionable_fingerprints = set(_collect_actionable_bank_transaction_fingerprints(body.transactions))
+    existing_fallback_actionable_fingerprints = set(
+        suggestion.get("fallback_actionable_fingerprints") or []
+    )
     created_ids = []
 
     skipped = 0
@@ -6694,6 +6749,14 @@ def confirm_bank_transactions(
             continue
 
         txn = extracted_txns[idx]
+
+        fingerprint = str(txn.get("fingerprint") or _build_bank_transaction_fingerprint(txn)).strip()
+
+        if body.transactions and fingerprint in fallback_imported_fingerprints:
+
+            skipped += 1
+
+            continue
 
         if txn.get("is_duplicate"):
 
@@ -6759,6 +6822,10 @@ def confirm_bank_transactions(
 
         created_ids.append(new_txn.id)
 
+        if body.transactions and fingerprint:
+
+            fallback_imported_fingerprints.add(fingerprint)
+
     # Auto-classify created transactions
 
     classified = 0
@@ -6789,17 +6856,52 @@ def confirm_bank_transactions(
 
         logger.warning(f"Auto-classification failed for bank import: {cls_err}")
 
-    # Mark suggestion as confirmed
+    suggestion_payload = suggestion.get("data") if isinstance(suggestion.get("data"), dict) else {}
+    suggestion_transactions = suggestion_payload.get("transactions") if isinstance(suggestion_payload, dict) else []
+    fallback_total_actionable_count = 0
+    try:
+        fallback_total_actionable_count = int(suggestion.get("fallback_total_actionable_count") or 0)
+    except (TypeError, ValueError):
+        fallback_total_actionable_count = 0
+    total_actionable_count = max(
+        fallback_total_actionable_count,
+        len(existing_fallback_actionable_fingerprints),
+        len(submitted_actionable_fingerprints),
+        _count_actionable_bank_transaction_candidates(suggestion_transactions),
+        _count_actionable_bank_transaction_candidates(extracted_txns),
+    )
+
+    try:
+        previous_imported_count = int(suggestion.get("imported_count") or 0)
+    except (TypeError, ValueError):
+        previous_imported_count = 0
+    cumulative_imported_count = previous_imported_count + len(created_ids)
+    resolved_import_count = max(cumulative_imported_count, len(fallback_imported_fingerprints))
+    suggestion_status = "confirmed" if resolved_import_count >= total_actionable_count else "pending"
+    remaining_count = max(total_actionable_count - resolved_import_count, 0)
+    resolved_actionable_fingerprints = sorted(
+        existing_fallback_actionable_fingerprints | submitted_actionable_fingerprints
+    )
+
+    # Persist cumulative import state without closing the whole statement early.
 
     import json as _json2
 
     updated_ocr = _json2.loads(_json2.dumps(document.ocr_result)) if document.ocr_result else {}
 
-    if updated_ocr.get("import_suggestion"):
-
-        updated_ocr["import_suggestion"]["status"] = "confirmed"
-
-        updated_ocr["import_suggestion"]["imported_count"] = len(created_ids)
+    if isinstance(updated_ocr.get("import_suggestion"), dict):
+        updated_ocr["import_suggestion"]["status"] = suggestion_status
+        updated_ocr["import_suggestion"]["imported_count"] = resolved_import_count
+        updated_ocr["import_suggestion"]["fallback_imported_fingerprints"] = sorted(
+            fallback_imported_fingerprints
+        )
+        updated_ocr["import_suggestion"]["fallback_total_actionable_count"] = total_actionable_count
+        if resolved_actionable_fingerprints:
+            updated_ocr["import_suggestion"]["fallback_actionable_fingerprints"] = (
+                resolved_actionable_fingerprints
+            )
+        updated_ocr.pop("tax_analysis", None)
+        updated_ocr.pop("transaction_suggestion", None)
 
         document.ocr_result = updated_ocr
 
@@ -6816,6 +6918,12 @@ def confirm_bank_transactions(
         "created_transaction_ids": created_ids,
 
         "imported": len(created_ids),
+
+        "imported_count": resolved_import_count,
+
+        "remaining_count": remaining_count,
+
+        "suggestion_status": suggestion_status,
 
         "skipped_duplicates": skipped,
 

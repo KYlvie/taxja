@@ -47,6 +47,18 @@ def test_processing_decision_routes_purchase_contract_to_property_then_asset():
     assert decision.secondary_actions == [ProcessingAction.ASSET_SUGGESTION]
 
 
+def test_processing_decision_routes_bank_statements_to_dedicated_import_action():
+    decision = ProcessingDecisionService().build_phase_two_decision(
+        DBDocumentType.BANK_STATEMENT,
+        tax_form_types=set(DocumentPipelineOrchestrator.TAX_FORM_DB_TYPES),
+    )
+
+    assert decision.primary_actions == [ProcessingAction.BANK_STATEMENT_IMPORT]
+    assert decision.secondary_actions == []
+    assert decision.normalized_input_required is False
+    assert decision.quality_gate_required is False
+
+
 def test_document_metering_builds_explicit_phase_checkpoints():
     metering_service = DocumentMeteringService()
 
@@ -104,6 +116,36 @@ def test_stage_suggest_records_processing_decision_and_runs_planned_actions():
     assert result.processing_decision["secondary_actions"] == ["asset_suggestion"]
     tx_mock.assert_called_once()
     asset_mock.assert_called_once()
+
+
+def test_stage_suggest_routes_bank_statements_to_dedicated_import_builder():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    result = PipelineResult(document_id=2)
+    document = SimpleNamespace(id=2, ocr_result={}, uploaded_at=datetime.utcnow())
+
+    with patch.object(
+        orchestrator,
+        "_build_bank_statement_import_suggestion",
+        return_value={"type": "import_bank_statement"},
+    ) as bank_mock, patch.object(
+        orchestrator,
+        "_build_tax_form_suggestion",
+        return_value=None,
+    ) as tax_mock:
+        orchestrator._stage_suggest(
+            document=document,
+            db_type=DBDocumentType.BANK_STATEMENT,
+            ocr_result={},
+            result=result,
+        )
+
+    assert result.processing_decision is not None
+    assert result.processing_decision["primary_actions"] == ["bank_statement_import"]
+    assert result.processing_decision["secondary_actions"] == []
+    bank_mock.assert_called_once()
+    tax_mock.assert_not_called()
 
 
 def test_finalize_persists_processing_decision_and_phase_checkpoints():
