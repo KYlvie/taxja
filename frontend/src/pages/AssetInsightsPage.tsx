@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Building2, Package, LibraryBig, Scale, type LucideIcon } from 'lucide-react';
+import { Building2, Package, LibraryBig, Scale, type LucideIcon , ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import Select from '../components/common/Select';
 import FuturisticIcon from '../components/common/FuturisticIcon';
 import SubpageBackLink from '../components/common/SubpageBackLink';
@@ -40,14 +41,23 @@ const SectionHeading = ({
   icon,
   tone,
   title,
+  collapsed,
+  onToggle,
 }: {
   icon: LucideIcon;
   tone: 'cyan' | 'amber' | 'violet';
   title: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }) => (
-  <h3 className="tax-tools-heading">
+  <h3
+    className={`tax-tools-heading ${onToggle ? 'collapsible' : ''}`}
+    onClick={onToggle}
+    style={onToggle ? { cursor: 'pointer', userSelect: 'none' } : undefined}
+  >
     <FuturisticIcon icon={icon} tone={tone} size="sm" />
     <span>{title}</span>
+    {onToggle && (collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />)}
   </h3>
 );
 
@@ -58,6 +68,19 @@ const AssetInsightsPage = () => {
   const [allAssets, setAllAssets] = useState<AssetOption[]>([]);
   const [rawAssets, setRawAssets] = useState<any[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Property | null>(null);
+
+  // All sections start collapsed
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(['summary', 'portfolio', 'otherAssets', 'assetReport'])
+  );
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const [loading, setLoading] = useState(false);
   const [propertiesCount, setPropertiesCount] = useState(0);
   const [nonReAssetsCount, setNonReAssetsCount] = useState(0);
@@ -184,7 +207,8 @@ const AssetInsightsPage = () => {
       <div className="tax-tools-content">
         {/* ── Section 0: Asset-Liability Summary ── */}
         <section className="asset-report-section">
-          <SectionHeading icon={Scale} tone="cyan" title={t('assetOverview.liabilitySummary', 'Asset-Liability Summary')} />
+          <SectionHeading icon={Scale} tone="cyan" title={t('assetOverview.liabilitySummary', 'Asset-Liability Summary')} collapsed={collapsedSections.has('summary')} onToggle={() => toggleSection('summary')} />
+          {!collapsedSections.has('summary') && (<>
           <p className="tax-tools-section-subtitle">
             {t('assetOverview.liabilitySummarySubtitle', 'High-level snapshot of your total assets, liabilities, and net worth.')}
           </p>
@@ -213,11 +237,13 @@ const AssetInsightsPage = () => {
           ) : (
             <p className="text-muted">{t('assetOverview.noSummary', 'No summary available yet. Add assets or liabilities to populate the overview.')}</p>
           )}
-        </section>
+                </>)}
+</section>
 
         {/* ── Section A: Property Portfolio ── */}
         <section className="asset-report-section">
-          <SectionHeading icon={Building2} tone="cyan" title={t('properties.portfolio.title', 'Property Portfolio')} />
+          <SectionHeading icon={Building2} tone="cyan" title={t('properties.portfolio.title', 'Property Portfolio')} collapsed={collapsedSections.has('portfolio')} onToggle={() => toggleSection('portfolio')} />
+          {!collapsedSections.has('portfolio') && (<>
           <p className="tax-tools-section-subtitle">
             {t('properties.portfolio.subtitle', 'Overview and comparison of your real estate properties.')}
           </p>
@@ -249,11 +275,13 @@ const AssetInsightsPage = () => {
           ) : (
             <p className="text-muted">{t('properties.portfolio.noProperties', 'No properties yet. Upload a purchase contract to get started.')}</p>
           )}
-        </section>
+                </>)}
+</section>
 
         {/* ── Section B: Other Assets (Devices, Vehicles, etc.) ── */}
         <section className="asset-report-section">
-          <SectionHeading icon={Package} tone="amber" title={t('properties.assetOverview.title', 'Other Assets')} />
+          <SectionHeading icon={Package} tone="amber" title={t('properties.assetOverview.title', 'Other Assets')} collapsed={collapsedSections.has('otherAssets')} onToggle={() => toggleSection('otherAssets')} />
+          {!collapsedSections.has('otherAssets') && (<>
           <p className="tax-tools-section-subtitle">
             {t('properties.assetOverview.subtitle', 'Devices, vehicles, and other depreciable assets.')}
           </p>
@@ -331,11 +359,13 @@ const AssetInsightsPage = () => {
           ) : (
             <p className="text-muted">{t('properties.assetOverview.noAssets', 'No other assets yet. Upload a purchase contract for equipment, vehicles, or devices.')}</p>
           )}
-        </section>
+                </>)}
+</section>
 
         {/* ── Section C: Individual Asset Report ── */}
         <section className="asset-report-section">
-          <SectionHeading icon={LibraryBig} tone="violet" title={t('properties.assetReport.title', 'Individual Asset Report')} />
+          <SectionHeading icon={LibraryBig} tone="violet" title={t('properties.assetReport.title', 'Individual Asset Report')} collapsed={collapsedSections.has('assetReport')} onToggle={() => toggleSection('assetReport')} />
+          {!collapsedSections.has('assetReport') && (<>
           {allAssets.length === 0 ? (
             <p className="text-muted">{t('properties.assetReport.noAssets', 'No assets available for reporting.')}</p>
           ) : (
@@ -352,7 +382,8 @@ const AssetInsightsPage = () => {
               {!loading && selectedAsset && <PropertyReports property={selectedAsset} />}
             </>
           )}
-        </section>
+                </>)}
+</section>
       </div>
     </div>
   );
