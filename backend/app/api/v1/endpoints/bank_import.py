@@ -295,11 +295,16 @@ def get_import_lines(
 @router.post("/lines/{line_id}/confirm-create", summary="Confirm creating a new transaction from a bank line")
 def confirm_create_line(
     line_id: int,
+    force: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
-        line, transaction = BankImportService(db=db).confirm_create_line(line_id=line_id, user=current_user)
+        line, transaction = BankImportService(db=db).confirm_create_line(
+            line_id=line_id,
+            user=current_user,
+            force_create=force,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

@@ -84,6 +84,7 @@ class BankImportService:
     AUTO_MATCH_SIMILARITY = 0.82
     SUGGEST_MATCH_SIMILARITY = 0.55
     DATE_TOLERANCE_DAYS = 7
+    REUSABLE_DATE_TOLERANCE_DAYS = 45
 
     def __init__(
         self,
@@ -414,7 +415,12 @@ class BankImportService:
 
         return changed
 
-    def confirm_create_line(self, line_id: int, user: User) -> Tuple[BankStatementLine, Transaction]:
+    def confirm_create_line(
+        self,
+        line_id: int,
+        user: User,
+        force_create: bool = False,
+    ) -> Tuple[BankStatementLine, Transaction]:
         line = self._get_line_for_user(line_id, user.id)
         if line.created_transaction is not None:
             return line, line.created_transaction
@@ -422,21 +428,22 @@ class BankImportService:
             return line, line.linked_transaction
 
         preview_transaction, classification_confidence = self._build_preview_transaction(line, user)
-        duplicate_transaction = self._find_reusable_transaction_for_line(
-            line=line,
-            preview_transaction=preview_transaction,
-            user_id=user.id,
-            tax_year=line.statement_import.tax_year,
-        )
-        if duplicate_transaction is not None:
-            self._apply_duplicate_resolution_to_line(
+        if not force_create:
+            duplicate_transaction = self._find_reusable_transaction_for_line(
                 line=line,
-                duplicate_transaction=duplicate_transaction,
-                reviewer_id=user.id,
+                preview_transaction=preview_transaction,
+                user_id=user.id,
+                tax_year=line.statement_import.tax_year,
             )
-            self.db.commit()
-            self.db.refresh(line)
-            return line, duplicate_transaction
+            if duplicate_transaction is not None:
+                self._apply_duplicate_resolution_to_line(
+                    line=line,
+                    duplicate_transaction=duplicate_transaction,
+                    reviewer_id=user.id,
+                )
+                self.db.commit()
+                self.db.refresh(line)
+                return line, duplicate_transaction
 
         transaction, classification_confidence = self._create_transaction_for_preview(
             preview_transaction=preview_transaction,
@@ -740,6 +747,7 @@ class BankImportService:
                 user_id=user.id,
                 tax_year=tax_year,
                 require_threshold=False,
+                window_days=self.REUSABLE_DATE_TOLERANCE_DAYS,
             )
 
             if (
@@ -822,14 +830,21 @@ class BankImportService:
         user_id: int,
         tax_year: Optional[int],
         require_threshold: bool,
+        window_days: Optional[int] = None,
     ) -> Tuple[Optional[Transaction], float]:
-        existing_transactions = self._get_existing_transactions(user_id=user_id, tax_year=tax_year, reference_date=line.line_date)
+        effective_window_days = window_days or self.DATE_TOLERANCE_DAYS
+        existing_transactions = self._get_existing_transactions(
+            user_id=user_id,
+            tax_year=tax_year,
+            reference_date=line.line_date,
+            window_days=effective_window_days,
+        )
         best_match = None
         best_similarity = 0.0
         for transaction in existing_transactions:
             if not self._amounts_match(line.amount, transaction.amount):
                 continue
-            if self._date_distance(line.line_date, transaction.transaction_date) > self.DATE_TOLERANCE_DAYS:
+            if self._date_distance(line.line_date, transaction.transaction_date) > effective_window_days:
                 continue
             similarity = self._match_similarity(line, transaction)
             if similarity > best_similarity:
@@ -845,16 +860,18 @@ class BankImportService:
         user_id: int,
         tax_year: Optional[int] = None,
         reference_date: Optional[date] = None,
+        window_days: Optional[int] = None,
     ) -> List[Transaction]:
         if self.db is None:
             return []
 
         query = self.db.query(Transaction).filter(Transaction.user_id == user_id)
+        effective_window_days = window_days or self.DATE_TOLERANCE_DAYS
 
         if reference_date is not None:
             query = query.filter(
-                Transaction.transaction_date >= reference_date - timedelta(days=self.DATE_TOLERANCE_DAYS),
-                Transaction.transaction_date <= reference_date + timedelta(days=self.DATE_TOLERANCE_DAYS),
+                Transaction.transaction_date >= reference_date - timedelta(days=effective_window_days),
+                Transaction.transaction_date <= reference_date + timedelta(days=effective_window_days),
             )
         elif tax_year:
             query = query.filter(
@@ -960,6 +977,7 @@ class BankImportService:
             user_id=user_id,
             tax_year=tax_year,
             require_threshold=False,
+            window_days=self.REUSABLE_DATE_TOLERANCE_DAYS,
         )
         if best_match is None:
             return None
@@ -1107,9 +1125,26 @@ class BankImportService:
     def _normalize_match_text(value: str) -> str:
         normalized = value.lower().strip()
         normalized = re.sub(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b", " ", normalized)
+        normalized = re.sub(r"\b\d{1,2}[./-]\d{4}\b", " ", normalized)
+        normalized = re.sub(r"\b\d{4}[./-]\d{1,2}\b", " ", normalized)
         normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip()
         return normalized
+
+    @staticmethod
+    def _match_tokens(value: str) -> List[str]:
+        normalized = BankImportService._normalize_match_text(value)
+        if not normalized:
+            return []
+        tokens: List[str] = []
+        for token in normalized.split():
+            if token.isdigit():
+                if len(token) <= 2:
+                    continue
+                if len(token) == 4 and token.startswith(("19", "20")):
+                    continue
+            tokens.append(token)
+        return tokens
 
     def _text_similarity(self, left: str, right: str) -> float:
         normalized_left = self._normalize_match_text(left)
@@ -1119,7 +1154,19 @@ class BankImportService:
         if not normalized_left or not normalized_right:
             return 0.0
 
-        return SequenceMatcher(None, normalized_left, normalized_right).ratio()
+        sequence_similarity = SequenceMatcher(None, normalized_left, normalized_right).ratio()
+        left_tokens = set(self._match_tokens(left))
+        right_tokens = set(self._match_tokens(right))
+        if not left_tokens or not right_tokens:
+            return sequence_similarity
+
+        shared_tokens = left_tokens & right_tokens
+        token_overlap = len(shared_tokens) / max(len(left_tokens), len(right_tokens))
+        has_long_numeric_anchor = any(token.isdigit() and len(token) >= 6 for token in shared_tokens)
+        if has_long_numeric_anchor and len(shared_tokens) >= 2 and token_overlap >= 0.5:
+            token_overlap = max(token_overlap, 0.88)
+
+        return max(sequence_similarity, token_overlap)
 
     @staticmethod
     def _amounts_match(lhs: Decimal, rhs: Decimal) -> bool:

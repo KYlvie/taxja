@@ -37,7 +37,7 @@ vi.mock('../components/documents/DocumentUpload', () => ({ default: () => <div d
 vi.mock('../components/documents/DocumentList', () => ({ default: () => <div data-testid="doc-list" /> }));
 vi.mock('../components/documents/OCRReview', () => ({ default: () => <div data-testid="ocr-review" /> }));
 vi.mock('../components/documents/BankStatementWorkbench', () => ({
-  default: () => <div>Open bank transaction</div>,
+  default: () => <div>Bank statement workbench</div>,
 }));
 vi.mock('../components/documents/EmployerReviewPanel', () => ({ default: () => null }));
 vi.mock('../components/documents/BescheidImport', () => ({ default: () => null }));
@@ -48,13 +48,6 @@ vi.mock('../services/documentService', () => ({
     getDocuments: (...args: any[]) => getDocuments(...args),
     getDocument: (...args: any[]) => getDocument(...args),
     downloadDocument: (...args: any[]) => downloadDocument(...args),
-  },
-}));
-
-vi.mock('../services/transactionService', () => ({
-  transactionService: {
-    getById: vi.fn(),
-    update: vi.fn(),
   },
 }));
 
@@ -115,7 +108,7 @@ describe('DocumentsPage linked transaction entry', () => {
     );
 
     await waitFor(() => expect(getDocument).toHaveBeenCalledWith(118));
-    await screen.findByText('Open bank transaction');
+    await screen.findByText('Bank statement workbench');
     expect(screen.getByTestId('location-probe')).toHaveTextContent('/documents/118');
   });
 });

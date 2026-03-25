@@ -350,6 +350,76 @@ def test_confirm_create_line_ignores_exact_duplicate_instead_of_creating_second_
     assert tx_count == 1
 
 
+def test_confirm_create_line_force_creates_even_when_duplicate_exists(
+    client: TestClient,
+    db: Session,
+    bank_workbench_user: User,
+    bank_workbench_auth_headers: dict,
+):
+    document = _make_custom_bank_statement_document(
+        db,
+        bank_workbench_user,
+        file_name="duplicate-force-create.pdf",
+        transactions=[
+            {
+                "date": "2024-12-19",
+                "amount": "-2.03",
+                "counterparty": "T-Mobile Austria GmbH",
+                "purpose": "Ratenplan 9001004040 vom 22.05.2023",
+                "reference": "Ratenplan 9001004040 vom 22.05.2023",
+            },
+            {
+                "date": "2024-12-19",
+                "amount": "-2.03",
+                "counterparty": "T-Mobile Austria GmbH",
+                "purpose": "Ratenplan 9001004040 vom 22.05.2023",
+                "reference": "Ratenplan 9001004040 vom 22.05.2023",
+            },
+        ],
+    )
+
+    with patch(
+        "app.services.bank_import_service.TransactionClassifier.classify_transaction",
+        return_value=ClassificationResult(category=None, confidence=Decimal("0.00"), method="test"),
+    ):
+        init_response = client.post(
+            f"/api/v1/bank-import/document/{document.id}/initialize",
+            headers=bank_workbench_auth_headers,
+        )
+
+    assert init_response.status_code == 200
+    summary = init_response.json()["import"]
+
+    lines_response = client.get(
+        f"/api/v1/bank-import/imports/{summary['id']}/lines",
+        headers=bank_workbench_auth_headers,
+    )
+    assert lines_response.status_code == 200
+    lines = lines_response.json()["lines"]
+
+    first_confirm = client.post(
+        f"/api/v1/bank-import/lines/{lines[0]['id']}/confirm-create",
+        headers=bank_workbench_auth_headers,
+    )
+    assert first_confirm.status_code == 200
+
+    second_confirm = client.post(
+        f"/api/v1/bank-import/lines/{lines[1]['id']}/confirm-create?force=true",
+        headers=bank_workbench_auth_headers,
+    )
+    assert second_confirm.status_code == 200
+    second_payload = second_confirm.json()
+    assert second_payload["line"]["review_status"] == "auto_created"
+    assert second_payload["line"]["created_transaction_id"] == second_payload["transaction"]["id"]
+
+    tx_count = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == bank_workbench_user.id)
+        .count()
+    )
+    assert tx_count == 2
+
+
 def test_confirm_create_line_reuses_fuzzy_existing_match_instead_of_creating_duplicate(
     client: TestClient,
     db: Session,
@@ -413,6 +483,69 @@ def test_confirm_create_line_reuses_fuzzy_existing_match_instead_of_creating_dup
     assert payload["line"]["created_transaction_id"] is None
     assert payload["line"]["linked_transaction_id"] == existing_transaction.id
     assert payload["transaction"]["id"] == existing_transaction.id
+
+    tx_count = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == bank_workbench_user.id)
+        .count()
+    )
+    assert tx_count == 1
+
+
+def test_initialize_document_import_reuses_monthly_match_with_same_amount_and_similar_text(
+    client: TestClient,
+    db: Session,
+    bank_workbench_user: User,
+    bank_workbench_auth_headers: dict,
+):
+    document = _make_custom_bank_statement_document(
+        db,
+        bank_workbench_user,
+        file_name="duplicate-monthly-match.pdf",
+        transactions=[
+            {
+                "date": "2024-08-01",
+                "amount": "-9.31",
+                "counterparty": "Helvetia Versicherungen AG",
+                "purpose": "2468104430/POL 4002211691 8/2024 HG",
+                "reference": "2468104430/POL 4002211691 8/2024 HG",
+            },
+        ],
+    )
+
+    existing_transaction = Transaction(
+        user_id=bank_workbench_user.id,
+        type=TransactionType.EXPENSE,
+        amount=Decimal("9.31"),
+        transaction_date=date(2024, 7, 1),
+        description="2454026682/POL 4002211691 7/2024 HG",
+        bank_reconciled=True,
+    )
+    db.add(existing_transaction)
+    db.commit()
+    db.refresh(existing_transaction)
+
+    with patch(
+        "app.services.bank_import_service.TransactionClassifier.classify_transaction",
+        return_value=ClassificationResult(category="insurance", confidence=Decimal("0.95"), method="test"),
+    ):
+        init_response = client.post(
+            f"/api/v1/bank-import/document/{document.id}/initialize",
+            headers=bank_workbench_auth_headers,
+        )
+
+    assert init_response.status_code == 200
+    summary = init_response.json()["import"]
+    assert summary["ignored_count"] == 1
+
+    lines_response = client.get(
+        f"/api/v1/bank-import/imports/{summary['id']}/lines",
+        headers=bank_workbench_auth_headers,
+    )
+    assert lines_response.status_code == 200
+    line = lines_response.json()["lines"][0]
+    assert line["review_status"] == "ignored_duplicate"
+    assert line["linked_transaction_id"] == existing_transaction.id
 
     tx_count = (
         db.query(Transaction)

@@ -26,7 +26,8 @@ import {
   type FallbackBankStatementLine,
   type FallbackTransactionDirection,
 } from '../../utils/bankStatementFallback';
-import type { Transaction } from '../../types/transaction';
+import { TransactionType, type Transaction } from '../../types/transaction';
+import TransactionDetail from '../transactions/TransactionDetail';
 import './OCRReview.css';
 import './BankStatementWorkbench.css';
 
@@ -438,6 +439,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
   const [matchPickerSubmitting, setMatchPickerSubmitting] = useState(false);
   const [matchPickerError, setMatchPickerError] = useState<string | null>(null);
   const [selectedMatchTransactionId, setSelectedMatchTransactionId] = useState<number | null>(null);
+  const [inlineTransaction, setInlineTransaction] = useState<Transaction | null>(null);
 
   const refreshDocumentSnapshot = useCallback(async () => {
     try {
@@ -623,6 +625,48 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     }
   }, [document.file_name, document.id, t]);
 
+  const buildInlinePreviewTransaction = useCallback((
+    transactionId: number,
+    previewTransaction?: BankStatementTransactionSummary | null,
+    fallbackLineDate?: string | null,
+    fallbackLineAmount?: string | null,
+  ): Transaction => {
+    const rawAmount = toAmountNumber(previewTransaction?.amount ?? fallbackLineAmount ?? 0) ?? 0;
+    const inferredType = (
+      previewTransaction?.type
+      && Object.values(TransactionType).includes(previewTransaction.type as TransactionType)
+    )
+      ? previewTransaction.type as TransactionType
+      : rawAmount < 0
+        ? TransactionType.EXPENSE
+        : TransactionType.INCOME;
+
+    return {
+      id: transactionId,
+      type: inferredType,
+      amount: Math.abs(rawAmount),
+      date:
+        previewTransaction?.transaction_date
+        ?? fallbackLineDate
+        ?? new Date().toISOString().slice(0, 10),
+      description:
+        previewTransaction?.description
+        || t('documents.linkedTransaction.fallbackDescription', 'Linked transaction'),
+      category:
+        previewTransaction?.expense_category
+        ?? previewTransaction?.income_category
+        ?? undefined,
+      is_deductible: false,
+      classification_confidence:
+        previewTransaction?.classification_confidence != null
+          ? Number(previewTransaction.classification_confidence)
+          : undefined,
+      bank_reconciled: previewTransaction?.bank_reconciled,
+      bank_reconciled_at: previewTransaction?.bank_reconciled_at ?? undefined,
+      line_items: [],
+    };
+  }, [t]);
+
   const closeMatchPicker = useCallback(() => {
     setMatchPickerLine(null);
     setMatchPickerTransactions([]);
@@ -701,6 +745,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       lineId: number,
       action: 'create' | 'match' | 'ignore' | 'restore' | 'undo-create' | 'unmatch',
       transactionId?: number | null,
+      options?: { forceCreate?: boolean },
     ) => {
       if (!statementImport) return;
 
@@ -708,7 +753,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       setError(null);
       try {
         if (action === 'create') {
-          await bankImportService.confirmCreateLine(lineId);
+          await bankImportService.confirmCreateLine(lineId, Boolean(options?.forceCreate));
         } else if (action === 'match') {
           await bankImportService.matchExistingLine(lineId, transactionId ?? undefined);
         } else if (action === 'restore') {
@@ -1057,12 +1102,26 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     if (!transactionId) {
       return;
     }
-    if (onOpenTransaction) {
-      onOpenTransaction(transactionId, previewTransaction, fallbackLineDate, fallbackLineAmount);
-      return;
-    }
-    navigate(`/transactions?transactionId=${transactionId}`);
-  }, [navigate, onOpenTransaction]);
+
+    const preview = buildInlinePreviewTransaction(
+      transactionId,
+      previewTransaction,
+      fallbackLineDate,
+      fallbackLineAmount,
+    );
+
+    setInlineTransaction(preview);
+    onOpenTransaction?.(transactionId, previewTransaction, fallbackLineDate, fallbackLineAmount);
+
+    void transactionService.getById(transactionId)
+      .then((transaction) => {
+        setInlineTransaction(transaction);
+      })
+      .catch((error) => {
+        console.error('Failed to load bank workbench transaction detail:', error);
+        setInlineTransaction(preview);
+      });
+  }, [buildInlinePreviewTransaction, onOpenTransaction]);
 
   const renderRemoteLineActions = useCallback((
     line: BankStatementLine,
@@ -1085,7 +1144,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     const canUnmatch = line.review_status === 'matched_existing' && Boolean(actualLinkedTransactionId);
     const matchEnabled = !disabled && (canMatch || canUnmatch);
 
-    const viewEnabled = Boolean(previewTransactionId);
+    const viewEnabled = Boolean(previewTransactionId || previewTransaction?.id);
 
     const containerClass = mobile
       ? 'bank-workbench-utility-actions bank-workbench-utility-actions--mobile'
@@ -1098,7 +1157,12 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
           className={`bank-workbench-utility-btn ${canUndoCreate ? 'bank-workbench-utility-btn--danger' : 'bank-workbench-utility-btn--primary'}`}
           onClick={() => {
             if (!createEnabled) return;
-            void runLineAction(line.id, canUndoCreate ? 'undo-create' : 'create');
+            void runLineAction(
+              line.id,
+              canUndoCreate ? 'undo-create' : 'create',
+              null,
+              !canUndoCreate ? { forceCreate: true } : undefined,
+            );
           }}
           disabled={!createEnabled}
           aria-label={canUndoCreate
@@ -1157,7 +1221,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
           onClick={() => {
             if (!viewEnabled) return;
             handleOpenTransaction(
-              previewTransactionId,
+              previewTransactionId ?? previewTransaction?.id ?? null,
               previewTransaction,
               line.line_date ?? null,
               line.amount ?? null,
@@ -1184,6 +1248,10 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     runLineAction,
     t,
   ]);
+
+  const handleCloseInlineTransaction = useCallback(() => {
+    setInlineTransaction(null);
+  }, []);
 
   const fallbackSummaryRows = useMemo(() => {
     if (!fallbackSummary) {
@@ -1943,6 +2011,16 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {inlineTransaction && (
+        <TransactionDetail
+          transaction={inlineTransaction}
+          hideLinkedDocumentSection
+          onClose={handleCloseInlineTransaction}
+          onEdit={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
+          onDelete={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
+        />
       )}
     </div>
   );

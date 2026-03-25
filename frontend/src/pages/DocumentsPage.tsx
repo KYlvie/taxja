@@ -1879,7 +1879,6 @@ const DocumentsPage = () => {
     <BankStatementWorkbench
       document={document}
       onDocumentUpdated={handleWorkbenchDocumentUpdated}
-      onOpenTransaction={handleOpenTransactionInline}
       onCancel={handleReviewCancel}
       onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
       onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
@@ -1888,7 +1887,6 @@ const DocumentsPage = () => {
     />
   ), [
     handleReviewCancel,
-    handleOpenTransactionInline,
     handleWorkbenchDocumentUpdated,
     hasNextDoc,
     hasPrevDoc,
@@ -1959,13 +1957,19 @@ const DocumentsPage = () => {
       line_items: [],
     });
 
+    const preview = buildPreviewTransaction();
+
+    if (previewTransaction || fallbackLineDate || fallbackLineAmount) {
+      setInlineTransaction(preview);
+    }
+
     try {
       const transaction = await transactionService.getById(transactionId);
       setInlineTransaction(transaction);
     } catch (error) {
       console.error('Failed to load transaction detail inline:', error);
       if (previewTransaction || fallbackLineDate || fallbackLineAmount) {
-        setInlineTransaction(buildPreviewTransaction());
+        setInlineTransaction(preview);
         return;
       }
       aiToast(t('documents.linkedTransaction.loadFailed', 'Could not load transaction details.'), 'error');
@@ -2289,6 +2293,7 @@ const DocumentsPage = () => {
               />
             )}
           />
+          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -2297,6 +2302,7 @@ const DocumentsPage = () => {
       return (
         <div className="documents-page">
           {renderBankStatementReview(viewingDocument)}
+          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -3656,6 +3662,7 @@ const DocumentsPage = () => {
             );
           })()}
         </div>
+        {renderInlineTransactionOverlay()}
       </div>
     );
   }

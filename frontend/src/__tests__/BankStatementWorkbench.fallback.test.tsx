@@ -18,6 +18,7 @@ const restoreLine = vi.fn();
 const undoCreateLine = vi.fn();
 const unmatchLine = vi.fn();
 const getAllTransactions = vi.fn();
+const getTransactionById = vi.fn();
 const aiToast = vi.fn();
 const navigate = vi.fn();
 const translationApi = {
@@ -161,7 +162,14 @@ vi.mock('../services/bankImportService', () => ({
 vi.mock('../services/transactionService', () => ({
   transactionService: {
     getAll: (...args: any[]) => getAllTransactions(...args),
+    getById: (...args: any[]) => getTransactionById(...args),
   },
+}));
+
+vi.mock('../components/transactions/TransactionDetail', () => ({
+  default: ({ transaction }: { transaction: { description: string } }) => (
+    <div>Inline transaction {transaction.description}</div>
+  ),
 }));
 
 vi.mock('../mobile/files', () => ({
@@ -201,6 +209,7 @@ describe('BankStatementWorkbench local fallback', () => {
     undoCreateLine.mockReset();
     unmatchLine.mockReset();
     getAllTransactions.mockReset();
+    getTransactionById.mockReset();
     navigate.mockReset();
     global.URL.createObjectURL = vi.fn(() => 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==');
     global.URL.revokeObjectURL = vi.fn();
@@ -233,6 +242,14 @@ describe('BankStatementWorkbench local fallback', () => {
       total_pages: 0,
       available_years: [],
       needs_review_count: 0,
+    });
+    getTransactionById.mockResolvedValue({
+      id: 1621,
+      type: 'expense',
+      amount: 62.23,
+      date: '2024-12-18',
+      description: 'T-Mobile Austria GmbH',
+      is_deductible: false,
     });
   });
 
@@ -566,7 +583,9 @@ describe('BankStatementWorkbench local fallback', () => {
     await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole('button', { name: 'View transaction' })[0]);
 
-    expect(navigate).toHaveBeenCalledWith('/transactions?transactionId=1621');
+    await waitFor(() => expect(getTransactionById).toHaveBeenCalledWith(1621));
+    expect(screen.getByText('Inline transaction T-Mobile Austria GmbH')).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('uses the inline transaction callback when the document page provides one', async () => {
@@ -625,6 +644,7 @@ describe('BankStatementWorkbench local fallback', () => {
     await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole('button', { name: 'View transaction' })[0]);
 
+    await waitFor(() => expect(getTransactionById).toHaveBeenCalledWith(1722));
     expect(onOpenTransaction).toHaveBeenCalledWith(
       1722,
       expect.objectContaining({
@@ -635,6 +655,7 @@ describe('BankStatementWorkbench local fallback', () => {
       '-62.23',
     );
     expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByText('Inline transaction T-Mobile Austria GmbH')).toBeInTheDocument();
   });
 
   it('keeps the view action available for ignored duplicate lines that still point to an existing transaction', async () => {
@@ -688,6 +709,7 @@ describe('BankStatementWorkbench local fallback', () => {
     await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
     fireEvent.click(screen.getAllByRole('button', { name: 'View transaction' })[0]);
 
+    await waitFor(() => expect(getTransactionById).toHaveBeenCalledWith(1655));
     expect(onOpenTransaction).toHaveBeenCalledWith(
       1655,
       expect.objectContaining({
@@ -697,6 +719,7 @@ describe('BankStatementWorkbench local fallback', () => {
       '2024-12-19',
       '-2.03',
     );
+    expect(screen.getByText('Inline transaction T-Mobile Austria GmbH')).toBeInTheDocument();
   });
 
   it('normalizes orphaned remote line states back to pending review in the UI', async () => {
@@ -923,6 +946,167 @@ describe('BankStatementWorkbench local fallback', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0));
   });
 
+  it('forces create for an ignored line when the user explicitly clicks create', async () => {
+    const ignoredLine = {
+      id: 91,
+      line_date: '2024-12-24',
+      amount: '-18.20',
+      counterparty: 'Parking AG',
+      purpose: 'Parking invoice',
+      raw_reference: 'Parking invoice',
+      normalized_fingerprint: 'fp-force-create',
+      review_status: 'ignored_duplicate',
+      suggested_action: 'ignore',
+      confidence_score: '1.00',
+      linked_transaction_id: 1555,
+      created_transaction_id: null,
+      linked_transaction: {
+        id: 1555,
+        amount: '18.20',
+        description: 'Parking invoice',
+        transaction_date: '2024-12-24',
+        type: 'expense',
+      },
+      created_transaction: null,
+    };
+
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: { start: '2024-12-01', end: '2024-12-31' },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:00Z',
+      updated_at: '2026-03-24T00:00:00Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 0,
+      ignored_count: 1,
+    });
+    getLines.mockResolvedValue([ignoredLine]);
+    confirmCreateLine.mockResolvedValue({
+      success: true,
+      line: {
+        ...ignoredLine,
+        review_status: 'auto_created',
+        suggested_action: 'create_new',
+        created_transaction_id: 1777,
+        linked_transaction_id: 1777,
+      },
+      transaction: {
+        id: 1777,
+        amount: '18.20',
+        description: 'Parking invoice',
+        transaction_date: '2024-12-24',
+        type: 'expense',
+      },
+    });
+    getImport.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: { start: '2024-12-01', end: '2024-12-31' },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:00Z',
+      updated_at: '2026-03-24T00:00:00Z',
+      total_count: 1,
+      auto_created_count: 1,
+      matched_existing_count: 0,
+      pending_review_count: 0,
+      ignored_count: 0,
+    });
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create transaction' })[0]);
+
+    await waitFor(() => expect(confirmCreateLine).toHaveBeenCalledWith(91, true));
+  });
+
+  it('forces create for a revoked line when the user explicitly clicks create', async () => {
+    const revokedLine = {
+      id: 92,
+      line_date: '2024-12-27',
+      amount: '-18.20',
+      counterparty: 'Parking AG',
+      purpose: 'Parking invoice',
+      raw_reference: 'Parking invoice',
+      normalized_fingerprint: 'fp-revoked-create',
+      review_status: 'pending_review',
+      suggested_action: 'create_new',
+      resolution_reason: 'revoked_create',
+      confidence_score: '0.80',
+      linked_transaction_id: null,
+      created_transaction_id: null,
+      linked_transaction: null,
+      created_transaction: null,
+    };
+
+    initializeFromDocument.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: { start: '2024-12-01', end: '2024-12-31' },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:00Z',
+      updated_at: '2026-03-24T00:00:00Z',
+      total_count: 1,
+      auto_created_count: 0,
+      matched_existing_count: 0,
+      pending_review_count: 1,
+      ignored_count: 0,
+    });
+    getLines.mockResolvedValue([revokedLine]);
+    confirmCreateLine.mockResolvedValue({
+      success: true,
+      line: {
+        ...revokedLine,
+        review_status: 'auto_created',
+        suggested_action: 'create_new',
+        created_transaction_id: 1778,
+        linked_transaction_id: 1778,
+      },
+      transaction: {
+        id: 1778,
+        amount: '18.20',
+        description: 'Parking invoice',
+        transaction_date: '2024-12-27',
+        type: 'expense',
+      },
+    });
+    getImport.mockResolvedValue({
+      id: 12,
+      source_type: 'document',
+      source_document_id: 326,
+      bank_name: 'Magenta Bank',
+      iban: 'AT602011183744980900',
+      statement_period: { start: '2024-12-01', end: '2024-12-31' },
+      tax_year: 2024,
+      created_at: '2026-03-24T00:00:00Z',
+      updated_at: '2026-03-24T00:00:00Z',
+      total_count: 1,
+      auto_created_count: 1,
+      matched_existing_count: 0,
+      pending_review_count: 0,
+      ignored_count: 0,
+    });
+
+    render(<BankStatementWorkbench document={makeFallbackDocument()} />);
+
+    await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Create transaction' })[0]);
+
+    await waitFor(() => expect(confirmCreateLine).toHaveBeenCalledWith(92, true));
+  });
+
   it('opens a manual transaction picker before matching a pending line', async () => {
     const pendingLine = {
       id: 91,
@@ -1089,8 +1273,19 @@ describe('BankStatementWorkbench local fallback', () => {
     expectAllActionButtonsEnabled('Match existing');
     expectAllActionButtonsEnabled('View transaction');
 
+    getTransactionById.mockResolvedValueOnce({
+      id: 2001,
+      type: 'income',
+      amount: 1200,
+      date: '2024-12-22',
+      description: 'Suggested salary match',
+      is_deductible: false,
+    });
+
     fireEvent.click(screen.getAllByRole('button', { name: 'View transaction' })[0]);
-    expect(navigate).toHaveBeenCalledWith('/transactions?transactionId=2001');
+    await waitFor(() => expect(getTransactionById).toHaveBeenCalledWith(2001));
+    expect(screen.getByText('Inline transaction Suggested salary match')).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('unmatches a remote line back to pending review and clears the previous match candidate', async () => {

@@ -37,8 +37,14 @@ export const bankImportService = {
     return response.data.lines;
   },
 
-  confirmCreateLine: async (lineId: number): Promise<LineActionEnvelope> => {
-    const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/confirm-create`);
+  confirmCreateLine: async (lineId: number, force = false): Promise<LineActionEnvelope> => {
+    const response = await api.post<LineActionEnvelope>(
+      `/bank-import/lines/${lineId}/confirm-create`,
+      null,
+      {
+        params: force ? { force: true } : undefined,
+      }
+    );
     return response.data;
   },
 
