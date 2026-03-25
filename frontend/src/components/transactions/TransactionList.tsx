@@ -32,6 +32,14 @@ function getDeductStatus(t: Transaction): DeductStatus {
   return 'partial';
 }
 
+function isSystemGeneratedTransaction(transaction: Transaction): boolean {
+  return Boolean(
+    transaction.is_system_generated
+    || transaction.source_recurring_id
+    || transaction.parent_recurring_id
+  );
+}
+
 interface TransactionListProps {
   transactions: Transaction[];
   onEdit: (transaction: Transaction) => void;
@@ -237,7 +245,9 @@ const TransactionList = ({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((transaction) => (
+            {transactions.map((transaction) => {
+              const systemGenerated = isSystemGeneratedTransaction(transaction);
+              return (
               <tr
                 key={transaction.id}
                 className={`transaction-row ${transaction.type}${selectedIds?.has(transaction.id) ? ' selected' : ''}`}
@@ -257,7 +267,7 @@ const TransactionList = ({
                 <td className="description">
                   <span className="description-text">{transaction.description}</span>
                   <span className="transaction-inline-flags">
-                    {transaction.is_recurring ? (
+                    {transaction.is_recurring && !systemGenerated ? (
                       <span
                         className={`inline-flag recurring-badge ${
                           transaction.recurring_is_active === false ? 'paused' : ''
@@ -268,10 +278,11 @@ const TransactionList = ({
                       </span>
                     ) : null}
 
-                    {transaction.is_system_generated ? (
+                    {systemGenerated ? (
                       <span
                         className="inline-flag system-generated-badge"
                         title={t('transactions.systemGenerated')}
+                        aria-label={t('transactions.systemGenerated')}
                       >
                         <Bot size={13} />
                       </span>
@@ -316,13 +327,16 @@ const TransactionList = ({
                 </td>
                 <td className="transaction-row-actions">{renderActionButtons(transaction)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="transaction-mobile-list">
-        {transactions.map((transaction) => (
+        {transactions.map((transaction) => {
+          const systemGenerated = isSystemGeneratedTransaction(transaction);
+          return (
           <article
             key={transaction.id}
             className={`transaction-card ${transaction.type}`}
@@ -365,7 +379,7 @@ const TransactionList = ({
                 </span>
               ) : null}
 
-              {transaction.is_recurring ? (
+              {transaction.is_recurring && !systemGenerated ? (
                 <span
                   className={`transaction-chip recurring ${
                     transaction.recurring_is_active === false ? 'paused' : ''
@@ -376,7 +390,7 @@ const TransactionList = ({
                 </span>
               ) : null}
 
-              {transaction.is_system_generated ? (
+              {systemGenerated ? (
                 <span className="transaction-chip neutral">
                   <Bot size={12} />
                   <span>{t('transactions.systemGenerated')}</span>
@@ -400,7 +414,8 @@ const TransactionList = ({
 
             <div className="transaction-card-actions">{renderActionButtons(transaction)}</div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

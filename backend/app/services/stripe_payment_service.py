@@ -11,6 +11,11 @@ from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.plan import Plan, PlanType, BillingCycle
 from app.models.payment_event import PaymentEvent
 from app.models.user import User
+from app.services.email_service import (
+    send_subscription_activated_email,
+    send_subscription_payment_failed_email,
+    send_subscription_renewal_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +427,77 @@ class StripePaymentService:
             )
         return f"Taxja overage settlement ({overage_credits_used} credits)"
 
+    def _get_user_for_subscription(self, subscription: Subscription) -> Optional[User]:
+        if getattr(subscription, "user", None) is not None:
+            return subscription.user
+        return self.db.query(User).filter(User.id == subscription.user_id).first()
+
+    def _send_activation_email(self, subscription: Subscription) -> None:
+        try:
+            user = self._get_user_for_subscription(subscription)
+            if not user or not user.email:
+                logger.warning(
+                    "Skipping subscription activation email; no user/email for subscription %s",
+                    subscription.id,
+                )
+                return
+
+            send_subscription_activated_email(
+                email=user.email,
+                name=user.name or user.email,
+                plan_name=subscription.plan.name if subscription.plan else "Taxja",
+                billing_cycle=subscription.billing_cycle.value if subscription.billing_cycle else None,
+                current_period_end=subscription.current_period_end,
+                language=getattr(user, "language", None) or "de",
+            )
+        except Exception as e:
+            logger.warning("Failed to send activation email for subscription %s: %s", subscription.id, e)
+
+    def _send_renewal_email(self, subscription: Subscription, invoice: Dict[str, Any]) -> None:
+        try:
+            user = self._get_user_for_subscription(subscription)
+            if not user or not user.email:
+                logger.warning(
+                    "Skipping subscription renewal email; no user/email for subscription %s",
+                    subscription.id,
+                )
+                return
+
+            send_subscription_renewal_email(
+                email=user.email,
+                name=user.name or user.email,
+                plan_name=subscription.plan.name if subscription.plan else "Taxja",
+                amount_paid_cents=invoice.get("amount_paid"),
+                currency=invoice.get("currency"),
+                current_period_end=subscription.current_period_end,
+                invoice_url=invoice.get("hosted_invoice_url") or invoice.get("invoice_pdf"),
+                language=getattr(user, "language", None) or "de",
+            )
+        except Exception as e:
+            logger.warning("Failed to send renewal email for subscription %s: %s", subscription.id, e)
+
+    def _send_payment_failed_email(self, subscription: Subscription, invoice: Dict[str, Any]) -> None:
+        try:
+            user = self._get_user_for_subscription(subscription)
+            if not user or not user.email:
+                logger.warning(
+                    "Skipping failed subscription payment email; no user/email for subscription %s",
+                    subscription.id,
+                )
+                return
+
+            send_subscription_payment_failed_email(
+                email=user.email,
+                name=user.name or user.email,
+                plan_name=subscription.plan.name if subscription.plan else "Taxja",
+                amount_due_cents=invoice.get("amount_due") or invoice.get("amount_remaining"),
+                currency=invoice.get("currency"),
+                invoice_url=invoice.get("hosted_invoice_url") or invoice.get("invoice_pdf"),
+                language=getattr(user, "language", None) or "de",
+            )
+        except Exception as e:
+            logger.warning("Failed to send payment-failed email for subscription %s: %s", subscription.id, e)
+
     # ── Webhook handling ──────────────────────────────────────────────
     def handle_webhook_event(self, payload: bytes, sig_header: str) -> Dict[str, Any]:
         """Verify and process a Stripe webhook event."""
@@ -587,7 +663,8 @@ class StripePaymentService:
             return {"status": "error", "reason": "missing_metadata"}
 
         try:
-            self._activate_subscription_from_checkout_session(session)
+            subscription = self._activate_subscription_from_checkout_session(session)
+            self._send_activation_email(subscription)
         except ValueError as e:
             logger.error("Checkout completion processing failed for %s: %s", session.get("id"), e)
             return {"status": "error", "reason": str(e)}
@@ -615,6 +692,12 @@ class StripePaymentService:
         if sub and sub.status == SubscriptionStatus.PAST_DUE:
             sub.status = SubscriptionStatus.ACTIVE
             self.db.commit()
+        if (
+            sub
+            and event.get("type") == "invoice.paid"
+            and invoice.get("billing_reason") in {"subscription_cycle", "subscription_update", "subscription_threshold"}
+        ):
+            self._send_renewal_email(sub, invoice)
         return {"status": "processed", "action": "payment_confirmed"}
 
     def _on_payment_failed(self, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -637,6 +720,7 @@ class StripePaymentService:
         if sub:
             sub.status = SubscriptionStatus.PAST_DUE
             self.db.commit()
+            self._send_payment_failed_email(sub, invoice)
         return {"status": "processed", "action": "payment_failed_grace_period"}
 
     def _on_subscription_updated(self, event: Dict[str, Any]) -> Dict[str, Any]:

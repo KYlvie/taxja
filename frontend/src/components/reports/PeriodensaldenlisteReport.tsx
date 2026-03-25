@@ -214,48 +214,46 @@ const PeriodensaldenlisteReport = () => {
 
           <div className="summary-box">
             <h3>{t('reports.periodensaldenliste.title')}</h3>
+            <table className="periodensaldenliste-table summary-table">
+              <tbody>
             {([
               ['aktiva', t('reports.periodensaldenliste.aktiva')],
               ['passiva', t('reports.periodensaldenliste.passiva')],
               ['ertrag', t('reports.periodensaldenliste.ertrag')],
               ['aufwand', t('reports.periodensaldenliste.aufwand')],
             ] as const).map(([key, label]) => (
-              <div key={key} className="summary-row">
-                <span className="summary-label">{label}</span>
-                <div className="summary-months">
-                  {((report.summary as any)[`${key}_months`] as number[]).map(
-                    (monthValue: number, index: number) => (
-                      <span key={index} className="summary-month-val">
-                        {fmt(monthValue)}
-                      </span>
-                    ),
-                  )}
-                  <span className="summary-gesamt-val">
-                    {fmt((report.summary as any)[`${key}_gesamt`])}
-                  </span>
-                </div>
-              </div>
+              <tr key={key}>
+                <td className="summary-label-cell">{label}</td>
+                {((report.summary as any)[`${key}_months`] as number[]).map(
+                  (monthValue: number, index: number) => (
+                    <td key={index} style={{ textAlign: 'right', fontSize: '0.78rem', padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                      {fmt(monthValue)}
+                    </td>
+                  ),
+                )}
+                <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.82rem', borderLeft: '1px solid #d1d5db', paddingLeft: '6px', whiteSpace: 'nowrap' }}>
+                  {fmt((report.summary as any)[`${key}_gesamt`])}
+                </td>
+              </tr>
             ))}
-            <div className="summary-row total">
-              <span className="summary-label">{t('reports.periodensaldenliste.gewinnVerlust')}</span>
-              <div className="summary-months">
-                {report.summary.gewinn_verlust_months.map((monthValue, index) => (
-                  <span
-                    key={index}
-                    className={`summary-month-val ${monthValue >= 0 ? 'positive' : 'negative'}`}
-                  >
-                    {fmt(monthValue)}
-                  </span>
-                ))}
-                <span
-                  className={`summary-gesamt-val ${
-                    report.summary.gewinn_verlust_gesamt >= 0 ? 'positive' : 'negative'
-                  }`}
+            <tr className="subtotal-row">
+              <td className="summary-label-cell" style={{ fontWeight: 700 }}>{t('reports.periodensaldenliste.gewinnVerlust')}</td>
+              {report.summary.gewinn_verlust_months.map((monthValue, index) => (
+                <td
+                  key={index}
+                  style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.82rem', padding: '4px 6px', whiteSpace: 'nowrap', color: monthValue >= 0 ? '#059669' : '#dc2626' }}
                 >
-                  {fmt(report.summary.gewinn_verlust_gesamt)}
-                </span>
-              </div>
-            </div>
+                  {fmt(monthValue)}
+                </td>
+              ))}
+              <td
+                style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.88rem', borderLeft: '1px solid #d1d5db', paddingLeft: '6px', whiteSpace: 'nowrap', color: report.summary.gewinn_verlust_gesamt >= 0 ? '#059669' : '#dc2626' }}
+              >
+                {fmt(report.summary.gewinn_verlust_gesamt)}
+              </td>
+            </tr>
+              </tbody>
+            </table>
           </div>
 
           <div className="periodensaldenliste-disclaimer">
