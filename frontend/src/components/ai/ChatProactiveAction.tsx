@@ -12,6 +12,14 @@ interface ChatProactiveActionProps {
   message: ProactiveMessage;
 }
 
+interface ReminderDetailItem {
+  kind: 'asset' | 'document';
+  href: string;
+  label: string;
+  asset_id?: string;
+  document_id?: number;
+}
+
 const ACTIONABLE_TYPES = new Set([
   'recurring_confirm',
   'asset_confirm',
@@ -51,6 +59,24 @@ function getBucketLabels(message: ProactiveMessage, t: ReturnType<typeof useTran
   }
 }
 
+function getDetailItems(message: ProactiveMessage): ReminderDetailItem[] {
+  const rawItems = message.actionData?.detail_items;
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+
+  return rawItems
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item) => ({
+      kind: item.kind === 'document' ? 'document' : 'asset',
+      href: typeof item.href === 'string' ? item.href : '',
+      label: typeof item.label === 'string' ? item.label : '',
+      asset_id: typeof item.asset_id === 'string' ? item.asset_id : undefined,
+      document_id: typeof item.document_id === 'number' ? item.document_id : undefined,
+    }))
+    .filter((item) => item.href && item.label);
+}
+
 export default function ChatProactiveAction({ message }: ChatProactiveActionProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -62,6 +88,9 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
   const updateMessageAction = useAIAdvisorStore((s) => s.updateMessageAction);
   const dismissMessage = useAIAdvisorStore((s) => s.dismissMessage);
   const refreshAll = useRefreshStore((s) => s.refreshAll);
+  const detailItems = getDetailItems(message);
+  const hasMultipleDetailItems = detailItems.length > 1;
+  const singleDetailItem = detailItems.length === 1 ? detailItems[0] : null;
 
   const handleLegacyConfirm = async () => {
     const docId = message.documentId;
@@ -127,6 +156,16 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
   };
 
   const handlePrimary = async () => {
+    if (message.bucket !== 'terminal_action' && hasMultipleDetailItems) {
+      setExpanded((value) => !value);
+      return;
+    }
+
+    if (message.bucket !== 'terminal_action' && !message.link && singleDetailItem?.href) {
+      navigate(singleDetailItem.href);
+      return;
+    }
+
     setLoadingAction('primary');
     setResult(null);
     try {
@@ -197,7 +236,11 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
 
   const labels = getBucketLabels(message, t);
   const confirmLabel =
-    message.bucket === 'terminal_action' && message.action?.confirmLabel
+    message.bucket !== 'terminal_action' && hasMultipleDetailItems
+      ? expanded
+        ? t('ai.proactive.hideDetails', 'Hide details')
+        : t('ai.proactive.expandDetails', 'Expand details')
+      : message.bucket === 'terminal_action' && message.action?.confirmLabel
       ? typeof message.action.confirmLabel === 'object'
         ? (message.action.confirmLabel as any)[lang] || (message.action.confirmLabel as any).en
         : message.action.confirmLabel
@@ -226,7 +269,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
     if (typeof value === 'string' && value.includes('.') && !value.includes(' ') && value.length > 15) return false;
     return true;
   });
-  const canExpand = visibleDataEntries.length > 0;
+  const canExpand = hasMultipleDetailItems || visibleDataEntries.length > 0;
   const linkActions = [
     message.link
       ? {
@@ -246,7 +289,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
       : null,
   ].filter((action): action is { href: string; label: string } => Boolean(action));
   // Hide link actions when primary button already navigates to the same destination
-  const hasNavigatingPrimary = message.bucket !== 'terminal_action' && !!message.link;
+  const hasNavigatingPrimary = message.bucket !== 'terminal_action' && (!!message.link || !!singleDetailItem || hasMultipleDetailItems);
   const visibleLinkActions = hasNavigatingPrimary ? [] : linkActions;
 
   return (
@@ -266,6 +309,25 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
 
           {expanded && canExpand && (
             <div className="chat-recurring-details">
+              {detailItems.length > 0 && (
+                <div className="chat-proactive-detail-list">
+                  {detailItems.map((item) => (
+                    <div key={`${item.kind}:${item.href}`} className="chat-proactive-detail-item">
+                      <div className="chat-proactive-detail-copy">
+                        <span className="chat-proactive-detail-label">{item.label}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="chat-recurring-btn view-doc"
+                        onClick={() => navigate(item.href)}
+                      >
+                        <ArrowRight size={14} />
+                        <span>{t('common.viewDetails', 'View details')}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {Object.entries(message.actionData || {})
                 .filter(([key, value]) => {
                   if (value === null || value === undefined || value === '') {
@@ -278,6 +340,7 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
                     'category', 'action_label_key', 'action label key',
                     'bucket', 'priority', 'source', 'trigger',
                     'file_name',
+                    'detail_items',
                   ]);
                   if (internalKeys.has(key)) return false;
                   if (key.startsWith('suggestion_') || key.startsWith('_')) return false;

@@ -484,6 +484,37 @@
   margin-bottom: 10px;
 }
 
+.chat-proactive-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-proactive-detail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.chat-proactive-detail-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-proactive-detail-label {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  font-weight: 600;
+  word-break: break-word;
+}
+
 .chat-recurring-row {
   display: flex;
   justify-content: space-between;
