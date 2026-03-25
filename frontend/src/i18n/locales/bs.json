@@ -3621,10 +3621,10 @@
     "missingRentalContract": "Imate prihod od najma od {{amount}}, ali nema postavljenog ugovora o najmu.",
     "missingBusinessDocs": "Imate {{amount}} prihoda od samostalne djelatnosti u {{year}}, ali imate malo pratecih dokumenata.",
     "rentalPercentageZero": "Nekretnina '{{address}}' je postavljena kao iznajmljena, ali procenat najma je 0%. Azurirajte ga da biste zatrazili odbitke.",
-    "missingAfaSetup": "Imate {{property_count}} nekretnina, ali nemate postavljenu amortizaciju (AfA) kao ponavljajuci odbitak.",
+    "missingAfaSetup": "Imate {{property_count}} sredstava, ali nemate postavljenu amortizaciju (AfA) kao ponavljajuci odbitak.",
     "propertyNoAfaRate": "Nekretnina '{{address}}' nema postavljenu stopu amortizacije. Nekretnine za najam trebaju koristiti 1,5% (stambene) ili 2,5% (poslovne).",
     "propertyNoRentalIncome": "Nekretnina za najam '{{address}}' nema postavljen ponavljajuci prihod od najma.",
-    "propertyNoKaufvertrag": "Nekretnina '{{address}}' nema povezan kupoprodajni ugovor.",
+    "propertyNoKaufvertrag": "Sredstvo '{{address}}' nema povezan dokument kupnje.",
     "missingDocument": "Nema postavljenog dokumenta {{document_type}} za poresku godinu {{year}}. Ovaj dokument je vazan za vasu poresku prijavu.",
     "docTypes": {
       "lohnzettel": "Godisnja platna lista (L16)",

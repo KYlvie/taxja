@@ -3613,10 +3613,10 @@
     "missingRentalContract": "Vous avez des revenus locatifs de {{amount}} mais aucun contrat de location téléchargé.",
     "missingBusinessDocs": "Vous avez {{amount}} de revenus d'activité indépendante en {{year}} mais peu de documents justificatifs.",
     "rentalPercentageZero": "La propriété « {{address}} » est définie comme locative mais le pourcentage de location est de 0 %. Mettez-le à jour pour demander des déductions.",
-    "missingAfaSetup": "Vous avez {{property_count}} propriétés mais aucun amortissement (AfA) configuré comme déduction récurrente.",
+    "missingAfaSetup": "Vous avez {{property_count}} actifs mais aucun amortissement (AfA) configuré comme déduction récurrente.",
     "propertyNoAfaRate": "La propriété « {{address}} » n'a pas de taux d'amortissement défini. Les propriétés locatives doivent utiliser 1,5 % (résidentiel) ou 2,5 % (commercial).",
     "propertyNoRentalIncome": "La propriété locative « {{address}} » n'a pas de revenu locatif récurrent configuré.",
-    "propertyNoKaufvertrag": "La propriété « {{address}} » n'a pas de contrat d'achat lié.",
+    "propertyNoKaufvertrag": "L'actif « {{address}} » n'a pas de document d'achat lié.",
     "missingDocument": "Aucun {{document_type}} téléchargé pour l'année fiscale {{year}}. Ce document est important pour votre déclaration fiscale.",
     "docTypes": {
       "lohnzettel": "Fiche de paie annuelle (L16)",

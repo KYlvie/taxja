@@ -3687,10 +3687,10 @@
     "missingRentalContract": "Sie haben Mieteinnahmen von {{amount}}, aber keinen Mietvertrag hochgeladen.",
     "missingBusinessDocs": "Sie haben {{amount}} Einkünfte aus selbständiger Arbeit in {{year}}, aber wenige Belege hochgeladen.",
     "rentalPercentageZero": "Immobilie \"{{address}}\" ist als Vermietung eingestellt, aber der Vermietungsanteil beträgt 0%. Aktualisieren Sie ihn, um Absetzungen geltend zu machen.",
-    "missingAfaSetup": "Sie haben {{property_count}} Immobilien, aber keine Abschreibung (AfA) als wiederkehrende Buchung eingerichtet.",
+    "missingAfaSetup": "Sie haben {{property_count}} Vermögenswerte, aber keine Abschreibung (AfA) als wiederkehrende Buchung eingerichtet.",
     "propertyNoAfaRate": "Immobilie \"{{address}}\" hat keinen AfA-Satz. Vermietete Wohngebäude: 1,5%, Gewerbegebäude: 2,5%.",
     "propertyNoRentalIncome": "Vermietete Immobilie \"{{address}}\" hat keine wiederkehrenden Mieteinnahmen eingerichtet.",
-    "propertyNoKaufvertrag": "Immobilie \"{{address}}\" hat keinen Kaufvertrag verknüpft.",
+    "propertyNoKaufvertrag": "Vermögenswert \"{{address}}\" hat kein verknüpftes Kaufdokument.",
     "missingDocument": "Kein(e) {{document_type}} für das Steuerjahr {{year}} hochgeladen. Dieses Dokument ist wichtig für Ihre Steuererklärung.",
     "docTypes": {
       "lohnzettel": "Lohnzettel (L16)",

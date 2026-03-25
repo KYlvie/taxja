@@ -3699,10 +3699,10 @@
     "missingRentalContract": "You have rental income of {{amount}} but no rental contract uploaded.",
     "missingBusinessDocs": "You have {{amount}} self-employment income in {{year}} but few supporting documents.",
     "rentalPercentageZero": "Property \"{{address}}\" is set as rental but rental percentage is 0%. Update it to claim deductions.",
-    "missingAfaSetup": "You have {{property_count}} properties but no depreciation (AfA) set up as recurring deduction.",
+    "missingAfaSetup": "You have {{property_count}} assets but no depreciation (AfA) set up as a recurring deduction.",
     "propertyNoAfaRate": "Property \"{{address}}\" has no depreciation rate set. Rental properties should use 1.5% (residential) or 2.5% (commercial).",
     "propertyNoRentalIncome": "Rental property \"{{address}}\" has no recurring rental income set up.",
-    "propertyNoKaufvertrag": "Property \"{{address}}\" has no purchase contract document linked.",
+    "propertyNoKaufvertrag": "Asset \"{{address}}\" has no purchase document linked.",
     "missingDocument": "No {{document_type}} uploaded for tax year {{year}}. This document is important for your tax filing.",
     "docTypes": {
       "lohnzettel": "Annual payslip (L16)",

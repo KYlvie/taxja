@@ -3613,10 +3613,10 @@
     "missingRentalContract": "Masz dochody z najmu w wysokości {{amount}}, ale nie przesłałeś umowy najmu.",
     "missingBusinessDocs": "Masz {{amount}} dochodów z samozatrudnienia w {{year}}, ale niewiele dokumentów potwierdzających.",
     "rentalPercentageZero": "Nieruchomość \"{{address}}\" jest ustawiona jako wynajmowana, ale procent wynajmu wynosi 0%. Zaktualizuj go, aby zastosować odliczenia.",
-    "missingAfaSetup": "Masz {{property_count}} nieruchomości, ale nie skonfigurowano amortyzacji (AfA) jako cyklicznego odliczenia.",
+    "missingAfaSetup": "Masz {{property_count}} aktywów, ale nie skonfigurowano amortyzacji (AfA) jako cyklicznego odliczenia.",
     "propertyNoAfaRate": "Nieruchomość \"{{address}}\" nie ma ustawionej stawki amortyzacji. Nieruchomości wynajmowane powinny stosować 1,5% (mieszkalne) lub 2,5% (komercyjne).",
     "propertyNoRentalIncome": "Nieruchomość wynajmowana \"{{address}}\" nie ma skonfigurowanego cyklicznego dochodu z najmu.",
-    "propertyNoKaufvertrag": "Nieruchomość \"{{address}}\" nie ma powiązanego dokumentu umowy zakupu.",
+    "propertyNoKaufvertrag": "Składnik majątku \"{{address}}\" nie ma powiązanego dokumentu zakupu.",
     "missingDocument": "Nie przesłano {{document_type}} za rok podatkowy {{year}}. Ten dokument jest ważny dla Twojego zeznania podatkowego.",
     "docTypes": {
       "lohnzettel": "Roczny pasek wypłaty (L16)",

@@ -3621,10 +3621,10 @@
     "missingRentalContract": "{{amount}} bérleti jövedelme van, de nincs feltöltve bérleti szerződés.",
     "missingBusinessDocs": "{{year}}-ben {{amount}} önálló vállalkozásból származó jövedelme van, de kevés igazoló dokumentum.",
     "rentalPercentageZero": "A(z) \"{{address}}\" ingatlan bérbeadásra van beállítva, de a bérbeadási arány 0%. Frissítse a levonások igényléséhez.",
-    "missingAfaSetup": "{{property_count}} ingatlan van, de nincs értékcsökkenés (AfA) beállítva ismétlődő levonásként.",
+    "missingAfaSetup": "{{property_count}} eszköz van, de nincs értékcsökkenés (AfA) beállítva ismétlődő levonásként.",
     "propertyNoAfaRate": "A(z) \"{{address}}\" ingatlannak nincs értékcsökkenési rátája beállítva. Bérleti ingatlanok esetén 1,5% (lakó) vagy 2,5% (kereskedelmi) ajánlott.",
     "propertyNoRentalIncome": "A(z) \"{{address}}\" bérleti ingatlannak nincs ismétlődő bérleti bevétele beállítva.",
-    "propertyNoKaufvertrag": "A(z) \"{{address}}\" ingatlanhoz nincs adásvételi szerződés kapcsolva.",
+    "propertyNoKaufvertrag": "A(z) \"{{address}}\" eszközhöz nincs kapcsolt beszerzési dokumentum.",
     "missingDocument": "Nincs {{document_type}} feltöltve a(z) {{year}} adóévre. Ez a dokumentum fontos az adóbevalláshoz.",
     "docTypes": {
       "lohnzettel": "Éves bérjegyzék (L16)",

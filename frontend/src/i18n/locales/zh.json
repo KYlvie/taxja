@@ -3702,10 +3702,10 @@
     "missingRentalContract": "您有 {{amount}} 的租金收入但尚未上传租赁合同",
     "missingBusinessDocs": "您有 {{year}} 年度 {{amount}} 的自雇收入，但支撑文档较少",
     "rentalPercentageZero": "房产\"{{address}}\"设置为出租但出租比例为0%，请更新以申请抵扣",
-    "missingAfaSetup": "您有 {{property_count}} 处房产但未设置折旧(AfA)周期性扣除",
+    "missingAfaSetup": "您有 {{property_count}} 项资产但未设置折旧(AfA)周期性扣除",
     "propertyNoAfaRate": "房产\"{{address}}\"未设置折旧率，出租住宅应为1.5%，商业用房为2.5%",
     "propertyNoRentalIncome": "出租房产\"{{address}}\"未设置周期性租金收入",
-    "propertyNoKaufvertrag": "房产\"{{address}}\"未关联购买合同文档",
+    "propertyNoKaufvertrag": "资产\"{{address}}\"未关联购买文档",
     "missingDocument": "{{year}} 税年尚未上传{{document_type}}，此文档对您的报税很重要",
     "docTypes": {
       "lohnzettel": "年度工资单(L16)",

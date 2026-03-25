@@ -3613,10 +3613,10 @@
     "missingRentalContract": "{{amount}} tutarinda kira geliriniz var ancak kira sozlesmesi yuklenmemis.",
     "missingBusinessDocs": "{{year}} yilinda {{amount}} serbest meslek geliriniz var ancak destekleyici belge sayisi az.",
     "rentalPercentageZero": "\"{{address}}\" mulku kiralik olarak ayarlanmis ancak kira yuzdesi %0. Indirim talep edebilmek icin guncelleyin.",
-    "missingAfaSetup": "{{property_count}} mulkunuz var ancak yinelenen indirim olarak amortisman (AfA) ayarlanmamis.",
+    "missingAfaSetup": "{{property_count}} varliginiz var ancak yinelenen indirim olarak amortisman (AfA) ayarlanmamis.",
     "propertyNoAfaRate": "\"{{address}}\" mulkunde amortisman orani ayarlanmamis. Kiralik mulkler icin %1,5 (konut) veya %2,5 (ticari) kullanilmalidir.",
     "propertyNoRentalIncome": "\"{{address}}\" kiralik mulkunde yinelenen kira geliri ayarlanmamis.",
-    "propertyNoKaufvertrag": "\"{{address}}\" mulkune satin alma sozlesmesi belgesi bagli degil.",
+    "propertyNoKaufvertrag": "\"{{address}}\" varligina bagli satin alma belgesi yok.",
     "missingDocument": "{{year}} vergi yili icin {{document_type}} yuklenmemis. Bu belge vergi beyannameniz icin onemlidir.",
     "docTypes": {
       "lohnzettel": "Yillik maas bordrosu (L16)",
