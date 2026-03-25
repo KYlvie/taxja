@@ -118,8 +118,12 @@ const TransactionList = ({
   };
 
   const renderActionButtons = (transaction: Transaction) => {
+    // If bank_reconciled, document_id points to the bank statement – not a separate invoice/contract
+    const hasNonBankDocument = Boolean(
+      transaction.document_id && !transaction.bank_reconciled
+    );
     const hasIndicators = Boolean(
-      transaction.document_id || (transaction.needs_review && !transaction.reviewed)
+      hasNonBankDocument || (transaction.needs_review && !transaction.reviewed)
     );
 
     return (
@@ -202,7 +206,7 @@ const TransactionList = ({
 
         {hasIndicators ? (
           <span className="transaction-action-secondary">
-            {transaction.document_id ? (
+            {hasNonBankDocument ? (
               <button
                 type="button"
                 className="transaction-action-btn"
@@ -349,13 +353,28 @@ const TransactionList = ({
                   </td>
                   <td>
                     {transaction.bank_reconciled ? (
-                      <span
-                        className="reconciled-status reconciled-status--yes"
-                        title={t('transactions.bankReconciled')}
-                        aria-label={t('transactions.bankReconciled')}
-                      >
-                        <Landmark size={15} />
-                      </span>
+                      transaction.document_id && onOpenDocument ? (
+                        <button
+                          type="button"
+                          className="reconciled-status reconciled-status--yes reconciled-status--clickable"
+                          title={t('transactions.viewBankStatement', 'View bank statement')}
+                          aria-label={t('transactions.viewBankStatement', 'View bank statement')}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenDocument(transaction.document_id!);
+                          }}
+                        >
+                          <Landmark size={15} />
+                        </button>
+                      ) : (
+                        <span
+                          className="reconciled-status reconciled-status--yes"
+                          title={t('transactions.bankReconciled')}
+                          aria-label={t('transactions.bankReconciled')}
+                        >
+                          <Landmark size={15} />
+                        </span>
+                      )
                     ) : (
                       <span
                         className="reconciled-status reconciled-status--no"
@@ -456,7 +475,7 @@ const TransactionList = ({
                   </span>
                 ) : null}
 
-                {transaction.document_id ? (
+                {transaction.document_id && !transaction.bank_reconciled ? (
                   <span className="transaction-chip neutral">
                     <Paperclip size={12} />
                     <span>{t('transactions.hasDocument')}</span>

@@ -252,6 +252,19 @@
   color: #059669;
 }
 
+.reconciled-status--clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.reconciled-status--clickable:hover {
+  transform: scale(1.2);
+  color: #047857;
+}
+
 .reconciled-status--no {
   color: var(--color-text-muted);
   cursor: help;
