@@ -855,7 +855,7 @@
       "errorTitle": "Otpremanje neuspjesno",
       "uploadError": "Greska pri otpremanju ugovora. Molimo pokusajte ponovo.",
       "invalidFileType": "Nevazeci tip datoteke. Molimo otpremite PDF ili slikovnu datoteku.",
-      "fileTooLarge": "Datoteka prevelika. Maksimalna velicina je 10MB.",
+      "fileTooLarge": "Datoteka prevelika. Maksimalna velicina je 5MB.",
       "retry": "Pokusaj ponovo"
     },
     "warnings": {
@@ -1329,7 +1329,9 @@
       "title": "Otpremi dokumente",
       "dragDrop": "Prevucite i ispustite datoteke ovdje, ili kliknite da izaberete",
       "mobileHint": "Izaberite datoteke s vaseg telefona ili skenirajte dokument kamerom",
-      "formats": "Podrzani formati: JPG, PNG, PDF (preporuceno ispod 5MB, maksimalno 10MB)",
+      "formats": "Podrzani formati: JPG, PNG, PDF (preporuceno ispod 5MB, maksimalno 5MB)",
+      "separateFilesHint": "Molimo učitajte svaki dokument kao zasebnu datoteku. Nemojte spajati više dokumenata u jednu datoteku.",
+      "fileTooLarge": "Datoteka \"{{name}}\" je prevelika. Maksimalna veličina je 5 MB.",
       "selectFiles": "Izaberite datoteke",
       "takePhoto": "Uslikaj",
       "progress": "Napredak otpremanja",
@@ -2750,7 +2752,7 @@
     "notifications": "AI Obavijesti",
     "newMessages": "novih poruka",
     "attachFile": "Prilozi fajl",
-    "fileTooLarge": "Fajl je prevelik. Maksimalna velicina je 10 MB.",
+    "fileTooLarge": "Fajl je prevelik. Maksimalna velicina je 5 MB.",
     "fileAttachedPlaceholder": "Dodajte poruku o ovom fajlu...",
     "cpuWarning": "CPU rezim, priblizno 20-30 sekundi...",
     "advisorName": "Taxja",

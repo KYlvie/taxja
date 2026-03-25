@@ -849,7 +849,7 @@
       "errorTitle": "Échec du téléchargement",
       "uploadError": "Erreur lors du téléchargement du contrat. Veuillez réessayer.",
       "invalidFileType": "Type de fichier invalide. Veuillez télécharger un fichier PDF ou image.",
-      "fileTooLarge": "Fichier trop volumineux. La taille maximale est de 10 Mo.",
+      "fileTooLarge": "Fichier trop volumineux. La taille maximale est de 5 Mo.",
       "retry": "Réessayer"
     },
     "warnings": {
@@ -1323,7 +1323,9 @@
       "title": "Télécharger des documents",
       "dragDrop": "Glissez-déposez les fichiers ici, ou cliquez pour sélectionner",
       "mobileHint": "Choisissez des fichiers depuis votre téléphone ou numérisez un document avec l'appareil photo",
-      "formats": "Formats acceptés : JPG, PNG, PDF (max 10 Mo)",
+      "formats": "Formats acceptés : JPG, PNG, PDF (max 5 Mo)",
+      "separateFilesHint": "Veuillez télécharger chaque document séparément. Ne combinez pas plusieurs documents en un seul fichier.",
+      "fileTooLarge": "Le fichier \"{{name}}\" est trop volumineux. La taille maximale est de 5 Mo.",
       "selectFiles": "Sélectionner des fichiers",
       "takePhoto": "Prendre une photo",
       "progress": "Progression du téléchargement",
@@ -2744,7 +2746,7 @@
     "notifications": "Notifications AI",
     "newMessages": "nouveaux messages",
     "attachFile": "Joindre un fichier",
-    "fileTooLarge": "Le fichier est trop volumineux. La taille maximale est de 10 Mo.",
+    "fileTooLarge": "Le fichier est trop volumineux. La taille maximale est de 5 Mo.",
     "fileAttachedPlaceholder": "Ajoutez un message concernant ce fichier...",
     "cpuWarning": "Mode CPU, environ 20-30 secondes...",
     "advisorName": "Taxja",

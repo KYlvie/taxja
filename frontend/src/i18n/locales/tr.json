@@ -849,7 +849,7 @@
       "errorTitle": "Yukleme Basarisiz",
       "uploadError": "Sozlesme yuklenirken hata. Lutfen tekrar deneyin.",
       "invalidFileType": "Gecersiz dosya turu. Lutfen bir PDF veya resim dosyasi yukleyin.",
-      "fileTooLarge": "Dosya cok buyuk. Maksimum boyut 10MB.",
+      "fileTooLarge": "Dosya cok buyuk. Maksimum boyut 5MB.",
       "retry": "Tekrar Dene"
     },
     "warnings": {
@@ -1323,7 +1323,9 @@
       "title": "Belge Yukle",
       "dragDrop": "Dosyalari buraya surukleyin ve birakin veya secmek icin tiklayin",
       "mobileHint": "Telefonunuzdan dosya secin veya kamerayla belge tarayin",
-      "formats": "Desteklenen formatlar: JPG, PNG, PDF (5MB alti onerilen, maks 10MB)",
+      "formats": "Desteklenen formatlar: JPG, PNG, PDF (5MB alti onerilen, maks 5MB)",
+      "separateFilesHint": "Lütfen her belgeyi ayrı bir dosya olarak yükleyin. Birden fazla belgeyi tek bir dosyada birleştirmeyin.",
+      "fileTooLarge": "\"{{name}}\" dosyası çok büyük. Maksimum boyut 5 MB'dir.",
       "selectFiles": "Dosya Sec",
       "takePhoto": "Fotograf Cek",
       "progress": "Yukleme Ilerlemesi",
@@ -2744,7 +2746,7 @@
     "notifications": "Yapay Zeka Bildirimleri",
     "newMessages": "yeni mesajlar",
     "attachFile": "Dosya ekle",
-    "fileTooLarge": "Dosya cok buyuk. Maksimum boyut 10 MB.",
+    "fileTooLarge": "Dosya cok buyuk. Maksimum boyut 5 MB.",
     "fileAttachedPlaceholder": "Bu dosya hakkinda bir mesaj ekleyin...",
     "cpuWarning": "CPU modu, yaklasik 20-30 saniye...",
     "advisorName": "Taxja",

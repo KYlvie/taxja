@@ -855,7 +855,7 @@
       "errorTitle": "Upload Failed",
       "uploadError": "Error uploading contract. Please try again.",
       "invalidFileType": "Invalid file type. Please upload a PDF or image file.",
-      "fileTooLarge": "File too large. Maximum size is 10MB.",
+      "fileTooLarge": "File too large. Maximum size is 5MB.",
       "retry": "Retry"
     },
     "warnings": {
@@ -1334,7 +1334,9 @@
       "title": "Upload Documents",
       "dragDrop": "Drag and drop files here, or click to select",
       "mobileHint": "Choose files from your phone or scan a document with the camera",
-      "formats": "Supported formats: JPG, PNG, PDF (recommended under 5MB, max 10MB)",
+      "formats": "Supported formats: JPG, PNG, PDF (recommended under 5MB, max 5MB)",
+      "separateFilesHint": "Please upload each document as a separate file. Do not combine multiple documents into one file.",
+      "fileTooLarge": "File \"{{name}}\" is too large. Maximum size is 5MB.",
       "selectFiles": "Select Files",
       "takePhoto": "Take Photo",
       "progress": "Upload Progress",
@@ -2764,7 +2766,7 @@
     "notifications": "AI Notifications",
     "newMessages": "new messages",
     "attachFile": "Attach file",
-    "fileTooLarge": "File is too large. Maximum size is 10 MB.",
+    "fileTooLarge": "File is too large. Maximum size is 5 MB.",
     "fileAttachedPlaceholder": "Add a message about this file...",
     "cpuWarning": "CPU mode, approx. 20-30 seconds...",
     "advisorName": "Taxja",

@@ -59,6 +59,11 @@
   color: var(--color-text-muted);
 }
 
+.upload-hint-warning {
+  color: var(--color-warning, #e67e22);
+  font-weight: 500;
+}
+
 .upload-native-actions {
   display: flex;
   justify-content: center;

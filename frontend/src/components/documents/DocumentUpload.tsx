@@ -622,8 +622,21 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
 
   // --- Upload execution ---
 
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
   const queueEntries = useCallback(
     async (sourceFiles: File[]) => {
+      // Client-side file size validation
+      const oversizedFiles = sourceFiles.filter((f) => f.size > MAX_FILE_SIZE);
+      if (oversizedFiles.length > 0) {
+        setPickerError(
+          oversizedFiles
+            .map((f) => t('documents.upload.fileTooLarge', { name: f.name }))
+            .join('\n')
+        );
+        return;
+      }
+
       const entries = buildUploadEntries(sourceFiles);
       if (entries.length === 0) {
         return;
@@ -995,6 +1008,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
             : t('documents.upload.dragDrop')}
         </p>
         <p className="upload-hint">{t('documents.upload.formats')}</p>
+        <p className="upload-hint upload-hint-warning">{t('documents.upload.separateFilesHint')}</p>
 
         {nativeActionsEnabled ? (
           <div className="upload-native-actions">

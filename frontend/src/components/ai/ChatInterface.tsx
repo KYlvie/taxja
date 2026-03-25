@@ -42,7 +42,7 @@ interface ChatInterfaceProps {
 }
 
 const ACCEPTED_FILE_TYPES = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.xlsx,.xls';
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const formatEmployerMonthLabel = (yearMonth?: string, locale?: string) => {
   if (!yearMonth) {

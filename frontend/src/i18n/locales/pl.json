@@ -849,7 +849,7 @@
       "errorTitle": "Przesyłanie nie powiodło się",
       "uploadError": "Błąd przesyłania umowy. Proszę spróbować ponownie.",
       "invalidFileType": "Nieprawidłowy typ pliku. Proszę przesłać plik PDF lub obraz.",
-      "fileTooLarge": "Plik jest za duży. Maksymalny rozmiar to 10MB.",
+      "fileTooLarge": "Plik jest za duży. Maksymalny rozmiar to 5MB.",
       "retry": "Ponów"
     },
     "warnings": {
@@ -1323,7 +1323,9 @@
       "title": "Prześlij dokumenty",
       "dragDrop": "Przeciągnij i upuść pliki tutaj lub kliknij, aby wybrać",
       "mobileHint": "Wybierz pliki z telefonu lub zeskanuj dokument aparatem",
-      "formats": "Obsługiwane formaty: JPG, PNG, PDF (zalecane poniżej 5MB, maks. 10MB)",
+      "formats": "Obsługiwane formaty: JPG, PNG, PDF (zalecane poniżej 5MB, maks. 5MB)",
+      "separateFilesHint": "Proszę przesyłać każdy dokument jako osobny plik. Nie łącz wielu dokumentów w jeden plik.",
+      "fileTooLarge": "Plik \"{{name}}\" jest za duży. Maksymalny rozmiar to 5 MB.",
       "selectFiles": "Wybierz pliki",
       "takePhoto": "Zrób zdjęcie",
       "progress": "Postęp przesyłania",
@@ -2744,7 +2746,7 @@
     "notifications": "Powiadomienia AI",
     "newMessages": "nowe wiadomości",
     "attachFile": "Dołącz plik",
-    "fileTooLarge": "Plik jest za duży. Maksymalny rozmiar to 10 MB.",
+    "fileTooLarge": "Plik jest za duży. Maksymalny rozmiar to 5 MB.",
     "fileAttachedPlaceholder": "Dodaj wiadomość o tym pliku...",
     "cpuWarning": "Tryb CPU, ok. 20-30 sekund...",
     "advisorName": "Taxja",

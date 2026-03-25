@@ -849,7 +849,7 @@
       "errorTitle": "Upload fehlgeschlagen",
       "uploadError": "Fehler beim Hochladen des Vertrags. Bitte versuchen Sie es erneut.",
       "invalidFileType": "Ungültiger Dateityp. Bitte laden Sie eine PDF- oder Bilddatei hoch.",
-      "fileTooLarge": "Datei zu groß. Maximale Größe ist 10MB.",
+      "fileTooLarge": "Datei zu groß. Maximale Größe ist 5MB.",
       "retry": "Erneut versuchen"
     },
     "warnings": {
@@ -1328,7 +1328,9 @@
       "title": "Dokumente hochladen",
       "dragDrop": "Dateien hierher ziehen oder klicken zum Auswählen",
       "mobileHint": "Wählen Sie Dateien vom Telefon aus oder scannen Sie ein Dokument mit der Kamera",
-      "formats": "Unterstützte Formate: JPG, PNG, PDF (empfohlen unter 5MB, maximal 10MB)",
+      "formats": "Unterstützte Formate: JPG, PNG, PDF (empfohlen unter 5MB, maximal 5MB)",
+      "separateFilesHint": "Bitte laden Sie jedes Dokument als separate Datei hoch. Fassen Sie nicht mehrere Dokumente in einer Datei zusammen.",
+      "fileTooLarge": "Datei \"{{name}}\" ist zu groß. Maximale Größe beträgt 5 MB.",
       "selectFiles": "Dateien auswählen",
       "takePhoto": "Foto aufnehmen",
       "progress": "Upload-Fortschritt",
@@ -2754,7 +2756,7 @@
     "notifications": "KI-Benachrichtigungen",
     "newMessages": "neue Nachrichten",
     "attachFile": "Datei anhängen",
-    "fileTooLarge": "Datei ist zu groß. Maximale Größe: 10 MB.",
+    "fileTooLarge": "Datei ist zu groß. Maximale Größe: 5 MB.",
     "fileAttachedPlaceholder": "Nachricht zur Datei hinzufügen...",
     "cpuWarning": "CPU-Modus, ca. 20-30 Sekunden...",
     "advisorName": "Taxja",

@@ -855,7 +855,7 @@
       "errorTitle": "Feltöltés sikertelen",
       "uploadError": "Hiba a szerződés feltöltésekor. Kérjük, próbálja újra.",
       "invalidFileType": "Érvénytelen fájltípus. Kérjük, töltsön fel PDF vagy képfájlt.",
-      "fileTooLarge": "A fájl túl nagy. A maximális méret 10MB.",
+      "fileTooLarge": "A fájl túl nagy. A maximális méret 5MB.",
       "retry": "Újrapróbálás"
     },
     "warnings": {
@@ -1329,7 +1329,9 @@
       "title": "Dokumentumok feltöltése",
       "dragDrop": "Húzza ide a fájlokat, vagy kattintson a kiválasztáshoz",
       "mobileHint": "Válasszon fájlokat a telefonjáról, vagy szkenneljen dokumentumot a kamerával",
-      "formats": "Támogatott formátumok: JPG, PNG, PDF (ajánlott 5MB alatt, maximum 10MB)",
+      "formats": "Támogatott formátumok: JPG, PNG, PDF (ajánlott 5MB alatt, maximum 5MB)",
+      "separateFilesHint": "Kérjük, minden dokumentumot külön fájlként töltsön fel. Ne egyesítsen több dokumentumot egy fájlba.",
+      "fileTooLarge": "A(z) \"{{name}}\" fájl túl nagy. A maximális méret 5 MB.",
       "selectFiles": "Fájlok kiválasztása",
       "takePhoto": "Fénykép készítése",
       "progress": "Feltöltési folyamat",
@@ -2750,7 +2752,7 @@
     "notifications": "AI értesítések",
     "newMessages": "új üzenetek",
     "attachFile": "Fájl csatolása",
-    "fileTooLarge": "A fájl túl nagy. A maximális méret 10 MB.",
+    "fileTooLarge": "A fájl túl nagy. A maximális méret 5 MB.",
     "fileAttachedPlaceholder": "Írjon üzenetet ehhez a fájlhoz...",
     "cpuWarning": "CPU mód, kb. 20-30 másodperc...",
     "advisorName": "Taxja",
