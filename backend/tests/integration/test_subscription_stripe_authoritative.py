@@ -98,22 +98,38 @@ def test_reactivate_subscription_uses_stripe_for_stripe_backed_subscription(
     assert response.json()["cancel_at_period_end"] is False
 
 
-def test_upgrade_subscription_rejects_local_change_for_stripe_backed_subscription(
+def test_upgrade_subscription_uses_stripe_for_stripe_backed_subscription(
     authenticated_client, db, test_user, monkeypatch
 ):
     plus_plan = _create_plan(db, PlanType.PLUS, "4.90", "49.00")
     pro_plan = _create_plan(db, PlanType.PRO, "12.90", "129.00")
-    _create_stripe_backed_subscription(db, test_user["id"], plus_plan.id)
+    subscription = _create_stripe_backed_subscription(db, test_user["id"], plus_plan.id)
 
     monkeypatch.setattr(subscriptions_endpoint, "_is_stripe_configured", lambda: True)
+
+    def fake_switch(self, user_id: int, plan_id: int, billing_cycle: BillingCycle):
+        assert user_id == test_user["id"]
+        assert plan_id == pro_plan.id
+        assert billing_cycle == BillingCycle.MONTHLY
+        subscription.plan_id = pro_plan.id
+        subscription.billing_cycle = BillingCycle.MONTHLY
+        db.commit()
+        db.refresh(subscription)
+        return subscription
+
+    monkeypatch.setattr(
+        StripePaymentService,
+        "switch_subscription_plan",
+        fake_switch,
+    )
 
     response = authenticated_client.post(
         "/api/v1/subscriptions/upgrade",
         params={"plan_id": pro_plan.id, "billing_cycle": "monthly"},
     )
 
-    assert response.status_code == 400
-    assert "Stripe" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["plan_id"] == pro_plan.id
 
 
 def test_customer_portal_defaults_to_configured_frontend_pricing_url(
@@ -125,9 +141,17 @@ def test_customer_portal_defaults_to_configured_frontend_pricing_url(
     monkeypatch.setattr(subscriptions_endpoint, "_is_stripe_configured", lambda: True)
     monkeypatch.setattr(settings, "FRONTEND_URL", "https://taxja.at")
 
-    def fake_create_customer_portal_session(self, user_id: int, return_url: str):
+    def fake_create_customer_portal_session(
+        self,
+        user_id: int,
+        return_url: str,
+        target_plan_id=None,
+        billing_cycle=None,
+    ):
         assert user_id == test_user["id"]
         assert return_url == "https://taxja.at/pricing"
+        assert target_plan_id is None
+        assert billing_cycle is None
         return {"url": "https://billing.stripe.com/session/test"}
 
     monkeypatch.setattr(
@@ -140,6 +164,44 @@ def test_customer_portal_defaults_to_configured_frontend_pricing_url(
 
     assert response.status_code == 200
     assert response.json()["url"] == "https://billing.stripe.com/session/test"
+
+
+def test_customer_portal_can_target_a_plan_switch(
+    authenticated_client, db, test_user, monkeypatch
+):
+    plus_plan = _create_plan(db, PlanType.PLUS, "4.90", "49.00")
+    pro_plan = _create_plan(db, PlanType.PRO, "12.90", "129.00")
+    _create_stripe_backed_subscription(db, test_user["id"], plus_plan.id)
+
+    monkeypatch.setattr(subscriptions_endpoint, "_is_stripe_configured", lambda: True)
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://taxja.at")
+
+    def fake_create_customer_portal_session(
+        self,
+        user_id: int,
+        return_url: str,
+        target_plan_id=None,
+        billing_cycle=None,
+    ):
+        assert user_id == test_user["id"]
+        assert return_url == "https://taxja.at/pricing"
+        assert target_plan_id == pro_plan.id
+        assert billing_cycle == BillingCycle.YEARLY
+        return {"url": "https://billing.stripe.com/session/upgrade"}
+
+    monkeypatch.setattr(
+        StripePaymentService,
+        "create_customer_portal_session",
+        fake_create_customer_portal_session,
+    )
+
+    response = authenticated_client.post(
+        "/api/v1/subscriptions/customer-portal",
+        params={"target_plan_id": pro_plan.id, "billing_cycle": "yearly"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["url"] == "https://billing.stripe.com/session/upgrade"
 
 
 def test_subscription_updated_webhook_syncs_plan_and_billing_cycle(db, test_user, monkeypatch):

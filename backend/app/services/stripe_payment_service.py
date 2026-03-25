@@ -89,9 +89,13 @@ class StripePaymentService:
 
     # ── Customer Portal ───────────────────────────────────────────────
     def create_customer_portal_session(
-        self, user_id: int, return_url: str
+        self,
+        user_id: int,
+        return_url: str,
+        target_plan_id: Optional[int] = None,
+        billing_cycle: Optional[BillingCycle] = None,
     ) -> Dict[str, str]:
-        """Create a Stripe Customer Portal session for managing subscription."""
+        """Create a Stripe Customer Portal session for managing or switching subscription."""
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError(f"User {user_id} not found")
@@ -105,10 +109,60 @@ class StripePaymentService:
             raise ValueError("No Stripe customer found for this user")
 
         try:
-            session = stripe.billing_portal.Session.create(
-                customer=subscription.stripe_customer_id,
-                return_url=return_url,
-            )
+            session_kwargs: Dict[str, Any] = {
+                "customer": subscription.stripe_customer_id,
+                "return_url": return_url,
+            }
+
+            if target_plan_id is not None:
+                if billing_cycle is None:
+                    raise ValueError("Billing cycle is required when switching plans")
+                if not subscription.stripe_subscription_id:
+                    raise ValueError("No Stripe subscription found for this user")
+
+                target_plan = self.db.query(Plan).filter(Plan.id == target_plan_id).first()
+                if not target_plan:
+                    raise ValueError(f"Plan {target_plan_id} not found")
+                if target_plan.plan_type == PlanType.FREE:
+                    raise ValueError("Stripe portal switching only supports paid plans")
+
+                target_price_id = PRICE_MAP.get((target_plan.plan_type.value, billing_cycle.value))
+                if not target_price_id:
+                    raise ValueError(
+                        f"No Stripe price configured for {target_plan.plan_type.value}/{billing_cycle.value}"
+                    )
+
+                stripe_subscription = stripe.Subscription.retrieve(
+                    subscription.stripe_subscription_id
+                )
+                stripe_subscription_data = (
+                    stripe_subscription.to_dict_recursive()
+                    if hasattr(stripe_subscription, "to_dict_recursive")
+                    else stripe_subscription
+                )
+                subscription_items = stripe_subscription_data.get("items", {}).get("data", [])
+                if not subscription_items:
+                    raise ValueError("Stripe subscription has no items to update")
+
+                current_item_id = subscription_items[0].get("id")
+                if not current_item_id:
+                    raise ValueError("Stripe subscription item id is missing")
+
+                session_kwargs["flow_data"] = {
+                    "type": "subscription_update_confirm",
+                    "subscription_update_confirm": {
+                        "subscription": subscription.stripe_subscription_id,
+                        "items": [
+                            {
+                                "id": current_item_id,
+                                "price": target_price_id,
+                                "quantity": 1,
+                            }
+                        ],
+                    },
+                }
+
+            session = stripe.billing_portal.Session.create(**session_kwargs)
             return {"url": session.url}
         except stripe.error.StripeError as e:
             logger.error(f"Portal session error: {e}")
@@ -286,6 +340,73 @@ class StripePaymentService:
             stripe_sub,
             user_id=user_id,
             local_subscription=subscription,
+        )
+
+    def switch_subscription_plan(
+        self,
+        user_id: int,
+        plan_id: int,
+        billing_cycle: BillingCycle,
+    ) -> Subscription:
+        """Switch an existing Stripe-backed subscription to another paid plan/interval."""
+        subscription = self._get_subscription(user_id)
+        if not subscription:
+            raise ValueError(f"No subscription found for user {user_id}")
+        if not subscription.stripe_subscription_id:
+            raise ValueError("No Stripe subscription found for this user")
+
+        target_plan = self.db.query(Plan).filter(Plan.id == plan_id).first()
+        if not target_plan:
+            raise ValueError(f"Plan {plan_id} not found")
+        if target_plan.plan_type == PlanType.FREE:
+            raise ValueError("Cannot switch a Stripe subscription to the free plan directly")
+
+        target_price_id = PRICE_MAP.get((target_plan.plan_type.value, billing_cycle.value))
+        if not target_price_id:
+            raise ValueError(
+                f"No Stripe price configured for {target_plan.plan_type.value}/{billing_cycle.value}"
+            )
+
+        stripe_subscription = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        stripe_subscription_data = (
+            stripe_subscription.to_dict_recursive()
+            if hasattr(stripe_subscription, "to_dict_recursive")
+            else stripe_subscription
+        )
+        subscription_items = stripe_subscription_data.get("items", {}).get("data", [])
+        if not subscription_items:
+            raise ValueError("Stripe subscription has no items to update")
+
+        current_item_id = subscription_items[0].get("id")
+        if not current_item_id:
+            raise ValueError("Stripe subscription item id is missing")
+
+        try:
+            updated_subscription = stripe.Subscription.modify(
+                subscription.stripe_subscription_id,
+                items=[
+                    {
+                        "id": current_item_id,
+                        "price": target_price_id,
+                        "quantity": 1,
+                    }
+                ],
+                proration_behavior="create_prorations",
+            )
+        except stripe.error.StripeError as e:
+            logger.error(
+                "Stripe subscription switch error for user %s: %s",
+                user_id,
+                e,
+            )
+            raise ValueError(f"Failed to switch subscription: {str(e)}")
+
+        return self._sync_local_subscription_from_stripe(
+            updated_subscription,
+            user_id=user_id,
+            local_subscription=subscription,
+            fallback_plan_id=target_plan.id,
+            fallback_billing_cycle=billing_cycle,
         )
 
     def resume_scheduled_cancellation(self, user_id: int) -> Subscription:

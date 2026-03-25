@@ -176,6 +176,21 @@ class TestListMyRules:
         assert isinstance(result[0]["confidence"], float)
         assert result[0]["confidence"] == 0.85
 
+    def test_list_preserves_auto_rule_type(self):
+        from app.api.v1.endpoints.classification_rules import list_my_rules
+
+        rule = _make_mock_rule(rule_type="auto", category="insurance")
+        mock_db = MagicMock()
+        mock_user = _make_mock_user()
+
+        with patch(
+            "app.api.v1.endpoints.classification_rules.UserClassificationService"
+        ) as MockSvc:
+            MockSvc.return_value.list_rules.return_value = [rule]
+            result = list_my_rules(current_user=mock_user, db=mock_db)
+
+        assert result[0]["rule_type"] == "auto"
+
 
 # ---------------------------------------------------------------------------
 # 2. delete_my_rule

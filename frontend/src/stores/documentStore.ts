@@ -1,6 +1,20 @@
 import { create } from 'zustand';
 import { Document, DocumentFilter } from '../types/document';
 
+export type SortMode = 'upload_date' | 'document_date';
+
+const SORT_MODE_STORAGE_KEY = 'taxja_doc_sort_mode';
+
+function loadSortMode(): SortMode {
+  try {
+    const stored = localStorage.getItem(SORT_MODE_STORAGE_KEY);
+    if (stored === 'document_date') return 'document_date';
+  } catch {
+    // localStorage unavailable
+  }
+  return 'upload_date';
+}
+
 interface DocumentState {
   documents: Document[];
   currentDocument: Document | null;
@@ -8,6 +22,7 @@ interface DocumentState {
   loading: boolean;
   error: string | null;
   filters: DocumentFilter;
+  sortMode: SortMode;
   setDocuments: (documents: Document[], total: number) => void;
   setCurrentDocument: (document: Document | null) => void;
   addDocument: (document: Document) => void;
@@ -17,6 +32,7 @@ interface DocumentState {
   setError: (error: string | null) => void;
   setFilters: (filters: DocumentFilter) => void;
   clearFilters: () => void;
+  setSortMode: (mode: SortMode) => void;
 }
 
 export const useDocumentStore = create<DocumentState>((set) => ({
@@ -26,6 +42,7 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   loading: false,
   error: null,
   filters: {},
+  sortMode: loadSortMode(),
   setDocuments: (documents, total) => set({ documents, total }),
   setCurrentDocument: (document) => set({ currentDocument: document }),
   addDocument: (document) =>
@@ -61,4 +78,12 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   setError: (error) => set({ error }),
   setFilters: (filters) => set({ filters }),
   clearFilters: () => set({ filters: {} }),
+  setSortMode: (mode) => {
+    try {
+      localStorage.setItem(SORT_MODE_STORAGE_KEY, mode);
+    } catch {
+      // localStorage unavailable
+    }
+    set({ sortMode: mode });
+  },
 }));

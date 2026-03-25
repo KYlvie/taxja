@@ -164,8 +164,10 @@ const buildBankWorkbenchHotfix = (config: {
   actionCreate: string;
   actionMatch: string;
   actionIgnore: string;
+  actionRestore: string;
   actionUndoCreate: string;
   actionUnmatch: string;
+  actionViewUnavailable: string;
   fallbackCreatedOne: string;
   fallbackCreatedMany: string;
   fallbackAlreadyImportedOne: string;
@@ -243,8 +245,10 @@ const buildBankWorkbenchHotfix = (config: {
         create: config.actionCreate,
         match: config.actionMatch,
         ignore: config.actionIgnore,
+        restore: config.actionRestore,
         undoCreate: config.actionUndoCreate,
         unmatch: config.actionUnmatch,
+        viewUnavailable: config.actionViewUnavailable,
       },
       fallback: {
         createdOne: config.fallbackCreatedOne,
@@ -271,6 +275,46 @@ const buildBankWorkbenchHotfix = (config: {
         },
       },
     },
+  },
+});
+
+const buildClassificationMemoryHotfix = (config: {
+  pageTitle: string;
+  pageSubtitle: string;
+  title: string;
+  subtitle: string;
+  empty: string;
+  categorySectionDescription: string;
+  automationSectionTitle: string;
+  automationSectionDescription: string;
+  searchAutomationPlaceholder: string;
+  automationEmpty: string;
+  selectAllAutomation: string;
+  automationActionAutoCreate: string;
+  reasonAutomation: string;
+  reasonAutomationFrozen: string;
+  reasonAutomationConflict: string;
+  deductibilitySectionDescription: string;
+  action: string;
+}): LocaleObject => ({
+  classificationRules: {
+    pageTitle: config.pageTitle,
+    pageSubtitle: config.pageSubtitle,
+    title: config.title,
+    subtitle: config.subtitle,
+    empty: config.empty,
+    categorySectionDescription: config.categorySectionDescription,
+    automationSectionTitle: config.automationSectionTitle,
+    automationSectionDescription: config.automationSectionDescription,
+    searchAutomationPlaceholder: config.searchAutomationPlaceholder,
+    automationEmpty: config.automationEmpty,
+    selectAllAutomation: config.selectAllAutomation,
+    automationActionAutoCreate: config.automationActionAutoCreate,
+    reasonAutomation: config.reasonAutomation,
+    reasonAutomationFrozen: config.reasonAutomationFrozen,
+    reasonAutomationConflict: config.reasonAutomationConflict,
+    deductibilitySectionDescription: config.deductibilitySectionDescription,
+    action: config.action,
   },
 });
 
@@ -367,12 +411,14 @@ const buildReviewWorkflowHotfix = (config: {
 
 const buildTransactionSemanticsHotfix = (config: {
   systemGenerated: string;
+  bankReconcileHint: string;
   ignored: string;
   suggestedIgnore: string;
   ignore: string;
 }): LocaleObject => ({
   transactions: {
     systemGenerated: config.systemGenerated,
+    bankReconcileHint: config.bankReconcileHint,
   },
   documents: {
     bankWorkbench: {
@@ -386,6 +432,104 @@ const buildTransactionSemanticsHotfix = (config: {
         ignore: config.ignore,
       },
     },
+  },
+});
+
+const buildTaxPackageHotfix = (config: {
+  exportPackage: string;
+  exportPackageLoading: string;
+  exportPackageFailed: string;
+  exportPackagePanelTitle: string;
+  exportPackagePanelDescription: string;
+  includeFoundationMaterials: string;
+  includeFoundationMaterialsHint: string;
+  packageScopeTransactionsCsv: string;
+  packageScopeTransactionsPdf: string;
+  packageScopeSummaryPdf: string;
+  packageScopeDocuments: string;
+  packageScopeFoundationOptional: string;
+  preparePackage: string;
+  packageStatusPending: string;
+  packageStatusProcessing: string;
+  packageStatusReady: string;
+  packageDownloadSingle: string;
+  packageDownloadPart: string;
+  packageFailureTitle: string;
+  packageFailureDocumentCount: string;
+  packageFailureEstimatedSize: string;
+  packageFailureLargestFamily: string;
+  exportPackagePreviewLoading: string;
+  exportPackagePreviewFailed: string;
+  exportPackageWarningTitle: string;
+  exportPackageWarningDescription: string;
+  exportPackageWarningPendingTransactions: string;
+  exportPackageWarningPendingDocuments: string;
+  exportPackageWarningFallbackYears: string;
+  exportPackageWarningSkippedFiles: string;
+  reviewTransactionsBeforeExport: string;
+  reviewDocumentsBeforeExport: string;
+  reviewDocumentsByYear?: string;
+  continueExportPackage: string;
+  reviewWarningsFirst: string;
+}): LocaleObject => ({
+  reports: {
+    taxForm: {
+      exportPackage: config.exportPackage,
+      exportPackageLoading: config.exportPackageLoading,
+      exportPackageFailed: config.exportPackageFailed,
+      exportPackagePanelTitle: config.exportPackagePanelTitle,
+      exportPackagePanelDescription: config.exportPackagePanelDescription,
+      includeFoundationMaterials: config.includeFoundationMaterials,
+      includeFoundationMaterialsHint: config.includeFoundationMaterialsHint,
+      packageScopeTransactionsCsv: config.packageScopeTransactionsCsv,
+      packageScopeTransactionsPdf: config.packageScopeTransactionsPdf,
+      packageScopeSummaryPdf: config.packageScopeSummaryPdf,
+      packageScopeDocuments: config.packageScopeDocuments,
+      packageScopeFoundationOptional: config.packageScopeFoundationOptional,
+      preparePackage: config.preparePackage,
+      packageStatusPending: config.packageStatusPending,
+      packageStatusProcessing: config.packageStatusProcessing,
+      packageStatusReady: config.packageStatusReady,
+      packageDownloadSingle: config.packageDownloadSingle,
+      packageDownloadPart: config.packageDownloadPart,
+      packageFailureTitle: config.packageFailureTitle,
+      packageFailureDocumentCount: config.packageFailureDocumentCount,
+      packageFailureEstimatedSize: config.packageFailureEstimatedSize,
+      packageFailureLargestFamily: config.packageFailureLargestFamily,
+      exportPackagePreviewLoading: config.exportPackagePreviewLoading,
+      exportPackagePreviewFailed: config.exportPackagePreviewFailed,
+      exportPackageWarningTitle: config.exportPackageWarningTitle,
+      exportPackageWarningDescription: config.exportPackageWarningDescription,
+      exportPackageWarningPendingTransactions: config.exportPackageWarningPendingTransactions,
+      exportPackageWarningPendingDocuments: config.exportPackageWarningPendingDocuments,
+      exportPackageWarningFallbackYears: config.exportPackageWarningFallbackYears,
+      exportPackageWarningSkippedFiles: config.exportPackageWarningSkippedFiles,
+      reviewTransactionsBeforeExport: config.reviewTransactionsBeforeExport,
+      reviewDocumentsBeforeExport: config.reviewDocumentsBeforeExport,
+      reviewDocumentsByYear: config.reviewDocumentsByYear || config.reviewDocumentsBeforeExport,
+      continueExportPackage: config.continueExportPackage,
+      reviewWarningsFirst: config.reviewWarningsFirst,
+    },
+  },
+});
+
+const buildDocumentExportZipHotfix = (config: {
+  exportZipYearHint: string;
+  exportZipNoYears: string;
+  fileYearLabel: string;
+  filesLabel: string;
+  estimatedSizeLabel: string;
+  exportZipLargeHint: string;
+  exportZipDirectDownloadHint: string;
+}): LocaleObject => ({
+  documents: {
+    exportZipYearHint: config.exportZipYearHint,
+    exportZipNoYears: config.exportZipNoYears,
+    fileYearLabel: config.fileYearLabel,
+    filesLabel: config.filesLabel,
+    estimatedSizeLabel: config.estimatedSizeLabel,
+    exportZipLargeHint: config.exportZipLargeHint,
+    exportZipDirectDownloadHint: config.exportZipDirectDownloadHint,
   },
 });
 
@@ -432,6 +576,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Systemgeneriert',
+        bankReconcileHint: 'Bitte laden Sie Bankauszuege unter Dokumente hoch, um abzugleichen.',
         ignored: 'Ignoriert',
         suggestedIgnore: 'Vorgeschlagenes Ignorieren',
         ignore: 'Ignorieren',
@@ -479,9 +624,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Vorgeschlagenes Ignorieren',
       actionCreate: 'Transaktion erstellen',
       actionMatch: 'Bestehende zuordnen',
-      actionIgnore: 'Als Duplikat ignorieren',
+      actionIgnore: 'Ignorieren',
+      actionRestore: 'Erneut pruefen',
       actionUndoCreate: 'Erstellung rueckgaengig machen',
       actionUnmatch: 'Zuordnung aufheben',
+      actionViewUnavailable: 'Keine Transaktion zur Vorschau',
       fallbackCreatedOne: '1 Transaktion erstellt.',
       fallbackCreatedMany: '{{count}} Transaktionen erstellt.',
       fallbackAlreadyImportedOne: 'Diese Auszugszeile wurde bereits importiert.',
@@ -541,6 +688,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'System-generated',
+        bankReconcileHint: 'Upload bank statements in Documents to reconcile.',
         ignored: 'Ignored',
         suggestedIgnore: 'Suggested ignore',
         ignore: 'Ignore',
@@ -588,9 +736,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Suggested ignore',
       actionCreate: 'Create transaction',
       actionMatch: 'Match existing',
-      actionIgnore: 'Ignore duplicate',
+      actionIgnore: 'Ignore',
+      actionRestore: 'Review again',
       actionUndoCreate: 'Undo create',
       actionUnmatch: 'Unmatch',
+      actionViewUnavailable: 'No transaction to preview',
       fallbackCreatedOne: 'Created 1 transaction.',
       fallbackCreatedMany: 'Created {{count}} transactions.',
       fallbackAlreadyImportedOne: 'This statement line was already imported.',
@@ -656,6 +806,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: '\u7cfb\u7edf\u751f\u6210',
+        bankReconcileHint: '\u8bf7\u5230\u6587\u6863\u4e0a\u4f20\u94f6\u884c\u6d41\u6c34\u5b8c\u6210\u5bf9\u8d26',
         ignored: '\u5df2\u5ffd\u7565',
         suggestedIgnore: '\u5efa\u8bae\u5ffd\u7565',
         ignore: '\u5ffd\u7565',
@@ -703,9 +854,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: '建议忽略',
       actionCreate: '\u65b0\u589e\u4ea4\u6613',
       actionMatch: '\u5339\u914d\u5df2\u6709\u4ea4\u6613',
-      actionIgnore: '\u5ffd\u7565\u91cd\u590d',
+      actionIgnore: '\u5ffd\u7565',
+      actionRestore: '\u91cd\u65b0\u5ba1\u6838',
       actionUndoCreate: '\u64a4\u9500\u521b\u5efa',
       actionUnmatch: '\u53d6\u6d88\u5339\u914d',
+      actionViewUnavailable: '\u6682\u65e0\u53ef\u9884\u89c8\u4ea4\u6613',
       fallbackCreatedOne: '\u5df2\u521b\u5efa 1 \u7b14\u4ea4\u6613\u3002',
       fallbackCreatedMany: '\u5df2\u521b\u5efa {{count}} \u7b14\u4ea4\u6613\u3002',
       fallbackAlreadyImportedOne: '\u8fd9\u6761\u6d41\u6c34\u660e\u7ec6\u5df2\u5bfc\u5165\u3002',
@@ -770,6 +923,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Genere par le systeme',
+        bankReconcileHint: 'Importez vos releves bancaires dans Documents pour effectuer le rapprochement.',
         ignored: 'Ignore',
         suggestedIgnore: 'Suggestion d ignorer',
         ignore: 'Ignorer',
@@ -817,9 +971,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Ignorer suggere',
       actionCreate: 'Creer la transaction',
       actionMatch: 'Associer a l existant',
-      actionIgnore: 'Ignorer le doublon',
+      actionIgnore: 'Ignorer',
+      actionRestore: 'Revoir',
       actionUndoCreate: 'Annuler la creation',
       actionUnmatch: 'Annuler le rapprochement',
+      actionViewUnavailable: 'Aucune transaction a afficher',
       fallbackCreatedOne: '1 transaction creee.',
       fallbackCreatedMany: '{{count}} transactions creees.',
       fallbackAlreadyImportedOne: 'Cette ligne de releve a deja ete importee.',
@@ -909,6 +1065,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: '\u0421\u043e\u0437\u0434\u0430\u043d\u043e \u0441\u0438\u0441\u0442\u0435\u043c\u043e\u0439',
+        bankReconcileHint: '\u0427\u0442\u043e\u0431\u044b \u0432\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0441\u0432\u0435\u0440\u043a\u0443, \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u0443\u044e \u0432\u044b\u043f\u0438\u0441\u043a\u0443 \u0432 \u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b.',
         ignored: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043e',
         suggestedIgnore: '\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u0442\u0441\u044f \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c',
         ignore: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c',
@@ -956,9 +1113,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Рекомендовано игнорировать',
       actionCreate: '\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u044e',
       actionMatch: '\u0421\u043e\u043f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0441 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0439',
-      actionIgnore: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0434\u0443\u0431\u043b\u0438\u043a\u0430\u0442',
+      actionIgnore: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c',
+      actionRestore: '\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0441\u043d\u043e\u0432\u0430',
       actionUndoCreate: '\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u0435',
       actionUnmatch: '\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u043e\u043f\u043e\u0441\u0442\u0430\u0432\u043b\u0435\u043d\u0438\u0435',
+      actionViewUnavailable: '\u041d\u0435\u0442 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0438 \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430',
       fallbackCreatedOne: '\u0421\u043e\u0437\u0434\u0430\u043d\u0430 1 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u044f.',
       fallbackCreatedMany: '\u0421\u043e\u0437\u0434\u0430\u043d\u043e {{count}} \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0439.',
       fallbackAlreadyImportedOne: '\u042d\u0442\u0430 \u0441\u0442\u0440\u043e\u043a\u0430 \u0432\u044b\u043f\u0438\u0441\u043a\u0438 \u0443\u0436\u0435 \u0438\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0430.',
@@ -1043,6 +1202,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Rendszer altal generalt',
+        bankReconcileHint: 'Az egyezteteshez toltse fel a bankszamlakivonatot a Dokumentumokhoz.',
         ignored: 'Figyelmen kivul hagyva',
         suggestedIgnore: 'Javasolt figyelmen kivul hagyas',
         ignore: 'Figyelmen kivul hagy',
@@ -1090,9 +1250,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Javasolt figyelmen kivul hagyas',
       actionCreate: 'Tranzakcio letrehozasa',
       actionMatch: 'Meglevo parositasa',
-      actionIgnore: 'Duplikatum figyelmen kivul hagyasa',
+      actionIgnore: 'Figyelmen kivul hagy',
+      actionRestore: 'Ujra ellenoriz',
       actionUndoCreate: 'Letrehozas visszavonasa',
       actionUnmatch: 'Parositas megszuntetese',
+      actionViewUnavailable: 'Nincs megjelenitheto tranzakcio',
       fallbackCreatedOne: '1 tranzakcio letrehozva.',
       fallbackCreatedMany: '{{count}} tranzakcio letrehozva.',
       fallbackAlreadyImportedOne: 'Ez a kivonatsor mar importalva lett.',
@@ -1183,6 +1345,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Wygenerowane przez system',
+        bankReconcileHint: 'Aby uzgodnic, przeslij wyciag bankowy w Dokumentach.',
         ignored: 'Pominiete',
         suggestedIgnore: 'Zalecane pominiecie',
         ignore: 'Pomin',
@@ -1230,9 +1393,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Zalecane pominiecie',
       actionCreate: 'Utworz transakcje',
       actionMatch: 'Dopasuj istniejaca',
-      actionIgnore: 'Ignoruj duplikat',
+      actionIgnore: 'Ignoruj',
+      actionRestore: 'Sprawdz ponownie',
       actionUndoCreate: 'Cofnij utworzenie',
       actionUnmatch: 'Anuluj dopasowanie',
+      actionViewUnavailable: 'Brak transakcji do podgladu',
       fallbackCreatedOne: 'Utworzono 1 transakcje.',
       fallbackCreatedMany: 'Utworzono {{count}} transakcji.',
       fallbackAlreadyImportedOne: 'Ten wiersz wyciagu zostal juz zaimportowany.',
@@ -1328,6 +1493,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Sistem tarafindan olusturuldu',
+        bankReconcileHint: 'Mutabakat icin banka ekstresini Belgeler bolumune yukleyin.',
         ignored: 'Yoksayildi',
         suggestedIgnore: 'Yoksayma onerildi',
         ignore: 'Yoksay',
@@ -1375,9 +1541,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Onerilen yok sayma',
       actionCreate: 'Islem olustur',
       actionMatch: 'Mevcut islemi eslestir',
-      actionIgnore: 'Cift kaydi yoksay',
+      actionIgnore: 'Yoksay',
+      actionRestore: 'Yeniden incele',
       actionUndoCreate: 'Olusturmayi geri al',
       actionUnmatch: 'Eslestirmeyi kaldir',
+      actionViewUnavailable: 'Onizlenecek islem yok',
       fallbackCreatedOne: '1 islem olusturuldu.',
       fallbackCreatedMany: '{{count}} islem olusturuldu.',
       fallbackAlreadyImportedOne: 'Bu ekstre satiri zaten ice aktarildi.',
@@ -1467,6 +1635,7 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       }),
       buildTransactionSemanticsHotfix({
         systemGenerated: 'Sistemski generisano',
+        bankReconcileHint: 'Za uskladjivanje otpremite bankovni izvod u Dokumente.',
         ignored: 'Ignorisano',
         suggestedIgnore: 'Predlozeno ignorisanje',
         ignore: 'Ignorisi',
@@ -1514,9 +1683,11 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       suggestedIgnore: 'Preporuceno ignorisanje',
       actionCreate: 'Kreiraj transakciju',
       actionMatch: 'Povezi postojecu',
-      actionIgnore: 'Ignorisi duplikat',
+      actionIgnore: 'Ignorisi',
+      actionRestore: 'Pregledaj ponovo',
       actionUndoCreate: 'Ponisti kreiranje',
       actionUnmatch: 'Ukloni povezivanje',
+      actionViewUnavailable: 'Nema transakcije za pregled',
       fallbackCreatedOne: 'Kreirana je 1 transakcija.',
       fallbackCreatedMany: 'Kreirano je {{count}} transakcija.',
       fallbackAlreadyImportedOne: 'Ova stavka izvoda je vec uvezena.',
@@ -1591,6 +1762,651 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       },
     },
   },
+};
+
+const TAX_PACKAGE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
+  de: buildTaxPackageHotfix({
+    exportPackage: 'Steuerpaket exportieren',
+    exportPackageLoading: 'Steuerpaket wird exportiert...',
+    exportPackageFailed: 'Das Steuerpaket konnte nicht exportiert werden.',
+    exportPackagePanelTitle: 'Steuerpaket exportieren',
+    exportPackagePanelDescription: 'Bereiten Sie ein herunterladbares Paket fuer das ausgewaehlte Steuerjahr vor.',
+    includeFoundationMaterials: 'Grundlagenmaterialien einbeziehen',
+    includeFoundationMaterialsHint: 'Fuegt langlebige Grundlagendokumente wie Miet-, Kredit- oder Kaufvertraege hinzu.',
+    packageScopeTransactionsCsv: 'Transaktionen CSV',
+    packageScopeTransactionsPdf: 'Transaktionen PDF',
+    packageScopeSummaryPdf: 'Zusammenfassung PDF',
+    packageScopeDocuments: 'Steuerrelevante Quelldokumente',
+    packageScopeFoundationOptional: 'Optional: Grundlagenmaterialien',
+    preparePackage: 'Paket vorbereiten',
+    packageStatusPending: 'Vorbereitung laeuft',
+    packageStatusProcessing: 'Paket wird erstellt',
+    packageStatusReady: 'Bereit zum Download',
+    packageDownloadSingle: 'Paket herunterladen',
+    packageDownloadPart: 'Teil {{part}} herunterladen',
+    packageFailureTitle: 'Paket konnte nicht vorbereitet werden',
+    packageFailureDocumentCount: 'Dokumentanzahl',
+    packageFailureEstimatedSize: 'Geschaetzte Groesse',
+    packageFailureLargestFamily: 'Groesste Dokumentfamilie',
+    exportPackagePreviewLoading: 'Offene Punkte fuer den Export werden geprueft...',
+    exportPackagePreviewFailed: 'Die Exportwarnungen konnten nicht geprueft werden.',
+    exportPackageWarningTitle: 'Bitte pruefen Sie diese Punkte vor dem Export',
+    exportPackageWarningDescription: 'Der Export ist trotzdem moeglich, aber offene Punkte koennen die Qualitaet Ihrer Steuerunterlagen verschlechtern.',
+    exportPackageWarningPendingTransactions: 'Noch zu pruefende Transaktionen',
+    exportPackageWarningPendingDocuments: 'Noch zu pruefende Dokumente',
+    exportPackageWarningFallbackYears: 'Dokumente mit Jahr aus Upload-Datum',
+    exportPackageWarningSkippedFiles: 'Nicht exportierte Dateien',
+    reviewTransactionsBeforeExport: 'Transaktionen pruefen',
+    reviewDocumentsBeforeExport: 'Dokumente pruefen',
+    continueExportPackage: 'Trotzdem exportieren',
+    reviewWarningsFirst: 'Warnungen zuerst pruefen',
+  }),
+  en: buildTaxPackageHotfix({
+    exportPackage: 'Export tax package',
+    exportPackageLoading: 'Exporting tax package...',
+    exportPackageFailed: 'Failed to export tax package.',
+    exportPackagePanelTitle: 'Export tax package',
+    exportPackagePanelDescription: 'Prepare a downloadable package for the selected tax year.',
+    includeFoundationMaterials: 'Include foundation materials',
+    includeFoundationMaterialsHint: 'Adds long-lived base materials such as rental, loan, purchase, registry, and trade-license documents.',
+    packageScopeTransactionsCsv: 'Transaction CSV',
+    packageScopeTransactionsPdf: 'Transaction PDF',
+    packageScopeSummaryPdf: 'Summary PDF',
+    packageScopeDocuments: 'Tax-related source documents',
+    packageScopeFoundationOptional: 'Optional: foundation materials',
+    preparePackage: 'Prepare package',
+    packageStatusPending: 'Preparing',
+    packageStatusProcessing: 'Packaging',
+    packageStatusReady: 'Ready to download',
+    packageDownloadSingle: 'Download package',
+    packageDownloadPart: 'Download part {{part}}',
+    packageFailureTitle: 'Package could not be prepared',
+    packageFailureDocumentCount: 'Document count',
+    packageFailureEstimatedSize: 'Estimated size',
+    packageFailureLargestFamily: 'Largest family',
+    exportPackagePreviewLoading: 'Checking export warnings...',
+    exportPackagePreviewFailed: 'Failed to check export warnings.',
+    exportPackageWarningTitle: 'Review these items before exporting',
+    exportPackageWarningDescription: 'You can still export the package, but these open items may reduce filing quality.',
+    exportPackageWarningPendingTransactions: 'Pending review transactions',
+    exportPackageWarningPendingDocuments: 'Pending review documents',
+    exportPackageWarningFallbackYears: 'Documents assigned by uploaded date fallback',
+    exportPackageWarningSkippedFiles: 'Files excluded from export',
+    reviewTransactionsBeforeExport: 'Review transactions',
+    reviewDocumentsBeforeExport: 'Review documents',
+    continueExportPackage: 'Continue export anyway',
+    reviewWarningsFirst: 'Review warnings first',
+  }),
+  zh: buildTaxPackageHotfix({
+    exportPackage: '导出税务包',
+    exportPackageLoading: '正在导出税务包...',
+    exportPackageFailed: '导出税务包失败。',
+    exportPackagePanelTitle: '导出税务包',
+    exportPackagePanelDescription: '为当前选中的税务年度准备一个可下载的税务包。',
+    includeFoundationMaterials: '包含长期基础材料',
+    includeFoundationMaterialsHint: '会额外纳入租赁合同、贷款合同、购房合同等长期基础材料。',
+    packageScopeTransactionsCsv: '交易 CSV',
+    packageScopeTransactionsPdf: '交易 PDF',
+    packageScopeSummaryPdf: '总结 PDF',
+    packageScopeDocuments: '税务相关原始文档',
+    packageScopeFoundationOptional: '可选：长期基础材料',
+    preparePackage: '开始准备',
+    packageStatusPending: '准备中',
+    packageStatusProcessing: '打包中',
+    packageStatusReady: '可下载',
+    packageDownloadSingle: '下载税务包',
+    packageDownloadPart: '下载第 {{part}} 卷',
+    packageFailureTitle: '税务包暂时无法准备',
+    packageFailureDocumentCount: '文档数量',
+    packageFailureEstimatedSize: '预计大小',
+    packageFailureLargestFamily: '最大文档家族',
+    exportPackagePreviewLoading: '正在检查导出前风险...',
+    exportPackagePreviewFailed: '暂时无法检查导出风险。',
+    exportPackageWarningTitle: '导出前请先检查这些项目',
+    exportPackageWarningDescription: '您仍然可以继续导出，但这些未处理项目可能会降低报税资料质量，建议先处理。',
+    exportPackageWarningPendingTransactions: '仍待审核的交易',
+    exportPackageWarningPendingDocuments: '仍待审核的文档',
+    exportPackageWarningFallbackYears: '按上传日期归入本年度的文档',
+    exportPackageWarningSkippedFiles: '未纳入导出的文件',
+    reviewTransactionsBeforeExport: '去检查交易',
+    reviewDocumentsBeforeExport: '去检查文档',
+    continueExportPackage: '仍然继续导出',
+    reviewWarningsFirst: '先查看这些提醒',
+  }),
+  fr: buildTaxPackageHotfix({
+    exportPackage: 'Exporter le pack fiscal',
+    exportPackageLoading: 'Export du pack fiscal...',
+    exportPackageFailed: "Impossible d'exporter le pack fiscal.",
+    exportPackagePanelTitle: 'Exporter le pack fiscal',
+    exportPackagePanelDescription: "Préparez un pack téléchargeable pour l'année fiscale sélectionnée.",
+    includeFoundationMaterials: 'Inclure les documents de base',
+    includeFoundationMaterialsHint: "Ajoute les contrats et documents de base à long terme.",
+    packageScopeTransactionsCsv: 'CSV des transactions',
+    packageScopeTransactionsPdf: 'PDF des transactions',
+    packageScopeSummaryPdf: 'PDF de synthèse',
+    packageScopeDocuments: 'Documents fiscaux sources',
+    packageScopeFoundationOptional: 'Optionnel : documents de base',
+    preparePackage: 'Préparer le pack',
+    packageStatusPending: 'Préparation',
+    packageStatusProcessing: 'Création du pack',
+    packageStatusReady: 'Prêt à télécharger',
+    packageDownloadSingle: 'Télécharger le pack',
+    packageDownloadPart: 'Télécharger la partie {{part}}',
+    packageFailureTitle: 'Le pack n’a pas pu être préparé',
+    packageFailureDocumentCount: 'Nombre de documents',
+    packageFailureEstimatedSize: 'Taille estimée',
+    packageFailureLargestFamily: 'Famille la plus volumineuse',
+    exportPackagePreviewLoading: 'Vérification des alertes avant export...',
+    exportPackagePreviewFailed: "Impossible de vérifier les alertes d'export.",
+    exportPackageWarningTitle: "Vérifiez ces points avant l'export",
+    exportPackageWarningDescription: "L'export reste possible, mais ces éléments ouverts peuvent réduire la qualité du dossier fiscal.",
+    exportPackageWarningPendingTransactions: 'Transactions à vérifier',
+    exportPackageWarningPendingDocuments: 'Documents à vérifier',
+    exportPackageWarningFallbackYears: "Documents rattachés via la date d'envoi",
+    exportPackageWarningSkippedFiles: 'Fichiers exclus de l’export',
+    reviewTransactionsBeforeExport: 'Vérifier les transactions',
+    reviewDocumentsBeforeExport: 'Vérifier les documents',
+    continueExportPackage: 'Exporter quand même',
+    reviewWarningsFirst: 'Vérifier les alertes',
+  }),
+  ru: buildTaxPackageHotfix({
+    exportPackage: 'Экспорт налогового пакета',
+    exportPackageLoading: 'Экспорт налогового пакета...',
+    exportPackageFailed: 'Не удалось экспортировать налоговый пакет.',
+    exportPackagePanelTitle: 'Экспорт налогового пакета',
+    exportPackagePanelDescription: 'Подготовьте пакет для выбранного налогового года.',
+    includeFoundationMaterials: 'Включить базовые долгосрочные материалы',
+    includeFoundationMaterialsHint: 'Добавляет договоры аренды, займа, покупки и другие базовые документы.',
+    packageScopeTransactionsCsv: 'CSV операций',
+    packageScopeTransactionsPdf: 'PDF операций',
+    packageScopeSummaryPdf: 'Сводный PDF',
+    packageScopeDocuments: 'Налоговые исходные документы',
+    packageScopeFoundationOptional: 'Дополнительно: базовые материалы',
+    preparePackage: 'Подготовить пакет',
+    packageStatusPending: 'Подготовка',
+    packageStatusProcessing: 'Упаковка',
+    packageStatusReady: 'Готово к загрузке',
+    packageDownloadSingle: 'Скачать пакет',
+    packageDownloadPart: 'Скачать часть {{part}}',
+    packageFailureTitle: 'Не удалось подготовить пакет',
+    packageFailureDocumentCount: 'Количество документов',
+    packageFailureEstimatedSize: 'Оценочный размер',
+    packageFailureLargestFamily: 'Самая большая группа',
+    exportPackagePreviewLoading: 'Проверка предупреждений перед экспортом...',
+    exportPackagePreviewFailed: 'Не удалось проверить предупреждения экспорта.',
+    exportPackageWarningTitle: 'Проверьте эти пункты перед экспортом',
+    exportPackageWarningDescription: 'Экспорт всё равно возможен, но открытые вопросы могут ухудшить качество налогового пакета.',
+    exportPackageWarningPendingTransactions: 'Операции на проверке',
+    exportPackageWarningPendingDocuments: 'Документы на проверке',
+    exportPackageWarningFallbackYears: 'Документы, отнесённые по дате загрузки',
+    exportPackageWarningSkippedFiles: 'Файлы, исключённые из экспорта',
+    reviewTransactionsBeforeExport: 'Проверить операции',
+    reviewDocumentsBeforeExport: 'Проверить документы',
+    continueExportPackage: 'Все равно экспортировать',
+    reviewWarningsFirst: 'Сначала проверить предупреждения',
+  }),
+  hu: buildTaxPackageHotfix({
+    exportPackage: 'Ado csomag exportalasa',
+    exportPackageLoading: 'Ado csomag exportalasa folyamatban...',
+    exportPackageFailed: 'Az ado csomag exportalasa sikertelen.',
+    exportPackagePanelTitle: 'Ado csomag exportalasa',
+    exportPackagePanelDescription: 'Letoltheto csomag elokeszitese a kivalasztott adoevre.',
+    includeFoundationMaterials: 'Hosszu tavu alapdokumentumok belefoglalasa',
+    includeFoundationMaterialsHint: 'Berleti, hitel-, vasarlasi es hasonlo alapdokumentumokat is hozzaad.',
+    packageScopeTransactionsCsv: 'Tranzakcio CSV',
+    packageScopeTransactionsPdf: 'Tranzakcio PDF',
+    packageScopeSummaryPdf: 'Osszefoglalo PDF',
+    packageScopeDocuments: 'Adozasi forrasdokumentumok',
+    packageScopeFoundationOptional: 'Opcionális: alapdokumentumok',
+    preparePackage: 'Csomag elokeszitese',
+    packageStatusPending: 'Elokeszites',
+    packageStatusProcessing: 'Csomagolas',
+    packageStatusReady: 'Letoltesre kesz',
+    packageDownloadSingle: 'Csomag letoltese',
+    packageDownloadPart: '{{part}}. resz letoltese',
+    packageFailureTitle: 'A csomag nem keszitheto elo',
+    packageFailureDocumentCount: 'Dokumentumok szama',
+    packageFailureEstimatedSize: 'Becsult meret',
+    packageFailureLargestFamily: 'Legnagyobb dokumentumcsalad',
+    exportPackagePreviewLoading: 'Export elotti figyelmeztetesek ellenorzese...',
+    exportPackagePreviewFailed: 'Az export figyelmeztetesek ellenorzese nem sikerult.',
+    exportPackageWarningTitle: 'Exportalas elott ellenorizze ezeket',
+    exportPackageWarningDescription: 'A csomag igy is exportalhato, de a nyitott tetelek ronthatjak az adoanyag minoseget.',
+    exportPackageWarningPendingTransactions: 'Ellenorizendo tranzakciok',
+    exportPackageWarningPendingDocuments: 'Ellenorizendo dokumentumok',
+    exportPackageWarningFallbackYears: 'Feltoltési dátum alapján besorolt dokumentumok',
+    exportPackageWarningSkippedFiles: 'Az exportból kihagyott fájlok',
+    reviewTransactionsBeforeExport: 'Tranzakciók ellenőrzése',
+    reviewDocumentsBeforeExport: 'Dokumentumok ellenőrzése',
+    continueExportPackage: 'Exportálás folytatása',
+    reviewWarningsFirst: 'Figyelmeztetések áttekintése',
+  }),
+  pl: buildTaxPackageHotfix({
+    exportPackage: 'Eksport pakietu podatkowego',
+    exportPackageLoading: 'Eksportowanie pakietu podatkowego...',
+    exportPackageFailed: 'Nie udalo sie wyeksportowac pakietu podatkowego.',
+    exportPackagePanelTitle: 'Eksport pakietu podatkowego',
+    exportPackagePanelDescription: 'Przygotuj pakiet do pobrania dla wybranego roku podatkowego.',
+    includeFoundationMaterials: 'Uwzglednij materialy podstawowe',
+    includeFoundationMaterialsHint: 'Dodaje umowy najmu, kredytu, zakupu i podobne dokumenty bazowe.',
+    packageScopeTransactionsCsv: 'CSV transakcji',
+    packageScopeTransactionsPdf: 'PDF transakcji',
+    packageScopeSummaryPdf: 'PDF podsumowania',
+    packageScopeDocuments: 'Zrodlowe dokumenty podatkowe',
+    packageScopeFoundationOptional: 'Opcjonalnie: materialy podstawowe',
+    preparePackage: 'Przygotuj pakiet',
+    packageStatusPending: 'Przygotowywanie',
+    packageStatusProcessing: 'Pakowanie',
+    packageStatusReady: 'Gotowe do pobrania',
+    packageDownloadSingle: 'Pobierz pakiet',
+    packageDownloadPart: 'Pobierz czesc {{part}}',
+    packageFailureTitle: 'Nie udalo sie przygotowac pakietu',
+    packageFailureDocumentCount: 'Liczba dokumentow',
+    packageFailureEstimatedSize: 'Szacowany rozmiar',
+    packageFailureLargestFamily: 'Najwieksza rodzina dokumentow',
+    exportPackagePreviewLoading: 'Sprawdzanie ostrzezen przed eksportem...',
+    exportPackagePreviewFailed: 'Nie udalo sie sprawdzic ostrzezen eksportu.',
+    exportPackageWarningTitle: 'Sprawdz te pozycje przed eksportem',
+    exportPackageWarningDescription: 'Pakiet nadal mozna wyeksportowac, ale te otwarte pozycje moga pogorszyc jakosc materialow podatkowych.',
+    exportPackageWarningPendingTransactions: 'Transakcje do weryfikacji',
+    exportPackageWarningPendingDocuments: 'Dokumenty do weryfikacji',
+    exportPackageWarningFallbackYears: 'Dokumenty przypisane po dacie przeslania',
+    exportPackageWarningSkippedFiles: 'Pliki wylaczone z eksportu',
+    reviewTransactionsBeforeExport: 'Sprawdz transakcje',
+    reviewDocumentsBeforeExport: 'Sprawdz dokumenty',
+    continueExportPackage: 'Eksportuj mimo to',
+    reviewWarningsFirst: 'Najpierw sprawdz ostrzezenia',
+  }),
+  tr: buildTaxPackageHotfix({
+    exportPackage: 'Vergi paketini disa aktar',
+    exportPackageLoading: 'Vergi paketi disa aktariliyor...',
+    exportPackageFailed: 'Vergi paketi disa aktarilamadi.',
+    exportPackagePanelTitle: 'Vergi paketini disa aktar',
+    exportPackagePanelDescription: 'Secilen vergi yili icin indirilebilir bir paket hazirlayin.',
+    includeFoundationMaterials: 'Uzun sureli temel belgeleri dahil et',
+    includeFoundationMaterialsHint: 'Kira, kredi, satin alma ve benzeri temel belgeleri ekler.',
+    packageScopeTransactionsCsv: 'Islem CSV',
+    packageScopeTransactionsPdf: 'Islem PDF',
+    packageScopeSummaryPdf: 'Ozet PDF',
+    packageScopeDocuments: 'Vergiyle ilgili kaynak belgeler',
+    packageScopeFoundationOptional: 'Istege bagli: temel belgeler',
+    preparePackage: 'Paketi hazirla',
+    packageStatusPending: 'Hazirlaniyor',
+    packageStatusProcessing: 'Paketleniyor',
+    packageStatusReady: 'Indirmeye hazir',
+    packageDownloadSingle: 'Paketi indir',
+    packageDownloadPart: '{{part}}. parcayi indir',
+    packageFailureTitle: 'Paket hazirlanamadi',
+    packageFailureDocumentCount: 'Belge sayisi',
+    packageFailureEstimatedSize: 'Tahmini boyut',
+    packageFailureLargestFamily: 'En buyuk belge grubu',
+    exportPackagePreviewLoading: 'Disa aktarma uyarilari kontrol ediliyor...',
+    exportPackagePreviewFailed: 'Disa aktarma uyarilari kontrol edilemedi.',
+    exportPackageWarningTitle: 'Disa aktarmadan once bu maddeleri inceleyin',
+    exportPackageWarningDescription: 'Paket yine de disa aktarilabilir, ancak bu acik maddeler vergi dosyasinin kalitesini dusurebilir.',
+    exportPackageWarningPendingTransactions: 'Inceleme bekleyen islemler',
+    exportPackageWarningPendingDocuments: 'Inceleme bekleyen belgeler',
+    exportPackageWarningFallbackYears: 'Yukleme tarihine gore atanan belgeler',
+    exportPackageWarningSkippedFiles: 'Disa aktarmaya dahil edilmeyen dosyalar',
+    reviewTransactionsBeforeExport: 'Islemleri incele',
+    reviewDocumentsBeforeExport: 'Belgeleri incele',
+    continueExportPackage: 'Yine de disa aktar',
+    reviewWarningsFirst: 'Once uyarilari incele',
+  }),
+  bs: buildTaxPackageHotfix({
+    exportPackage: 'Izvezi poreski paket',
+    exportPackageLoading: 'Izvoz poreskog paketa je u toku...',
+    exportPackageFailed: 'Izvoz poreskog paketa nije uspio.',
+    exportPackagePanelTitle: 'Izvezi poreski paket',
+    exportPackagePanelDescription: 'Pripremite paket za preuzimanje za odabranu poresku godinu.',
+    includeFoundationMaterials: 'Ukljuci dugorocne osnovne materijale',
+    includeFoundationMaterialsHint: 'Dodaje ugovore o najmu, kreditu, kupovini i slicne osnovne dokumente.',
+    packageScopeTransactionsCsv: 'CSV transakcija',
+    packageScopeTransactionsPdf: 'PDF transakcija',
+    packageScopeSummaryPdf: 'PDF sazetka',
+    packageScopeDocuments: 'Izvorni poreski dokumenti',
+    packageScopeFoundationOptional: 'Opcionalno: osnovni materijali',
+    preparePackage: 'Pripremi paket',
+    packageStatusPending: 'Priprema',
+    packageStatusProcessing: 'Pakovanje',
+    packageStatusReady: 'Spremno za preuzimanje',
+    packageDownloadSingle: 'Preuzmi paket',
+    packageDownloadPart: 'Preuzmi dio {{part}}',
+    packageFailureTitle: 'Paket nije mogao biti pripremljen',
+    packageFailureDocumentCount: 'Broj dokumenata',
+    packageFailureEstimatedSize: 'Procijenjena velicina',
+    packageFailureLargestFamily: 'Najveca porodica dokumenata',
+    exportPackagePreviewLoading: 'Provjera upozorenja prije izvoza...',
+    exportPackagePreviewFailed: 'Upozorenja za izvoz nije bilo moguce provjeriti.',
+    exportPackageWarningTitle: 'Pregledajte ove stavke prije izvoza',
+    exportPackageWarningDescription: 'Paket i dalje mozete izvesti, ali ove otvorene stavke mogu umanjiti kvalitet poreskog paketa.',
+    exportPackageWarningPendingTransactions: 'Transakcije koje cekaju pregled',
+    exportPackageWarningPendingDocuments: 'Dokumenti koji cekaju pregled',
+    exportPackageWarningFallbackYears: 'Dokumenti svrstani po datumu otpremanja',
+    exportPackageWarningSkippedFiles: 'Datoteke izostavljene iz izvoza',
+    reviewTransactionsBeforeExport: 'Pregledaj transakcije',
+    reviewDocumentsBeforeExport: 'Pregledaj dokumente',
+    continueExportPackage: 'Ipak izvezi',
+    reviewWarningsFirst: 'Prvo pregledaj upozorenja',
+  }),
+};
+
+const TAX_PACKAGE_REVIEW_COPY_OVERRIDES: Record<SupportedLanguage, {
+  reviewTransactionsBeforeExport: string;
+  reviewDocumentsBeforeExport: string;
+  reviewDocumentsByYear: string;
+}> = {
+  de: {
+    reviewTransactionsBeforeExport: 'Noch offene Transaktionen pruefen',
+    reviewDocumentsBeforeExport: 'Noch offene Dokumente pruefen',
+    reviewDocumentsByYear: 'Dokumente dieses Steuerjahres pruefen',
+  },
+  en: {
+    reviewTransactionsBeforeExport: 'Review pending transactions',
+    reviewDocumentsBeforeExport: 'Review pending documents',
+    reviewDocumentsByYear: 'Review documents from this tax year',
+  },
+  zh: {
+    reviewTransactionsBeforeExport: '查看待审核交易',
+    reviewDocumentsBeforeExport: '查看待审核文档',
+    reviewDocumentsByYear: '查看该税年文档',
+  },
+  fr: {
+    reviewTransactionsBeforeExport: 'Verifier les transactions en attente',
+    reviewDocumentsBeforeExport: 'Verifier les documents en attente',
+    reviewDocumentsByYear: 'Verifier les documents de cette annee fiscale',
+  },
+  ru: {
+    reviewTransactionsBeforeExport: 'Проверить ожидающие операции',
+    reviewDocumentsBeforeExport: 'Проверить ожидающие документы',
+    reviewDocumentsByYear: 'Проверить документы этого налогового года',
+  },
+  hu: {
+    reviewTransactionsBeforeExport: 'Fuggoben levo tranzakciok ellenorzese',
+    reviewDocumentsBeforeExport: 'Fuggoben levo dokumentumok ellenorzese',
+    reviewDocumentsByYear: 'Ennek az adoevnek a dokumentumai',
+  },
+  pl: {
+    reviewTransactionsBeforeExport: 'Sprawdz oczekujace transakcje',
+    reviewDocumentsBeforeExport: 'Sprawdz oczekujace dokumenty',
+    reviewDocumentsByYear: 'Sprawdz dokumenty z tego roku podatkowego',
+  },
+  tr: {
+    reviewTransactionsBeforeExport: 'Bekleyen islemleri incele',
+    reviewDocumentsBeforeExport: 'Bekleyen belgeleri incele',
+    reviewDocumentsByYear: 'Bu vergi yilinin belgelerini incele',
+  },
+  bs: {
+    reviewTransactionsBeforeExport: 'Pregledaj transakcije na cekanju',
+    reviewDocumentsBeforeExport: 'Pregledaj dokumente na cekanju',
+    reviewDocumentsByYear: 'Pregledaj dokumente ove poreske godine',
+  },
+};
+
+(Object.keys(TAX_PACKAGE_REVIEW_COPY_OVERRIDES) as SupportedLanguage[]).forEach((language) => {
+  const reports = TAX_PACKAGE_HOTFIXES[language].reports as LocaleObject | undefined;
+  const taxFormCopy = reports?.taxForm as LocaleObject | undefined;
+  if (taxFormCopy) {
+    Object.assign(taxFormCopy, TAX_PACKAGE_REVIEW_COPY_OVERRIDES[language]);
+  }
+});
+
+const DOCUMENT_EXPORT_ZIP_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
+  de: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Waehlen Sie das Dateijahr fuer den Export. Massgeblich ist das zugeordnete Dokumentjahr, nicht das Upload-Datum.',
+    exportZipNoYears: 'Es sind noch keine exportierbaren Dokumentjahre verfuegbar.',
+    fileYearLabel: 'Dateijahr',
+    filesLabel: 'Dateien',
+    estimatedSizeLabel: 'Geschaetzte Groesse',
+    exportZipLargeHint: 'Ein grosser Export wurde erkannt. Die ZIP-Datei wird direkt im Browser heruntergeladen, damit die Seite das komplette Archiv nicht im Speicher halten muss.',
+    exportZipDirectDownloadHint: 'Die ZIP-Datei wird direkt in Ihrem Browser heruntergeladen.',
+  }),
+  en: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Choose the file year to export. The year is based on the document attribution year, not the upload year.',
+    exportZipNoYears: 'No attributable file years are available yet for export.',
+    fileYearLabel: 'File year',
+    filesLabel: 'files',
+    estimatedSizeLabel: 'estimated size',
+    exportZipLargeHint: 'Large export detected. The browser will download it directly so the page does not need to keep the full ZIP in memory.',
+    exportZipDirectDownloadHint: 'The ZIP will download directly in your browser.',
+  }),
+  zh: buildDocumentExportZipHotfix({
+    exportZipYearHint: '请选择要导出的文件年度。这里使用文档归属年份，而不是上传年份。',
+    exportZipNoYears: '目前还没有可按归属年份导出的文件。',
+    fileYearLabel: '文件年度',
+    filesLabel: '文件',
+    estimatedSizeLabel: '预计大小',
+    exportZipLargeHint: '检测到较大的导出内容。ZIP 将直接在浏览器中下载，这样页面无需一直保留完整压缩包。',
+    exportZipDirectDownloadHint: 'ZIP 将直接在浏览器中下载。',
+  }),
+  fr: buildDocumentExportZipHotfix({
+    exportZipYearHint: "Choisissez l'annee de document a exporter. L'annee utilisee est l'annee d'attribution du document, pas l'annee de televersement.",
+    exportZipNoYears: "Aucune annee de document exportable n'est encore disponible.",
+    fileYearLabel: 'Annee du document',
+    filesLabel: 'fichiers',
+    estimatedSizeLabel: 'taille estimee',
+    exportZipLargeHint: "Export volumineux detecte. Le fichier ZIP sera telecharge directement dans le navigateur pour eviter de conserver l'archive complete en memoire sur la page.",
+    exportZipDirectDownloadHint: 'Le fichier ZIP sera telecharge directement dans votre navigateur.',
+  }),
+  ru: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Vyberite god dokumentov dlya eksporta. Ispolzuetsya god atributsii dokumenta, a ne god zagruzki.',
+    exportZipNoYears: 'Poka net godov dokumentov, dostupnykh dlya eksporta.',
+    fileYearLabel: 'God dokumentov',
+    filesLabel: 'faily',
+    estimatedSizeLabel: 'predpolagaemyi razmer',
+    exportZipLargeHint: 'Obnaruzhen eksport bolshogo obema. ZIP budet zagruzhen napryamuyu v brauzere, chtoby stranitsa ne derzhala vsyu arkhivnuyu kopiyu v pamyati.',
+    exportZipDirectDownloadHint: 'ZIP budet zagruzhen napryamuyu v vashem brauzere.',
+  }),
+  hu: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Valassza ki az exportalando dokumentumevet. Itt a dokumentumhoz rendelt evet hasznaljuk, nem a feltoltes evet.',
+    exportZipNoYears: 'Meg nincsen exportalhato dokumentumev.',
+    fileYearLabel: 'Dokumentumev',
+    filesLabel: 'fajl',
+    estimatedSizeLabel: 'becsult meret',
+    exportZipLargeHint: 'Nagy exportot eszleltunk. A ZIP fajl kozvetlenul a bongeszoben tolodik le, igy az oldalnak nem kell a teljes archivumot memoriaban tartania.',
+    exportZipDirectDownloadHint: 'A ZIP fajl kozvetlenul a bongeszoben fog letoltodni.',
+  }),
+  pl: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Wybierz rok dokumentow do eksportu. Uzywany jest rok przypisania dokumentu, a nie rok przeslania.',
+    exportZipNoYears: 'Nie ma jeszcze lat dokumentow dostepnych do eksportu.',
+    fileYearLabel: 'Rok dokumentow',
+    filesLabel: 'pliki',
+    estimatedSizeLabel: 'szacowany rozmiar',
+    exportZipLargeHint: 'Wykryto duzy eksport. Plik ZIP zostanie pobrany bezposrednio w przegladarce, aby strona nie musiala trzymac calego archiwum w pamieci.',
+    exportZipDirectDownloadHint: 'Plik ZIP zostanie pobrany bezposrednio w przegladarce.',
+  }),
+  tr: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Disa aktarilacak belge yilini secin. Burada yukleme yili degil, belgeye atanan yil kullanilir.',
+    exportZipNoYears: 'Henuz disa aktarilabilecek bir belge yili yok.',
+    fileYearLabel: 'Belge yili',
+    filesLabel: 'dosya',
+    estimatedSizeLabel: 'tahmini boyut',
+    exportZipLargeHint: 'Buyuk bir disa aktarim algilandi. ZIP dosyasi dogrudan tarayicida indirilecek; boylece sayfanin tum arsivi bellekte tutmasi gerekmeyecek.',
+    exportZipDirectDownloadHint: 'ZIP dosyasi dogrudan tarayicinizda indirilecektir.',
+  }),
+  bs: buildDocumentExportZipHotfix({
+    exportZipYearHint: 'Odaberite godinu dokumenata za izvoz. Koristi se godina pripisana dokumentu, a ne godina uploada.',
+    exportZipNoYears: 'Jos nema godina dokumenata dostupnih za izvoz.',
+    fileYearLabel: 'Godina dokumenta',
+    filesLabel: 'dokumenti',
+    estimatedSizeLabel: 'procijenjena velicina',
+    exportZipLargeHint: 'Otkriven je veliki izvoz. ZIP ce se preuzeti direktno u pregledniku kako stranica ne bi morala drzati cijelu arhivu u memoriji.',
+    exportZipDirectDownloadHint: 'ZIP ce se preuzeti direktno u vasem pregledniku.',
+  }),
+};
+
+const CLASSIFICATION_MEMORY_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
+  de: buildClassificationMemoryHotfix({
+    pageTitle: 'Regeln und Erinnerungen',
+    pageSubtitle: 'Diese Erinnerungen entstehen automatisch, wenn Sie Kategorien, Abzugsfaehigkeit oder Bankbuchungsaktionen bestaetigen, damit aehnliche Transaktionen beim naechsten Mal richtig landen.',
+    title: 'Regeln und Erinnerungen',
+    subtitle: 'Kategorien, Abzugsfaehigkeits-Overrides und Regeln zur automatischen Verarbeitung, die beim naechsten Mal wiederverwendet werden.',
+    empty: 'Noch keine Lernregeln. Regeln werden automatisch erstellt, wenn Sie Kategorien, Abzugsentscheidungen oder Bankzeilen bestaetigen.',
+    categorySectionDescription: 'Gespeicherte Kategoriekorrekturen, damit aehnliche Transaktionen im richtigen Bereich landen.',
+    automationSectionTitle: 'Regeln zur automatischen Verarbeitung',
+    automationSectionDescription: 'Aus bestaetigten Bankbuchungs-Erstellungen gelernte Muster, die beim naechsten Mal automatisch erstellt werden koennen.',
+    searchAutomationPlaceholder: 'Nach Regeln zur automatischen Verarbeitung suchen...',
+    automationEmpty: 'Noch keine Regeln zur automatischen Verarbeitung. Sie erscheinen, nachdem Sie das Erstellen einer Bankbuchung bestaetigt haben.',
+    selectAllAutomation: 'Alle Regeln zur automatischen Verarbeitung auswaehlen',
+    automationActionAutoCreate: 'Automatisch erstellen',
+    reasonAutomation: 'Gelernt, als Sie das Erstellen einer Bankbuchung bestaetigt haben.',
+    reasonAutomationFrozen: 'Diese Regel zur automatischen Verarbeitung wurde nach wiederholten widerspruechlichen Korrekturen eingefroren.',
+    reasonAutomationConflict: 'Die Regel zur automatischen Verarbeitung wurde durch spaetere Korrekturen in Frage gestellt',
+    deductibilitySectionDescription: 'Gespeicherte Abzugsfaehig-/Nicht-abzugsfaehig-Overrides, die beim naechsten Mal wiederverwendet werden.',
+    action: 'Aktion',
+  }),
+  en: buildClassificationMemoryHotfix({
+    pageTitle: 'Rules and Memory',
+    pageSubtitle: 'These memories are created automatically when you confirm categories, deductibility decisions, or bank statement actions, helping similar transactions land in the right place next time.',
+    title: 'Rules and Memory',
+    subtitle: 'Category memory, deductibility overrides, and automatic handling rules that the system will reuse next time.',
+    empty: 'No learning rules yet. Rules are created automatically when you confirm categories, deductibility decisions, or bank statement actions.',
+    categorySectionDescription: 'Saved category corrections that help similar transactions land in the right bucket.',
+    automationSectionTitle: 'Automatic handling rules',
+    automationSectionDescription: 'Patterns learned from confirmed bank statement creations that can be auto-created next time.',
+    searchAutomationPlaceholder: 'Search automatic handling rules...',
+    automationEmpty: 'No automatic handling rules yet. They will appear after you confirm creating a bank statement transaction.',
+    selectAllAutomation: 'Select all automatic handling rules',
+    automationActionAutoCreate: 'Auto-create',
+    reasonAutomation: 'Learned when you confirmed creating a bank statement transaction.',
+    reasonAutomationFrozen: 'This automatic handling rule was frozen after repeated conflicting corrections.',
+    reasonAutomationConflict: 'The automatic handling rule was challenged by later corrections',
+    deductibilitySectionDescription: 'Saved deductible and non-deductible overrides that the system will reuse next time.',
+    action: 'Action',
+  }),
+  zh: buildClassificationMemoryHotfix({
+    pageTitle: '规则与记忆',
+    pageSubtitle: '当您确认分类、抵扣判断或银行流水动作时，系统会自动形成这些记忆，帮助相似交易下次直接落到正确位置。',
+    title: '规则与记忆',
+    subtitle: '下次会被重复使用的分类记忆、抵扣覆盖规则和自动处理规则。',
+    empty: '还没有学习到任何规则。当您确认分类、抵扣判断或银行流水动作后，系统会自动创建规则。',
+    categorySectionDescription: '保存的分类纠正，帮助相似交易下次直接进入正确分类。',
+    automationSectionTitle: '自动处理规则',
+    automationSectionDescription: '从已确认的新建银行流水交易中学到的模式，下次可直接自动创建。',
+    searchAutomationPlaceholder: '搜索自动处理规则...',
+    automationEmpty: '还没有自动处理规则。您确认创建银行流水交易后，这里就会出现。',
+    selectAllAutomation: '全选自动处理规则',
+    automationActionAutoCreate: '自动创建',
+    reasonAutomation: '当您确认创建银行流水交易时学到的规则。',
+    reasonAutomationFrozen: '这条自动处理规则因多次冲突修正已被冻结。',
+    reasonAutomationConflict: '这条自动处理规则被后续修正提出了冲突',
+    deductibilitySectionDescription: '保存的可抵扣/不可抵扣覆盖规则，下次会自动复用。',
+    action: '动作',
+  }),
+  fr: buildClassificationMemoryHotfix({
+    pageTitle: 'Regles et memoire',
+    pageSubtitle: 'Ces memoires sont creees automatiquement lorsque vous confirmez des categories, des decisions de deductibilite ou des actions sur des releves bancaires, afin que les transactions similaires tombent au bon endroit la prochaine fois.',
+    title: 'Regles et memoire',
+    subtitle: 'Memoire de categorie, remplacements de deductibilite et regles de traitement automatique reutilises la prochaine fois.',
+    empty: 'Aucune regle apprise pour le moment. Les regles sont creees automatiquement lorsque vous confirmez des categories, des decisions de deductibilite ou des actions sur des releves bancaires.',
+    categorySectionDescription: 'Corrections de categorie enregistrees pour orienter les transactions similaires vers le bon classement.',
+    automationSectionTitle: 'Regles de traitement automatique',
+    automationSectionDescription: 'Modeles appris a partir de creations confirmees dans le releve bancaire pouvant etre recrées automatiquement la prochaine fois.',
+    searchAutomationPlaceholder: 'Rechercher des regles de traitement automatique...',
+    automationEmpty: 'Aucune regle de traitement automatique pour le moment. Elles apparaitront apres confirmation de la creation d une transaction bancaire.',
+    selectAllAutomation: 'Selectionner toutes les regles de traitement automatique',
+    automationActionAutoCreate: 'Creation auto',
+    reasonAutomation: 'Apprise lorsque vous avez confirme la creation d une transaction de releve bancaire.',
+    reasonAutomationFrozen: 'Cette regle de traitement automatique a ete gelee apres des corrections contradictoires repetees.',
+    reasonAutomationConflict: 'La regle de traitement automatique a ete contestee par des corrections ulterieures',
+    deductibilitySectionDescription: 'Overrides deductibles et non deductibles enregistres pour reutilisation future.',
+    action: 'Action',
+  }),
+  ru: buildClassificationMemoryHotfix({
+    pageTitle: 'Pravila i pamyat',
+    pageSubtitle: 'Eti pravila sozdajutsya avtomaticheski, kogda vy podtverzhdaete kategorii, resheniya po vychetu ili deistviya po bankovskim vypiskam, chtoby pokhozhie operatsii v sleduyushchiy raz popadali v nuzhnoe mesto.',
+    title: 'Pravila i pamyat',
+    subtitle: 'Pamyat kategoriy, pereopredeleniya vychetov i pravila avtomaticheskoy obrabotki, kotorye sistema ispolzuet povtorno.',
+    empty: 'Pravil poka net. Oni sozdajutsya avtomaticheski, kogda vy podtverzhdaete kategorii, resheniya po vychetu ili deistviya po bankovskim vypiskam.',
+    categorySectionDescription: 'Sohranennye ispravleniya kategoriy, chtoby pokhozhie operatsii srazu popadali v pravilnyy razdel.',
+    automationSectionTitle: 'Pravila avtomaticheskoy obrabotki',
+    automationSectionDescription: 'Shablony, vyuchennye posle podtverzhdennogo sozdaniya operatsii iz bankovskoy vypiski, kotorye mozhno avtomaticheski sozdavat v sleduyushchiy raz.',
+    searchAutomationPlaceholder: 'Iskat pravila avtomaticheskoy obrabotki...',
+    automationEmpty: 'Pravil avtomaticheskoy obrabotki poka net. Oni poyavyatsya posle podtverzhdeniya sozdaniya operatsii iz bankovskoy vypiski.',
+    selectAllAutomation: 'Vybrat vse pravila avtomaticheskoy obrabotki',
+    automationActionAutoCreate: 'Sozdavat avtomaticheski',
+    reasonAutomation: 'Pravilo sozdano posle podtverzhdeniya sozdaniya operatsii iz bankovskoy vypiski.',
+    reasonAutomationFrozen: 'Eto pravilo avtomaticheskoy obrabotki bylo zamorozheno posle povtoryayushchikhsya protivorechivykh ispravleniy.',
+    reasonAutomationConflict: 'Pravilo avtomaticheskoy obrabotki bylo osporeno pozdneyshimi ispravleniyami',
+    deductibilitySectionDescription: 'Sohranennye pereopredeleniya vycheta i nevycheta, kotorye budut ispolzovatsya povtorno.',
+    action: 'Deystvie',
+  }),
+  hu: buildClassificationMemoryHotfix({
+    pageTitle: 'Szabalyok es memoria',
+    pageSubtitle: 'Ezek a memoriak automatikusan letrejonnek, amikor kategoriakat, levonhatosagi donteseket vagy bankszamlakivonat-muveleteket hagy jo, hogy a hasonlo tranzakciok legkozelebb a megfelelo helyre keruljenek.',
+    title: 'Szabalyok es memoria',
+    subtitle: 'Kategoriamemoria, levonhatosagi felulirasok es automatikus feldolgozasi szabalyok, amelyeket a rendszer legkozelebb ujra felhasznal.',
+    empty: 'Meg nincsenek tanult szabalyok. A rendszer automatikusan hoz letre szabalyokat, amikor kategoriakat, levonhatosagi donteseket vagy bankszamlakivonat-muveleteket hagy jova.',
+    categorySectionDescription: 'Mentett kategoriakorrekciok, hogy a hasonlo tranzakciok kovetkezo alkalommal a megfelelo kategoriaba keruljenek.',
+    automationSectionTitle: 'Automatikus feldolgozasi szabalyok',
+    automationSectionDescription: 'A megerositett bankszamlakivonat-tranzakcio letrehozasokbol tanult mintak, amelyek legkozelebb automatikusan letrehozhatok.',
+    searchAutomationPlaceholder: 'Automatikus feldolgozasi szabalyok keresese...',
+    automationEmpty: 'Meg nincsenek automatikus feldolgozasi szabalyok. Akkor jelennek meg, amikor megerositi egy bankszamlakivonat-tranzakcio letrehozasat.',
+    selectAllAutomation: 'Osszes automatikus feldolgozasi szabaly kijelolese',
+    automationActionAutoCreate: 'Automatikus letrehozas',
+    reasonAutomation: 'Akkor tanulta meg a rendszer, amikor megerositette a bankszamlakivonat-tranzakcio letrehozasat.',
+    reasonAutomationFrozen: 'Ez az automatikus feldolgozasi szabaly tobbszori ellentmondo javitas utan befagyasztasra kerult.',
+    reasonAutomationConflict: 'Az automatikus feldolgozasi szabaly kesobbi javitasok miatt ellentmondasossa valt',
+    deductibilitySectionDescription: 'Mentett levonhato es nem levonhato felulirasok, amelyeket a rendszer legkozelebb ujra felhasznal.',
+    action: 'Muvelet',
+  }),
+  pl: buildClassificationMemoryHotfix({
+    pageTitle: 'Reguly i pamiec',
+    pageSubtitle: 'Ta pamiec powstaje automatycznie, gdy potwierdzasz kategorie, decyzje o odliczalnosci lub akcje na wyciagu bankowym, aby podobne transakcje nastepnym razem trafialy we wlasciwe miejsce.',
+    title: 'Reguly i pamiec',
+    subtitle: 'Pamiec kategorii, nadpisania odliczalnosci i reguly automatycznej obslugi, ktore system wykorzysta ponownie nastepnym razem.',
+    empty: 'Brak wyuczonych regul. Reguly sa tworzone automatycznie, gdy potwierdzasz kategorie, decyzje o odliczalnosci lub akcje na wyciagu bankowym.',
+    categorySectionDescription: 'Zapisane korekty kategorii, aby podobne transakcje nastepnym razem trafialy do wlasciwej kategorii.',
+    automationSectionTitle: 'Reguly automatycznej obslugi',
+    automationSectionDescription: 'Wzorce wyuczone z potwierdzonych utworzen transakcji z wyciagu bankowego, ktore mozna nastepnym razem utworzyc automatycznie.',
+    searchAutomationPlaceholder: 'Szukaj regul automatycznej obslugi...',
+    automationEmpty: 'Nie ma jeszcze regul automatycznej obslugi. Pojawia sie po potwierdzeniu utworzenia transakcji z wyciagu bankowego.',
+    selectAllAutomation: 'Zaznacz wszystkie reguly automatycznej obslugi',
+    automationActionAutoCreate: 'Utworz automatycznie',
+    reasonAutomation: 'Nauczone po potwierdzeniu utworzenia transakcji z wyciagu bankowego.',
+    reasonAutomationFrozen: 'Ta regula automatycznej obslugi zostala zamrozona po powtarzajacych sie sprzecznych korektach.',
+    reasonAutomationConflict: 'Regula automatycznej obslugi zostala zakwestionowana przez pozniejsze korekty',
+    deductibilitySectionDescription: 'Zapisane nadpisania odliczalne i nieodliczalne, ktore system wykorzysta ponownie.',
+    action: 'Akcja',
+  }),
+  tr: buildClassificationMemoryHotfix({
+    pageTitle: 'Kurallar ve hafiza',
+    pageSubtitle: 'Bu hafiza, kategorileri, indirilebilirlik kararlarini veya banka ekstresi islemlerini onayladiginizda otomatik olarak olusur; boylece benzer islemler bir sonraki sefer dogru yere duser.',
+    title: 'Kurallar ve hafiza',
+    subtitle: 'Kategori hafizasi, indirilebilirlik gecersiz kilmalari ve sistemin bir sonraki sefer yeniden kullanacagi otomatik isleme kurallari.',
+    empty: 'Henuz ogrenilmis kural yok. Kategorileri, indirilebilirlik kararlarini veya banka ekstresi islemlerini onayladiginizda kurallar otomatik olarak olusturulur.',
+    categorySectionDescription: 'Benzer islemlerin bir sonraki sefer dogru kategoriye dusmesine yardimci olan kaydedilmis kategori duzeltmeleri.',
+    automationSectionTitle: 'Otomatik isleme kurallari',
+    automationSectionDescription: 'Onaylanmis banka ekstresi islem olusturmalarindan ogrenilen ve bir sonraki sefer otomatik olusturulabilen desenler.',
+    searchAutomationPlaceholder: 'Otomatik isleme kurallarini ara...',
+    automationEmpty: 'Henuz otomatik isleme kurali yok. Bir banka ekstresi islemi olusturmayi onayladiginizda burada gorunurler.',
+    selectAllAutomation: 'Tum otomatik isleme kurallarini sec',
+    automationActionAutoCreate: 'Otomatik olustur',
+    reasonAutomation: 'Bir banka ekstresi islemi olusturmayi onayladiginizda ogrenildi.',
+    reasonAutomationFrozen: 'Bu otomatik isleme kurali, tekrar eden celiskili duzeltmelerden sonra donduruldu.',
+    reasonAutomationConflict: 'Otomatik isleme kurali daha sonraki duzeltmelerle sorgulandi',
+    deductibilitySectionDescription: 'Sistemin tekrar kullanacagi kaydedilmis indirilebilir ve indirilemez gecersiz kilmalar.',
+    action: 'Islem',
+  }),
+  bs: buildClassificationMemoryHotfix({
+    pageTitle: 'Pravila i memorija',
+    pageSubtitle: 'Ova memorija se automatski stvara kada potvrdite kategorije, odluke o odbitku ili radnje nad bankovnim izvodom, kako bi slicne transakcije sljedeci put zavrsile na pravom mjestu.',
+    title: 'Pravila i memorija',
+    subtitle: 'Memorija kategorija, preinake odbitka i pravila automatske obrade koja ce sistem sljedeci put ponovo koristiti.',
+    empty: 'Jos nema naucenih pravila. Pravila se automatski kreiraju kada potvrdite kategorije, odluke o odbitku ili radnje nad bankovnim izvodom.',
+    categorySectionDescription: 'Sacuvane korekcije kategorija kako bi slicne transakcije sljedeci put zavrsile u pravoj grupi.',
+    automationSectionTitle: 'Pravila automatske obrade',
+    automationSectionDescription: 'Obrasci nauceni iz potvrdjenih kreiranja transakcija sa bankovnog izvoda koji se sljedeci put mogu automatski kreirati.',
+    searchAutomationPlaceholder: 'Pretrazi pravila automatske obrade...',
+    automationEmpty: 'Jos nema pravila automatske obrade. Pojavice se nakon sto potvrdite kreiranje transakcije sa bankovnog izvoda.',
+    selectAllAutomation: 'Oznaci sva pravila automatske obrade',
+    automationActionAutoCreate: 'Automatski kreiraj',
+    reasonAutomation: 'Nauceno kada ste potvrdili kreiranje transakcije sa bankovnog izvoda.',
+    reasonAutomationFrozen: 'Ovo pravilo automatske obrade je zamrznuto nakon ponovljenih kontradiktornih ispravki.',
+    reasonAutomationConflict: 'Pravilo automatske obrade je dovedeno u pitanje kasnijim ispravkama',
+    deductibilitySectionDescription: 'Sacuvane preinake za odbitno i neodbitno koje ce sistem ponovo koristiti.',
+    action: 'Akcija',
+  }),
 };
 
 const encodeWindows1252 = (value: string): Uint8Array | null => {
@@ -1706,5 +2522,14 @@ export const sanitizeLocaleResource = (
   resource: Record<string, unknown>
 ): Record<string, unknown> =>
   repairLocaleValue(
-    deepMerge(resource as LocaleObject, LOCALE_HOTFIXES[language])
+    deepMerge(
+      deepMerge(
+        deepMerge(
+          deepMerge(resource as LocaleObject, LOCALE_HOTFIXES[language]),
+          TAX_PACKAGE_HOTFIXES[language]
+        ),
+        CLASSIFICATION_MEMORY_HOTFIXES[language]
+      ),
+      DOCUMENT_EXPORT_ZIP_HOTFIXES[language]
+    )
   ) as Record<string, unknown>;

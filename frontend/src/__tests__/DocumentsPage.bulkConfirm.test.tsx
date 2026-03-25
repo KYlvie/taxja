@@ -9,6 +9,8 @@ import DocumentsPage from '../pages/DocumentsPage';
 
 const getDocuments = vi.fn();
 const confirmOCR = vi.fn();
+const getExportYears = vi.fn();
+const getExportZipUrl = vi.fn();
 const aiToast = vi.fn();
 
 vi.mock('react-i18next', () => ({
@@ -66,6 +68,8 @@ vi.mock('../services/documentService', () => ({
     getDocuments: (...args: any[]) => getDocuments(...args),
     confirmOCR: (...args: any[]) => confirmOCR(...args),
     exportZip: vi.fn(),
+    getExportYears: (...args: any[]) => getExportYears(...args),
+    getExportZipUrl: (...args: any[]) => getExportZipUrl(...args),
   },
 }));
 
@@ -108,8 +112,17 @@ vi.mock('../documents/presentation/featureFlag', () => ({
 describe('DocumentsPage bulk confirm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
     getDocuments.mockResolvedValue({ documents: [] });
     confirmOCR.mockResolvedValue(undefined);
+    getExportYears.mockResolvedValue([
+      { year: 2026, count: 3, total_size_bytes: 5 * 1024 * 1024 },
+      { year: 2024, count: 4, total_size_bytes: 180 * 1024 * 1024 },
+    ]);
+    getExportZipUrl.mockReturnValue('/api/v1/documents/export-zip?sort_by=document_date&document_year=2024');
   });
 
   it('confirms all summary-provided reviewable documents from the list header action', async () => {
@@ -134,5 +147,43 @@ describe('DocumentsPage bulk confirm', () => {
     await waitFor(() => {
       expect(aiToast).toHaveBeenCalledWith('Confirmed 3 items.', 'success');
     });
+  });
+
+  it('opens an export dialog, lets the user choose a document year, and starts a direct download', async () => {
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/documents']}>
+        <Routes>
+          <Route path="/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Export ZIP' }));
+
+    expect(await screen.findByText('Choose the file year to export. The year is based on the document attribution year, not the upload year.')).toBeInTheDocument();
+    expect(getExportYears).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('combobox'));
+    fireEvent.mouseDown(await screen.findByRole('option', { name: '2024 (4)' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/180 MB/)).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        'Large export detected. The browser will download it directly so the page does not need to keep the full ZIP in memory.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Export ZIP' }).at(-1)!);
+
+    expect(getExportZipUrl).toHaveBeenCalledWith({}, { documentYear: 2024 });
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+
+    clickSpy.mockRestore();
   });
 });

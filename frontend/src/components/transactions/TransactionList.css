@@ -254,6 +254,7 @@
 
 .reconciled-status--no {
   color: var(--color-text-muted);
+  cursor: help;
 }
 
 .transaction-row-actions {

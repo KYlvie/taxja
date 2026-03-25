@@ -945,6 +945,11 @@
   },
   "documents": {
     "title": "Dokumentumok",
+    "sortMode": {
+      "label": "Rendezés",
+      "uploadDate": "Feltöltés dátuma",
+      "documentDate": "Dokumentum dátuma"
+    },
     "description": "Adódokumentumok feltöltése és kezelése automatikus felismeréssel",
     "uploadDocument": "Dokumentum feltöltése",
     "documentType": "Dokumentum típusa",

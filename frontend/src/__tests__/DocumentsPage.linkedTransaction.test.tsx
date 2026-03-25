@@ -38,10 +38,45 @@ vi.mock('react-i18next', () => ({
 vi.mock('../components/documents/DocumentUpload', () => ({ default: () => <div data-testid="doc-upload" /> }));
 vi.mock('../components/documents/DocumentList', () => ({ default: () => <div data-testid="doc-list" /> }));
 vi.mock('../components/documents/OCRReview', () => ({ default: () => <div data-testid="ocr-review" /> }));
+vi.mock('../components/documents/BankStatementWorkbench', () => ({
+  default: ({ onOpenTransaction }: any) => (
+    <button
+      type="button"
+      onClick={() => onOpenTransaction?.(
+        1621,
+        {
+          id: 1621,
+          type: 'expense',
+          amount: '62.23',
+          transaction_date: '2024-12-18',
+          description: 'T-Mobile Austria GmbH',
+          expense_category: 'telecommunications',
+          classification_confidence: '0.90',
+          bank_reconciled: true,
+        },
+        '2024-12-18',
+        '-62.23',
+      )}
+    >
+      Open bank transaction
+    </button>
+  ),
+}));
 vi.mock('../components/documents/EmployerReviewPanel', () => ({ default: () => null }));
 vi.mock('../components/documents/BescheidImport', () => ({ default: () => null }));
 vi.mock('../components/documents/E1FormImport', () => ({ default: () => null }));
 vi.mock('../components/documents/SuggestionCardFactory', () => ({ default: () => null }));
+vi.mock('../components/transactions/TransactionDetail', () => ({
+  default: ({ transaction, hideLinkedDocumentSection, onClose }: any) => (
+    <div data-testid="transaction-detail">
+      <span>{transaction.description}</span>
+      <span>{hideLinkedDocumentSection ? 'hide-linked-document-section' : 'show-linked-document-section'}</span>
+      <button type="button" onClick={onClose}>
+        close-inline-transaction
+      </button>
+    </div>
+  ),
+}));
 
 vi.mock('../services/documentService', () => ({
   documentService: {
@@ -97,10 +132,25 @@ describe('DocumentsPage linked transaction entry', () => {
       transaction_id: 1151,
       created_at: '2026-03-17T00:00:00Z',
       updated_at: '2026-03-17T00:00:00Z',
+      linked_transactions: [
+        {
+          transaction_id: 1151,
+          description: 'OAMTC battery replacement',
+          amount: 237.9,
+          date: '2024-12-30',
+          has_line_items: false,
+        },
+      ],
       ocr_result: {
         merchant: 'OAMTC',
         amount: 237.9,
-        line_items: [],
+        line_items: [
+          {
+            description: 'Battery replacement',
+            amount: 237.9,
+            quantity: 1,
+          },
+        ],
       },
     });
 
@@ -115,15 +165,16 @@ describe('DocumentsPage linked transaction entry', () => {
       expense_category: 'maintenance',
       category: 'maintenance',
       line_items: [],
+      document_id: 118,
     });
   });
 
-  it('shows a direct linked-transaction button and navigates to the matching transaction', async () => {
+  it('opens linked transactions inline and keeps the user on the current document page', async () => {
     render(
       <MemoryRouter initialEntries={['/documents/118']}>
+        <LocationProbe />
         <Routes>
           <Route path="/documents/:documentId" element={<DocumentsPage />} />
-          <Route path="/transactions" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -134,7 +185,18 @@ describe('DocumentsPage linked transaction entry', () => {
     fireEvent.click(openButton);
 
     await waitFor(() => {
-      expect(screen.getByTestId('location-probe')).toHaveTextContent('/transactions?transactionId=1151');
+      expect(getById).toHaveBeenCalledWith(1151);
     });
+
+    expect(screen.getByTestId('transaction-detail')).toBeInTheDocument();
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/documents/118');
+    expect(screen.getByText('hide-linked-document-section')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'close-inline-transaction' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('transaction-detail')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/documents/118');
   });
 });

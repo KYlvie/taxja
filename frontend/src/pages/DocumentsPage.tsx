@@ -2,9 +2,12 @@
 import { CheckCheck } from 'lucide-react';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useRef } from 'react';
+import { createPortal } from 'react-dom';
+import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Select from '../components/common/Select';
+import RobotMascot from '../components/common/RobotMascot';
 import DocumentUpload from '../components/documents/DocumentUpload';
 import { translateDeductionReason } from '../utils/translateDeductionReason';
 import DocumentList, { type DocumentListSummary } from '../components/documents/DocumentList';
@@ -14,11 +17,17 @@ import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
 import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
-import { documentService, type AssetSuggestionConfirmationPayload } from '../services/documentService';
+import {
+  documentService,
+  type AssetSuggestionConfirmationPayload,
+  type DocumentExportYearOption,
+} from '../services/documentService';
 import { useDocumentStore } from '../stores/documentStore';
 import { transactionService } from '../services/transactionService';
+import TransactionDetail from '../components/transactions/TransactionDetail';
 import { propertyService } from '../services/propertyService';
 import { Document } from '../types/document';
+import type { BankStatementTransactionSummary } from '../types/bankImport';
 import { Property } from '../types/property';
 import { ExpenseCategory, IncomeCategory, Transaction } from '../types/transaction';
 import { saveBlobWithNativeShare } from '../mobile/files';
@@ -35,6 +44,7 @@ import { resolveControlPolicy } from '../documents/presentation/resolveControlPo
 import type {
   DocumentPresentationDraft,
 } from '../documents/presentation/types';
+import '../components/common/ConfirmDialog.css';
 import './DocumentsPage.css';
 
 type ReceiptDraftItem = {
@@ -89,6 +99,26 @@ const OCR_META_SKIP_KEYS = [
   'receipts',
   'total_amount',
 ];
+const LARGE_EXPORT_WARNING_BYTES = 150 * 1024 * 1024;
+const EXPORT_ROBOT_SIZE = 320;
+
+const parseFilterYearParam = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1900 || parsed > 3000) return null;
+  return parsed;
+};
+
+const formatExportSize = (bytes: number, locale: string) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toLocaleString(locale, { maximumFractionDigits: 1 })} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toLocaleString(locale, { maximumFractionDigits: 1 })} GB`;
+};
 
 const toFiniteNumber = (value: unknown): number | null => {
   if (value === null || value === undefined || value === '') return null;
@@ -871,6 +901,8 @@ const DocumentsPage = () => {
   const [searchParams] = useSearchParams();
   const uploadPropertyId = searchParams.get('property_id');
   const uploadType = searchParams.get('type');
+  const needsReviewParam = searchParams.get('needs_review');
+  const yearParam = searchParams.get('year');
   const resolverEnabled = isDocumentPresentationResolverEnabled();
   const [reviewingDocument, setReviewingDocument] = useState<Document | null>(null);
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
@@ -887,25 +919,105 @@ const DocumentsPage = () => {
   });
   const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
   const [docIdList, setDocIdList] = useState<number[]>([]);
-  const [exporting, setExporting] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportYears, setExportYears] = useState<DocumentExportYearOption[]>([]);
+  const [loadingExportYears, setLoadingExportYears] = useState(false);
+  const [selectedExportYear, setSelectedExportYear] = useState<string>('');
+  const [downloadingExport, setDownloadingExport] = useState(false);
   const [bulkConfirming, setBulkConfirming] = useState(false);
 
+  const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
   const currentFilters = useDocumentStore((s) => s.filters);
+  const setDocumentFilters = useDocumentStore((s) => s.setFilters);
+  const selectedExportOption = exportYears.find((option) => String(option.year) === selectedExportYear) ?? null;
+  const isLargeExport = (selectedExportOption?.total_size_bytes ?? 0) >= LARGE_EXPORT_WARNING_BYTES;
+  const filterYear = parseFilterYearParam(yearParam);
 
-  const handleExportZip = async () => {
-    setExporting(true);
+  useEffect(() => {
+    if (needsReviewParam !== 'true' && filterYear === null) {
+      return;
+    }
+
+    const nextFilters = {
+      needs_review: needsReviewParam === 'true' ? true : undefined,
+      start_date: filterYear !== null ? `${filterYear}-01-01` : undefined,
+      end_date: filterYear !== null ? `${filterYear}-12-31` : undefined,
+    };
+
+    if (
+      currentFilters.needs_review === nextFilters.needs_review
+      && currentFilters.start_date === nextFilters.start_date
+      && currentFilters.end_date === nextFilters.end_date
+      && currentFilters.document_type === undefined
+      && currentFilters.search === undefined
+      && currentFilters.is_deductible === undefined
+      && currentFilters.is_recurring === undefined
+    ) {
+      return;
+    }
+
+    setDocumentFilters(nextFilters);
+  }, [
+    needsReviewParam,
+    filterYear,
+    currentFilters.needs_review,
+    currentFilters.start_date,
+    currentFilters.end_date,
+    currentFilters.document_type,
+    currentFilters.search,
+    currentFilters.is_deductible,
+    currentFilters.is_recurring,
+    setDocumentFilters,
+  ]);
+
+  const handleOpenExportZipDialog = async () => {
+    if (loadingExportYears || downloadingExport || documentSummary.totalCount === 0) return;
+
+    setShowExportDialog(true);
+    setLoadingExportYears(true);
     try {
-      const blob = await documentService.exportZip(currentFilters);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'documents.zip';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // silent
+      const years = await documentService.getExportYears(currentFilters);
+      setExportYears(years);
+      setSelectedExportYear((current) => {
+        if (current && years.some((option) => String(option.year) === current)) {
+          return current;
+        }
+        return years[0] ? String(years[0].year) : '';
+      });
+    } catch (error) {
+      console.error('Failed to load export years:', error);
+      aiToast(t('documents.exportZipFailed', 'Export failed'), 'error');
+      setShowExportDialog(false);
     } finally {
-      setExporting(false);
+      setLoadingExportYears(false);
+    }
+  };
+
+  const handleCloseExportZipDialog = () => {
+    if (loadingExportYears || downloadingExport) return;
+    setShowExportDialog(false);
+  };
+
+  const handleExportZip = () => {
+    if (!selectedExportYear || downloadingExport) return;
+
+    setDownloadingExport(true);
+    try {
+      const documentYear = Number(selectedExportYear);
+      const url = documentService.getExportZipUrl(currentFilters, { documentYear });
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `documents_${documentYear}.zip`;
+      anchor.rel = 'noopener';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      setShowExportDialog(false);
+    } catch (error) {
+      console.error('Failed to start ZIP export:', error);
+      aiToast(t('documents.exportZipFailed', 'Export failed'), 'error');
+    } finally {
+      setDownloadingExport(false);
     }
   };
 
@@ -984,6 +1096,9 @@ const DocumentsPage = () => {
   const [receiptItemDrafts, setReceiptItemDrafts] = useState<Record<number, ReceiptDraftItem[]>>({});
   const [receiptPresentationDrafts, setReceiptPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
   const [expandedReceiptIndexes, setExpandedReceiptIndexes] = useState<number[]>([]);
+  const [, setInlineTransactionId] = useState<number | null>(null);
+  const [inlineTransaction, setInlineTransaction] = useState<any | null>(null);
+  const [inlineTransactionLoading, setInlineTransactionLoading] = useState(false);
   const [editingReceiptIndex, setEditingReceiptIndex] = useState<number | null>(null);
   const [savingReceiptIndex, setSavingReceiptIndex] = useState<number | null>(null);
   const [receiptItemSaveResult, setReceiptItemSaveResult] = useState<{
@@ -1503,7 +1618,8 @@ const DocumentsPage = () => {
     );
     setExpandedReceiptIndexes((current) => {
       if (receiptSections.length === 0) return [];
-      if (isNewDocument) return receiptSections.length > 1 ? [] : [0];
+      if (isNewDocument) return [];  // always start collapsed
+      return current;
       const filtered = current.filter((index) => index >= 0 && index < receiptSections.length);
       if (filtered.length > 0) return filtered;
       return receiptSections.length > 1 ? [] : [0];
@@ -1768,6 +1884,7 @@ const DocumentsPage = () => {
     <BankStatementWorkbench
       document={document}
       onDocumentUpdated={handleWorkbenchDocumentUpdated}
+      onOpenTransaction={handleOpenTransactionInline}
       onCancel={handleReviewCancel}
       onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
       onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
@@ -1776,6 +1893,7 @@ const DocumentsPage = () => {
     />
   ), [
     handleReviewCancel,
+    handleOpenTransactionInline,
     handleWorkbenchDocumentUpdated,
     hasNextDoc,
     hasPrevDoc,
@@ -1803,10 +1921,116 @@ const DocumentsPage = () => {
     navigateToDocument,
   ]);
 
-  const handleOpenLinkedTransaction = () => {
-    if (!viewingDocument?.transaction_id) return;
-    navigate(`/transactions?transactionId=${viewingDocument.transaction_id}`);
-  };
+  const closeInlineTransaction = useCallback(() => {
+    setInlineTransaction(null);
+    setInlineTransactionId(null);
+    setInlineTransactionLoading(false);
+  }, []);
+
+  function buildInlineTransactionFallback(
+    transactionId: number,
+    previewTransaction?: BankStatementTransactionSummary | null,
+    fallbackLineDate?: string | null,
+    fallbackLineAmount?: string | null,
+  ): Transaction | null {
+    if (!previewTransaction && !fallbackLineDate && !fallbackLineAmount) {
+      return null;
+    }
+
+    const summaryAmount = previewTransaction?.amount != null ? Number(previewTransaction.amount) : NaN;
+    const lineAmount = fallbackLineAmount != null ? Number(fallbackLineAmount) : NaN;
+    const amountSource = Number.isFinite(summaryAmount)
+      ? Math.abs(summaryAmount)
+      : (Number.isFinite(lineAmount) ? Math.abs(lineAmount) : 0);
+
+    const inferredType = previewTransaction?.type
+      ?? ((Number.isFinite(lineAmount) ? lineAmount : 0) < 0 ? 'expense' : 'income');
+    const transactionDate = previewTransaction?.transaction_date
+      ?? fallbackLineDate
+      ?? new Date().toISOString();
+    const category = previewTransaction?.expense_category
+      ?? previewTransaction?.income_category
+      ?? null;
+    const classificationConfidence = previewTransaction?.classification_confidence != null
+      ? Number(previewTransaction.classification_confidence)
+      : undefined;
+
+    return {
+      id: transactionId,
+      type: inferredType as Transaction['type'],
+      amount: amountSource,
+      date: transactionDate,
+      description: previewTransaction?.description || t('documents.bankWorkbench.linkedTransaction', 'Linked transaction'),
+      category,
+      is_deductible: false,
+      line_items: [],
+      classification_confidence: Number.isFinite(classificationConfidence ?? NaN)
+        ? classificationConfidence
+        : undefined,
+      bank_reconciled: previewTransaction?.bank_reconciled ?? true,
+      bank_reconciled_at: previewTransaction?.bank_reconciled_at ?? undefined,
+    };
+  }
+
+  async function handleOpenTransactionInline(
+    transactionId: number,
+    previewTransaction?: BankStatementTransactionSummary | null,
+    fallbackLineDate?: string | null,
+    fallbackLineAmount?: string | null,
+  ) {
+    const fallbackTransaction = buildInlineTransactionFallback(
+      transactionId,
+      previewTransaction,
+      fallbackLineDate,
+      fallbackLineAmount,
+    );
+    setInlineTransactionId(transactionId);
+    setInlineTransaction(fallbackTransaction);
+    setInlineTransactionLoading(true);
+    try {
+      const txn = await transactionService.getById(transactionId);
+      setInlineTransaction(txn);
+    } catch {
+      if (!fallbackTransaction) {
+        setInlineTransactionId(null);
+        setInlineTransaction(null);
+        aiToast(t('documents.linkedTransaction.loadFailed', 'Unable to load transaction details.'), 'error');
+      }
+    } finally {
+      setInlineTransactionLoading(false);
+    }
+  }
+
+  const renderInlineTransactionOverlay = useCallback(() => (
+    <>
+      {inlineTransactionLoading && !inlineTransaction && (
+        <div className="transaction-detail-overlay" onClick={closeInlineTransaction}>
+          <div className="transaction-detail" onClick={(event) => event.stopPropagation()}>
+            <div className="detail-header">
+              <h2>{t('transactions.transactionDetails')}</h2>
+              <button className="btn-close" onClick={closeInlineTransaction}>
+                ×
+              </button>
+            </div>
+            <div className="detail-body">
+              <div className="detail-section">
+                <p>{t('common.loading', 'Loading')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {inlineTransaction && (
+        <TransactionDetail
+          transaction={inlineTransaction}
+          hideLinkedDocumentSection
+          onClose={closeInlineTransaction}
+          onEdit={() => { closeInlineTransaction(); navigate(`/transactions?transactionId=${inlineTransaction.id}`); }}
+          onDelete={closeInlineTransaction}
+        />
+      )}
+    </>
+  ), [closeInlineTransaction, inlineTransaction, inlineTransactionLoading, navigate, t]);
 
   const handleOpenLinkedAsset = () => {
     const assetId = linkedAsset?.id || getAssetOutcome(viewingDocument?.ocr_result)?.asset_id;
@@ -2106,6 +2330,7 @@ const DocumentsPage = () => {
               />
             )}
           />
+          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -2114,6 +2339,7 @@ const DocumentsPage = () => {
       return (
         <div className="documents-page">
           {renderBankStatementReview(viewingDocument)}
+          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -2128,9 +2354,6 @@ const DocumentsPage = () => {
       viewingDocument.ocr_status
     );
     const pipelineStatePresentation = getPipelineStatePresentation(t, pipelineCurrentState);
-    const linkedTransactionSummary = linkedTransaction
-      ? [linkedTransaction.description || null, linkedTransaction.date || null].filter(Boolean).join(' | ')
-      : t('documents.linkedTransaction.hint', 'This document already created a linked transaction. You can open it directly.');
     const linkedAssetTitle = linkedAsset?.name
       || (linkedAsset?.asset_type
         ? t(`properties.assetTypes.${linkedAsset.asset_type}`, linkedAsset.asset_type)
@@ -2213,17 +2436,6 @@ const DocumentsPage = () => {
             <div className={`viewer-pipeline-state viewer-pipeline-state--${pipelineStatePresentation.tone}`}>
               <strong>{pipelineStatePresentation.title}</strong>
               <span>{pipelineStatePresentation.description}</span>
-            </div>
-          )}
-          {viewingDocument.transaction_id && (
-            <div className="viewer-linked-transaction">
-              <div className="viewer-linked-transaction-copy">
-                <strong>{t('documents.linkedTransaction.title', 'Linked transaction')}</strong>
-                <span>{linkedTransactionSummary}</span>
-              </div>
-              <button type="button" className="btn btn-primary" onClick={handleOpenLinkedTransaction}>
-                {t('documents.linkedTransaction.open', 'Open transaction')}
-              </button>
             </div>
           )}
           {assetOutcome && linkedAsset && (
@@ -2515,6 +2727,15 @@ const DocumentsPage = () => {
                                   <div className="receipt-breakdown-header-actions">
                                     <div className="receipt-breakdown-amount">{fmtEur(receipt.amount)}</div>
                                     <div className="receipt-breakdown-header-buttons">
+                                      {linkedReceiptTransaction && (
+                                        <button
+                                          type="button"
+                                          className="receipt-review-edit-btn receipt-review-edit-btn--header"
+                                          onClick={() => handleOpenTransactionInline(linkedReceiptTransaction.transaction_id)}
+                                        >
+                                          {t('documents.linkedTransaction.open', 'Open transaction')}
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         className={`receipt-breakdown-toggle-btn ${isReceiptExpanded ? 'expanded' : ''}`}
@@ -2967,10 +3188,15 @@ const DocumentsPage = () => {
                                                   <span
                                                     className="line-item-txn-status created"
                                                     title={t('documents.lineItems.viewTransaction', 'View transaction')}
-                                                    onClick={() => navigate(`/transactions?transactionId=${matchedTxn.transaction_id}`)}
+                                                    onClick={() => { void handleOpenTransactionInline(matchedTxn.transaction_id); }}
                                                     role="button"
                                                     tabIndex={0}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/transactions?transactionId=${matchedTxn.transaction_id}`); }}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        void handleOpenTransactionInline(matchedTxn.transaction_id);
+                                                      }
+                                                    }}
                                                   >
                                                     Linked
                                                   </span>
@@ -3473,6 +3699,7 @@ const DocumentsPage = () => {
             );
           })()}
         </div>
+      {renderInlineTransactionOverlay()}
       </div>
     );
   }
@@ -3503,11 +3730,11 @@ const DocumentsPage = () => {
           </button>
           <button
             className="btn btn-outline btn-sm"
-            onClick={handleExportZip}
-            disabled={exporting || documentSummary.totalCount === 0}
+            onClick={() => void handleOpenExportZipDialog()}
+            disabled={loadingExportYears || downloadingExport || documentSummary.totalCount === 0}
             title={t('documents.exportZip', 'Export ZIP')}
           >
-            {exporting ? t('common.loading') : t('documents.exportZip', 'Export ZIP')}
+            {(loadingExportYears || downloadingExport) ? t('common.loading', 'Loading') : t('documents.exportZip', 'Export ZIP')}
           </button>
         </div>
       </div>
@@ -3540,11 +3767,123 @@ const DocumentsPage = () => {
 
       <div className="documents-list-section">
         <DocumentList
-          key={refreshKey}
+          refreshTrigger={refreshKey}
           onDocumentSelect={handleDocumentSelect}
           onSummaryChange={setDocumentSummary}
         />
       </div>
+
+      {showExportDialog && typeof document !== 'undefined' && createPortal(
+        <div
+          className="cfd-robot-overlay"
+          onClick={handleCloseExportZipDialog}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="documents-export-dialog-title"
+        >
+          <div className="cfd-robot-scene documents-export-robot-scene" onClick={(event) => event.stopPropagation()}>
+            <div className="cfd-robot-container documents-export-robot-container">
+              <RobotMascot size={EXPORT_ROBOT_SIZE} />
+            </div>
+
+            <div className="cfd-robot-bubble cfd-robot-bubble--info documents-export-robot-bubble">
+              <div className="documents-export-dialog__header">
+                <div>
+                  <h2 id="documents-export-dialog-title">{t('documents.exportZip', 'Export ZIP')}</h2>
+                  <p>
+                    {t(
+                      'documents.exportZipYearHint',
+                      'Choose the file year to export. The year is based on the document attribution year, not the upload year.'
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="documents-export-dialog__close"
+                  onClick={handleCloseExportZipDialog}
+                  aria-label={t('common.close', 'Close')}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="documents-export-dialog__body">
+                {loadingExportYears ? (
+                  <p className="documents-export-dialog__empty">{t('common.loading', 'Loading')}</p>
+                ) : exportYears.length === 0 ? (
+                  <p className="documents-export-dialog__empty">
+                    {t(
+                      'documents.exportZipNoYears',
+                      'No attributable file years are available yet for export.'
+                    )}
+                  </p>
+                ) : (
+                  <>
+                    <div className="documents-export-dialog__field">
+                      <label>{t('documents.fileYearLabel', 'File year')}</label>
+                      <Select
+                        value={selectedExportYear}
+                        onChange={(value: string) => setSelectedExportYear(value)}
+                        options={exportYears.map((option) => ({
+                          value: String(option.year),
+                          label: `${option.year} (${option.count})`,
+                        }))}
+                        size="sm"
+                      />
+                    </div>
+
+                    {selectedExportOption && (
+                      <div className="documents-export-dialog__meta">
+                        <div className="documents-export-dialog__meta-pill">
+                          <strong>{selectedExportOption.count}</strong>
+                          <span>{t('documents.filesLabel', 'files')}</span>
+                        </div>
+                        <div className="documents-export-dialog__meta-pill">
+                          <strong>{formatExportSize(selectedExportOption.total_size_bytes, locale)}</strong>
+                          <span>{t('documents.estimatedSizeLabel', 'estimated size')}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className={`documents-export-dialog__note ${isLargeExport ? 'documents-export-dialog__note--warning' : ''}`}>
+                      {isLargeExport
+                        ? t(
+                            'documents.exportZipLargeHint',
+                            'Large export detected. The browser will download it directly so the page does not need to keep the full ZIP in memory.'
+                          )
+                        : t(
+                            'documents.exportZipDirectDownloadHint',
+                            'The ZIP will download directly in your browser.'
+                          )}
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="cfd-robot-actions cfd-robot-actions--visible documents-export-dialog__actions">
+                <button
+                  type="button"
+                  className="cfd-robot-btn cfd-robot-btn--cancel"
+                  onClick={handleCloseExportZipDialog}
+                  disabled={loadingExportYears || downloadingExport}
+                >
+                  {t('common.cancel', 'Cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="cfd-robot-btn cfd-robot-btn--confirm"
+                  style={{ '--btn-color': '#7c3aed' } as CSSProperties}
+                  onClick={handleExportZip}
+                  disabled={!selectedExportYear || loadingExportYears || downloadingExport}
+                >
+                  {downloadingExport ? t('common.loading', 'Loading') : t('documents.exportZip', 'Export ZIP')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

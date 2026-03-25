@@ -27,7 +27,6 @@ class TestFeatureGateCreditRouting:
             Feature.AI_ASSISTANT,
             Feature.TRANSACTION_ENTRY, Feature.UNLIMITED_TRANSACTIONS,
             Feature.BANK_IMPORT,
-            Feature.E1_GENERATION,
             Feature.BASIC_TAX_CALC, Feature.FULL_TAX_CALC,
             Feature.VAT_CALC, Feature.SVS_CALC,
         ]
@@ -40,6 +39,7 @@ class TestFeatureGateCreditRouting:
         """Features that should use plan hierarchy must NOT be in credit operations."""
         credit_ops = FeatureGateService._FEATURE_CREDIT_OPERATION
         plan_only = [
+            Feature.E1_GENERATION,
             Feature.PROPERTY_MANAGEMENT,
             Feature.RECURRING_SUGGESTIONS,
             Feature.ADVANCED_REPORTS,
@@ -84,7 +84,7 @@ class TestFeatureMinPlanConsistency:
         )
 
     def test_plus_tier_features(self):
-        """Plus tier should include: unlimited_transactions, full_tax_calc, vat, svs, bank, property, recurring."""
+        """Plus tier should include: unlimited_transactions, full_tax_calc, vat, svs, bank, property, recurring, advanced reports."""
         plus_features = {
             k for k, v in FeatureGateService._FEATURE_MIN_PLAN.items()
             if v == PlanType.PLUS
@@ -97,13 +97,14 @@ class TestFeatureMinPlanConsistency:
             Feature.BANK_IMPORT,
             Feature.PROPERTY_MANAGEMENT,
             Feature.RECURRING_SUGGESTIONS,
+            Feature.ADVANCED_REPORTS,
         }
         assert expected == plus_features, (
             f"Plus tier mismatch. Expected: {expected}, Got: {plus_features}"
         )
 
     def test_pro_tier_features(self):
-        """Pro tier should include: unlimited_ocr, e1, advanced_reports, priority, api."""
+        """Pro tier should include: unlimited_ocr, e1, priority, api."""
         pro_features = {
             k for k, v in FeatureGateService._FEATURE_MIN_PLAN.items()
             if v == PlanType.PRO
@@ -111,7 +112,6 @@ class TestFeatureMinPlanConsistency:
         expected = {
             Feature.UNLIMITED_OCR,
             Feature.E1_GENERATION,
-            Feature.ADVANCED_REPORTS,
             Feature.PRIORITY_SUPPORT,
             Feature.API_ACCESS,
         }
@@ -228,6 +228,19 @@ class TestFeatureGateAccessDecisions:
                 1, "ai_conversation", quantity=1, allow_overage=True
             )
             assert result is True
+
+    def test_e1_generation_uses_plan_hierarchy_not_credit_service(self):
+        """E1 generation must stay plan-gated even though the endpoint deducts credits."""
+        svc = self._make_service()
+        svc.db.query.return_value.filter.return_value.first.return_value = MagicMock(is_admin=False)
+
+        with patch("app.services.credit_service.CreditService") as MockCredit:
+            with patch.object(svc, '_check_plan_hierarchy', return_value=False) as mock_hierarchy:
+                result = svc.check_feature_access(1, Feature.E1_GENERATION)
+
+                MockCredit.assert_not_called()
+                mock_hierarchy.assert_called_once_with(1, Feature.E1_GENERATION)
+                assert result is False
 
     def test_plan_feature_delegates_to_hierarchy(self):
         """When feature has NO credit mapping, should use plan hierarchy."""

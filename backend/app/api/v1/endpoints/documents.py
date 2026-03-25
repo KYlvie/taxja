@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass
 
 from datetime import datetime
+from enum import Enum as PyEnum
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, File, status, Query, BackgroundTasks, Body
 
@@ -23,7 +24,7 @@ from fastapi.responses import StreamingResponse
 
 from sqlalchemy.orm import Session
 
-from sqlalchemy import or_, func
+from sqlalchemy import and_, or_, func, case
 
 from typing import List, Optional, Dict, Any
 
@@ -98,6 +99,64 @@ from app.services.document_tax_review_service import backfill_document_tax_revie
 from app.services.credit_service import CreditService, InsufficientCreditsError
 
 from app.core.error_messages import get_error_message, get_ocr_field_label
+
+
+class SortByOption(str, PyEnum):
+    upload_date = "upload_date"
+    document_date = "document_date"
+
+
+def _document_attribution_year_expr():
+    return case(
+        (Document.document_date.isnot(None), func.extract("year", Document.document_date)),
+        (Document.document_year.isnot(None), Document.document_year),
+        else_=None,
+    )
+
+
+def _document_date_sort_order():
+    return (
+        case(
+            (Document.document_date.isnot(None), 0),
+            (Document.document_year.isnot(None), 1),
+            else_=2,
+        ),
+        Document.document_date.desc().nullslast(),
+        Document.document_year.desc().nullslast(),
+        Document.uploaded_at.desc(),
+    )
+
+
+def _apply_document_date_filters(query, start_date: Optional[datetime], end_date: Optional[datetime]):
+    if start_date:
+        start_day = start_date.date()
+        start_year = start_date.year
+        query = query.filter(
+            or_(
+                and_(Document.document_date.isnot(None), Document.document_date >= start_day),
+                and_(Document.document_date.is_(None), Document.document_year.isnot(None), Document.document_year >= start_year),
+                and_(Document.document_date.is_(None), Document.document_year.is_(None), Document.uploaded_at >= start_date),
+            )
+        )
+
+    if end_date:
+        end_day = end_date.date()
+        end_year = end_date.year
+        query = query.filter(
+            or_(
+                and_(Document.document_date.isnot(None), Document.document_date <= end_day),
+                and_(Document.document_date.is_(None), Document.document_year.isnot(None), Document.document_year <= end_year),
+                and_(Document.document_date.is_(None), Document.document_year.is_(None), Document.uploaded_at <= end_date),
+            )
+        )
+
+    return query
+
+
+def _apply_document_attribution_year_filter(query, target_year: int):
+    year_expr = _document_attribution_year_expr()
+    return query.filter(year_expr == target_year)
+
 
 router = APIRouter()
 
@@ -1480,6 +1539,8 @@ def get_documents(
 
     search_text: Optional[str] = Query(None),
 
+    sort_by: Optional[SortByOption] = Query(None),
+
     page: int = Query(1, ge=1),
 
     page_size: int = Query(20, ge=1, le=100),
@@ -1502,6 +1563,8 @@ def get_documents(
 
     - Paginated results
 
+    - sort_by: 'upload_date' (default) or 'document_date'
+
     """
 
     query = db.query(Document).filter(
@@ -1522,15 +1585,14 @@ def get_documents(
 
     
 
-    if start_date:
-
-        query = query.filter(Document.uploaded_at >= start_date)
-
-    
-
-    if end_date:
-
-        query = query.filter(Document.uploaded_at <= end_date)
+    use_document_date = sort_by == SortByOption.document_date
+    if use_document_date:
+        query = _apply_document_date_filters(query, start_date, end_date)
+    else:
+        if start_date:
+            query = query.filter(Document.uploaded_at >= start_date)
+        if end_date:
+            query = query.filter(Document.uploaded_at <= end_date)
 
     
 
@@ -1554,11 +1616,12 @@ def get_documents(
 
     
 
-    # Apply pagination
-
+    # Apply pagination with sort order
     offset = (page - 1) * page_size
-
-    documents = query.order_by(Document.uploaded_at.desc()).offset(offset).limit(page_size).all()
+    if use_document_date:
+        documents = query.order_by(*_document_date_sort_order()).offset(offset).limit(page_size).all()
+    else:
+        documents = query.order_by(Document.uploaded_at.desc()).offset(offset).limit(page_size).all()
     linked_transaction_counts = _build_document_linked_transaction_count_map(
         db,
         user_id=current_user.id,
@@ -1675,12 +1738,19 @@ async def export_documents_zip(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
     search_text: Optional[str] = Query(None),
+    document_year: Optional[int] = Query(None, ge=1900, le=2100),
+    sort_by: Optional[SortByOption] = Query(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Export filtered documents as a ZIP archive.
     Accepts the same filter params as GET /documents.
+
+    When sort_by is omitted: flat file list (current behavior).
+    When sort_by=upload_date: files in {year}/ subfolders by uploaded_at.
+    When sort_by=document_date: files in {year}/ subfolders by document_date,
+    then document_year, with unknown/ when neither exists.
     """
     query = db.query(Document).filter(
         Document.user_id == current_user.id,
@@ -1688,13 +1758,25 @@ async def export_documents_zip(
     )
     if document_type:
         query = query.filter(Document.document_type == document_type)
-    if start_date:
-        query = query.filter(Document.uploaded_at >= start_date)
-    if end_date:
-        query = query.filter(Document.uploaded_at <= end_date)
+    effective_sort_by = sort_by
+    if document_year is not None and effective_sort_by is None:
+        effective_sort_by = SortByOption.document_date
+
+    if document_year is not None:
+        query = _apply_document_attribution_year_filter(query, document_year)
+    elif effective_sort_by == SortByOption.document_date:
+        query = _apply_document_date_filters(query, start_date, end_date)
+    else:
+        if start_date:
+            query = query.filter(Document.uploaded_at >= start_date)
+        if end_date:
+            query = query.filter(Document.uploaded_at <= end_date)
     if search_text:
         query = query.filter(Document.raw_text.ilike(f"%{search_text}%"))
-    documents = query.order_by(Document.uploaded_at.desc()).all()
+    if effective_sort_by == SortByOption.document_date:
+        documents = query.order_by(*_document_date_sort_order()).all()
+    else:
+        documents = query.order_by(Document.uploaded_at.desc()).all()
 
     if not documents:
         raise HTTPException(
@@ -1704,7 +1786,21 @@ async def export_documents_zip(
 
     storage_service = get_storage_service()
     buf = io.BytesIO()
-    seen_names: dict[str, int] = {}
+    # Track seen names per folder to handle duplicates
+    seen_names: dict[str, dict[str, int]] = {}
+
+    def _unique_name(folder: str, name: str) -> str:
+        if folder not in seen_names:
+            seen_names[folder] = {}
+        folder_seen = seen_names[folder]
+        if name in folder_seen:
+            folder_seen[name] += 1
+            stem, _, ext = name.rpartition(".")
+            if ext and stem:
+                return f"{stem}_{folder_seen[name]}.{ext}"
+            return f"{name}_{folder_seen[name]}"
+        folder_seen[name] = 0
+        return name
 
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for doc in documents:
@@ -1715,23 +1811,76 @@ async def export_documents_zip(
             if not file_bytes:
                 continue
             name = doc.file_name or f"document_{doc.id}"
-            if name in seen_names:
-                seen_names[name] += 1
-                stem, _, ext = name.rpartition(".")
-                if ext and stem:
-                    name = f"{stem}_{seen_names[name]}.{ext}"
-                else:
-                    name = f"{name}_{seen_names[name]}"
+
+            if effective_sort_by is None:
+                # Flat file list (backward compatible)
+                name = _unique_name("", name)
+                zf.writestr(name, file_bytes)
+            elif effective_sort_by == SortByOption.upload_date:
+                year = str(doc.uploaded_at.year)
+                name = _unique_name(year, name)
+                zf.writestr(f"{year}/{name}", file_bytes)
             else:
-                seen_names[name] = 0
-            zf.writestr(name, file_bytes)
+                # document_date mode
+                if doc.document_date is not None:
+                    year = str(doc.document_date.year)
+                elif doc.document_year is not None:
+                    year = str(doc.document_year)
+                else:
+                    year = "unknown"
+                name = _unique_name(year, name)
+                zf.writestr(f"{year}/{name}", file_bytes)
 
     buf.seek(0)
+    file_name = f"documents_{document_year}.zip" if document_year is not None else "documents.zip"
     return StreamingResponse(
         buf,
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="documents.zip"'},
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
+
+
+@router.get("/export-years")
+async def list_export_document_years(
+    request: Request,
+    document_type: Optional[DocumentType] = Query(None),
+    search_text: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    year_expr = _document_attribution_year_expr().label("year")
+    query = db.query(
+        year_expr,
+        func.count(Document.id).label("count"),
+        func.coalesce(func.sum(Document.file_size), 0).label("total_size_bytes"),
+    ).filter(
+        Document.user_id == current_user.id,
+        Document.is_archived == False,
+    )
+
+    if document_type:
+        query = query.filter(Document.document_type == document_type)
+    if search_text:
+        query = query.filter(Document.raw_text.ilike(f"%{search_text}%"))
+
+    rows = (
+        query
+        .group_by(year_expr)
+        .order_by(func.coalesce(year_expr, 0).desc())
+        .all()
+    )
+
+    years = [
+        {
+            "year": int(row.year),
+            "count": int(row.count),
+            "total_size_bytes": int(row.total_size_bytes or 0),
+        }
+        for row in rows
+        if row.year is not None
+    ]
+
+    return {"years": years}
 
 
 @router.get("/{document_id}")

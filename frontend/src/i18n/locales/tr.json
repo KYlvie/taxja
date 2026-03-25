@@ -939,6 +939,11 @@
   },
   "documents": {
     "title": "Belgeler",
+    "sortMode": {
+      "label": "Sıralama",
+      "uploadDate": "Yükleme tarihi",
+      "documentDate": "Belge tarihi"
+    },
     "description": "Otomatik tanima ile vergi belgelerinizi yukleyin ve yonetin",
     "uploadDocument": "Belge Yukle",
     "documentType": "Belge Turu",

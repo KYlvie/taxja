@@ -16,6 +16,7 @@ import {
   documentService,
   type ConfirmBankTransactionPayload,
 } from '../../services/documentService';
+import { transactionService } from '../../services/transactionService';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import { getLocaleForLanguage } from '../../utils/locale';
 import { useRefreshStore } from '../../stores/refreshStore';
@@ -25,6 +26,7 @@ import {
   type FallbackBankStatementLine,
   type FallbackTransactionDirection,
 } from '../../utils/bankStatementFallback';
+import type { Transaction } from '../../types/transaction';
 import './OCRReview.css';
 import './BankStatementWorkbench.css';
 
@@ -36,6 +38,12 @@ interface BankStatementWorkbenchProps {
   onNextDocument?: () => void;
   hasPrevDocument?: boolean;
   hasNextDocument?: boolean;
+  onOpenTransaction?: (
+    transactionId: number,
+    previewTransaction?: BankStatementTransactionSummary | null,
+    fallbackLineDate?: string | null,
+    fallbackLineAmount?: string | null,
+  ) => void;
 }
 
 type BankStatementWorkbenchMode = 'remote' | 'fallback';
@@ -175,6 +183,12 @@ const CreateTransactionIcon = () => (
   </svg>
 );
 
+const RemoveTransactionIcon = () => (
+  <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M5 12H19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
 const MatchTransactionIcon = () => (
   <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path
@@ -232,6 +246,13 @@ const getDateDistanceDays = (
   const diffMs = Math.abs(leftDate.getTime() - rightDate.getTime());
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 };
+
+const getMatchSearchSeed = (line: BankStatementLine): string => (
+  line.counterparty
+  || line.purpose
+  || line.raw_reference
+  || ''
+).trim();
 
 const parseOcrResult = (ocrResult: unknown): Record<string, unknown> => {
   if (!ocrResult) return {};
@@ -393,6 +414,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
   onNextDocument,
   hasPrevDocument = false,
   hasNextDocument = false,
+  onOpenTransaction,
 }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -409,6 +431,13 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
   const [fallbackActingId, setFallbackActingId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<BankWorkbenchFilter>('all');
   const [bulkActing, setBulkActing] = useState(false);
+  const [matchPickerLine, setMatchPickerLine] = useState<BankStatementLine | null>(null);
+  const [matchPickerTransactions, setMatchPickerTransactions] = useState<Transaction[]>([]);
+  const [matchPickerSearch, setMatchPickerSearch] = useState('');
+  const [matchPickerLoading, setMatchPickerLoading] = useState(false);
+  const [matchPickerSubmitting, setMatchPickerSubmitting] = useState(false);
+  const [matchPickerError, setMatchPickerError] = useState<string | null>(null);
+  const [selectedMatchTransactionId, setSelectedMatchTransactionId] = useState<number | null>(null);
 
   const refreshDocumentSnapshot = useCallback(async () => {
     try {
@@ -594,9 +623,84 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     }
   }, [document.file_name, document.id, t]);
 
+  const closeMatchPicker = useCallback(() => {
+    setMatchPickerLine(null);
+    setMatchPickerTransactions([]);
+    setMatchPickerSearch('');
+    setMatchPickerError(null);
+    setSelectedMatchTransactionId(null);
+    setMatchPickerLoading(false);
+    setMatchPickerSubmitting(false);
+  }, []);
+
+  const loadMatchTransactions = useCallback(async (
+    line: BankStatementLine,
+    searchValue: string,
+  ) => {
+    setMatchPickerLoading(true);
+    setMatchPickerError(null);
+    try {
+      const response = await transactionService.getAll(
+        {
+          search: searchValue.trim() || undefined,
+        },
+        {
+          page: 1,
+          page_size: 20,
+        },
+      );
+
+      const lineAmount = Math.abs(toAmountNumber(line.amount) ?? 0);
+      const ranked = [...response.items].sort((left, right) => {
+        const leftAmountDelta = Math.abs(Math.abs(left.amount) - lineAmount);
+        const rightAmountDelta = Math.abs(Math.abs(right.amount) - lineAmount);
+        if (leftAmountDelta !== rightAmountDelta) {
+          return leftAmountDelta - rightAmountDelta;
+        }
+
+        const leftDateDelta = getDateDistanceDays(line.line_date, left.date) ?? Number.MAX_SAFE_INTEGER;
+        const rightDateDelta = getDateDistanceDays(line.line_date, right.date) ?? Number.MAX_SAFE_INTEGER;
+        if (leftDateDelta !== rightDateDelta) {
+          return leftDateDelta - rightDateDelta;
+        }
+
+        return (right.id ?? 0) - (left.id ?? 0);
+      });
+
+      setMatchPickerTransactions(ranked);
+      setSelectedMatchTransactionId((current) => (
+        current && ranked.some((transaction) => transaction.id === current)
+          ? current
+          : ranked[0]?.id ?? null
+      ));
+    } catch (loadError: any) {
+      console.error('Failed to load transactions for manual bank match', loadError);
+      setMatchPickerTransactions([]);
+      setSelectedMatchTransactionId(null);
+      setMatchPickerError(
+        loadError?.response?.data?.detail
+        || loadError?.message
+        || t('documents.bankWorkbench.matchPicker.loadFailed', 'Transactions could not be loaded.')
+      );
+    } finally {
+      setMatchPickerLoading(false);
+    }
+  }, [t]);
+
+  const openMatchPicker = useCallback(async (line: BankStatementLine) => {
+    const initialSearch = getMatchSearchSeed(line);
+    setMatchPickerLine(line);
+    setMatchPickerSearch(initialSearch);
+    setMatchPickerTransactions([]);
+    setMatchPickerError(null);
+    setSelectedMatchTransactionId(null);
+    await loadMatchTransactions(line, initialSearch);
+  }, [loadMatchTransactions]);
+
   const runLineAction = useCallback(async (
       lineId: number,
-      action: 'create' | 'match' | 'ignore' | 'undo-create' | 'unmatch'
+      action: 'create' | 'match' | 'ignore' | 'restore' | 'undo-create' | 'unmatch',
+      transactionId?: number | null,
     ) => {
       if (!statementImport) return;
 
@@ -606,7 +710,9 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
         if (action === 'create') {
           await bankImportService.confirmCreateLine(lineId);
         } else if (action === 'match') {
-          await bankImportService.matchExistingLine(lineId);
+          await bankImportService.matchExistingLine(lineId, transactionId ?? undefined);
+        } else if (action === 'restore') {
+          await bankImportService.restoreLine(lineId);
         } else if (action === 'undo-create') {
           await bankImportService.undoCreateLine(lineId);
         } else if (action === 'unmatch') {
@@ -618,6 +724,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
         await refreshWorkbench(statementImport.id, true);
         useRefreshStore.getState().refreshTransactions();
         useRefreshStore.getState().refreshDashboard();
+        return true;
       } catch (actionError: any) {
         console.error(`Failed to ${action} bank statement line`, actionError);
         setError(
@@ -625,22 +732,35 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
           || actionError?.message
           || t('documents.bankWorkbench.actionFailed', 'The bank statement action could not be completed.')
         );
+        return false;
       } finally {
         setActingLineId(null);
       }
     }, [refreshWorkbench, statementImport, t]);
 
-  const runSuggestedAction = useCallback(async (line: BankStatementLine) => {
-    if (line.suggested_action === 'match_existing' && line.linked_transaction_id) {
-      await runLineAction(line.id, 'match');
+  const handleConfirmMatchSelection = useCallback(async () => {
+    if (!matchPickerLine || !selectedMatchTransactionId) {
+      setMatchPickerError(
+        t('documents.bankWorkbench.matchPicker.selectRequired', 'Please choose a transaction first.')
+      );
       return;
     }
-    if (line.suggested_action === 'ignore') {
-      await runLineAction(line.id, 'ignore');
-      return;
+
+    setMatchPickerSubmitting(true);
+    setMatchPickerError(null);
+    const success = await runLineAction(matchPickerLine.id, 'match', selectedMatchTransactionId);
+    setMatchPickerSubmitting(false);
+
+    if (success) {
+      closeMatchPicker();
     }
-    await runLineAction(line.id, 'create');
-  }, [runLineAction]);
+  }, [
+    closeMatchPicker,
+    matchPickerLine,
+    runLineAction,
+    selectedMatchTransactionId,
+    t,
+  ]);
 
   const handleBulkConfirm = useCallback(async () => {
     if (!statementImport || actionablePendingLines.length === 0) {
@@ -802,16 +922,6 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     }
   }, [t]);
 
-  const getSuggestedActionLabel = useCallback((line: BankStatementLine) => {
-    if (line.suggested_action === 'match_existing') {
-      return t('documents.bankWorkbench.actions.match', 'Match existing');
-    }
-    if (line.suggested_action === 'ignore') {
-      return t('documents.bankWorkbench.actions.ignore', 'Ignore');
-    }
-    return t('documents.bankWorkbench.actions.create', 'Create transaction');
-  }, [t]);
-
   const getSuggestedActionBadgeLabel = useCallback((line: BankStatementLine): string | null => {
     if (line.review_status !== 'pending_review') {
       return null;
@@ -872,6 +982,12 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
   }, []);
 
   const getActualLinkedTransactionId = useCallback((line: BankStatementLine): number | null => {
+    if (line.created_transaction?.id || line.created_transaction_id) {
+      return line.created_transaction?.id ?? line.created_transaction_id ?? null;
+    }
+    if (line.linked_transaction?.id || line.linked_transaction_id) {
+      return line.linked_transaction?.id ?? line.linked_transaction_id ?? null;
+    }
     if (line.review_status === 'auto_created') {
       return (
         line.created_transaction?.id
@@ -893,12 +1009,181 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     return null;
   }, []);
 
-  const handleOpenTransaction = useCallback((transactionId: number | null) => {
+  const getSuggestedMatchTransactionId = useCallback((line: BankStatementLine): number | null => (
+    line.linked_transaction?.id
+    ?? line.linked_transaction_id
+    ?? null
+  ), []);
+
+  const getPreviewTransactionSummary = useCallback((line: BankStatementLine): BankStatementTransactionSummary | null => {
+    if (line.created_transaction || line.linked_transaction) {
+      return line.created_transaction ?? line.linked_transaction ?? null;
+    }
+    if (line.review_status === 'auto_created') {
+      return line.created_transaction ?? line.linked_transaction ?? null;
+    }
+    if (line.review_status === 'matched_existing') {
+      return line.linked_transaction ?? line.created_transaction ?? null;
+    }
+    if (
+      (line.review_status === 'pending_review' || line.review_status === 'ignored_duplicate')
+      && line.suggested_action === 'match_existing'
+    ) {
+      return line.linked_transaction ?? null;
+    }
+    return null;
+  }, []);
+
+  const getPreviewTransactionId = useCallback((line: BankStatementLine): number | null => {
+    const actualLinkedTransactionId = getActualLinkedTransactionId(line);
+    if (actualLinkedTransactionId) {
+      return actualLinkedTransactionId;
+    }
+    if (
+      (line.review_status === 'pending_review' || line.review_status === 'ignored_duplicate')
+      && line.suggested_action === 'match_existing'
+    ) {
+      return getSuggestedMatchTransactionId(line);
+    }
+    return null;
+  }, [getActualLinkedTransactionId, getSuggestedMatchTransactionId]);
+
+  const handleOpenTransaction = useCallback((
+    transactionId: number | null,
+    previewTransaction?: BankStatementTransactionSummary | null,
+    fallbackLineDate?: string | null,
+    fallbackLineAmount?: string | null,
+  ) => {
     if (!transactionId) {
       return;
     }
+    if (onOpenTransaction) {
+      onOpenTransaction(transactionId, previewTransaction, fallbackLineDate, fallbackLineAmount);
+      return;
+    }
     navigate(`/transactions?transactionId=${transactionId}`);
-  }, [navigate]);
+  }, [navigate, onOpenTransaction]);
+
+  const renderRemoteLineActions = useCallback((
+    line: BankStatementLine,
+    disabled: boolean,
+    mobile = false,
+  ) => {
+    const actualLinkedTransactionId = getActualLinkedTransactionId(line);
+    const previewTransactionId = getPreviewTransactionId(line);
+    const previewTransaction = getPreviewTransactionSummary(line);
+
+    const canCreate = line.review_status === 'pending_review' || line.review_status === 'ignored_duplicate';
+    const canUndoCreate = line.review_status === 'auto_created' && Boolean(line.created_transaction_id ?? actualLinkedTransactionId);
+    const createEnabled = !disabled && (canCreate || canUndoCreate);
+
+    const canIgnore = line.review_status === 'pending_review';
+    const canRestore = line.review_status === 'ignored_duplicate';
+    const ignoreEnabled = !disabled && (canIgnore || canRestore);
+
+    const canMatch = line.review_status === 'pending_review' || line.review_status === 'ignored_duplicate';
+    const canUnmatch = line.review_status === 'matched_existing' && Boolean(actualLinkedTransactionId);
+    const matchEnabled = !disabled && (canMatch || canUnmatch);
+
+    const viewEnabled = Boolean(previewTransactionId);
+
+    const containerClass = mobile
+      ? 'bank-workbench-utility-actions bank-workbench-utility-actions--mobile'
+      : 'bank-workbench-utility-actions';
+
+    return (
+      <div className={containerClass}>
+        <button
+          type="button"
+          className={`bank-workbench-utility-btn ${canUndoCreate ? 'bank-workbench-utility-btn--danger' : 'bank-workbench-utility-btn--primary'}`}
+          onClick={() => {
+            if (!createEnabled) return;
+            void runLineAction(line.id, canUndoCreate ? 'undo-create' : 'create');
+          }}
+          disabled={!createEnabled}
+          aria-label={canUndoCreate
+            ? t('documents.bankWorkbench.actions.undoCreate', 'Undo create')
+            : t('documents.bankWorkbench.actions.create', 'Create transaction')}
+          title={canUndoCreate
+            ? t('documents.bankWorkbench.actions.undoCreate', 'Undo create')
+            : t('documents.bankWorkbench.actions.create', 'Create transaction')}
+        >
+          {canUndoCreate ? <RemoveTransactionIcon /> : <CreateTransactionIcon />}
+        </button>
+
+        <button
+          type="button"
+          className={`bank-workbench-utility-btn ${canIgnore ? 'bank-workbench-utility-btn--warning' : ''}`}
+          onClick={() => {
+            if (!ignoreEnabled) return;
+            void runLineAction(line.id, canRestore ? 'restore' : 'ignore');
+          }}
+          disabled={!ignoreEnabled}
+          aria-label={canRestore
+            ? t('documents.bankWorkbench.actions.restore', 'Review again')
+            : t('documents.bankWorkbench.actions.ignore', 'Ignore')}
+          title={canRestore
+            ? t('documents.bankWorkbench.actions.restore', 'Review again')
+            : t('documents.bankWorkbench.actions.ignore', 'Ignore')}
+        >
+          {canRestore ? <UndoIcon /> : <IgnoreDuplicateIcon />}
+        </button>
+
+        <button
+          type="button"
+          className={`bank-workbench-utility-btn ${canMatch ? 'bank-workbench-utility-btn--primary' : canUnmatch ? 'bank-workbench-utility-btn--warning' : ''}`}
+          onClick={() => {
+            if (!matchEnabled) return;
+            if (canUnmatch) {
+              void runLineAction(line.id, 'unmatch');
+              return;
+            }
+            void openMatchPicker(line);
+          }}
+          disabled={!matchEnabled}
+          aria-label={canUnmatch
+            ? t('documents.bankWorkbench.actions.unmatch', 'Unmatch')
+            : t('documents.bankWorkbench.actions.match', 'Match existing')}
+          title={canUnmatch
+            ? t('documents.bankWorkbench.actions.unmatch', 'Unmatch')
+            : t('documents.bankWorkbench.actions.match', 'Match existing')}
+        >
+          {canUnmatch ? <UnmatchIcon /> : <MatchTransactionIcon />}
+        </button>
+
+        <button
+          type="button"
+          className="bank-workbench-utility-btn"
+          onClick={() => {
+            if (!viewEnabled) return;
+            handleOpenTransaction(
+              previewTransactionId,
+              previewTransaction,
+              line.line_date ?? null,
+              line.amount ?? null,
+            );
+          }}
+          disabled={!viewEnabled}
+          aria-label={viewEnabled
+            ? t('documents.lineItems.viewTransaction', 'View transaction')
+            : t('documents.bankWorkbench.actions.viewUnavailable', 'No transaction to preview')}
+          title={viewEnabled
+            ? t('documents.lineItems.viewTransaction', 'View transaction')
+            : t('documents.bankWorkbench.actions.viewUnavailable', 'No transaction to preview')}
+        >
+          <ViewIcon />
+        </button>
+      </div>
+    );
+  }, [
+    getActualLinkedTransactionId,
+    getPreviewTransactionId,
+    getPreviewTransactionSummary,
+    handleOpenTransaction,
+    openMatchPicker,
+    runLineAction,
+    t,
+  ]);
 
   const fallbackSummaryRows = useMemo(() => {
     if (!fallbackSummary) {
@@ -1130,96 +1415,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                           </div>
                         </td>
                         <td className="bank-workbench-table__actions">
-                          {isPending ? (
-                            <div className="bank-workbench-utility-actions">
-                              <button
-                                type="button"
-                                className="bank-workbench-utility-btn bank-workbench-utility-btn--primary"
-                                onClick={() => void runSuggestedAction(line)}
-                                disabled={disabled}
-                                aria-label={getSuggestedActionLabel(line)}
-                                title={getSuggestedActionLabel(line)}
-                              >
-                                {line.suggested_action === 'match_existing' ? <MatchTransactionIcon /> : <CreateTransactionIcon />}
-                              </button>
-                              {line.suggested_action !== 'match_existing' && line.linked_transaction_id && (
-                                <button
-                                  type="button"
-                                  className="bank-workbench-utility-btn"
-                                  onClick={() => void runLineAction(line.id, 'match')}
-                                  disabled={disabled}
-                                  aria-label={t('documents.bankWorkbench.actions.match', 'Match existing')}
-                                  title={t('documents.bankWorkbench.actions.match', 'Match existing')}
-                                >
-                                  <MatchTransactionIcon />
-                                </button>
-                              )}
-                              {line.suggested_action !== 'create_new' && (
-                                <button
-                                  type="button"
-                                  className="bank-workbench-utility-btn"
-                                  onClick={() => void runLineAction(line.id, 'create')}
-                                  disabled={disabled}
-                                  aria-label={t('documents.bankWorkbench.actions.create', 'Create transaction')}
-                                  title={t('documents.bankWorkbench.actions.create', 'Create transaction')}
-                                >
-                                  <CreateTransactionIcon />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                className="bank-workbench-utility-btn bank-workbench-utility-btn--warning"
-                                onClick={() => void runLineAction(line.id, 'ignore')}
-                                disabled={disabled}
-                                aria-label={t('documents.bankWorkbench.actions.ignore', 'Ignore')}
-                                title={t('documents.bankWorkbench.actions.ignore', 'Ignore')}
-                              >
-                                <IgnoreDuplicateIcon />
-                              </button>
-                            </div>
-                          ) : (
-                            actualLinkedTransactionId ? (
-                              <div className="bank-workbench-utility-actions">
-                                <button
-                                  type="button"
-                                  className="bank-workbench-utility-btn"
-                                  onClick={() => handleOpenTransaction(actualLinkedTransactionId)}
-                                  aria-label={t('documents.lineItems.viewTransaction', 'View transaction')}
-                                  title={t('documents.lineItems.viewTransaction', 'View transaction')}
-                                >
-                                  <ViewIcon />
-                                </button>
-                                {line.review_status === 'auto_created' && line.created_transaction_id && (
-                                  <button
-                                    type="button"
-                                    className="bank-workbench-utility-btn bank-workbench-utility-btn--warning"
-                                    onClick={() => void runLineAction(line.id, 'undo-create')}
-                                    disabled={disabled}
-                                    aria-label={t('documents.bankWorkbench.actions.undoCreate', 'Undo create')}
-                                    title={t('documents.bankWorkbench.actions.undoCreate', 'Undo create')}
-                                  >
-                                    <UndoIcon />
-                                  </button>
-                                )}
-                                {line.review_status === 'matched_existing' && (
-                                  <button
-                                    type="button"
-                                    className="bank-workbench-utility-btn bank-workbench-utility-btn--warning"
-                                    onClick={() => void runLineAction(line.id, 'unmatch')}
-                                    disabled={disabled}
-                                    aria-label={t('documents.bankWorkbench.actions.unmatch', 'Unmatch')}
-                                    title={t('documents.bankWorkbench.actions.unmatch', 'Unmatch')}
-                                  >
-                                    <UnmatchIcon />
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="bank-workbench-table__static-action">
-                                {displayStatus.label}
-                              </span>
-                            )
-                          )}
+                          {renderRemoteLineActions(line, disabled)}
                         </td>
                       </tr>
                     );
@@ -1315,76 +1511,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                       )}
                     </div>
 
-                    {isPending ? (
-                      <div className="bank-workbench-line__actions bank-workbench-line__actions--mobile">
-                        <button
-                          type="button"
-                          className="btn btn-primary bank-workbench-action-btn bank-workbench-action-btn--primary"
-                          onClick={() => void runSuggestedAction(line)}
-                          disabled={disabled}
-                        >
-                          {getSuggestedActionLabel(line)}
-                        </button>
-                        {line.suggested_action !== 'create_new' && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary bank-workbench-action-btn"
-                            onClick={() => void runLineAction(line.id, 'create')}
-                            disabled={disabled}
-                          >
-                            {t('documents.bankWorkbench.actions.create', 'Create transaction')}
-                          </button>
-                        )}
-                        {line.suggested_action !== 'match_existing' && line.linked_transaction_id && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary bank-workbench-action-btn"
-                            onClick={() => void runLineAction(line.id, 'match')}
-                            disabled={disabled}
-                          >
-                            {t('documents.bankWorkbench.actions.match', 'Match existing')}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn-secondary bank-workbench-action-btn"
-                          onClick={() => void runLineAction(line.id, 'ignore')}
-                          disabled={disabled}
-                        >
-                          {t('documents.bankWorkbench.actions.ignore', 'Ignore')}
-                        </button>
-                      </div>
-                    ) : actualLinkedTransactionId ? (
-                      <div className="bank-workbench-line__actions bank-workbench-line__actions--mobile">
-                        <button
-                          type="button"
-                          className="btn btn-secondary bank-workbench-action-btn"
-                          onClick={() => handleOpenTransaction(actualLinkedTransactionId)}
-                        >
-                          {t('documents.lineItems.viewTransaction', 'View transaction')}
-                        </button>
-                        {line.review_status === 'auto_created' && line.created_transaction_id && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary bank-workbench-action-btn bank-workbench-action--warning"
-                            onClick={() => void runLineAction(line.id, 'undo-create')}
-                            disabled={disabled}
-                          >
-                            {t('documents.bankWorkbench.actions.undoCreate', 'Undo create')}
-                          </button>
-                        )}
-                        {line.review_status === 'matched_existing' && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary bank-workbench-action-btn bank-workbench-action--warning"
-                            onClick={() => void runLineAction(line.id, 'unmatch')}
-                            disabled={disabled}
-                          >
-                            {t('documents.bankWorkbench.actions.unmatch', 'Unmatch')}
-                          </button>
-                        )}
-                      </div>
-                    ) : null}
+                    {renderRemoteLineActions(line, disabled, true)}
                   </article>
                 );
               })}
@@ -1696,6 +1823,127 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
           )}
         </div>
       </div>
+
+      {matchPickerLine && (
+        <div
+          className="bank-workbench-match-dialog__overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bank-workbench-match-dialog-title"
+          onClick={closeMatchPicker}
+        >
+          <div
+            className="bank-workbench-match-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="bank-workbench-match-dialog__header">
+              <div>
+                <h3 id="bank-workbench-match-dialog-title">
+                  {t('documents.bankWorkbench.matchPicker.title', 'Choose a transaction to link')}
+                </h3>
+                <p>
+                  {formatDate(matchPickerLine.line_date, i18n.language)}
+                  {' · '}
+                  {matchPickerLine.counterparty || t('documents.bankWorkbench.noCounterparty', 'Unknown counterparty')}
+                  {' · '}
+                  {formatCurrency(matchPickerLine.amount, i18n.language)}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="bank-workbench-match-dialog__close"
+                onClick={closeMatchPicker}
+                aria-label={t('common.close', 'Close')}
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              className="bank-workbench-match-dialog__search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void loadMatchTransactions(matchPickerLine, matchPickerSearch);
+              }}
+            >
+              <input
+                type="search"
+                value={matchPickerSearch}
+                onChange={(event) => setMatchPickerSearch(event.target.value)}
+                placeholder={t('documents.bankWorkbench.matchPicker.searchPlaceholder', 'Search by description or counterparty')}
+              />
+              <button
+                type="submit"
+                className="btn btn-secondary"
+                disabled={matchPickerLoading || matchPickerSubmitting}
+              >
+                {t('common.search', 'Search')}
+              </button>
+            </form>
+
+            {matchPickerError && (
+              <div className="bank-workbench-match-dialog__error">{matchPickerError}</div>
+            )}
+
+            <div className="bank-workbench-match-dialog__list">
+              {matchPickerLoading ? (
+                <p className="bank-workbench-match-dialog__empty">
+                  {t('common.loading', 'Loading...')}
+                </p>
+              ) : matchPickerTransactions.length === 0 ? (
+                <p className="bank-workbench-match-dialog__empty">
+                  {t('documents.bankWorkbench.matchPicker.empty', 'No transactions found. Try another search.')}
+                </p>
+              ) : (
+                matchPickerTransactions.map((transaction) => {
+                  const isSelected = selectedMatchTransactionId === transaction.id;
+                  return (
+                    <button
+                      key={transaction.id}
+                      type="button"
+                      className={`bank-workbench-match-dialog__item ${isSelected ? 'bank-workbench-match-dialog__item--selected' : ''}`}
+                      onClick={() => setSelectedMatchTransactionId(transaction.id)}
+                    >
+                      <div className="bank-workbench-match-dialog__item-main">
+                        <strong>{transaction.description || t('transactions.description', 'Transaction')}</strong>
+                        <span>
+                          {formatDate(transaction.date, i18n.language)}
+                          {' · '}
+                          {formatCurrency(transaction.amount, i18n.language)}
+                        </span>
+                      </div>
+                      <span className="bank-workbench-match-dialog__item-radio" aria-hidden="true">
+                        {isSelected ? '●' : '○'}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="bank-workbench-match-dialog__actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeMatchPicker}
+                disabled={matchPickerSubmitting}
+              >
+                {t('common.cancel', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void handleConfirmMatchSelection()}
+                disabled={!selectedMatchTransactionId || matchPickerSubmitting || matchPickerLoading}
+              >
+                {matchPickerSubmitting
+                  ? t('common.loading', 'Loading...')
+                  : t('documents.bankWorkbench.actions.match', 'Match existing')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

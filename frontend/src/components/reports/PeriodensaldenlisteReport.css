@@ -1,7 +1,25 @@
 .periodensaldenliste-report { max-width: 100%; margin: 0 auto; }
-.periodensaldenliste-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
-.periodensaldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
-.periodensaldenliste-controls .form-group label { font-size: 0.8rem; color: #6b7280; font-weight: 500; margin-bottom: 0; }
+.periodensaldenliste-controls { margin-bottom: 20px; }
+.periodensaldenliste-generate-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.periodensaldenliste-year-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+.periodensaldenliste-year-inline label { font-size: 0.8rem; color: #6b7280; font-weight: 500; margin-bottom: 0; white-space: nowrap; }
+.periodensaldenliste-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .periodensaldenliste-controls .btn { height: 44px; min-height: 44px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
 
 .periodensaldenliste-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
@@ -58,4 +76,11 @@
   .periodensaldenliste-controls, .periodensaldenliste-disclaimer { display: none; }
   .periodensaldenliste-content { border: none; padding: 0; }
   .periodensaldenliste-table { font-size: 0.65rem; min-width: auto; }
+}
+
+@media (max-width: 768px) {
+  .periodensaldenliste-generate-row { align-items: stretch; }
+  .periodensaldenliste-year-inline,
+  .periodensaldenliste-action-group { width: 100%; justify-content: center; }
+  .periodensaldenliste-action-group .btn { flex: 1 1 220px; }
 }

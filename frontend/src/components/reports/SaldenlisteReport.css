@@ -1,7 +1,25 @@
 .saldenliste-report { max-width: 960px; margin: 0 auto; }
-.saldenliste-controls { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; }
-.saldenliste-controls .form-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0; }
-.saldenliste-controls .form-group label { font-size: 0.8rem; color: #6b7280; font-weight: 500; margin-bottom: 0; }
+.saldenliste-controls { margin-bottom: 20px; }
+.saldenliste-generate-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.saldenliste-year-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+.saldenliste-year-inline label { font-size: 0.8rem; color: #6b7280; font-weight: 500; margin-bottom: 0; white-space: nowrap; }
+.saldenliste-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .saldenliste-controls .btn { height: 44px; min-height: 44px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
 
 .saldenliste-content { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; }
@@ -52,4 +70,11 @@
 @media print {
   .saldenliste-controls, .saldenliste-disclaimer { display: none; }
   .saldenliste-content { border: none; padding: 0; }
+}
+
+@media (max-width: 768px) {
+  .saldenliste-generate-row { align-items: stretch; }
+  .saldenliste-year-inline,
+  .saldenliste-action-group { width: 100%; justify-content: center; }
+  .saldenliste-action-group .btn { flex: 1 1 220px; }
 }

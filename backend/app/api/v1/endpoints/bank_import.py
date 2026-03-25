@@ -367,6 +367,23 @@ def undo_create_line(
     }
 
 
+@router.post("/lines/{line_id}/restore", summary="Restore an ignored bank line back to pending review")
+def restore_line(
+    line_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        line = BankImportService(db=db).restore_ignored_line(line_id=line_id, user=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {
+        "success": True,
+        "line": _serialize_line(line),
+    }
+
+
 @router.post("/lines/{line_id}/unmatch", summary="Unmatch a bank line from its linked transaction")
 def unmatch_line(
     line_id: int,

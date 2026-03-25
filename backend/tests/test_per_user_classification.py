@@ -113,6 +113,8 @@ class TestUserClassificationService:
         existing = MagicMock()
         existing.hit_count = 2
         existing.category = "other"
+        existing.rule_type = "soft"
+        existing.confidence = Decimal("0.80")
         db.query.return_value.filter.return_value.first.return_value = existing
         svc.upsert_rule(
             user_id=1,
@@ -123,6 +125,42 @@ class TestUserClassificationService:
         assert existing.category == "office_supplies"
         assert existing.hit_count == 3
         db.add.assert_not_called()  # should not add, just update
+
+    def test_upsert_creates_auto_rule_with_full_confidence(self):
+        svc, db = self._make_service()
+        db.query.return_value.filter.return_value.first.return_value = None
+
+        rule = svc.upsert_rule(
+            user_id=1,
+            description="Helvetia Versicherungen AG Policy Premium",
+            txn_type="expense",
+            category="insurance",
+            rule_type="auto",
+        )
+
+        assert rule.rule_type == "auto"
+        assert rule.confidence == Decimal("1.00")
+        db.add.assert_called_once()
+
+    def test_upsert_preserves_auto_rule_type_on_later_strict_confirmation(self):
+        svc, db = self._make_service()
+        existing = MagicMock()
+        existing.hit_count = 1
+        existing.category = "insurance"
+        existing.rule_type = "auto"
+        existing.confidence = Decimal("1.00")
+        db.query.return_value.filter.return_value.first.return_value = existing
+
+        svc.upsert_rule(
+            user_id=1,
+            description="Helvetia Versicherungen AG Policy Premium",
+            txn_type="expense",
+            category="insurance",
+            rule_type="strict",
+        )
+
+        assert existing.rule_type == "auto"
+        assert existing.confidence == Decimal("1.00")
 
 
 # ── TransactionClassifier: user_rule priority ──────────────────────

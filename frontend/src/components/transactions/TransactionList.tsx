@@ -69,6 +69,10 @@ const TransactionList = ({
 }: TransactionListProps) => {
   const { t, i18n } = useTranslation();
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
+  const unreconciledHint = t(
+    'transactions.bankReconcileHint',
+    'Upload bank statements in Documents to reconcile.'
+  );
 
   const formatAmount = (amount: number, type: TransactionType) => {
     const formatted = new Intl.NumberFormat(locale, {
@@ -353,7 +357,13 @@ const TransactionList = ({
                         <Landmark size={15} />
                       </span>
                     ) : (
-                      <span className="reconciled-status reconciled-status--no">-</span>
+                      <span
+                        className="reconciled-status reconciled-status--no"
+                        title={unreconciledHint}
+                        aria-label={unreconciledHint}
+                      >
+                        -
+                      </span>
                     )}
                   </td>
                   <td className="transaction-row-actions">{renderActionButtons(transaction)}</td>

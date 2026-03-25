@@ -1210,6 +1210,13 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
                 document.document_type = DBDocumentType.EINKOMMENSTEUERBESCHEID
 
         document.processed_at = datetime.utcnow()
+        from app.services.document_year_attribution import (
+            materialize_document_temporal_metadata,
+        )
+        from sqlalchemy.orm.attributes import flag_modified
+
+        materialize_document_temporal_metadata(document, document.ocr_result)
+        flag_modified(document, "ocr_result")
         db.commit()
 
         logger.info(

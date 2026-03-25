@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Building2, Package, LibraryBig, Scale, type LucideIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Package, LibraryBig, type LucideIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import Select from '../components/common/Select';
 import FuturisticIcon from '../components/common/FuturisticIcon';
 import SubpageBackLink from '../components/common/SubpageBackLink';
@@ -13,6 +13,7 @@ import { Property } from '../types/property';
 import { LiabilitySummary } from '../types/liability';
 import { getLocaleForLanguage } from '../utils/locale';
 import './TaxToolsPage.css';
+import './LiabilitiesPage.css';
 
 type AssetOption = {
   id: string;
@@ -70,7 +71,7 @@ const AssetInsightsPage = () => {
 
   // All sections start collapsed
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    new Set(['summary', 'portfolio', 'otherAssets', 'assetReport'])
+    new Set(['portfolio', 'otherAssets', 'assetReport'])
   );
   const toggleSection = (key: string) => {
     setCollapsedSections((prev) => {
@@ -199,45 +200,71 @@ const AssetInsightsPage = () => {
     <div className="tax-tools-page">
       <div className="tax-tools-header">
         <SubpageBackLink to="/advanced" label={t('common.back', 'Back')} />
-        <h1>{t('assetOverview.pageTitle', 'Asset-Liability Overview')}</h1>
-        <p>{t('assetOverview.pageSubtitle', 'Assets, liabilities, net worth, and individual reports in one place.')}</p>
+        <h1>{t('assetOverview.pageTitle', 'Asset Overview')}</h1>
+        <p>{t('assetOverview.pageSubtitle', 'Assets, depreciation, net worth, and individual reports in one place.')}</p>
       </div>
 
       <div className="tax-tools-content">
-        {/* ── Section 0: Asset-Liability Summary ── */}
-        <section className={`asset-report-section ${collapsedSections.has('summary') ? 'collapsed' : ''}`}>
-          <SectionHeading icon={Scale} tone="cyan" title={t('assetOverview.liabilitySummary', 'Asset-Liability Summary')} collapsed={collapsedSections.has('summary')} onToggle={() => toggleSection('summary')} />
-          {!collapsedSections.has('summary') && (<>
-          <p className="tax-tools-section-subtitle">
-            {t('assetOverview.liabilitySummarySubtitle', 'High-level snapshot of your total assets, liabilities, and net worth.')}
-          </p>
+        {/* ── Asset Overview Summary (always visible) ── */}
+        <section className="liability-panel card">
+          <h2>{t('assetOverview.summaryTitle', 'Asset Overview')}</h2>
 
           {loadingLiabilities ? (
             <p className="text-muted">{t('common.loading', 'Loading...')}</p>
           ) : liabilitySummary ? (
-            <div className="tax-tools-summary-grid">
-              <div className="tax-tools-summary-card positive">
-                <span className="tax-tools-summary-label">{t('assetOverview.totalAssets', 'Total Assets')}</span>
-                <strong>{fmtCurrency(liabilitySummary.total_assets)}</strong>
+            <>
+              <div className="liability-overview-balance" style={{ marginBottom: '16px' }}>
+                <article className="liability-highlight-card">
+                  <span>{t('assetOverview.balanceSnapshot', 'Balance snapshot')}</span>
+                  <strong>{fmtCurrency(liabilitySummary.net_worth)}</strong>
+                  <p>{t('assetOverview.balanceSnapshotHint', 'Current asset carrying values combined with all tracked liabilities.')}</p>
+                </article>
+                <article className="liability-highlight-card">
+                  <span>{t('assetOverview.annualDepreciation', 'Annual depreciation')}</span>
+                  <strong>{fmtCurrency(
+                    (propertyMetrics?.total_property_expenses ?? 0) + nonReAssetTotalDepreciation
+                  )}</strong>
+                  <p>{t('assetOverview.annualDepreciationHint', 'Total depreciation across all properties and other assets for the current year.')}</p>
+                </article>
               </div>
-              <div className="tax-tools-summary-card warning">
-                <span className="tax-tools-summary-label">{t('assetOverview.totalLiabilities', 'Total Liabilities')}</span>
-                <strong>{fmtCurrency(liabilitySummary.total_liabilities)}</strong>
+
+              <div className="liability-overview-grid">
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.totalAssets', 'Total Assets')}</span>
+                  <strong className="liability-metric-value">{fmtCurrency(liabilitySummary.total_assets)}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.totalAssetsNote', 'Carrying value of all registered assets')}</span>
+                </article>
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.totalLiabilities', 'Total Liabilities')}</span>
+                  <strong className="liability-metric-value">{fmtCurrency(liabilitySummary.total_liabilities)}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.totalLiabilitiesNote', 'Open balances across all active liabilities')}</span>
+                </article>
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.netWorth', 'Net Worth')}</span>
+                  <strong className="liability-metric-value">{fmtCurrency(liabilitySummary.net_worth)}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.netWorthNote', 'Assets minus liabilities')}</span>
+                </article>
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.propertyCount', 'Properties')}</span>
+                  <strong className="liability-metric-value">{propertyMetrics?.active_properties_count ?? propertiesCount}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.propertyCountNote', 'Active real estate properties')}</span>
+                </article>
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.otherAssetCount', 'Other Assets')}</span>
+                  <strong className="liability-metric-value">{nonReAssetsCount}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.otherAssetCountNote', 'Devices, vehicles, and equipment')}</span>
+                </article>
+                <article className="liability-metric-card">
+                  <span className="liability-metric-label">{t('assetOverview.monthlyDebtService', 'Monthly Debt Service')}</span>
+                  <strong className="liability-metric-value">{fmtCurrency(liabilitySummary.monthly_debt_service)}</strong>
+                  <span className="liability-metric-note">{t('assetOverview.monthlyDebtServiceNote', 'Scheduled repayments currently on file')}</span>
+                </article>
               </div>
-              <div className="tax-tools-summary-card">
-                <span className="tax-tools-summary-label">{t('assetOverview.netWorth', 'Net Worth')}</span>
-                <strong>{fmtCurrency(liabilitySummary.net_worth)}</strong>
-              </div>
-              <div className="tax-tools-summary-card">
-                <span className="tax-tools-summary-label">{t('assetOverview.monthlyDebtService', 'Monthly Debt Service')}</span>
-                <strong>{fmtCurrency(liabilitySummary.monthly_debt_service)}</strong>
-              </div>
-            </div>
+            </>
           ) : (
             <p className="text-muted">{t('assetOverview.noSummary', 'No summary available yet. Add assets or liabilities to populate the overview.')}</p>
           )}
-                </>)}
-</section>
+        </section>
 
         {/* ── Section A: Property Portfolio ── */}
         <section className={`asset-report-section ${collapsedSections.has('portfolio') ? 'collapsed' : ''}`}>

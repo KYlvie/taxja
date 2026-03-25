@@ -1,228 +1,151 @@
-/* Upgrade Prompt Modal Styles */
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-out;
+.upgrade-robot-overlay {
+  z-index: 12000;
 }
 
-.upgrade-prompt-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: white;
-  border-radius: 16px;
-  padding: 2rem;
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow-y: auto;
-  z-index: 1001;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -45%);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-}
-
-.modal-close {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: transparent;
-  border: none;
-  font-size: 2rem;
-  line-height: 1;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 0.25rem;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
+.upgrade-robot-scene {
+  max-width: 1080px;
+  width: min(1080px, calc(100vw - 32px));
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s;
+  gap: 20px;
+  padding: 24px;
 }
 
-.modal-close:hover {
-  background: #f3f4f6;
-  color: #1a1a1a;
+.upgrade-robot-container {
+  flex: 0 0 auto;
 }
 
-.modal-icon {
-  display: flex;
+.upgrade-robot-bubble {
+  position: relative;
+  max-width: 540px;
+  width: min(540px, calc(100vw - 40px));
+  padding: 28px 30px;
+}
+
+.upgrade-robot-plan-badge {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 1.5rem;
+  min-width: 58px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.18);
+  color: #ddd6fe;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
 }
 
-.modal-title {
-  font-size: 1.75rem;
+.upgrade-robot-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.upgrade-robot-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.upgrade-robot-title {
+  padding-right: 40px;
+}
+
+.upgrade-robot-description {
+  margin-top: 8px;
+}
+
+.upgrade-robot-benefits {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.upgrade-robot-benefits-title {
+  font-size: 0.92rem;
   font-weight: 700;
-  text-align: center;
-  margin-bottom: 1rem;
-  color: #1a1a1a;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.modal-description {
-  font-size: 1rem;
-  text-align: center;
-  color: #6b7280;
-  margin-bottom: 2rem;
-  line-height: 1.6;
-}
-
-/* Benefits section */
-.benefits-section {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.benefits-section h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #1a1a1a;
-}
-
-.benefits-list {
+.upgrade-robot-benefits-list {
   list-style: none;
   padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 10px;
 }
 
-.benefits-list li {
+.upgrade-robot-benefit {
   display: flex;
   align-items: flex-start;
-  gap: 0.75rem;
-  font-size: 0.9375rem;
-  color: #374151;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
-.benefit-icon {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  background: #10b981;
-  color: white;
-  border-radius: 50%;
-  display: flex;
+.upgrade-robot-benefit-icon {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.22);
+  color: #86efac;
+  font-size: 0.85rem;
   font-weight: 700;
-  font-size: 0.75rem;
+  flex: 0 0 auto;
 }
 
-/* Modal actions */
-.modal-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.btn-upgrade {
-  width: 100%;
-  padding: 1rem;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.btn-upgrade:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
-}
-
-.btn-upgrade:active {
-  transform: translateY(0);
-}
-
-.btn-cancel {
-  width: 100%;
-  padding: 0.75rem;
-  background: transparent;
-  color: #6b7280;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-cancel:hover {
-  background: #f3f4f6;
-  color: #1a1a1a;
-}
-
-.trial-note {
+.upgrade-robot-footnote {
+  margin-top: 16px;
+  color: #facc15;
+  font-size: 0.85rem;
   text-align: center;
-  font-size: 0.875rem;
-  color: #f59e0b;
-  font-weight: 500;
-  margin: 0;
 }
 
-/* Responsive */
+@media (max-width: 900px) {
+  .upgrade-robot-scene {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .upgrade-robot-container {
+    transform: scale(0.88);
+    transform-origin: center center;
+  }
+}
+
 @media (max-width: 640px) {
-  .upgrade-prompt-modal {
-    padding: 1.5rem;
-    width: 95%;
+  .upgrade-robot-scene {
+    width: calc(100vw - 20px);
+    padding: 10px;
   }
-  
-  .modal-title {
-    font-size: 1.5rem;
-  }
-  
-  .modal-description {
-    font-size: 0.9375rem;
-  }
-}
 
-/* Accessibility */
-@media (prefers-reduced-motion: reduce) {
-  .modal-overlay,
-  .upgrade-prompt-modal {
-    animation: none;
+  .upgrade-robot-container {
+    display: none;
   }
-  
-  .btn-upgrade:hover {
-    transform: none;
+
+  .upgrade-robot-bubble {
+    width: 100%;
+    max-width: none;
+    padding: 22px 20px;
   }
 }

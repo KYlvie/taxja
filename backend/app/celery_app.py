@@ -16,6 +16,7 @@ celery_app = Celery(
         "app.tasks.property_tasks",
         "app.tasks.recurring_tasks",
         "app.tasks.data_export_tasks",
+        "app.tasks.tax_package_export_tasks",
         "app.tasks.account_cleanup_tasks",
         "app.tasks.trial_tasks",
         "app.tasks.classification_tasks",

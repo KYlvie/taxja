@@ -2000,6 +2000,9 @@ Antworte NUR mit JSON:
                 "_pipeline",
                 "_validation",
                 "confidence",
+                "document_year",
+                "year_basis",
+                "year_confidence",
                 "matched_existing",
                 "import_suggestion",
                 "asset_outcome",
@@ -2771,6 +2774,11 @@ Antworte NUR mit JSON:
                     ocr_result.pop("transaction_suggestion", None)
                     ocr_result.pop("tax_analysis", None)
 
+            from app.services.document_year_attribution import (
+                materialize_document_temporal_metadata,
+            )
+
+            materialize_document_temporal_metadata(document, ocr_result)
             document.ocr_result = self._make_json_safe(ocr_result)
             try:
                 flag_modified(document, "ocr_result")

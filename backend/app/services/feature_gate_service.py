@@ -1,8 +1,11 @@
 """Feature gate service for subscription-based access control.
 
-v1 Credit migration: user-side feature access is now determined by credit
+v1 Credit migration: most user-side feature access is now determined by credit
 sufficiency (via CreditService.check_sufficient), with the old plan-hierarchy
 mapping retained as a fallback during the transition period.
+
+Some premium entitlements such as tax-form generation remain strictly
+plan-gated even when the eventual operation also deducts credits.
 
 System-side processing gates (risk control, quality control) remain unchanged
 and are NOT migrated to the credit layer.
@@ -54,11 +57,13 @@ class FeatureGateService:
 
     v1 Credit migration
     --------------------
-    User-side entitlement is now determined by credit sufficiency:
-    ``check_feature_access`` delegates to ``CreditService.check_sufficient``.
+    Most user-side entitlement is now determined by credit sufficiency:
+    ``check_feature_access`` delegates to ``CreditService.check_sufficient``
+    when a feature is credit-routed.
 
     The old ``_FEATURE_MIN_PLAN`` hierarchy is retained as a fallback for
-    features that have no CreditCostConfig entry yet (transition period).
+    features that have no CreditCostConfig entry yet (transition period), and
+    for premium features that intentionally remain plan-gated.
 
     System-side processing gates (risk, quality) are separate — see
     ``check_processing_gate``.
@@ -91,7 +96,6 @@ class FeatureGateService:
         Feature.TRANSACTION_ENTRY: "transaction_entry",
         Feature.UNLIMITED_TRANSACTIONS: "transaction_entry",
         Feature.BANK_IMPORT: "bank_import",
-        Feature.E1_GENERATION: "e1_generation",
         Feature.BASIC_TAX_CALC: "tax_calc",
         Feature.FULL_TAX_CALC: "tax_calc",
         Feature.VAT_CALC: "tax_calc",

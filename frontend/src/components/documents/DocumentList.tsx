@@ -3,8 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useDocumentStore, SortMode } from '../../stores/documentStore';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
+import {
+  compareDocumentsByDocumentDate,
+  resolveDocumentYear,
+} from '../../utils/documentDateResolver';
 import { aiToast } from '../../stores/aiToastStore';
 import { Document, DocumentType } from '../../types/document';
 import { canReprocessDocument } from '../../utils/documentReprocessing';
@@ -23,6 +27,7 @@ export interface DocumentListSummary {
 interface DocumentListProps {
   onDocumentSelect?: (document: Document) => void;
   onSummaryChange?: (summary: DocumentListSummary) => void;
+  refreshTrigger?: number;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -40,6 +45,51 @@ type DocumentGroupId =
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
+const EXPANDED_YEARS_STORAGE_PREFIX = 'taxja.documents.expandedYears';
+
+const getExpandedYearsStorageKey = (mode: SortMode) =>
+  `${EXPANDED_YEARS_STORAGE_PREFIX}.${mode}`;
+
+const loadExpandedYears = (mode: SortMode): Set<number> => {
+  if (typeof window === 'undefined') {
+    return new Set();
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getExpandedYearsStorageKey(mode));
+    if (!raw) {
+      return new Set();
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    return new Set(
+      parsed
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value)),
+    );
+  } catch {
+    return new Set();
+  }
+};
+
+const persistExpandedYears = (mode: SortMode, years: Set<number>) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      getExpandedYearsStorageKey(mode),
+      JSON.stringify(Array.from(years)),
+    );
+  } catch {
+    // Ignore storage failures and keep UI responsive.
+  }
+};
 
 const SearchIcon = () => (
   <svg className="icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -244,59 +294,36 @@ const getDocumentGroupId = (type: DocumentType): Exclude<DocumentGroupId, 'all'>
   return matchedGroup?.id || 'other';
 };
 
-const sortDocumentsByDate = (items: Document[]) =>
-  [...items].sort(
-    (left, right) =>
-      new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-  );
+const sortDocumentsByDate = (items: Document[], mode: SortMode = 'upload_date') =>
+  [...items].sort((left, right) => {
+    if (mode === 'document_date') {
+      return compareDocumentsByDocumentDate(left, right);
+    }
+
+    const leftDate = new Date(left.created_at).getTime();
+    const rightDate = new Date(right.created_at).getTime();
+    return rightDate - leftDate;
+  });
 
 /**
- * Extract the document's own date(s) from OCR data for year grouping.
- * - Receipts/invoices: use ocr_result.date
- * - Contracts: use start_date only (NOT the full range — a 25-year loan
- *   would otherwise appear duplicated in every year group)
- * - Fallback: created_at (upload date)
- * Returns an array of years this document belongs to.
+ * Extract the year(s) a document belongs to for year grouping.
+ *
+ * When mode is 'upload_date': use doc.created_at (upload date) only.
+ * When mode is 'document_date': use resolveDocumentDate(doc) which picks
+ * the best OCR date, falling back to created_at.
  */
-const getDocumentYears = (doc: Document): number[] => {
-  const ocr = doc.ocr_result as Record<string, any> | undefined;
-  const years = new Set<number>();
-
-  if (ocr) {
-    // Try document_date or date field
-    const dateStr = ocr.document_date || ocr.date;
-    if (dateStr && typeof dateStr === 'string') {
-      const parsed = new Date(dateStr);
-      if (!isNaN(parsed.getTime())) years.add(parsed.getFullYear());
-    }
-
-    // For contracts: only use start_date year (not the full span)
-    const startStr = ocr.start_date || ocr.lease_start;
-    if (startStr && typeof startStr === 'string') {
-      const s = new Date(startStr);
-      if (!isNaN(s.getTime())) years.add(s.getFullYear());
-    }
-
-    // For purchase contracts
-    const purchaseDate = ocr.purchase_date;
-    if (purchaseDate && typeof purchaseDate === 'string') {
-      const p = new Date(purchaseDate);
-      if (!isNaN(p.getTime())) years.add(p.getFullYear());
-    }
+const getDocumentYears = (doc: Document, mode: SortMode = 'upload_date'): number[] => {
+  if (mode === 'document_date') {
+    return [resolveDocumentYear(doc)];
   }
 
-  // Fallback to upload date
-  if (years.size === 0) {
-    years.add(new Date(doc.created_at).getFullYear());
-  }
-
-  return Array.from(years);
+  return [new Date(doc.created_at).getFullYear()];
 };
 
-const groupDocumentsByYear = (items: Document[]): Array<{ year: number; documents: Document[] }> => {
+const groupDocumentsByYear = (items: Document[], mode: SortMode = 'upload_date'): Array<{ year: number; documents: Document[] }> => {
   const yearMap = new Map<number, Document[]>();
   for (const doc of items) {
-    const docYears = getDocumentYears(doc);
+    const docYears = getDocumentYears(doc, mode);
     for (const year of docYears) {
       if (!yearMap.has(year)) yearMap.set(year, []);
       yearMap.get(year)!.push(doc);
@@ -304,13 +331,13 @@ const groupDocumentsByYear = (items: Document[]): Array<{ year: number; document
   }
   return Array.from(yearMap.entries())
     .sort(([a], [b]) => b - a)
-    .map(([year, documents]) => ({ year, documents }));
+    .map(([year, documents]) => ({ year, documents: sortDocumentsByDate(documents, mode) }));
 };
 
-const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummaryChange }) => {
+const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummaryChange, refreshTrigger }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { documents, total, loading, filters, setDocuments, setLoading, setFilters } =
+  const { documents, total, loading, filters, sortMode, setDocuments, setLoading, setFilters, setSortMode } =
     useDocumentStore();
   const pushMessage = useAIAdvisorStore((s) => s.pushMessage);
 
@@ -323,24 +350,40 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(() => loadExpandedYears(sortMode));
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
+
+  useEffect(() => {
+    setExpandedYears(loadExpandedYears(sortMode));
+  }, [sortMode]);
+
+  useEffect(() => {
+    persistExpandedYears(sortMode, expandedYears);
+  }, [expandedYears, sortMode]);
 
   const loadDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await documentService.getDocuments(filters, page, pageSize);
+      const result = await documentService.getDocuments(filters, page, pageSize, sortMode);
       setDocuments(result.documents, result.total);
     } catch (error) {
       console.error('Failed to load documents:', error);
     } finally {
       setLoading(false);
     }
-  }, [filters, page, pageSize, setDocuments, setLoading]);
+  }, [filters, page, pageSize, sortMode, setDocuments, setLoading]);
 
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
+
+  // External refresh trigger (e.g. after bulk confirm or review close) — re-fetches
+  // without remounting the component so expandedYears state is preserved.
+  useEffect(() => {
+    if (refreshTrigger === undefined || refreshTrigger === 0) return;
+    void loadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   const hasProcessingDocuments = documents.some(
     (doc) => doc.ocr_status === 'processing' || (!doc.processed_at && doc.ocr_status !== 'failed')
@@ -544,7 +587,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const getStatusLabel = (document: Document) => getDocumentStatusInfo(document).label;
   const getStatusTone = (document: Document) => getDocumentStatusInfo(document).tone;
 
-  const sortedDocuments = sortDocumentsByDate(documents);
+  const sortedDocuments = sortDocumentsByDate(documents, sortMode);
   const groupedDocuments = documentGroups.map((group) => ({
     ...group,
     documents: sortedDocuments.filter(
@@ -559,18 +602,25 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
           (document) => getDocumentGroupId(document.document_type) === activeGroup
         );
 
-  // Compute available years from document dates (OCR) for year filter buttons
+  // Compute available years from document dates for year filter buttons
   const availableYears = React.useMemo(() => {
     const yearSet = new Set<number>();
     for (const doc of visibleDocuments) {
-      for (const y of getDocumentYears(doc)) yearSet.add(y);
+      for (const y of getDocumentYears(doc, sortMode)) yearSet.add(y);
     }
     return Array.from(yearSet).sort((a, b) => b - a);
-  }, [visibleDocuments]);
+  }, [visibleDocuments, sortMode]);
+
+  useEffect(() => {
+    if (activeYear !== null && !availableYears.includes(activeYear)) {
+      setActiveYear(null);
+      setPage(1);
+    }
+  }, [activeYear, availableYears]);
 
   // Apply year filter
   const yearFilteredDocuments = activeYear
-    ? visibleDocuments.filter((doc) => getDocumentYears(doc).includes(activeYear))
+    ? visibleDocuments.filter((doc) => getDocumentYears(doc, sortMode).includes(activeYear))
     : visibleDocuments;
 
   const activeGroupLabel =
@@ -786,6 +836,20 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
               <ListIcon />
             </button>
           </div>
+
+          <div className="sort-mode-selector">
+            <label className="sort-mode-label">{t('documents.sortMode.label', 'Sort by')}</label>
+            <Select
+              value={sortMode}
+              onChange={(v: string) => { setSortMode(v as SortMode); setPage(1); }}
+              size="sm"
+              aria-label={t('documents.sortMode.label', 'Sort by')}
+              options={[
+                { value: 'upload_date', label: t('documents.sortMode.uploadDate', 'Upload date') },
+                { value: 'document_date', label: t('documents.sortMode.documentDate', 'Document date') },
+              ]}
+            />
+          </div>
         </div>
 
         <div className="document-group-tabs">
@@ -970,7 +1034,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
               </div>
             </div>
 
-            {groupDocumentsByYear(yearFilteredDocuments).map((yearGroup) => {
+            {groupDocumentsByYear(yearFilteredDocuments, sortMode).map((yearGroup) => {
               const isCollapsed = !expandedYears.has(yearGroup.year);
               return (
               <div key={yearGroup.year} className="document-year-group">

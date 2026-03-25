@@ -953,6 +953,11 @@
   },
   "documents": {
     "title": "Documents",
+    "sortMode": {
+      "label": "Sort by",
+      "uploadDate": "Upload date",
+      "documentDate": "Document date"
+    },
     "description": "Upload and manage your tax documents with automatic recognition",
     "uploadDocument": "Upload Document",
     "documentType": "Document Type",
@@ -4350,14 +4355,25 @@
     }
   },
   "assetOverview": {
-    "pageTitle": "Asset-Liability Overview",
-    "pageSubtitle": "Assets, liabilities, net worth, and individual reports in one place.",
-    "liabilitySummary": "Asset-Liability Summary",
-    "liabilitySummarySubtitle": "High-level snapshot of your total assets, liabilities, and net worth.",
+    "pageTitle": "Asset Overview",
+    "pageSubtitle": "Assets, depreciation, net worth, and individual reports in one place.",
+    "summaryTitle": "Asset Overview",
     "totalAssets": "Total Assets",
+    "totalAssetsNote": "Carrying value of all registered assets",
     "totalLiabilities": "Total Liabilities",
+    "totalLiabilitiesNote": "Open balances across all active liabilities",
     "netWorth": "Net Worth",
+    "netWorthNote": "Assets minus liabilities",
+    "propertyCount": "Properties",
+    "propertyCountNote": "Active real estate properties",
+    "otherAssetCount": "Other Assets",
+    "otherAssetCountNote": "Devices, vehicles, and equipment",
     "monthlyDebtService": "Monthly Debt Service",
+    "monthlyDebtServiceNote": "Scheduled repayments currently on file",
+    "balanceSnapshot": "Balance snapshot",
+    "balanceSnapshotHint": "Current asset carrying values combined with all tracked liabilities.",
+    "annualDepreciation": "Annual depreciation",
+    "annualDepreciationHint": "Total depreciation across all properties and other assets for the current year.",
     "noSummary": "No summary available yet. Add assets or liabilities to populate the overview."
   },
   "taxTools": {

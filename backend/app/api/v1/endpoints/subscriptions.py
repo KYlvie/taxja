@@ -307,6 +307,8 @@ def sync_checkout_session(
 @router.post("/customer-portal")
 def create_customer_portal_session(
     return_url: str | None = None,
+    target_plan_id: int | None = None,
+    billing_cycle: BillingCycle | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -325,10 +327,17 @@ def create_customer_portal_session(
 
     stripe_service = StripePaymentService(db)
     effective_return_url = return_url or f"{settings.FRONTEND_URL.rstrip('/')}/pricing"
+    if (target_plan_id is None) != (billing_cycle is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_plan_id and billing_cycle must be provided together",
+        )
     try:
         result = stripe_service.create_customer_portal_session(
             user_id=current_user.id,
             return_url=effective_return_url,
+            target_plan_id=target_plan_id,
+            billing_cycle=billing_cycle,
         )
         return result
     except ValueError as e:
@@ -355,10 +364,22 @@ def upgrade_subscription(
         and current_subscription
         and current_subscription.stripe_subscription_id
     ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Manage paid plan changes through Stripe checkout or customer portal.",
-        )
+        from app.services.stripe_payment_service import StripePaymentService
+
+        stripe_service = StripePaymentService(db)
+        try:
+            subscription = stripe_service.switch_subscription_plan(
+                user_id=current_user.id,
+                plan_id=plan_id,
+                billing_cycle=billing_cycle,
+            )
+            feature_gate_service.invalidate_user_plan_cache(current_user.id)
+            return _build_subscription_response_with_credits(subscription, current_user, db)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
     
     try:
         result = subscription_service.upgrade_subscription(
@@ -377,11 +398,13 @@ def upgrade_subscription(
 @router.post("/downgrade", response_model=SubscriptionResponse)
 def downgrade_subscription(
     plan_id: int,
+    billing_cycle: BillingCycle | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Downgrade subscription plan (effective at period end)."""
     subscription_service = SubscriptionService(db)
+    feature_gate_service = FeatureGateService(db)
     current_subscription = subscription_service.get_user_subscription(current_user.id)
 
     if (
@@ -389,10 +412,27 @@ def downgrade_subscription(
         and current_subscription
         and current_subscription.stripe_subscription_id
     ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Manage paid plan changes through Stripe customer portal.",
+        from app.services.stripe_payment_service import StripePaymentService
+
+        effective_billing_cycle = (
+            billing_cycle
+            or current_subscription.billing_cycle
+            or BillingCycle.MONTHLY
         )
+        stripe_service = StripePaymentService(db)
+        try:
+            subscription = stripe_service.switch_subscription_plan(
+                user_id=current_user.id,
+                plan_id=plan_id,
+                billing_cycle=effective_billing_cycle,
+            )
+            feature_gate_service.invalidate_user_plan_cache(current_user.id)
+            return _build_subscription_response_with_credits(subscription, current_user, db)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
     
     try:
         result = subscription_service.downgrade_subscription(

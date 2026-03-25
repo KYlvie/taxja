@@ -939,6 +939,11 @@
   },
   "documents": {
     "title": "Documents",
+    "sortMode": {
+      "label": "Trier par",
+      "uploadDate": "Date de téléchargement",
+      "documentDate": "Date du document"
+    },
     "description": "Téléchargez et gérez vos documents fiscaux avec reconnaissance automatique",
     "uploadDocument": "Télécharger un document",
     "documentType": "Type de document",

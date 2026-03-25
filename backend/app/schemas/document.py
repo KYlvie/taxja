@@ -1,5 +1,5 @@
 """Document schemas for API validation"""
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from app.models.document import DocumentType
@@ -124,6 +124,10 @@ class DocumentDetail(BaseModel):
     linked_transaction_count: int = 0
     uploaded_at: datetime
     processed_at: Optional[datetime] = None
+    document_date: Optional[date] = None
+    document_year: Optional[int] = None
+    year_basis: Optional[str] = None
+    year_confidence: Optional[float] = None
 
     class Config:
         from_attributes = True

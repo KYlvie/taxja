@@ -95,34 +95,38 @@ const PeriodensaldenlisteReport = () => {
   return (
     <div className="periodensaldenliste-report">
       <div className="periodensaldenliste-controls">
-        <div className="form-group">
-          <label htmlFor="periodensaldenliste-year">{t('reports.taxYear')}</label>
-          <Select
-            id="periodensaldenliste-year"
-            value={String(taxYear)}
-            onChange={(value) => setTaxYear(Number(value))}
-            options={Array.from({ length: 5 }, (_, index) => ({
-              value: String(currentYear - index),
-              label: String(currentYear - index),
-            }))}
-            size="sm"
-          />
-        </div>
+        <div className="periodensaldenliste-generate-row">
+          <div className="periodensaldenliste-year-inline">
+            <label htmlFor="periodensaldenliste-year">{t('reports.taxYear')}</label>
+            <Select
+              id="periodensaldenliste-year"
+              value={String(taxYear)}
+              onChange={(value) => setTaxYear(Number(value))}
+              options={Array.from({ length: 5 }, (_, index) => ({
+                value: String(currentYear - index),
+                label: String(currentYear - index),
+              }))}
+              size="sm"
+            />
+          </div>
 
-        {!report ? (
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
-            {loading ? t('common.loading') : t('reports.periodensaldenliste.generate')}
-          </button>
-        ) : (
-          <>
-            <button className="btn btn-secondary" onClick={handlePrint}>
-              {t('reports.ea.print')}
-            </button>
-            <button className="btn btn-primary" onClick={handleDownloadPDF}>
-              {t('reports.ea.downloadPDF')}
-            </button>
-          </>
-        )}
+          <div className="periodensaldenliste-action-group">
+            {!report ? (
+              <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
+                {loading ? t('common.loading') : t('reports.periodensaldenliste.generate')}
+              </button>
+            ) : (
+              <>
+                <button className="btn btn-secondary" onClick={handlePrint}>
+                  {t('reports.ea.print')}
+                </button>
+                <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                  {t('reports.ea.downloadPDF')}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       <YearWarning taxYear={taxYear} />

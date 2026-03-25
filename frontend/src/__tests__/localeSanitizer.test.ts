@@ -138,6 +138,13 @@ describe('localeSanitizer', () => {
       'documents.reviewAction',
       'documents.reviewActionHint',
       'documents.confirmReview',
+      'documents.exportZipYearHint',
+      'documents.exportZipNoYears',
+      'documents.fileYearLabel',
+      'documents.filesLabel',
+      'documents.estimatedSizeLabel',
+      'documents.exportZipLargeHint',
+      'documents.exportZipDirectDownloadHint',
       'documents.receiptReview.editing',
       'documents.receiptReview.expandDetails',
       'documents.receiptReview.hideDetails',
@@ -168,10 +175,19 @@ describe('localeSanitizer', () => {
       'documents.bankWorkbench.fallback.noTransactionsCreated',
       'common.oneClickConfirm',
       'common.bulkConfirmSuccess',
+      'reports.taxForm.exportPackage',
+      'reports.taxForm.exportPackageLoading',
+      'reports.taxForm.exportPackageFailed',
       'transactions.exportCsv',
       'transactions.exportPdf',
       'classificationRules.searchPlaceholder',
       'classificationRules.searchDeductPlaceholder',
+      'classificationRules.pageTitle',
+      'classificationRules.title',
+      'classificationRules.categorySectionDescription',
+      'classificationRules.automationSectionTitle',
+      'classificationRules.searchAutomationPlaceholder',
+      'classificationRules.automationActionAutoCreate',
       'ai.proactive.healthSummaryReminder',
     ];
 
@@ -208,12 +224,20 @@ describe('localeSanitizer', () => {
     expect(getValue(locales.zh, 'documents.bankWorkbench.creditCount')).toBe(
       '\u6536\u5165\u7b14\u6570'
     );
+    expect(getValue(locales.zh, 'documents.exportZipYearHint')).toBe(
+      '\u8bf7\u9009\u62e9\u8981\u5bfc\u51fa\u7684\u6587\u4ef6\u5e74\u5ea6\u3002\u8fd9\u91cc\u4f7f\u7528\u6587\u6863\u5f52\u5c5e\u5e74\u4efd\uff0c\u800c\u4e0d\u662f\u4e0a\u4f20\u5e74\u4efd\u3002'
+    );
     expect(getValue(locales.de, 'documents.reviewAction')).toBe('Weiter pruefen');
     expect(getValue(locales.de, 'documents.reviewActionHint')).toBe('Klicken, um die Bestaetigung abzuschliessen');
+    expect(getValue(locales.de, 'classificationRules.automationSectionTitle')).toBe('Regeln zur automatischen Verarbeitung');
     expect(getValue(locales.en, 'documents.reviewAction')).toBe('Continue review');
     expect(getValue(locales.en, 'documents.reviewActionHint')).toBe('Click to complete confirmation');
+    expect(getValue(locales.en, 'classificationRules.automationActionAutoCreate')).toBe('Auto-create');
+    expect(getValue(locales.en, 'reports.taxForm.exportPackage')).toBe('Export tax package');
     expect(getValue(locales.zh, 'documents.confirmReview')).toBe('\u786e\u8ba4\u5b8c\u6210\u5ba1\u6838\uff1f');
     expect(getValue(locales.zh, 'documents.reviewActionHint')).toBe('\u70b9\u51fb\u5b8c\u6210\u786e\u8ba4');
+    expect(getValue(locales.zh, 'classificationRules.automationSectionTitle')).toBe('\u81ea\u52a8\u5904\u7406\u89c4\u5219');
+    expect(getValue(locales.zh, 'reports.taxForm.exportPackage')).toBe('\u5bfc\u51fa\u7a0e\u52a1\u5305');
     expect(getValue(locales.fr, 'documents.reviewAction')).toBe('Poursuivre la verification');
     expect(getValue(locales.fr, 'documents.reviewActionHint')).toBe('Cliquer pour terminer la confirmation');
     expect(getValue(locales.ru, 'documents.confirmReview')).toBe(
@@ -232,6 +256,7 @@ describe('localeSanitizer', () => {
     expect(getValue(locales.tr, 'documents.reviewActionHint')).toBe('Onayi tamamlamak icin tiklayin');
     expect(getValue(locales.bs, 'documents.confirmReview')).toBe('Zavrsiti pregled?');
     expect(getValue(locales.bs, 'documents.reviewActionHint')).toBe('Kliknite da dovrsite potvrdu');
+    expect(getValue(locales.de, 'reports.taxForm.exportPackage')).toBe('Steuerpaket exportieren');
     expect(getValue(locales.zh, 'ai.proactive.healthSummaryReminder')).toBe(
       '\u60a8\u6709 {{count}} \u9879\u7a0e\u52a1\u5065\u5eb7\u63d0\u9192\u5f85\u5904\u7406\uff0c\u5f53\u524d\u5065\u5eb7\u5206\u4e3a {{score}} \u5206\u3002'
     );

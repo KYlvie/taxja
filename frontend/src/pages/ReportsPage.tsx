@@ -10,6 +10,7 @@ import BilanzReport from '../components/reports/BilanzReport';
 import SaldenlisteReport from '../components/reports/SaldenlisteReport';
 import PeriodensaldenlisteReport from '../components/reports/PeriodensaldenlisteReport';
 import TaxFormPreview from '../components/reports/TaxFormPreview';
+import { useFeatureAccess } from '../components/subscription/withFeatureGate';
 import './ReportsPage.css';
 
 type TabType = 'ea' | 'bilanz' | 'taxform' | 'saldenliste' | 'periodensaldenliste';
@@ -29,6 +30,7 @@ const ReportsPage = () => {
   const isGmbH = userType === 'gmbh';
   const showBilanz = isGmbH || userType === 'selfEmployed' || userType === 'self_employed'
     || userType === 'mixed';
+  const hasTaxFormAccess = useFeatureAccess('e1_generation');
 
   const [activeTab, setActiveTab] = useState<TabType>(isGmbH ? 'bilanz' : 'ea');
   const [unreviewedCount, setUnreviewedCount] = useState(0);
@@ -39,6 +41,12 @@ const ReportsPage = () => {
       .then((res) => setUnreviewedCount(res.total))
       .catch(() => setUnreviewedCount(0));
   }, []);
+
+  useEffect(() => {
+    if (!hasTaxFormAccess && activeTab === 'taxform') {
+      // Don't auto-switch — we show the locked state instead
+    }
+  }, [activeTab, hasTaxFormAccess, isGmbH]);
 
   return (
     <div className="reports-page">
@@ -80,11 +88,12 @@ const ReportsPage = () => {
           <span>{t('reports.tabs.periodensaldenliste')}</span>
         </button>
         <button
-          className={`tab tab-taxform ${activeTab === 'taxform' ? 'active' : ''}`}
+          className={`tab tab-taxform ${activeTab === 'taxform' ? 'active' : ''} ${!hasTaxFormAccess ? 'tab-locked' : ''}`}
           onClick={() => setActiveTab('taxform')}
         >
           <FuturisticIcon icon={tabMeta.taxform.icon} tone={tabMeta.taxform.tone} size="xs" />
           <span>{isGmbH ? 'K1' : t('reports.tabs.taxForm')}</span>
+          {!hasTaxFormAccess && <span className="tab-lock-badge">PRO</span>}
         </button>
       </div>
 

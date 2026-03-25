@@ -1,6 +1,6 @@
 """Per-user classification override service.
 
-Manages user-specific description→category rules that take priority over
+Manages user-specific description->category rules that take priority over
 the global rule-based / ML / LLM classification pipeline.
 
 Key design: rules are keyed on the FULL normalized description, not just
@@ -8,8 +8,10 @@ the merchant name. "amazon druckerpatrone" and "amazon kleidung" produce
 different rules because the same merchant can sell items in different
 tax categories.
 
-Rules are auto-generated from user corrections and LLM results.
+Rules are auto-generated from user corrections, LLM results, and
+bank-import confirmations.
 """
+
 import logging
 import re
 from decimal import Decimal
@@ -26,10 +28,10 @@ logger = logging.getLogger(__name__)
 _STRIP_PATTERNS = [
     r"\b\d{4,}\b",                        # long numbers (card refs, store IDs)
     r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b",    # dates like 15.03.2026
-    r"\bAT\d+\b",                          # Austrian IBAN fragments
-    r"\b[A-Z]{2}\d{2}\b",                  # IBAN country prefix
-    r"\b(filiale|fil\.?|kasse)\s*\d*\b",   # branch/register numbers
-    r"\s{2,}",                             # collapse whitespace
+    r"\bAT\d+\b",                        # Austrian IBAN fragments
+    r"\b[A-Z]{2}\d{2}\b",                # IBAN country prefix
+    r"\b(filiale|fil\.?|kasse)\s*\d*\b", # branch/register numbers
+    r"\s{2,}",                           # collapse whitespace
 ]
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _STRIP_PATTERNS]
 
@@ -42,9 +44,9 @@ def normalize_description(description: str) -> str:
     different keys.
 
     Examples:
-        "AMAZON EU S.A.R.L. Druckerpatrone 12345" → "amazon eu s.a.r.l. druckerpatrone"
-        "AMAZON EU S.A.R.L. Kleidung 67890"       → "amazon eu s.a.r.l. kleidung"
-        "BILLA Filiale 1234 WIEN"                  → "billa wien"
+        "AMAZON EU S.A.R.L. Druckerpatrone 12345" -> "amazon eu s.a.r.l. druckerpatrone"
+        "AMAZON EU S.A.R.L. Kleidung 67890"       -> "amazon eu s.a.r.l. kleidung"
+        "BILLA Filiale 1234 WIEN"                 -> "billa wien"
     """
     text = description.lower().strip()
     for pat in _COMPILED:
@@ -64,11 +66,7 @@ class UserClassificationService:
         description: str,
         txn_type: str,
     ) -> Optional[UserClassificationRule]:
-        """
-        Look up a per-user rule for the given transaction description.
-
-        Returns the matching rule or None if no user override exists.
-        """
+        """Look up a per-user rule for the given transaction description."""
         norm = normalize_description(description)
         if not norm:
             return None
@@ -91,14 +89,13 @@ class UserClassificationService:
         category: str,
         rule_type: str = "strict",
     ) -> UserClassificationRule:
-        """
-        Create or update a per-user classification rule.
-
-        If a rule already exists for (user, normalized_description, type),
-        update it. Otherwise create a new one.
+        """Create or update a per-user classification rule.
 
         Args:
-            rule_type: "strict" for human-confirmed, "soft" for LLM-inferred.
+            rule_type:
+                - "strict" for human-confirmed category memory
+                - "soft" for LLM-promoted memory
+                - "auto" for confirmed bank-import auto-processing memory
         """
         norm = normalize_description(description)
 
@@ -116,19 +113,32 @@ class UserClassificationService:
             existing.category = category
             existing.hit_count += 1
             existing.original_description = description
-            # Upgrade soft → strict if a human confirms, but never downgrade
-            if rule_type == "strict" and existing.rule_type != "strict":
+
+            # Upgrade soft -> strict/auto when a human confirms, but never
+            # downgrade an auto-processing rule back to a plain strict rule.
+            if rule_type == "auto":
+                existing.rule_type = "auto"
+                existing.confidence = Decimal("1.00")
+            elif existing.rule_type == "auto":
+                existing.confidence = Decimal("1.00")
+            elif rule_type == "strict" and existing.rule_type != "strict":
                 existing.rule_type = "strict"
                 existing.confidence = Decimal("1.00")
+
             self.db.flush()
             logger.info(
-                "Updated user rule: user=%s desc=%r → %s (hits=%d, type=%s)",
-                user_id, norm, category, existing.hit_count, existing.rule_type,
+                "Updated user rule: user=%s desc=%r -> %s (hits=%d, type=%s)",
+                user_id,
+                norm,
+                category,
+                existing.hit_count,
+                existing.rule_type,
             )
             return existing
 
-        # Soft rules start with lower confidence
-        confidence = Decimal("1.00") if rule_type == "strict" else Decimal("0.80")
+        # Human-confirmed category memory and confirmed bank automation both
+        # start fully trusted. Soft rules start lower.
+        confidence = Decimal("1.00") if rule_type in {"strict", "auto"} else Decimal("0.80")
 
         rule = UserClassificationRule(
             user_id=user_id,
@@ -143,8 +153,11 @@ class UserClassificationService:
         self.db.add(rule)
         self.db.flush()
         logger.info(
-            "Created user rule: user=%s desc=%r → %s (type=%s)",
-            user_id, norm, category, rule_type,
+            "Created user rule: user=%s desc=%r -> %s (type=%s)",
+            user_id,
+            norm,
+            category,
+            rule_type,
         )
         return rule
 
@@ -203,8 +216,9 @@ class UserClassificationService:
     # ------------------------------------------------------------------
 
     def record_hit(self, rule: UserClassificationRule) -> None:
-        """Record a rule hit — updates last_hit_at timestamp."""
+        """Record a rule hit and update ``last_hit_at``."""
         from datetime import datetime
+
         rule.last_hit_at = datetime.utcnow()
         self.db.flush()
 
@@ -218,16 +232,16 @@ class UserClassificationService:
             rule.frozen = True
             logger.warning(
                 "Soft rule frozen due to conflicts: user=%s desc=%r conflicts=%d",
-                rule.user_id, rule.normalized_description, rule.conflict_count,
+                rule.user_id,
+                rule.normalized_description,
+                rule.conflict_count,
             )
         self.db.flush()
 
     def decay_stale_soft_rules(self, user_id: int, stale_days: int = 90) -> int:
-        """Reduce confidence of soft rules not hit in `stale_days`.
-
-        Returns the number of rules decayed.
-        """
+        """Reduce confidence of soft rules not hit in ``stale_days``."""
         from datetime import datetime, timedelta
+
         cutoff = datetime.utcnow() - timedelta(days=stale_days)
 
         stale = (
@@ -252,7 +266,9 @@ class UserClassificationService:
                 decayed += 1
                 logger.info(
                     "Decayed soft rule: user=%s desc=%r conf=%s",
-                    rule.user_id, rule.normalized_description, new_conf,
+                    rule.user_id,
+                    rule.normalized_description,
+                    new_conf,
                 )
 
         if decayed:
@@ -260,11 +276,9 @@ class UserClassificationService:
         return decayed
 
     def archive_low_hit_rules(self, user_id: int, min_hits: int = 1, stale_days: int = 180) -> int:
-        """Delete rules with <= min_hits that haven't been hit in stale_days.
-
-        Returns the number of rules archived (deleted).
-        """
+        """Delete rules with <= ``min_hits`` that haven't been hit in ``stale_days``."""
         from datetime import datetime, timedelta
+
         cutoff = datetime.utcnow() - timedelta(days=stale_days)
 
         deleted = (

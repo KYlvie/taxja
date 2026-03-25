@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from enum import Enum
+import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import and_, or_
@@ -27,6 +28,7 @@ from app.services.csv_parser import BankFormat, CSVParser
 from app.services.duplicate_detector import DuplicateDetector
 from app.services.mt940_parser import MT940Parser
 from app.services.transaction_classifier import TransactionClassifier
+from app.services.user_classification_service import UserClassificationService
 
 
 class ImportFormat(str, Enum):
@@ -419,7 +421,28 @@ class BankImportService:
         if line.linked_transaction is not None and line.review_status == BankStatementLineStatus.MATCHED_EXISTING:
             return line, line.linked_transaction
 
-        transaction, classification_confidence = self._create_transaction_for_line(line, user, auto_classify=True)
+        preview_transaction, classification_confidence = self._build_preview_transaction(line, user)
+        duplicate_transaction = self._find_reusable_transaction_for_line(
+            line=line,
+            preview_transaction=preview_transaction,
+            user_id=user.id,
+            tax_year=line.statement_import.tax_year,
+        )
+        if duplicate_transaction is not None:
+            self._apply_duplicate_resolution_to_line(
+                line=line,
+                duplicate_transaction=duplicate_transaction,
+                reviewer_id=user.id,
+            )
+            self.db.commit()
+            self.db.refresh(line)
+            return line, duplicate_transaction
+
+        transaction, classification_confidence = self._create_transaction_for_preview(
+            preview_transaction=preview_transaction,
+            line=line,
+            classification_confidence=classification_confidence,
+        )
         line.created_transaction_id = transaction.id
         line.linked_transaction_id = transaction.id
         line.review_status = BankStatementLineStatus.AUTO_CREATED
@@ -428,6 +451,7 @@ class BankImportService:
         line.confidence_score = classification_confidence
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
+        self._learn_classification_memory_from_confirmed_create(transaction, require_high_confidence=False)
         self.db.commit()
         self.db.refresh(line)
         return line, transaction
@@ -476,6 +500,25 @@ class BankImportService:
         line.resolution_reason = None
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
+        self.db.commit()
+        self.db.refresh(line)
+        return line
+
+    def restore_ignored_line(self, line_id: int, user: User) -> BankStatementLine:
+        """Move an ignored duplicate back to the review queue."""
+        line = self._get_line_for_user(line_id, user.id)
+        if line.review_status != BankStatementLineStatus.IGNORED_DUPLICATE:
+            raise ValueError("Only ignored lines can be restored")
+
+        line.review_status = BankStatementLineStatus.PENDING_REVIEW
+        line.suggested_action = (
+            BankStatementSuggestedAction.MATCH_EXISTING
+            if line.linked_transaction_id
+            else BankStatementSuggestedAction.CREATE_NEW
+        )
+        line.resolution_reason = BankStatementLineResolutionReason.NEW.value
+        line.reviewed_at = None
+        line.reviewed_by = None
         self.db.commit()
         self.db.refresh(line)
         return line
@@ -704,13 +747,13 @@ class BankImportService:
                 and best_match is not None
                 and similarity >= self.AUTO_MATCH_SIMILARITY
             ):
-                self._mark_transaction_reconciled(best_match)
-                line.linked_transaction_id = best_match.id
-                line.review_status = BankStatementLineStatus.MATCHED_EXISTING
-                line.suggested_action = BankStatementSuggestedAction.MATCH_EXISTING
-                line.resolution_reason = None
+                resolved_status = self._apply_duplicate_resolution_to_line(
+                    line=line,
+                    duplicate_transaction=best_match,
+                )
                 line.confidence_score = Decimal(str(round(similarity, 3)))
-                result.matched_existing_count += 1
+                if resolved_status == BankStatementLineStatus.MATCHED_EXISTING:
+                    result.matched_existing_count += 1
                 continue
 
             if best_match is not None and similarity >= self.SUGGEST_MATCH_SIMILARITY:
@@ -725,6 +768,21 @@ class BankImportService:
             if auto_classify:
                 preview_transaction, classification_confidence = self._build_preview_transaction(line, user)
                 if classification_confidence >= self.AUTO_CREATE_THRESHOLD:
+                    duplicate_transaction = self._find_reusable_transaction_for_line(
+                        line=line,
+                        preview_transaction=preview_transaction,
+                        user_id=user.id,
+                        tax_year=tax_year,
+                    )
+                    if duplicate_transaction is not None:
+                        resolved_status = self._apply_duplicate_resolution_to_line(
+                            line=line,
+                            duplicate_transaction=duplicate_transaction,
+                        )
+                        if resolved_status == BankStatementLineStatus.MATCHED_EXISTING:
+                            result.matched_existing_count += 1
+                        continue
+
                     transaction, _ = self._create_transaction_for_preview(
                         preview_transaction=preview_transaction,
                         line=line,
@@ -871,9 +929,124 @@ class BankImportService:
         preview_transaction.document_id = line.statement_import.source_document_id
         return preview_transaction, classification_confidence
 
+    def _find_exact_duplicate_transaction(self, preview_transaction: Transaction) -> Optional[Transaction]:
+        if self.duplicate_detector is None:
+            return None
+
+        is_duplicate, matching_transaction = self.duplicate_detector.check_duplicate(
+            user_id=preview_transaction.user_id,
+            transaction_date=preview_transaction.transaction_date,
+            amount=preview_transaction.amount,
+            description=preview_transaction.description,
+        )
+        if not is_duplicate:
+            return None
+        return matching_transaction
+
+    def _find_reusable_transaction_for_line(
+        self,
+        *,
+        line: BankStatementLine,
+        preview_transaction: Transaction,
+        user_id: int,
+        tax_year: Optional[int],
+    ) -> Optional[Transaction]:
+        exact_duplicate = self._find_exact_duplicate_transaction(preview_transaction)
+        if exact_duplicate is not None:
+            return exact_duplicate
+
+        best_match, similarity = self._find_best_existing_transaction(
+            line=line,
+            user_id=user_id,
+            tax_year=tax_year,
+            require_threshold=False,
+        )
+        if best_match is None:
+            return None
+        if similarity < self.SUGGEST_MATCH_SIMILARITY:
+            return None
+        return best_match
+
+    def _apply_duplicate_resolution_to_line(
+        self,
+        *,
+        line: BankStatementLine,
+        duplicate_transaction: Transaction,
+        reviewer_id: Optional[int] = None,
+    ) -> BankStatementLineStatus:
+        was_already_reconciled = bool(getattr(duplicate_transaction, "bank_reconciled", False))
+
+        self._mark_transaction_reconciled(duplicate_transaction)
+        line.created_transaction_id = None
+        line.linked_transaction_id = duplicate_transaction.id
+        line.review_status = (
+            BankStatementLineStatus.IGNORED_DUPLICATE
+            if was_already_reconciled
+            else BankStatementLineStatus.MATCHED_EXISTING
+        )
+        line.suggested_action = (
+            BankStatementSuggestedAction.IGNORE
+            if was_already_reconciled
+            else BankStatementSuggestedAction.MATCH_EXISTING
+        )
+        line.resolution_reason = None
+        line.confidence_score = Decimal("1.000")
+        if reviewer_id is not None:
+            line.reviewed_at = datetime.utcnow()
+            line.reviewed_by = reviewer_id
+        return line.review_status
+
     def _mark_transaction_reconciled(self, transaction: Transaction) -> None:
         transaction.bank_reconciled = True
         transaction.bank_reconciled_at = datetime.utcnow()
+
+    def _learn_classification_memory_from_confirmed_create(
+        self, transaction: Transaction, require_high_confidence: bool = True
+    ) -> None:
+        """Persist auto-processing memory after a human confirms creation.
+
+        A bank-import line reaching ``confirm_create_line`` has been explicitly
+        accepted by the user. If the classifier already produced a category for
+        the preview transaction, we can safely reuse that confirmation as an
+        auto-processing rule so future identical descriptions auto-classify and
+        auto-create inside the bank workbench.
+        """
+        if self.db is None:
+            return
+
+        description = getattr(transaction, "description", None)
+        if not isinstance(description, str) or not description.strip():
+            return
+
+        txn_type = TransactionClassifier._get_txn_type(transaction)
+        category_value: Optional[str]
+        if txn_type == TransactionType.INCOME.value:
+            category = getattr(transaction, "income_category", None)
+        else:
+            category = getattr(transaction, "expense_category", None)
+        category_value = str(getattr(category, "value", category)) if category is not None else None
+
+        if not category_value:
+            return
+
+        if require_high_confidence:
+            raw_confidence = getattr(transaction, "classification_confidence", None)
+            if raw_confidence is None:
+                return
+            try:
+                confidence = Decimal(str(raw_confidence))
+            except (InvalidOperation, TypeError, ValueError):
+                return
+            if confidence < TransactionClassifier.HIGH_CONFIDENCE_THRESHOLD:
+                return
+
+        UserClassificationService(self.db).upsert_rule(
+            user_id=transaction.user_id,
+            description=description,
+            txn_type=txn_type,
+            category=category_value,
+            rule_type="auto",
+        )
 
     def _get_line_for_user(self, line_id: int, user_id: int) -> BankStatementLine:
         if self.db is None:
@@ -911,13 +1084,42 @@ class BankImportService:
         if not line_text or not transaction_text:
             return 0.0
 
-        normalized_line = line_text.lower()
-        normalized_transaction = transaction_text.lower()
-        if self.duplicate_detector is not None and hasattr(self.duplicate_detector, "_is_similar_description"):
-            matcher = SequenceMatcher(None, normalized_line, normalized_transaction)
-            return matcher.ratio()
+        line_candidates = [
+            line_text,
+            line.purpose or "",
+            line.raw_reference or "",
+            line.counterparty or "",
+        ]
+        transaction_candidates = [
+            transaction_text,
+        ]
 
-        return SequenceMatcher(None, normalized_line, normalized_transaction).ratio()
+        best_similarity = 0.0
+        for left in line_candidates:
+            for right in transaction_candidates:
+                similarity = self._text_similarity(left, right)
+                if similarity > best_similarity:
+                    best_similarity = similarity
+
+        return best_similarity
+
+    @staticmethod
+    def _normalize_match_text(value: str) -> str:
+        normalized = value.lower().strip()
+        normalized = re.sub(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b", " ", normalized)
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    def _text_similarity(self, left: str, right: str) -> float:
+        normalized_left = self._normalize_match_text(left)
+        normalized_right = self._normalize_match_text(right)
+        if not normalized_left and not normalized_right:
+            return 1.0
+        if not normalized_left or not normalized_right:
+            return 0.0
+
+        return SequenceMatcher(None, normalized_left, normalized_right).ratio()
 
     @staticmethod
     def _amounts_match(lhs: Decimal, rhs: Decimal) -> bool:

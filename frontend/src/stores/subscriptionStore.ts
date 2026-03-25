@@ -107,6 +107,12 @@ export interface CreditEstimate {
   would_use_overage: boolean;
 }
 
+export interface CustomerPortalOptions {
+  returnUrl?: string;
+  targetPlanId?: number;
+  billingCycle?: 'monthly' | 'yearly';
+}
+
 interface SubscriptionState {
   // State
   currentPlan: Plan | null;
@@ -133,10 +139,10 @@ interface SubscriptionState {
   ) => Promise<{ session_id: string; url: string }>;
   syncCheckoutSession: (sessionId: string) => Promise<void>;
   upgradeSubscription: (planId: number, billingCycle: 'monthly' | 'yearly') => Promise<void>;
-  downgradeSubscription: (planId: number) => Promise<void>;
+  downgradeSubscription: (planId: number, billingCycle?: 'monthly' | 'yearly') => Promise<void>;
   cancelSubscription: () => Promise<void>;
   reactivateSubscription: () => Promise<void>;
-  openCustomerPortal: (returnUrl?: string) => Promise<void>;
+  openCustomerPortal: (options?: string | CustomerPortalOptions) => Promise<void>;
   clearError: () => void;
   reset: () => void;
   
@@ -348,17 +354,25 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       },
       
       // Downgrade subscription
-      downgradeSubscription: async (planId) => {
+      downgradeSubscription: async (planId, billingCycle) => {
         set({ loading: true, error: null });
         
         try {
+          const params = new URLSearchParams({ plan_id: String(planId) });
+          if (billingCycle) {
+            params.set('billing_cycle', billingCycle);
+          }
           const subscription = await apiCall(
-            `/subscriptions/downgrade?plan_id=${planId}`,
+            `/subscriptions/downgrade?${params.toString()}`,
             { method: 'POST' }
           );
           
+          const plans = await apiCall('/subscriptions/plans');
+          const currentPlan = plans.find((p: Plan) => p.id === subscription.plan_id);
+
           set({
             subscription,
+            currentPlan,
             loading: false,
           });
         } catch (error) {
@@ -418,13 +432,30 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       },
       
       // Open Stripe Customer Portal
-      openCustomerPortal: async (returnUrl?: string) => {
+      openCustomerPortal: async (options?: string | CustomerPortalOptions) => {
         set({ loading: true, error: null });
         
         try {
-          const url = returnUrl || `${window.location.origin}/pricing`;
+          const portalOptions: CustomerPortalOptions =
+            typeof options === 'string'
+              ? { returnUrl: options }
+              : (options || {});
+
+          const url = portalOptions.returnUrl || `${window.location.origin}/pricing`;
+          const params = new URLSearchParams({
+            return_url: url,
+          });
+
+          if (portalOptions.targetPlanId !== undefined) {
+            params.set('target_plan_id', String(portalOptions.targetPlanId));
+          }
+
+          if (portalOptions.billingCycle) {
+            params.set('billing_cycle', portalOptions.billingCycle);
+          }
+
           const result = await apiCall(
-            `/subscriptions/customer-portal?return_url=${encodeURIComponent(url)}`,
+            `/subscriptions/customer-portal?${params.toString()}`,
             { method: 'POST' }
           );
           window.location.href = result.url;

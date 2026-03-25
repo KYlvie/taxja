@@ -33,6 +33,12 @@ export interface ConfirmBankTransactionsResponse {
   classified: number;
 }
 
+export interface DocumentExportYearOption {
+  year: number;
+  count: number;
+  total_size_bytes: number;
+}
+
 export const documentService = {
   // Upload single document
   uploadDocument: async (
@@ -126,11 +132,16 @@ export const documentService = {
   getDocuments: async (
     filters?: DocumentFilter,
     page: number = 1,
-    pageSize: number = 20
+    pageSize: number = 20,
+    sortBy?: string
   ): Promise<{ documents: Document[]; total: number }> => {
     const params = new URLSearchParams();
     params.append('page', page.toString());
     params.append('page_size', pageSize.toString());
+
+    if (sortBy && sortBy !== 'upload_date') {
+      params.append('sort_by', sortBy);
+    }
 
     if (filters?.document_type) {
       params.append('document_type', filters.document_type);
@@ -238,18 +249,44 @@ export const documentService = {
   },
 
   // Export filtered documents as ZIP
-  exportZip: async (filters?: DocumentFilter): Promise<Blob> => {
+  exportZip: async (filters?: DocumentFilter, sortBy?: string): Promise<Blob> => {
     const params = new URLSearchParams();
     if (filters?.document_type) params.append('document_type', filters.document_type);
     if (filters?.start_date) params.append('start_date', filters.start_date);
     if (filters?.end_date) params.append('end_date', filters.end_date);
     if (filters?.search) params.append('search_text', filters.search);
+    if (sortBy) params.append('sort_by', sortBy);
     const qs = params.toString();
     const response = await api.get(`/documents/export-zip${qs ? '?' + qs : ''}`, {
       responseType: 'blob',
       timeout: 120000,
     });
     return response.data;
+  },
+
+  getExportYears: async (filters?: DocumentFilter): Promise<DocumentExportYearOption[]> => {
+    const params = new URLSearchParams();
+    if (filters?.document_type) params.append('document_type', filters.document_type);
+    if (filters?.search) params.append('search_text', filters.search);
+    const qs = params.toString();
+    const response = await api.get(`/documents/export-years${qs ? '?' + qs : ''}`);
+    return response.data?.years || [];
+  },
+
+  getExportZipUrl: (
+    filters?: DocumentFilter,
+    options?: { documentYear?: number | null }
+  ): string => {
+    const params = new URLSearchParams();
+    if (filters?.document_type) params.append('document_type', filters.document_type);
+    if (filters?.search) params.append('search_text', filters.search);
+    params.append('sort_by', 'document_date');
+    if (options?.documentYear != null) {
+      params.append('document_year', String(options.documentYear));
+    }
+    const qs = params.toString();
+    const baseURL = api.defaults.baseURL || '/api/v1';
+    return `${baseURL}/documents/export-zip${qs ? '?' + qs : ''}`;
   },
 
   // Delete document

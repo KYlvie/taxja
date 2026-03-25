@@ -945,6 +945,11 @@
   },
   "documents": {
     "title": "Dokumenti",
+    "sortMode": {
+      "label": "Sortiraj po",
+      "uploadDate": "Datum učitavanja",
+      "documentDate": "Datum dokumenta"
+    },
     "description": "Otpremite i upravljajte vasim poreskim dokumentima s automatskim prepoznavanjem",
     "uploadDocument": "Otpremi dokument",
     "documentType": "Tip dokumenta",

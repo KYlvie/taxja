@@ -29,7 +29,14 @@ const PricingPage: React.FC = () => {
   const navigate = useNavigate();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(false);
-  const { createCheckoutSession, subscription, openCustomerPortal, currentPlan } = useSubscriptionStore();
+  const {
+    createCheckoutSession,
+    subscription,
+    openCustomerPortal,
+    currentPlan,
+    upgradeSubscription,
+    downgradeSubscription,
+  } = useSubscriptionStore();
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentLanguage = i18n.resolvedLanguage || i18n.language;
@@ -154,7 +161,11 @@ const PricingPage: React.FC = () => {
 
       if (hasActiveStripeSubscription) {
         // Existing subscriber switching plan → Stripe Customer Portal
-        await openCustomerPortal(`${window.location.origin}/pricing`);
+        if (tierOrder[planType] > tierOrder[currentPlanType]) {
+          await upgradeSubscription(planId, billingCycle);
+        } else {
+          await downgradeSubscription(planId, billingCycle);
+        }
       } else {
         // New subscription — create Stripe Checkout session
         const successUrl = `${window.location.origin}/checkout/success`;

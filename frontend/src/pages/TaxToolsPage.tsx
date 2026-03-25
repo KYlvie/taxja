@@ -4,16 +4,15 @@ import Select from '../components/common/Select';
 import {
   BarChart3,
   Briefcase,
-  Calculator,
   ChevronDown,
   ChevronUp,
-  ClipboardCheck,
   ClipboardList,
   Landmark,
   NotebookTabs,
   ReceiptText,
   Scale,
   Sliders,
+  Sparkles,
   TriangleAlert,
   Wallet,
   type LucideIcon,
@@ -31,18 +30,10 @@ import AuditChecklist from '../components/reports/AuditChecklist';
 import YearWarning from '../components/reports/YearWarning';
 import FuturisticIcon from '../components/common/FuturisticIcon';
 import SubpageBackLink from '../components/common/SubpageBackLink';
+import { useFeatureAccess, FeatureLockedBanner } from '../components/subscription/withFeatureGate';
 import './TaxToolsPage.css';
 
-type TaxTool = 'refund' | 'whatIf' | 'flatRate' | 'filing' | 'employer' | 'audit';
-
-interface ToolDef {
-  id: TaxTool;
-  icon: LucideIcon;
-  label: string;
-  desc: string;
-}
-
-const TaxToolsSectionHeading = ({
+const SectionHeading = ({
   icon,
   tone,
   title,
@@ -50,7 +41,7 @@ const TaxToolsSectionHeading = ({
   onToggle,
 }: {
   icon: LucideIcon;
-  tone: 'emerald' | 'amber' | 'violet' | 'rose';
+  tone: 'emerald' | 'amber' | 'violet' | 'rose' | 'cyan';
   title: string;
   collapsed?: boolean;
   onToggle?: () => void;
@@ -77,7 +68,10 @@ const TaxToolsPage = () => {
       ['self_employed', 'mixed'].includes(user.user_type),
   );
 
-  const [selectedTool, setSelectedTool] = useState<TaxTool>('refund');
+  // Feature access checks
+  const hasAIAccess = useFeatureAccess('ai_assistant');
+  const hasAdvancedReports = useFeatureAccess('advanced_reports');
+
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [filingYears, setFilingYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -85,11 +79,12 @@ const TaxToolsPage = () => {
   const [filingLoading, setFilingLoading] = useState(false);
   const [auditYear, setAuditYear] = useState(currentYear);
 
-  const [collapsedTools, setCollapsedTools] = useState<Set<string>>(
-    new Set(['taxPosition', 'aiAdvisor', 'filing', 'audit'])
+  // All sections start collapsed except refund
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(['whatIf', 'flatRate', 'filing', 'employer', 'audit', 'aiAdvisor']),
   );
-  const toggleTool = (key: string) => {
-    setCollapsedTools((prev) => {
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -122,10 +117,7 @@ const TaxToolsPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedYear) {
-      return;
-    }
-
+    if (!selectedYear) return;
     setFilingLoading(true);
     taxFilingService
       .getSummary(selectedYear)
@@ -133,372 +125,6 @@ const TaxToolsPage = () => {
       .catch(() => setFilingSummary(null))
       .finally(() => setFilingLoading(false));
   }, [selectedYear]);
-
-  /* ── Tool definitions ─────────────────────────────────── */
-  const tools: ToolDef[] = [
-    {
-      id: 'refund',
-      icon: Calculator,
-      label: t('taxTools.refund.title', 'Tax Estimate'),
-      desc: t('taxTools.refund.desc', 'View estimated refund'),
-    },
-    {
-      id: 'whatIf',
-      icon: Sliders,
-      label: t('taxTools.whatIf.title', 'What-If Simulator'),
-      desc: t('taxTools.whatIf.desc', 'Test tax scenarios'),
-    },
-    {
-      id: 'flatRate',
-      icon: Scale,
-      label: t('taxTools.flatRate.title', 'Flat Rate Comparison'),
-      desc: t('taxTools.flatRate.desc', 'Compare tax methods'),
-    },
-    {
-      id: 'filing',
-      icon: BarChart3,
-      label: t('taxTools.filing.title', 'Filing Summary'),
-      desc: t('taxTools.filing.desc', 'Annual tax data'),
-    },
-    ...(showEmployerWorkbench
-      ? [
-          {
-            id: 'employer' as TaxTool,
-            icon: Briefcase,
-            label: t('taxTools.employer.title', 'Employer Workbench'),
-            desc: t('taxTools.employer.desc', 'Payroll documents'),
-          },
-        ]
-      : []),
-    {
-      id: 'audit',
-      icon: ClipboardCheck,
-      label: t('taxTools.audit.title', 'Audit Checklist'),
-      desc: t('taxTools.audit.desc', 'Filing readiness check'),
-    },
-  ];
-
-  /* ── Section renderers ────────────────────────────────── */
-
-  const renderRefund = () => (
-    <>
-      {showRefundEstimate && hasTransactions && (
-        <section className="asset-report-section">
-          <TaxToolsSectionHeading
-            icon={Landmark}
-            tone="emerald"
-            title={t('taxTools.page.taxPosition', 'Tax position')} collapsed={collapsedTools.has('taxPosition')} onToggle={() => toggleTool('taxPosition')}
-          />
-          {!collapsedTools.has('audit') && (<>
-      {!collapsedTools.has('taxPosition') && (
-            <RefundEstimate
-              estimatedRefund={dashboardData?.estimatedRefund}
-              withheldTax={dashboardData?.withheldTax}
-              calculatedTax={dashboardData?.calculatedTax}
-              hasLohnzettel={dashboardData?.hasLohnzettel}
-            />
-          )}
-            </>)}
-    </section>
-      )}
-      {hasTransactions && <AITaxAdvisor />}
-      {!showRefundEstimate && !hasTransactions && (
-        <p className="text-muted">{t('taxTools.page.noData', 'No data available yet. Upload documents to see your tax estimate.')}</p>
-      )}
-    </>
-  );
-
-  const renderWhatIf = () => <WhatIfSimulator />;
-
-  const renderFlatRate = () =>
-    showFlatRate ? <FlatRateComparison /> : (
-      <p className="text-muted">{t('taxTools.page.flatRateNotApplicable', 'Flat rate comparison is only available for self-employed users.')}</p>
-    );
-
-  const renderFiling = () => (
-    <section className="asset-report-section">
-      <TaxToolsSectionHeading
-        icon={BarChart3}
-        tone="violet"
-        title={t('taxTools.page.filingSummary', 'Annual Tax Data Summary')} collapsed={collapsedTools.has('filing')} onToggle={() => toggleTool('filing')}
-      />
-      {!collapsedTools.has('filing') && (<>
-      {filingYears.length === 0 ? (
-        <p className="text-muted">{t('taxTools.page.noYears', 'No confirmed tax data yet')}</p>
-      ) : (
-        <>
-          <label className="tax-tools-select-label" htmlFor="tax-tools-year-select">
-            {t('taxTools.page.selectYear', 'Select tax year')}
-          </label>
-          <Select
-            id="tax-tools-year-select"
-            value={selectedYear != null ? String(selectedYear) : ''}
-            onChange={(value) => setSelectedYear(Number(value))}
-            options={filingYears.map((year) => ({ value: String(year), label: String(year) }))}
-            size="sm"
-          />
-
-          {filingLoading && <p>...</p>}
-          {!filingLoading && !filingSummary && selectedYear && (
-            <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
-          )}
-          {!filingLoading && filingSummary && (filingSummary.record_count ?? 0) === 0 && (!filingSummary.transactions || filingSummary.transactions.transaction_count === 0) && (
-            <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
-          )}
-          {!filingLoading && filingSummary && ((filingSummary.record_count ?? 0) > 0 || (filingSummary.transactions && filingSummary.transactions.transaction_count > 0)) && (
-            <div className="filing-summary">
-              {(filingSummary.record_count ?? 0) > 0 && (
-                <>
-              <div className="filing-totals-grid">
-                <div className="filing-total-card">
-                  <span className="filing-label">{t('taxTools.page.taxableIncome', 'Taxable Income')}</span>
-                  <span className="filing-value">
-                    €{' '}
-                    {filingSummary.totals.taxable_income.toLocaleString(
-                      getLocaleForLanguage(i18n.language),
-                      { minimumFractionDigits: 2 },
-                    )}
-                  </span>
-                </div>
-                <div className="filing-total-card">
-                  <span className="filing-label">{t('taxTools.page.estimatedTax', 'Estimated Tax')}</span>
-                  <span className="filing-value">
-                    €{' '}
-                    {filingSummary.totals.estimated_tax.toLocaleString(
-                      getLocaleForLanguage(i18n.language),
-                      { minimumFractionDigits: 2 },
-                    )}
-                  </span>
-                </div>
-                <div className="filing-total-card">
-                  <span className="filing-label">{t('taxTools.page.withheldTax', 'Withheld Tax')}</span>
-                  <span className="filing-value">
-                    €{' '}
-                    {filingSummary.totals.withheld_tax.toLocaleString(
-                      getLocaleForLanguage(i18n.language),
-                      { minimumFractionDigits: 2 },
-                    )}
-                  </span>
-                </div>
-                <div
-                  className={`filing-total-card ${
-                    filingSummary.totals.estimated_refund >= 0 ? 'positive' : 'negative'
-                  }`}
-                >
-                  <span className="filing-label">{t('taxTools.page.estimatedRefund', 'Estimated Refund')}</span>
-                  <span className="filing-value">
-                    €{' '}
-                    {filingSummary.totals.estimated_refund.toLocaleString(
-                      getLocaleForLanguage(i18n.language),
-                      { minimumFractionDigits: 2 },
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              {filingSummary.conflicts && filingSummary.conflicts.length > 0 && (
-                <div className="tax-tools-conflict-bar">
-                  <div className="tax-tools-conflict-title">
-                    <FuturisticIcon icon={TriangleAlert} tone="amber" size="xs" />{' '}
-                    {t('taxTools.page.conflictsWarning', 'Data conflicts detected')}
-                  </div>
-                  {filingSummary.conflicts.map((conflict: any, idx: number) => (
-                    <div
-                      key={`${conflict.description || conflict.message || idx}-${idx}`}
-                      className="tax-tools-conflict-item"
-                    >
-                      {conflict.description || conflict.message || JSON.stringify(conflict)}
-                      {conflict.source_document_ids && (
-                        <span className="tax-tools-conflict-source">
-                          ({t('taxTools.page.conflictSource', 'Document')}: {conflict.source_document_ids.join(', ')})
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {filingSummary.income.length > 0 && (
-                <div className="filing-section">
-                  <h4 className="tax-tools-subheading">
-                    <FuturisticIcon icon={Wallet} tone="emerald" size="xs" />
-                    <span>
-                      {t('taxTools.page.income', 'Income')} (
-                      €{' '}
-                      {filingSummary.totals.total_income.toLocaleString(
-                        getLocaleForLanguage(i18n.language),
-                        { minimumFractionDigits: 2 },
-                      )}
-                      )
-                    </span>
-                  </h4>
-                  {filingSummary.income.map((item) => (
-                    <div key={item.id} className="filing-item">
-                      <span className="filing-item-type">{item.data_type}</span>
-                      <span className="filing-item-doc">
-                        {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {filingSummary.deductions.length > 0 && (
-                <div className="filing-section">
-                  <h4 className="tax-tools-subheading">
-                    <FuturisticIcon icon={ClipboardList} tone="amber" size="xs" />
-                    <span>
-                      {t('taxTools.page.deductions', 'Deductions')} (
-                      €{' '}
-                      {filingSummary.totals.total_deductions.toLocaleString(
-                        getLocaleForLanguage(i18n.language),
-                        { minimumFractionDigits: 2 },
-                      )}
-                      )
-                    </span>
-                  </h4>
-                  {filingSummary.deductions.map((item) => (
-                    <div key={item.id} className="filing-item">
-                      <span className="filing-item-type">{item.data_type}</span>
-                      <span className="filing-item-doc">
-                        {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {filingSummary.vat.length > 0 && (
-                <div className="filing-section">
-                  <h4 className="tax-tools-subheading">
-                    <FuturisticIcon icon={ReceiptText} tone="violet" size="xs" />
-                    <span>
-                      {t('taxTools.page.vatSummary', 'VAT')} ({t('taxTools.page.vatPayable', 'VAT Payable')}: €{' '}
-                      {filingSummary.totals.total_vat_payable.toLocaleString(
-                        getLocaleForLanguage(i18n.language),
-                        { minimumFractionDigits: 2 },
-                      )}
-                      )
-                    </span>
-                  </h4>
-                  {filingSummary.vat.map((item) => (
-                    <div key={item.id} className="filing-item">
-                      <span className="filing-item-type">{item.data_type}</span>
-                      <span className="filing-item-doc">
-                        {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              </>
-              )}
-
-              {(filingSummary.record_count ?? 0) > 0 && (
-                <p className="text-muted tax-tools-record-count">
-                  {filingSummary.record_count} {t('taxTools.page.records', 'confirmed records')}
-                </p>
-              )}
-
-              {filingSummary.transactions && filingSummary.transactions.transaction_count > 0 && (
-                <div className="filing-section filing-transactions-section">
-                  <h4 className="tax-tools-subheading">
-                    <FuturisticIcon icon={ClipboardList} tone="cyan" size="xs" />
-                    <span>
-                      {t('taxTools.page.transactionsSummary', 'Transactions')} ({filingSummary.transactions.transaction_count})
-                    </span>
-                  </h4>
-                  <div className="filing-totals-grid" style={{ marginBottom: '0.75rem' }}>
-                    <div className="filing-total-card">
-                      <span className="filing-label">{t('taxTools.page.txnIncome', 'Income')}</span>
-                      <span className="filing-value">
-                        € {filingSummary.transactions.income_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="filing-total-card">
-                      <span className="filing-label">{t('taxTools.page.txnExpense', 'Expenses')}</span>
-                      <span className="filing-value">
-                        € {filingSummary.transactions.expense_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <div className="filing-total-card">
-                      <span className="filing-label">{t('taxTools.page.txnDeductible', 'Deductible')}</span>
-                      <span className="filing-value">
-                        € {filingSummary.transactions.deductible_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="filing-txn-categories">
-                    {filingSummary.transactions.by_category.map((cat) => (
-                      <div key={`${cat.type}-${cat.category}`} className="filing-item">
-                        <span className="filing-item-type">
-                          {t(`transactions.types.${cat.type}`, cat.type)}
-                        </span>
-                        <span className="filing-item-category">
-                          {t(`transactions.categories.${cat.category}`, cat.category)}
-                        </span>
-                        <span className="filing-item-count">{cat.count}×</span>
-                        <span className="filing-item-amount">
-                          € {cat.total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-        </>)}
-    </section>
-  );
-
-  const renderEmployer = () => <EmployerDocumentsWorkbench />;
-
-  const renderAudit = () => (
-    <section className="asset-report-section audit-checklist-section">
-      <TaxToolsSectionHeading
-        icon={NotebookTabs}
-        tone="rose"
-        title={t('taxTools.page.auditChecklist', 'Audit Checklist')} collapsed={collapsedTools.has('audit')} onToggle={() => toggleTool('audit')}
-      />
-      <div className="year-selector">
-        <label htmlFor="audit-year">{t('taxTools.page.auditSelectYear', 'Select tax year')}</label>
-        <Select
-          id="audit-year"
-          value={String(auditYear)}
-          onChange={(v) => setAuditYear(Number(v))}
-          options={Array.from({ length: 5 }, (_, i) => ({
-            value: String(currentYear - i),
-            label: String(currentYear - i),
-          }))}
-          size="sm"
-        />
-      </div>
-      <YearWarning taxYear={auditYear} />
-      <AuditChecklist taxYear={auditYear} />
-    </section>
-  );
-
-  const renderContent = () => {
-    switch (selectedTool) {
-      case 'refund':
-        return renderRefund();
-      case 'whatIf':
-        return renderWhatIf();
-      case 'flatRate':
-        return renderFlatRate();
-      case 'filing':
-        return renderFiling();
-      case 'employer':
-        return renderEmployer();
-      case 'audit':
-        return renderAudit();
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="tax-tools-page">
@@ -508,25 +134,366 @@ const TaxToolsPage = () => {
         <p>{t('taxTools.page.subtitle', 'Tax position, AI guidance, payroll files and filings in one place')}</p>
       </div>
 
-      <div className="tax-tools-layout">
-        <nav className="tax-tools-sidebar">
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              className={`tax-tools-nav-item ${selectedTool === tool.id ? 'active' : ''}`}
-              onClick={() => setSelectedTool(tool.id)}
-            >
-              <tool.icon size={20} />
-              <div>
-                <div className="nav-item-label">{tool.label}</div>
-                <div className="nav-item-desc">{tool.desc}</div>
+      <div className="tax-tools-content">
+        {/* ── Section 1: Tax Position / Refund Estimate ── */}
+        {showRefundEstimate && hasTransactions && (
+          <section className={`asset-report-section ${collapsedSections.has('refund') ? 'collapsed' : ''}`}>
+            <SectionHeading
+              icon={Landmark}
+              tone="emerald"
+              title={t('taxTools.page.taxPosition', 'Tax position')}
+              collapsed={collapsedSections.has('refund')}
+              onToggle={() => toggleSection('refund')}
+            />
+            {!collapsedSections.has('refund') && (
+              <RefundEstimate
+                estimatedRefund={dashboardData?.estimatedRefund}
+                withheldTax={dashboardData?.withheldTax}
+                calculatedTax={dashboardData?.calculatedTax}
+                hasLohnzettel={dashboardData?.hasLohnzettel}
+              />
+            )}
+          </section>
+        )}
+
+        {/* ── Section 2: AI Tax Advisor ── */}
+        <section className={`asset-report-section ${collapsedSections.has('aiAdvisor') ? 'collapsed' : ''}`}>
+          <SectionHeading
+            icon={Sparkles}
+            tone="violet"
+            title={t('taxTools.page.aiAdvisor', 'AI Tax Optimization')}
+            collapsed={collapsedSections.has('aiAdvisor')}
+            onToggle={() => toggleSection('aiAdvisor')}
+          />
+          {!collapsedSections.has('aiAdvisor') && (
+            hasAIAccess ? (
+              <AITaxAdvisor />
+            ) : (
+              <FeatureLockedBanner feature="ai_assistant" requiredPlan="pro" />
+            )
+          )}
+        </section>
+
+        {/* ── Section 3: What-If Simulator ── */}
+        <section className={`asset-report-section ${collapsedSections.has('whatIf') ? 'collapsed' : ''}`}>
+          <SectionHeading
+            icon={Sliders}
+            tone="amber"
+            title={t('taxTools.whatIf.title', 'What-If Simulator')}
+            collapsed={collapsedSections.has('whatIf')}
+            onToggle={() => toggleSection('whatIf')}
+          />
+          {!collapsedSections.has('whatIf') && <WhatIfSimulator />}
+        </section>
+
+        {/* ── Section 4: Flat Rate Comparison ── */}
+        {showFlatRate && (
+          <section className={`asset-report-section ${collapsedSections.has('flatRate') ? 'collapsed' : ''}`}>
+            <SectionHeading
+              icon={Scale}
+              tone="cyan"
+              title={t('taxTools.flatRate.title', 'Flat Rate Comparison')}
+              collapsed={collapsedSections.has('flatRate')}
+              onToggle={() => toggleSection('flatRate')}
+            />
+            {!collapsedSections.has('flatRate') && <FlatRateComparison />}
+          </section>
+        )}
+
+        {/* ── Section 5: Filing Summary ── */}
+        <section className={`asset-report-section ${collapsedSections.has('filing') ? 'collapsed' : ''}`}>
+          <SectionHeading
+            icon={BarChart3}
+            tone="violet"
+            title={t('taxTools.page.filingSummary', 'Annual Tax Data Summary')}
+            collapsed={collapsedSections.has('filing')}
+            onToggle={() => toggleSection('filing')}
+          />
+          {!collapsedSections.has('filing') && (
+            hasAdvancedReports ? (
+            <>
+              {filingYears.length === 0 ? (
+                <p className="text-muted">{t('taxTools.page.noYears', 'No confirmed tax data yet')}</p>
+              ) : (
+                <>
+                  <label className="tax-tools-select-label" htmlFor="tax-tools-year-select">
+                    {t('taxTools.page.selectYear', 'Select tax year')}
+                  </label>
+                  <Select
+                    id="tax-tools-year-select"
+                    value={selectedYear != null ? String(selectedYear) : ''}
+                    onChange={(value) => setSelectedYear(Number(value))}
+                    options={filingYears.map((year) => ({ value: String(year), label: String(year) }))}
+                    size="sm"
+                  />
+
+                  {filingLoading && <p>...</p>}
+                  {!filingLoading && !filingSummary && selectedYear && (
+                    <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
+                  )}
+                  {!filingLoading && filingSummary && ((filingSummary.record_count ?? 0) > 0 || (filingSummary.transactions && filingSummary.transactions.transaction_count > 0)) && (
+                    <div className="filing-summary">
+                      {(filingSummary.record_count ?? 0) > 0 && (
+                        <>
+                          <div className="filing-totals-grid">
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.taxableIncome', 'Taxable Income')}</span>
+                              <span className="filing-value">
+                                €{' '}
+                                {filingSummary.totals.taxable_income.toLocaleString(
+                                  getLocaleForLanguage(i18n.language),
+                                  { minimumFractionDigits: 2 },
+                                )}
+                              </span>
+                            </div>
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.estimatedTax', 'Estimated Tax')}</span>
+                              <span className="filing-value">
+                                €{' '}
+                                {filingSummary.totals.estimated_tax.toLocaleString(
+                                  getLocaleForLanguage(i18n.language),
+                                  { minimumFractionDigits: 2 },
+                                )}
+                              </span>
+                            </div>
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.withheldTax', 'Withheld Tax')}</span>
+                              <span className="filing-value">
+                                €{' '}
+                                {filingSummary.totals.withheld_tax.toLocaleString(
+                                  getLocaleForLanguage(i18n.language),
+                                  { minimumFractionDigits: 2 },
+                                )}
+                              </span>
+                            </div>
+                            <div
+                              className={`filing-total-card ${
+                                filingSummary.totals.estimated_refund >= 0 ? 'positive' : 'negative'
+                              }`}
+                            >
+                              <span className="filing-label">{t('taxTools.page.estimatedRefund', 'Estimated Refund')}</span>
+                              <span className="filing-value">
+                                €{' '}
+                                {filingSummary.totals.estimated_refund.toLocaleString(
+                                  getLocaleForLanguage(i18n.language),
+                                  { minimumFractionDigits: 2 },
+                                )}
+                              </span>
+                            </div>
+                          </div>
+
+                          {filingSummary.conflicts && filingSummary.conflicts.length > 0 && (
+                            <div className="tax-tools-conflict-bar">
+                              <div className="tax-tools-conflict-title">
+                                <FuturisticIcon icon={TriangleAlert} tone="amber" size="xs" />{' '}
+                                {t('taxTools.page.conflictsWarning', 'Data conflicts detected')}
+                              </div>
+                              {filingSummary.conflicts.map((conflict: any, idx: number) => (
+                                <div
+                                  key={`${conflict.description || conflict.message || idx}-${idx}`}
+                                  className="tax-tools-conflict-item"
+                                >
+                                  {conflict.description || conflict.message || JSON.stringify(conflict)}
+                                  {conflict.source_document_ids && (
+                                    <span className="tax-tools-conflict-source">
+                                      ({t('taxTools.page.conflictSource', 'Document')}: {conflict.source_document_ids.join(', ')})
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {filingSummary.income.length > 0 && (
+                            <div className="filing-section">
+                              <h4 className="tax-tools-subheading">
+                                <FuturisticIcon icon={Wallet} tone="emerald" size="xs" />
+                                <span>
+                                  {t('taxTools.page.income', 'Income')} (
+                                  €{' '}
+                                  {filingSummary.totals.total_income.toLocaleString(
+                                    getLocaleForLanguage(i18n.language),
+                                    { minimumFractionDigits: 2 },
+                                  )}
+                                  )
+                                </span>
+                              </h4>
+                              {filingSummary.income.map((item) => (
+                                <div key={item.id} className="filing-item">
+                                  <span className="filing-item-type">{item.data_type}</span>
+                                  <span className="filing-item-doc">
+                                    {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {filingSummary.deductions.length > 0 && (
+                            <div className="filing-section">
+                              <h4 className="tax-tools-subheading">
+                                <FuturisticIcon icon={ClipboardList} tone="amber" size="xs" />
+                                <span>
+                                  {t('taxTools.page.deductions', 'Deductions')} (
+                                  €{' '}
+                                  {filingSummary.totals.total_deductions.toLocaleString(
+                                    getLocaleForLanguage(i18n.language),
+                                    { minimumFractionDigits: 2 },
+                                  )}
+                                  )
+                                </span>
+                              </h4>
+                              {filingSummary.deductions.map((item) => (
+                                <div key={item.id} className="filing-item">
+                                  <span className="filing-item-type">{item.data_type}</span>
+                                  <span className="filing-item-doc">
+                                    {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {filingSummary.vat.length > 0 && (
+                            <div className="filing-section">
+                              <h4 className="tax-tools-subheading">
+                                <FuturisticIcon icon={ReceiptText} tone="violet" size="xs" />
+                                <span>
+                                  {t('taxTools.page.vatSummary', 'VAT')} ({t('taxTools.page.vatPayable', 'VAT Payable')}: €{' '}
+                                  {filingSummary.totals.total_vat_payable.toLocaleString(
+                                    getLocaleForLanguage(i18n.language),
+                                    { minimumFractionDigits: 2 },
+                                  )}
+                                  )
+                                </span>
+                              </h4>
+                              {filingSummary.vat.map((item) => (
+                                <div key={item.id} className="filing-item">
+                                  <span className="filing-item-type">{item.data_type}</span>
+                                  <span className="filing-item-doc">
+                                    {t('taxTools.page.source', 'Source')}: #{item.source_document_id}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {(filingSummary.record_count ?? 0) > 0 && (
+                        <p className="text-muted tax-tools-record-count">
+                          {filingSummary.record_count} {t('taxTools.page.records', 'confirmed records')}
+                        </p>
+                      )}
+
+                      {filingSummary.transactions && filingSummary.transactions.transaction_count > 0 && (
+                        <div className="filing-section filing-transactions-section">
+                          <h4 className="tax-tools-subheading">
+                            <FuturisticIcon icon={ClipboardList} tone="cyan" size="xs" />
+                            <span>
+                              {t('taxTools.page.transactionsSummary', 'Transactions')} ({filingSummary.transactions.transaction_count})
+                            </span>
+                          </h4>
+                          <div className="filing-totals-grid" style={{ marginBottom: '0.75rem' }}>
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.txnIncome', 'Income')}</span>
+                              <span className="filing-value">
+                                € {filingSummary.transactions.income_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.txnExpense', 'Expenses')}</span>
+                              <span className="filing-value">
+                                € {filingSummary.transactions.expense_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="filing-total-card">
+                              <span className="filing-label">{t('taxTools.page.txnDeductible', 'Deductible')}</span>
+                              <span className="filing-value">
+                                € {filingSummary.transactions.deductible_total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="filing-txn-categories">
+                            {filingSummary.transactions.by_category.map((cat) => (
+                              <div key={`${cat.type}-${cat.category}`} className="filing-item">
+                                <span className="filing-item-type">
+                                  {t(`transactions.types.${cat.type}`, cat.type)}
+                                </span>
+                                <span className="filing-item-category">
+                                  {t(`transactions.categories.${cat.category}`, cat.category)}
+                                </span>
+                                <span className="filing-item-count">{cat.count}×</span>
+                                <span className="filing-item-amount">
+                                  € {cat.total.toLocaleString(getLocaleForLanguage(i18n.language), { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!filingLoading && filingSummary && (filingSummary.record_count ?? 0) === 0 && (!filingSummary.transactions || filingSummary.transactions.transaction_count === 0) && (
+                    <p className="text-muted">{t('taxTools.page.noData', 'No confirmed data for this year')}</p>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <FeatureLockedBanner feature="advanced_reports" requiredPlan="plus" />
+          )
+          )}
+        </section>
+
+        {/* ── Section 6: Employer Documents Workbench ── */}
+        {showEmployerWorkbench && (
+          <section className={`asset-report-section ${collapsedSections.has('employer') ? 'collapsed' : ''}`}>
+            <SectionHeading
+              icon={Briefcase}
+              tone="cyan"
+              title={t('taxTools.employer.title', 'Employer Workbench')}
+              collapsed={collapsedSections.has('employer')}
+              onToggle={() => toggleSection('employer')}
+            />
+            {!collapsedSections.has('employer') && <EmployerDocumentsWorkbench />}
+          </section>
+        )}
+
+        {/* ── Section 7: Audit Checklist ── */}
+        <section className={`asset-report-section ${collapsedSections.has('audit') ? 'collapsed' : ''}`}>
+          <SectionHeading
+            icon={NotebookTabs}
+            tone="rose"
+            title={t('taxTools.page.auditChecklist', 'Audit Checklist')}
+            collapsed={collapsedSections.has('audit')}
+            onToggle={() => toggleSection('audit')}
+          />
+          {!collapsedSections.has('audit') && (
+            <>
+              <div className="year-selector">
+                <label htmlFor="audit-year">{t('taxTools.page.auditSelectYear', 'Select tax year')}</label>
+                <Select
+                  id="audit-year"
+                  value={String(auditYear)}
+                  onChange={(v) => setAuditYear(Number(v))}
+                  options={Array.from({ length: 5 }, (_, i) => ({
+                    value: String(currentYear - i),
+                    label: String(currentYear - i),
+                  }))}
+                  size="sm"
+                />
               </div>
-            </button>
-          ))}
-        </nav>
-        <main className="tax-tools-content">
-          {renderContent()}
-        </main>
+              <YearWarning taxYear={auditYear} />
+              <AuditChecklist taxYear={auditYear} />
+            </>
+          )}
+        </section>
+
+        {/* ── No data fallback ── */}
+        {!showRefundEstimate && !hasTransactions && (
+          <p className="text-muted">{t('taxTools.page.noData', 'No data available yet. Upload documents to see your tax estimate.')}</p>
+        )}
       </div>
     </div>
   );

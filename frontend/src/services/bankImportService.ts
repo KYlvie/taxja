@@ -60,6 +60,11 @@ export const bankImportService = {
     return response.data;
   },
 
+  restoreLine: async (lineId: number): Promise<LineActionEnvelope> => {
+    const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/restore`);
+    return response.data;
+  },
+
   unmatchLine: async (lineId: number): Promise<LineActionEnvelope> => {
     const response = await api.post<LineActionEnvelope>(`/bank-import/lines/${lineId}/unmatch`);
     return response.data;

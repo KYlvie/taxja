@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useSubscriptionStore } from '../../stores/subscriptionStore';
 import { useAuthStore } from '../../stores/authStore';
 import UpgradePrompt from './UpgradePrompt';
+import './SubscriptionStatus.css';
 
 export type Feature =
   | 'ocr_scanning'
@@ -226,38 +227,20 @@ export const FeatureLockedBanner: React.FC<{
   feature: Feature;
   requiredPlan: PlanType;
   onUpgrade?: () => void;
-}> = ({ feature, requiredPlan, onUpgrade }) => {
+}> = ({ requiredPlan }) => {
   const { t } = useTranslation();
-  const [showPrompt, setShowPrompt] = useState(false);
-  
-  const handleUpgrade = () => {
-    if (onUpgrade) {
-      onUpgrade();
-    } else {
-      setShowPrompt(true);
-    }
-  };
   
   return (
-    <>
-      <div className="feature-locked-banner">
-        <div className="banner-content">
-          <span className="lock-icon">🔒</span>
-          <span className="banner-text">
-            {t('subscription.featureRequiresPlan', { plan: requiredPlan.toUpperCase(), defaultValue: 'This feature requires {{plan}} plan' })}
-          </span>
-        </div>
-        <button className="upgrade-button" onClick={handleUpgrade}>
-          {t('subscription.upgrade', 'Upgrade')}
-        </button>
+    <div className="feature-locked-banner">
+      <div className="banner-content">
+        <span className="lock-icon">🔒</span>
+        <span className="banner-text">
+          {t('subscription.featureRequiresPlan', { plan: requiredPlan.toUpperCase(), defaultValue: 'This feature requires {{plan}} plan' })}
+        </span>
       </div>
-      
-      <UpgradePrompt
-        isOpen={showPrompt}
-        onClose={() => setShowPrompt(false)}
-        feature={feature}
-        requiredPlan={requiredPlan}
-      />
-    </>
+      <a className="upgrade-button" href="/pricing" style={{ textDecoration: 'none' }}>
+        {t('subscription.upgrade', 'Upgrade')}
+      </a>
+    </div>
   );
 };

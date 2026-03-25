@@ -21,6 +21,13 @@ import './TransactionsPage.css';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'detail';
 
+const parseFilterYearParam = (value: string | null): number | null => {
+  if (!value) return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1900 || parsed > 3000) return null;
+  return parsed;
+};
+
 const chunkItems = <T,>(items: T[], size: number): T[][] => {
   if (size <= 0) return [items];
 
@@ -37,6 +44,7 @@ const TransactionsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const transactionIdParam = searchParams.get('transactionId');
   const needsReviewParam = searchParams.get('needs_review');
+  const yearParam = searchParams.get('year');
   const {
     transactions,
     filters,
@@ -86,11 +94,19 @@ const TransactionsPage = () => {
   const exportDropdownRef = useRef<HTMLDivElement | null>(null);
   const [exportMenuPos, setExportMenuPos] = useState<{ top: number; left: number; minWidth: number }>({ top: 0, left: 0, minWidth: 180 });
   const lastNeedsReviewParamRef = useRef<string | null>(needsReviewParam);
+  const filterYear = parseFilterYearParam(yearParam);
 
   const effectiveFilters =
-    needsReviewParam === 'true' && filters.needs_review !== true
-      ? { ...filters, needs_review: true }
-      : filters;
+    {
+      ...filters,
+      ...(needsReviewParam === 'true' ? { needs_review: true } : {}),
+      ...(filterYear !== null
+        ? {
+            start_date: `${filterYear}-01-01`,
+            end_date: `${filterYear}-12-31`,
+          }
+        : {}),
+    };
 
   const setQueryParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -134,6 +150,47 @@ const TransactionsPage = () => {
     lastNeedsReviewParamRef.current = needsReviewParam;
     setPagination({ page: 1 });
   }, [needsReviewParam, setPagination]);
+
+  useEffect(() => {
+    if (needsReviewParam !== 'true' && filterYear === null) {
+      return;
+    }
+
+    const nextFilters = {
+      needs_review: needsReviewParam === 'true' ? true : undefined,
+      start_date: filterYear !== null ? `${filterYear}-01-01` : undefined,
+      end_date: filterYear !== null ? `${filterYear}-12-31` : undefined,
+    };
+
+    if (
+      filters.needs_review === nextFilters.needs_review
+      && filters.start_date === nextFilters.start_date
+      && filters.end_date === nextFilters.end_date
+      && filters.type === undefined
+      && filters.category === undefined
+      && filters.search === undefined
+      && filters.is_deductible === undefined
+      && filters.is_recurring === undefined
+    ) {
+      return;
+    }
+
+    setFilters(nextFilters);
+    setPagination({ page: 1 });
+  }, [
+    needsReviewParam,
+    filterYear,
+    filters.needs_review,
+    filters.start_date,
+    filters.end_date,
+    filters.type,
+    filters.category,
+    filters.search,
+    filters.is_deductible,
+    filters.is_recurring,
+    setFilters,
+    setPagination,
+  ]);
 
   useEffect(() => {
     if (!transactionIdParam) {

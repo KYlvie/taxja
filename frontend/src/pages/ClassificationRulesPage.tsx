@@ -10,18 +10,12 @@ const ClassificationRulesPage = () => {
       <div style={{ marginBottom: '1rem' }}>
         <SubpageBackLink to="/transactions" />
         <h2 style={{ margin: 0 }}>
-          {t('classificationRules.pageTitle', 'Classification Memory')}
+          {t('classificationRules.pageTitle', 'Rules and Memory')}
         </h2>
-        <p
-          style={{
-            margin: '4px 0 0',
-            color: 'var(--color-text-secondary)',
-            fontSize: '0.9rem',
-          }}
-        >
+        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-secondary)' }}>
           {t(
             'classificationRules.pageSubtitle',
-            'This memory is created automatically when you correct a transaction category or deductibility decision, helping future similar transactions land in the right place.'
+            'These memories are created automatically when you confirm categories, deductibility decisions, or bank statement actions, helping similar transactions land in the right place next time.'
           )}
         </p>
       </div>

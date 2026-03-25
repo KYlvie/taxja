@@ -1,7 +1,7 @@
 """Document model for OCR storage"""
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, Numeric, JSON, DateTime, ForeignKey, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, String, Text, Numeric, JSON, DateTime, Date, ForeignKey, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -80,6 +80,10 @@ class Document(Base):
     # Timestamps
     uploaded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     processed_at = Column(DateTime, nullable=True)  # When OCR was completed
+    document_date = Column(Date, nullable=True, index=True)  # Resolved date from OCR result
+    document_year = Column(Integer, nullable=True, index=True)  # Year attribution for grouping/export
+    year_basis = Column(String(50), nullable=True)  # Why the document belongs to this year
+    year_confidence = Column(Numeric(3, 2), nullable=True)  # 0.00 to 1.00 confidence for year attribution
     
     # Relationships
     user = relationship("User", back_populates="documents")

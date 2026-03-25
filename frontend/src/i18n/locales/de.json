@@ -947,6 +947,11 @@
   },
   "documents": {
     "title": "Dokumente",
+    "sortMode": {
+      "label": "Sortieren nach",
+      "uploadDate": "Hochladedatum",
+      "documentDate": "Dokumentdatum"
+    },
     "description": "Laden Sie Ihre Steuerdokumente hoch und verwalten Sie sie mit automatischer Erkennung",
     "uploadDocument": "Dokument hochladen",
     "documentType": "Dokumenttyp",
@@ -4334,14 +4339,25 @@
     }
   },
   "assetOverview": {
-    "pageTitle": "Asset-Schulden-Uebersicht",
-    "pageSubtitle": "Vermoegen, Verbindlichkeiten, Nettovermoegen und Einzelberichte an einem Ort.",
-    "liabilitySummary": "Vermoegen-Schulden-Zusammenfassung",
-    "liabilitySummarySubtitle": "Ueberblick ueber Ihr gesamtes Vermoegen, Ihre Verbindlichkeiten und Ihr Nettovermoegen.",
+    "pageTitle": "Vermoegensuebersicht",
+    "pageSubtitle": "Vermoegen, Abschreibungen, Nettovermoegen und Einzelberichte an einem Ort.",
+    "summaryTitle": "Vermoegensuebersicht",
     "totalAssets": "Gesamtvermoegen",
+    "totalAssetsNote": "Buchwert aller registrierten Vermoegenswerte",
     "totalLiabilities": "Gesamtverbindlichkeiten",
+    "totalLiabilitiesNote": "Offene Salden aller aktiven Verbindlichkeiten",
     "netWorth": "Nettovermoegen",
+    "netWorthNote": "Vermoegen abzueglich Verbindlichkeiten",
+    "propertyCount": "Immobilien",
+    "propertyCountNote": "Aktive Immobilien",
+    "otherAssetCount": "Sonstige Vermoegenswerte",
+    "otherAssetCountNote": "Geraete, Fahrzeuge und Ausstattung",
     "monthlyDebtService": "Monatlicher Schuldendienst",
+    "monthlyDebtServiceNote": "Aktuell erfasste planmaessige Rueckzahlungen",
+    "balanceSnapshot": "Bilanzuebersicht",
+    "balanceSnapshotHint": "Aktuelle Buchwerte der Vermoegenswerte kombiniert mit allen erfassten Verbindlichkeiten.",
+    "annualDepreciation": "Jaehrliche Abschreibung",
+    "annualDepreciationHint": "Gesamtabschreibung aller Immobilien und sonstigen Vermoegenswerte im laufenden Jahr.",
     "noSummary": "Noch keine Zusammenfassung verfuegbar. Fuegen Sie Vermoegen oder Verbindlichkeiten hinzu."
   },
   "taxTools": {

@@ -175,6 +175,94 @@ def test_finalize_keeps_bank_statement_import_out_of_transaction_tax_analysis():
     assert "tax_analysis" not in document.ocr_result
 
 
+def test_finalize_materializes_document_year_fields_for_bank_statement():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    document = _make_document(
+        file_name="kontoauszug.pdf",
+        doc_type=DBDocumentType.BANK_STATEMENT,
+        ocr_result={},
+    )
+
+    result = PipelineResult(
+        document_id=1,
+        stage_reached=PipelineStage.SUGGEST,
+        classification=ClassificationResult(
+            document_type="bank_statement",
+            confidence=0.93,
+            method="regex",
+        ),
+        extracted_data={
+            "statement_period": {
+                "start": "2024-06-26",
+                "end": "2024-12-19",
+            },
+            "transactions": [
+                {"date": "2024-06-26", "amount": "-33.00"},
+                {"date": "2024-12-19", "amount": "-62.23"},
+            ],
+        },
+        raw_text="Kontoauszug",
+        current_state="completed",
+        needs_review=False,
+    )
+
+    orchestrator._finalize(
+        result=result,
+        document=document,
+        start_time=datetime.utcnow(),
+    )
+
+    assert document.document_date == date(2024, 6, 26)
+    assert document.document_year == 2024
+    assert document.year_basis == "statement_period_start"
+    assert float(document.year_confidence) == 1.0
+    assert document.ocr_result["document_year"] == 2024
+    assert document.ocr_result["year_basis"] == "statement_period_start"
+
+
+def test_finalize_materializes_document_year_fields_for_tax_year_documents():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    document = _make_document(
+        file_name="bescheid.pdf",
+        doc_type=DBDocumentType.EINKOMMENSTEUERBESCHEID,
+        ocr_result={},
+    )
+
+    result = PipelineResult(
+        document_id=1,
+        stage_reached=PipelineStage.SUGGEST,
+        classification=ClassificationResult(
+            document_type="einkommensteuerbescheid",
+            confidence=0.98,
+            method="regex",
+        ),
+        extracted_data={
+            "tax_year": 2024,
+            "assessment_amount": 123.45,
+        },
+        raw_text="Einkommensteuerbescheid 2024",
+        current_state="completed",
+        needs_review=False,
+    )
+
+    orchestrator._finalize(
+        result=result,
+        document=document,
+        start_time=datetime.utcnow(),
+    )
+
+    assert document.document_date is None
+    assert document.document_year == 2024
+    assert document.year_basis == "tax_year"
+    assert float(document.year_confidence) == 1.0
+    assert document.ocr_result["document_year"] == 2024
+    assert document.ocr_result["year_basis"] == "tax_year"
+
+
 # ---------------------------------------------------------------------------
 # Classification tests (unchanged — still valid)
 # ---------------------------------------------------------------------------

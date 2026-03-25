@@ -96,6 +96,162 @@ class TestStripePaymentService:
         
         assert result == "cus_new_123"
         mock_stripe_create.assert_called_once()
+
+    @patch('app.services.stripe_payment_service.stripe.billing_portal.Session.create')
+    @patch('app.services.stripe_payment_service.stripe.Subscription.retrieve')
+    def test_create_customer_portal_session_for_target_plan_switch(
+        self,
+        mock_retrieve_subscription,
+        mock_portal_create,
+    ):
+        """Test create_customer_portal_session can deep-link to a paid plan switch."""
+        mock_user = User(id=1, email="test@example.com")
+        mock_subscription = Subscription(
+            id=1,
+            user_id=1,
+            plan_id=3,
+            stripe_customer_id="cus_test_123",
+            stripe_subscription_id="sub_test_123",
+        )
+        mock_plan = Plan(
+            id=4,
+            plan_type=PlanType.PRO,
+            name="Pro",
+            monthly_price=Decimal("12.90"),
+            yearly_price=Decimal("129.00"),
+        )
+        mock_portal_session = MagicMock()
+        mock_portal_session.url = "https://billing.stripe.com/session/test"
+        mock_portal_create.return_value = mock_portal_session
+        mock_retrieve_subscription.return_value.to_dict_recursive.return_value = {
+            "items": {
+                "data": [
+                    {
+                        "id": "si_test_123",
+                    }
+                ]
+            }
+        }
+
+        self.mock_db.query().filter().first.side_effect = [
+            mock_user,
+            mock_subscription,
+            mock_plan,
+        ]
+
+        with patch.dict(
+            'app.services.stripe_payment_service.PRICE_MAP',
+            {("pro", "yearly"): "price_pro_yearly_test"},
+            clear=False,
+        ):
+            result = self.service.create_customer_portal_session(
+                user_id=1,
+                return_url="https://example.com/pricing",
+                target_plan_id=4,
+                billing_cycle=BillingCycle.YEARLY,
+            )
+
+        assert result["url"] == "https://billing.stripe.com/session/test"
+        mock_retrieve_subscription.assert_called_once_with("sub_test_123")
+        mock_portal_create.assert_called_once_with(
+            customer="cus_test_123",
+            return_url="https://example.com/pricing",
+            flow_data={
+                "type": "subscription_update_confirm",
+                "subscription_update_confirm": {
+                    "subscription": "sub_test_123",
+                    "items": [
+                        {
+                            "id": "si_test_123",
+                            "price": "price_pro_yearly_test",
+                            "quantity": 1,
+                        }
+                    ],
+                },
+            },
+        )
+
+    @patch('app.services.stripe_payment_service.stripe.Subscription.modify')
+    @patch('app.services.stripe_payment_service.stripe.Subscription.retrieve')
+    def test_switch_subscription_plan_updates_existing_subscription_item(
+        self,
+        mock_retrieve_subscription,
+        mock_modify_subscription,
+    ):
+        """Test switch_subscription_plan updates the existing Stripe subscription item."""
+        mock_subscription = Subscription(
+            id=1,
+            user_id=1,
+            plan_id=3,
+            stripe_subscription_id="sub_test_123",
+            stripe_customer_id="cus_test_123",
+            billing_cycle=BillingCycle.MONTHLY,
+        )
+        mock_plan = Plan(
+            id=4,
+            plan_type=PlanType.PRO,
+            name="Pro",
+            monthly_price=Decimal("12.90"),
+            yearly_price=Decimal("129.00"),
+        )
+        mock_retrieve_subscription.return_value.to_dict_recursive.return_value = {
+            "items": {
+                "data": [
+                    {
+                        "id": "si_test_123",
+                    }
+                ]
+            }
+        }
+        mock_modify_subscription.return_value = {
+            "id": "sub_test_123",
+            "status": "active",
+            "cancel_at_period_end": False,
+            "current_period_start": 1710000000,
+            "current_period_end": 1712592000,
+            "customer": "cus_test_123",
+            "items": {
+                "data": [
+                    {
+                        "id": "si_test_123",
+                        "price": {"id": "price_pro_monthly_test"},
+                    }
+                ]
+            },
+        }
+
+        with patch.dict(
+            'app.services.stripe_payment_service.PRICE_MAP',
+            {("pro", "monthly"): "price_pro_monthly_test"},
+            clear=False,
+        ):
+            with patch.object(self.service, '_get_subscription', return_value=mock_subscription):
+                self.mock_db.query().filter().first.return_value = mock_plan
+                with patch.object(
+                    self.service,
+                    '_sync_local_subscription_from_stripe',
+                    return_value=mock_subscription,
+                ) as mock_sync:
+                    result = self.service.switch_subscription_plan(
+                        user_id=1,
+                        plan_id=4,
+                        billing_cycle=BillingCycle.MONTHLY,
+                    )
+
+        assert result == mock_subscription
+        mock_retrieve_subscription.assert_called_once_with("sub_test_123")
+        mock_modify_subscription.assert_called_once_with(
+            "sub_test_123",
+            items=[
+                {
+                    "id": "si_test_123",
+                    "price": "price_pro_monthly_test",
+                    "quantity": 1,
+                }
+            ],
+            proration_behavior="create_prorations",
+        )
+        mock_sync.assert_called_once()
     
     def test_get_or_create_customer_existing(self):
         """Test _get_or_create_customer returns existing customer ID"""

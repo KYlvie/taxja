@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import Select from '../common/Select';
-import reportService, { TaxFormData, TaxFormField, EligibleForm } from '../../services/reportService';
+import reportService, {
+  TaxFormData,
+  TaxFormField,
+  EligibleForm,
+  TaxPackageExportPreview,
+  TaxPackageExportStatus,
+} from '../../services/reportService';
 import YearWarning from './YearWarning';
 import { getApiErrorMessage, getFeatureGatePlan } from '../../utils/apiError';
 import { getLocaleForLanguage } from '../../utils/locale';
 import exportElementToPdf from '../../utils/exportElementToPdf';
+import { useFeatureAccess, useUpgradePrompt } from '../subscription/withFeatureGate';
 import './TaxFormPreview.css';
 
 /** Section definitions matching official BMF form layout */
@@ -74,6 +82,74 @@ const FORM_ICONS: Record<string, string> = {
   UVA: '\uD83D\uDCB0',   // money
 };
 
+type TaxPackageWarningKey =
+  | 'pending_tx_count'
+  | 'pending_docs'
+  | 'uncertain_year_docs'
+  | 'skipped_files';
+
+const TAX_PACKAGE_WARNING_HELP: Record<string, Record<TaxPackageWarningKey, string>> = {
+  en: {
+    pending_tx_count: 'Transactions from the selected tax year still require review before filing.',
+    pending_docs: 'Tax-package documents for this year still have open review or OCR confirmation work.',
+    uncertain_year_docs: 'These documents were assigned to this tax year only by upload date because no reliable document date or year was found.',
+    skipped_files: 'These files matched the package scope but could not be included because the stored file is missing or unreadable.',
+  },
+  de: {
+    pending_tx_count: 'Transaktionen des ausgewaehlten Steuerjahres muessen vor der Abgabe noch geprueft werden.',
+    pending_docs: 'Steuerrelevante Dokumente dieses Jahres haben noch offene Pruef- oder OCR-Bestaetigungen.',
+    uncertain_year_docs: 'Diese Dokumente wurden diesem Steuerjahr nur ueber das Upload-Datum zugeordnet, weil kein verlaessliches Dokumentdatum erkannt wurde.',
+    skipped_files: 'Diese Dateien gehoeren inhaltlich zum Paket, konnten aber nicht aufgenommen werden, weil die gespeicherte Datei fehlt oder nicht lesbar ist.',
+  },
+  zh: {
+    pending_tx_count: '指当前所选税务年度内，仍带待审核标记、建议先人工确认的交易。',
+    pending_docs: '指会进入本税务包的文档里，仍未完成审核或 OCR 确认的文件。',
+    uncertain_year_docs: '这些文档没有可靠的文档日期或归年，只是按上传日期临时归入本年度。',
+    skipped_files: '这些文件本来属于导出范围，但因存储文件缺失或无法读取而未被纳入。',
+  },
+  fr: {
+    pending_tx_count: 'Transactions de l annee fiscale selectionnee qui necessitent encore une verification avant le depot.',
+    pending_docs: 'Documents fiscaux de cette annee dont la verification ou la confirmation OCR reste ouverte.',
+    uncertain_year_docs: 'Ces documents ont ete rattaches a cette annee uniquement via leur date d envoi, faute de date documentaire fiable.',
+    skipped_files: 'Ces fichiers entraient dans le perimetre du pack, mais n ont pas pu etre inclus car le fichier stocke est manquant ou illisible.',
+  },
+  ru: {
+    pending_tx_count: 'Операции выбранного налогового года, которые всё ещё требуют проверки перед подачей.',
+    pending_docs: 'Документы этого года, входящие в пакет, по которым ещё не завершена проверка или OCR-подтверждение.',
+    uncertain_year_docs: 'Эти документы были отнесены к этому году только по дате загрузки, потому что надёжная дата документа не определена.',
+    skipped_files: 'Эти файлы подходили под пакет, но не были включены, потому что файл в хранилище отсутствует или не читается.',
+  },
+  hu: {
+    pending_tx_count: 'A kivalasztott adoev tranzakcioi, amelyek a bevallas elott meg ellenorzesre varnak.',
+    pending_docs: 'Az idei adocsomagba tartozo dokumentumok, amelyeknel meg nyitott az ellenorzes vagy az OCR-jovahagyas.',
+    uncertain_year_docs: 'Ezeket a dokumentumokat csak a feltoltes datuma alapjan soroltuk ehhez az adoevhez, mert nincs megbizhato dokumentumdatum.',
+    skipped_files: 'Ezek a fajlok a csomag reszei lennenek, de a tarolt fajl hianyzik vagy nem olvashato, ezert kimaradtak.',
+  },
+  pl: {
+    pending_tx_count: 'Transakcje z wybranego roku podatkowego, ktore nadal wymagaja weryfikacji przed zlozeniem.',
+    pending_docs: 'Dokumenty podatkowe z tego roku, dla ktorych wciaz nie zakonczono przegladu lub potwierdzenia OCR.',
+    uncertain_year_docs: 'Te dokumenty przypisano do tego roku tylko na podstawie daty przeslania, poniewaz brak wiarygodnej daty dokumentu.',
+    skipped_files: 'Te pliki miescily sie w zakresie pakietu, ale nie zostaly dolaczone, bo brak pliku w magazynie lub nie da sie go odczytac.',
+  },
+  tr: {
+    pending_tx_count: 'Secilen vergi yilindaki ve beyan oncesinde halen incelenmesi gereken islemler.',
+    pending_docs: 'Bu yila ait vergi paketi belgeleri icinde incelemesi veya OCR onayi halen acik olan dosyalar.',
+    uncertain_year_docs: 'Bu belgeler guvenilir bir belge tarihi bulunamadigi icin sadece yukleme tarihine gore bu yila atanmistir.',
+    skipped_files: 'Bu dosyalar paket kapsamindaydi ancak depolanan dosya eksik veya okunamaz oldugu icin dahil edilemedi.',
+  },
+  bs: {
+    pending_tx_count: 'Transakcije iz odabrane poreske godine koje jos trebaju pregled prije prijave.',
+    pending_docs: 'Dokumenti za ovu godinu koji ulaze u poreski paket, ali im pregled ili OCR potvrda jos nisu zavrseni.',
+    uncertain_year_docs: 'Ovi dokumenti su svrstani u ovu godinu samo po datumu otpremanja jer nije pronaden pouzdan datum dokumenta.',
+    skipped_files: 'Ove datoteke pripadaju paketu, ali nisu ukljucene jer pohranjena datoteka nedostaje ili se ne moze procitati.',
+  },
+};
+
+const getTaxPackageWarningHelp = (language: string, key: TaxPackageWarningKey): string => {
+  const normalized = (language || 'en').split('-')[0].toLowerCase();
+  return TAX_PACKAGE_WARNING_HELP[normalized]?.[key] ?? TAX_PACKAGE_WARNING_HELP.en[key];
+};
+
 /** Map form_type to the API call */
 const generateFormByType = async (formType: string, taxYear: number): Promise<TaxFormData> => {
   switch (formType.toUpperCase()) {
@@ -101,14 +177,51 @@ const TaxFormPreview = () => {
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<TaxFormData | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, number>>({});
+  const [showTaxPackagePanel, setShowTaxPackagePanel] = useState(false);
+  const [includeFoundationMaterials, setIncludeFoundationMaterials] = useState(false);
+  const [taxPackagePreview, setTaxPackagePreview] = useState<TaxPackageExportPreview | null>(null);
+  const [loadingTaxPackagePreview, setLoadingTaxPackagePreview] = useState(false);
+  const [taxPackagePreviewError, setTaxPackagePreviewError] = useState<string | null>(null);
+  const [acknowledgedTaxPackageWarnings, setAcknowledgedTaxPackageWarnings] = useState(false);
+  const [taxPackageExport, setTaxPackageExport] = useState<TaxPackageExportStatus | null>(null);
+  const [creatingTaxPackage, setCreatingTaxPackage] = useState(false);
 
   // Eligible forms state
   const [eligibleForms, setEligibleForms] = useState<EligibleForm[]>([]);
   const [selectedFormType, setSelectedFormType] = useState<string>('MAIN');
   const [loadingForms, setLoadingForms] = useState(false);
   const previewExportRef = useRef<HTMLDivElement | null>(null);
+  const hasTaxFormAccess = useFeatureAccess('e1_generation');
+  const { showUpgrade, UpgradePromptComponent } = useUpgradePrompt();
 
-  const lang = (i18n.language.split('-')[0] || 'de') as 'de' | 'en' | 'zh' | 'fr' | 'ru';
+  const uiLanguage = i18n.language.split('-')[0] || 'de';
+  const lang = uiLanguage as 'de' | 'en' | 'zh' | 'fr' | 'ru';
+
+  const buildScopedLink = (
+    page: 'documents' | 'transactions',
+    options?: {
+      needsReview?: boolean;
+      yearScoped?: boolean;
+    },
+  ) => {
+    const params = new URLSearchParams();
+    if (options?.needsReview) params.set('needs_review', 'true');
+    if (options?.yearScoped) params.set('year', String(taxYear));
+    return `/${page}${params.toString() ? `?${params.toString()}` : ''}`;
+  };
+
+  // Clear generated preview when tax year changes so each year must be generated explicitly
+  useEffect(() => {
+    setFormData(null);
+    setError(null);
+    setEditedValues({});
+    setTaxPackagePreview(null);
+    setTaxPackagePreviewError(null);
+    setAcknowledgedTaxPackageWarnings(false);
+    setTaxPackageExport(null);
+    setShowTaxPackagePanel(false);
+    setIncludeFoundationMaterials(false);
+  }, [taxYear]);
 
   // Fetch eligible forms when year changes
   useEffect(() => {
@@ -129,6 +242,10 @@ const TaxFormPreview = () => {
   }, [taxYear]);
 
   const handleGenerate = async () => {
+    if (!hasTaxFormAccess) {
+      showUpgrade('e1_generation', 'pro');
+      return;
+    }
     setLoading(true);
     setError(null);
     setEditedValues({});
@@ -325,12 +442,140 @@ const TaxFormPreview = () => {
     }
   };
 
+  const handleCreateTaxPackage = async () => {
+    if (taxPackagePreview?.has_warnings && !acknowledgedTaxPackageWarnings) {
+      setAcknowledgedTaxPackageWarnings(true);
+      return;
+    }
+
+    setCreatingTaxPackage(true);
+    setError(null);
+    try {
+      const result = await reportService.createTaxPackageExport(
+        taxYear,
+        uiLanguage,
+        includeFoundationMaterials,
+      );
+      setTaxPackageExport(result);
+    } catch (err: any) {
+      const gatePlan = getFeatureGatePlan(err);
+      if (gatePlan) {
+        setError(t('subscription.featureRequiresPlan', { plan: gatePlan.toUpperCase() }));
+      } else {
+        setError(getApiErrorMessage(err, t('reports.taxForm.exportPackageFailed', 'Failed to export tax package')));
+      }
+    } finally {
+      setCreatingTaxPackage(false);
+    }
+  };
+
+  const handleToggleTaxPackagePanel = () => {
+    if (!hasTaxFormAccess) {
+      showUpgrade('e1_generation', 'pro');
+      return;
+    }
+    setShowTaxPackagePanel((open) => !open);
+  };
+
+  useEffect(() => {
+    if (!taxPackageExport || !['pending', 'processing'].includes(taxPackageExport.status)) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const next = await reportService.getTaxPackageExportStatus(taxPackageExport.export_id);
+        setTaxPackageExport(next);
+      } catch (err: any) {
+        setError(getApiErrorMessage(err, t('reports.taxForm.exportPackageFailed', 'Failed to export tax package')));
+      }
+    }, 2000);
+
+    return () => window.clearInterval(intervalId);
+  }, [taxPackageExport, t]);
+
+  useEffect(() => {
+    if (!showTaxPackagePanel || !hasTaxFormAccess) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const loadPreview = async () => {
+      setLoadingTaxPackagePreview(true);
+      setTaxPackagePreviewError(null);
+      setAcknowledgedTaxPackageWarnings(false);
+      try {
+        const preview = await reportService.previewTaxPackageExport(
+          taxYear,
+          uiLanguage,
+          includeFoundationMaterials,
+        );
+        if (!cancelled) {
+          setTaxPackagePreview(preview);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setTaxPackagePreview(null);
+          setTaxPackagePreviewError(
+            getApiErrorMessage(err, t('reports.taxForm.exportPackagePreviewFailed', 'Failed to check export package warnings')),
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTaxPackagePreview(false);
+        }
+      }
+    };
+
+    loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [showTaxPackagePanel, hasTaxFormAccess, taxYear, uiLanguage, includeFoundationMaterials, t]);
+
   // Determine which forms are "supplementary" (not the main form)
   const mainFormTypes = new Set(['E1', 'L1', 'K1']);
   const supplementaryForms = eligibleForms.filter(f => !mainFormTypes.has(f.form_type));
   const mainForms = eligibleForms.filter(f => mainFormTypes.has(f.form_type));
 
   const orderedSections = getSectionOrder().filter(s => groupedFields[s]?.length);
+  const taxPackageWarnings = taxPackagePreview?.warnings || [];
+  const hasTaxPackageWarnings = taxPackageWarnings.length > 0;
+  const taxPackageSummary = taxPackagePreview?.summary;
+  const taxPackageWarningItems = [
+    {
+      key: 'pending_tx_count' as const,
+      count: typeof taxPackageSummary?.pending_tx_count === 'number' ? taxPackageSummary.pending_tx_count : 0,
+      label: t('reports.taxForm.exportPackageWarningPendingTransactions', 'Pending review transactions'),
+      help: getTaxPackageWarningHelp(uiLanguage, 'pending_tx_count'),
+      href: buildScopedLink('transactions', { needsReview: true, yearScoped: true }),
+      actionLabel: t('reports.taxForm.reviewTransactionsBeforeExport', 'Review pending transactions'),
+    },
+    {
+      key: 'pending_docs' as const,
+      count: typeof taxPackageSummary?.pending_document_count === 'number' ? taxPackageSummary.pending_document_count : 0,
+      label: t('reports.taxForm.exportPackageWarningPendingDocuments', 'Pending review documents included in this package'),
+      help: getTaxPackageWarningHelp(uiLanguage, 'pending_docs'),
+      href: buildScopedLink('documents', { needsReview: true, yearScoped: true }),
+      actionLabel: t('reports.taxForm.reviewDocumentsBeforeExport', 'Review pending documents'),
+    },
+    {
+      key: 'uncertain_year_docs' as const,
+      count: typeof taxPackageSummary?.uncertain_year_docs === 'number' ? taxPackageSummary.uncertain_year_docs : 0,
+      label: t('reports.taxForm.exportPackageWarningFallbackYears', 'Documents assigned to this tax year by uploaded date fallback'),
+      help: getTaxPackageWarningHelp(uiLanguage, 'uncertain_year_docs'),
+      href: buildScopedLink('documents', { yearScoped: true }),
+      actionLabel: t('reports.taxForm.reviewDocumentsByYear', 'Review documents from this year'),
+    },
+    {
+      key: 'skipped_files' as const,
+      count: Array.isArray(taxPackageSummary?.skipped_files) ? taxPackageSummary.skipped_files.length : 0,
+      label: t('reports.taxForm.exportPackageWarningSkippedFiles', 'Files excluded from export'),
+      help: getTaxPackageWarningHelp(uiLanguage, 'skipped_files'),
+      href: buildScopedLink('documents', { yearScoped: true }),
+      actionLabel: t('reports.taxForm.reviewDocumentsByYear', 'Review documents from this year'),
+    },
+  ].filter((item) => item.count > 0);
 
   // Render E1b per-property sections
   const renderE1bProperties = () => {
@@ -396,12 +641,27 @@ const TaxFormPreview = () => {
 
   return (
     <div className="tax-form-preview">
+      {UpgradePromptComponent}
       {/* ─── Form Type Selector ─── */}
-      {eligibleForms.length > 0 && (
-        <div className="tf-form-selector">
-          <div className="tf-form-selector-label">
-            {t('taxFormPreview.selectForm', 'Formular auswaehlen')}
+      <div className="tf-form-selector">
+        <div className="tf-form-selector-header">
+          <div className="tf-form-selector-copy">
+            <div className="tf-form-selector-label">
+              {t('taxFormPreview.selectForm', 'Formular auswaehlen')}
+            </div>
           </div>
+          <button
+            className={`btn btn-secondary tf-tax-package-btn ${hasTaxFormAccess ? '' : 'tf-tax-package-btn--locked'}`.trim()}
+            onClick={handleToggleTaxPackagePanel}
+            type="button"
+          >
+            {'\uD83D\uDCE6'} {t('reports.taxForm.exportPackage', 'Export tax package')}
+            {!hasTaxFormAccess && (
+              <span className="tf-tax-package-btn-badge">PRO</span>
+            )}
+          </button>
+        </div>
+        {eligibleForms.length > 0 && (
           <div className="tf-form-tabs">
             {/* Main form tabs — render ALL main forms (E1, L1, K1) */}
             {mainForms.map((mf, idx) => (
@@ -442,39 +702,199 @@ const TaxFormPreview = () => {
               </button>
             ))}
           </div>
-          {loadingForms && (
-            <div className="tf-loading-forms">{t('common.loading', 'Laden...')}</div>
+        )}
+        {loadingForms && (
+          <div className="tf-loading-forms">{t('common.loading', 'Laden...')}</div>
+        )}
+      </div>
+
+      {/* ─── Controls: Year + Generate ─── */}
+      {hasTaxFormAccess && showTaxPackagePanel && (
+        <div className="tf-tax-package-panel">
+          <div className="tf-tax-package-title">
+            {t('reports.taxForm.exportPackagePanelTitle', 'Export tax package')}
+          </div>
+          <p className="tf-tax-package-description">
+            {t(
+              'reports.taxForm.exportPackagePanelDescription',
+              'Prepare a downloadable package for the selected tax year with transaction exports and tax-related source documents.',
+            )}
+          </p>
+          <ul className="tf-tax-package-scope">
+            <li>{t('reports.taxForm.packageScopeTransactionsCsv', 'Transaction CSV')}</li>
+            <li>{t('reports.taxForm.packageScopeTransactionsPdf', 'Transaction PDF')}</li>
+            <li>{t('reports.taxForm.packageScopeSummaryPdf', 'Summary PDF')}</li>
+            <li>{t('reports.taxForm.packageScopeDocuments', 'Tax-related source documents')}</li>
+            <li>{t('reports.taxForm.packageScopeFoundationOptional', 'Optional: foundation materials')}</li>
+          </ul>
+          <label className="tf-tax-package-checkbox">
+            <input
+              type="checkbox"
+              checked={includeFoundationMaterials}
+              onChange={(event) => setIncludeFoundationMaterials(event.target.checked)}
+            />
+            <span>{t('reports.taxForm.includeFoundationMaterials', 'Include foundation materials')}</span>
+          </label>
+          <div className="tf-tax-package-hint">
+            {t(
+              'reports.taxForm.includeFoundationMaterialsHint',
+              'Adds long-lived base materials such as rental, loan, purchase, registry, and trade-license documents.',
+            )}
+          </div>
+          {loadingTaxPackagePreview && (
+            <div className="tf-tax-package-preview-loading">
+              {t('reports.taxForm.exportPackagePreviewLoading', 'Checking export package warnings...')}
+            </div>
+          )}
+          {taxPackagePreviewError && (
+            <div className="tf-tax-package-failure">
+              {taxPackagePreviewError}
+            </div>
+          )}
+          {!loadingTaxPackagePreview && taxPackagePreview && hasTaxPackageWarnings && (
+            <div className={`tf-tax-package-warning ${acknowledgedTaxPackageWarnings ? 'tf-tax-package-warning--confirmed' : ''}`}>
+              <div className="tf-tax-package-warning-title">
+                {t('reports.taxForm.exportPackageWarningTitle', 'Review these items before exporting')}
+              </div>
+              <div className="tf-tax-package-warning-description">
+                {t(
+                  'reports.taxForm.exportPackageWarningDescription',
+                  'The package can still be exported, but these open items may reduce filing quality. Please review and resolve them first if possible.',
+                )}
+              </div>
+              <div className="tf-tax-package-warning-list">
+                {taxPackageWarningItems.map((warning) => (
+                  <div className="tf-tax-package-warning-item" key={warning.key}>
+                    <div className="tf-tax-package-warning-item-header">
+                      <span className="tf-tax-package-warning-item-label">
+                        {warning.label}: {warning.count}
+                      </span>
+                      <Link className="btn btn-secondary" to={warning.href}>
+                        {warning.actionLabel}
+                      </Link>
+                    </div>
+                    <div className="tf-tax-package-warning-item-help">{warning.help}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="tf-tax-package-actions">
+            <button
+              className="btn btn-primary"
+              onClick={handleCreateTaxPackage}
+              disabled={creatingTaxPackage || loadingTaxPackagePreview}
+            >
+              {creatingTaxPackage
+                ? t('reports.taxForm.exportPackageLoading', 'Preparing tax package...')
+                : hasTaxPackageWarnings
+                  ? acknowledgedTaxPackageWarnings
+                    ? t('reports.taxForm.continueExportPackage', 'Continue export anyway')
+                    : t('reports.taxForm.reviewWarningsFirst', 'Review warnings first')
+                  : t('reports.taxForm.preparePackage', 'Prepare package')}
+            </button>
+          </div>
+
+          {taxPackageExport && (
+            <div className="tf-tax-package-status">
+              <div className="tf-tax-package-status-label">
+                {taxPackageExport.status === 'pending' &&
+                  t('reports.taxForm.packageStatusPending', 'Preparing')}
+                {taxPackageExport.status === 'processing' &&
+                  t('reports.taxForm.packageStatusProcessing', 'Packaging')}
+                {taxPackageExport.status === 'ready' &&
+                  t('reports.taxForm.packageStatusReady', 'Ready to download')}
+                {taxPackageExport.status === 'failed' &&
+                  t('reports.taxForm.packageFailureTitle', 'Package could not be prepared')}
+              </div>
+
+              {taxPackageExport.status === 'ready' && (taxPackageExport.parts?.length ?? 0) > 0 && (
+                <div className="tf-tax-package-downloads">
+                  {(taxPackageExport.parts || []).map((part) => (
+                    <a
+                      key={part.part_number}
+                      className="btn btn-secondary"
+                      href={part.download_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {'\u2B07\uFE0F'} {(taxPackageExport.parts?.length || 0) === 1
+                        ? t('reports.taxForm.packageDownloadSingle', 'Download package')
+                        : t('reports.taxForm.packageDownloadPart', 'Download part {{part}}', { part: part.part_number })}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {taxPackageExport.status === 'failed' && taxPackageExport.failure && (
+                <div className="tf-tax-package-failure">
+                  <div>{taxPackageExport.failure.reason || t('reports.taxForm.exportPackageFailed', 'Failed to export tax package')}</div>
+                  {typeof taxPackageExport.failure.document_count === 'number' && (
+                    <div>
+                      {t('reports.taxForm.packageFailureDocumentCount', 'Document count')}: {taxPackageExport.failure.document_count}
+                    </div>
+                  )}
+                  {typeof taxPackageExport.failure.estimated_total_size_bytes === 'number' && (
+                    <div>
+                      {t('reports.taxForm.packageFailureEstimatedSize', 'Estimated size')}: {Math.round(taxPackageExport.failure.estimated_total_size_bytes / (1024 * 1024))} MB
+                    </div>
+                  )}
+                  {taxPackageExport.failure.largest_family && (
+                    <div>
+                      {t('reports.taxForm.packageFailureLargestFamily', 'Largest family')}: {taxPackageExport.failure.largest_family.label}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
 
-      {/* ─── Controls: Year + Generate ─── */}
       <div className="tf-controls">
-        <div className="form-group">
-          <label htmlFor="tf-year">{t('reports.taxYear')}</label>
-          <Select id="tf-year" value={String(taxYear)} onChange={v => setTaxYear(Number(v))}
-            options={Array.from({ length: 5 }, (_, i) => ({ value: String(currentYear - i), label: String(currentYear - i) }))} size="sm" />
-        </div>
-        {!formData ? (
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
-            {loading ? t('common.loading') : t('reports.taxForm.generate')}
-          </button>
-        ) : (
-          <>
-            <button className="btn btn-secondary" onClick={handlePrint}>
-              {'\uD83D\uDDA8\uFE0F'} {t('reports.ea.print')}
-            </button>
-            {selectedFormHasTemplate ? (
-              <button className="btn btn-primary" onClick={handleDownloadPDF}>
-                {'\uD83D\uDCE5'} {t('reports.taxForm.downloadPDF')}
+        <div className="tf-generate-row">
+          <div className="tf-year-inline">
+            <label htmlFor="tf-year">{t('reports.taxYear')}</label>
+            <Select
+              id="tf-year"
+              value={String(taxYear)}
+              onChange={v => setTaxYear(Number(v))}
+              options={Array.from({ length: 5 }, (_, i) => ({
+                value: String(currentYear - i),
+                label: String(currentYear - i),
+              }))}
+              size="sm"
+            />
+          </div>
+          <div className="tf-action-group">
+            {!formData ? (
+              <button
+                className={`btn btn-primary tf-generate-btn ${hasTaxFormAccess ? '' : 'tf-generate-btn--locked'}`.trim()}
+                onClick={handleGenerate}
+                disabled={loading}
+                type="button"
+              >
+                {loading ? t('common.loading') : t('reports.taxForm.generate')}
+                {!hasTaxFormAccess && <span className="tf-generate-btn-badge">PRO</span>}
               </button>
             ) : (
-              <button className="btn btn-primary" onClick={handleDownloadPDF}>
-                {'\uD83D\uDCE5'} {t('reports.ea.downloadPDF', 'Download PDF')}
-              </button>
+              <>
+                <button className="btn btn-secondary" onClick={handlePrint}>
+                  {'\uD83D\uDDA8\uFE0F'} {t('reports.ea.print')}
+                </button>
+                {selectedFormHasTemplate ? (
+                  <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                    {'\uD83D\uDCE5'} {t('reports.taxForm.downloadPDF')}
+                  </button>
+                ) : (
+                  <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                    {'\uD83D\uDCE5'} {t('reports.ea.downloadPDF', 'Download PDF')}
+                  </button>
+                )}
+              </>
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       {/* Info message for forms without official BMF template */}

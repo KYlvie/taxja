@@ -21,8 +21,21 @@
   margin-bottom: 16px;
 }
 
-.tf-form-selector-label {
+.tf-form-selector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 8px;
+}
+
+.tf-form-selector-copy {
+  flex: 1 1 260px;
+}
+
+.tf-form-selector-label {
+  margin-bottom: 0;
   color: var(--tf-text-muted);
   font-size: 0.78rem;
   font-weight: 600;
@@ -142,25 +155,218 @@
 }
 
 .tf-controls {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-  flex-wrap: wrap;
   margin-bottom: 20px;
 }
 
-.tf-controls .form-group {
+.tf-generate-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 0;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.tf-controls .form-group label {
+.tf-year-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.tf-year-inline label {
   font-size: 0.8rem;
   color: #6b7280;
   font-weight: 500;
   margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.tf-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tf-tax-package-btn {
+  min-width: 196px;
+  justify-content: center;
+  position: relative;
+  gap: 8px;
+  align-self: flex-start;
+}
+
+.tf-tax-package-btn--locked {
+  border-color: rgba(124, 58, 237, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 245, 255, 0.98) 100%);
+}
+
+.tf-generate-btn {
+  min-width: 220px;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tf-generate-btn--locked {
+  position: relative;
+}
+
+.tf-generate-btn-badge,
+.tf-tax-package-btn-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #6d28d9;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.tf-tax-package-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 255, 0.98) 100%);
+  box-shadow: 0 18px 32px rgba(15, 23, 42, 0.08);
+  padding: 16px 18px;
+}
+
+.tf-tax-package-title {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--tf-text);
+}
+
+.tf-tax-package-description,
+.tf-tax-package-hint,
+.tf-tax-package-status {
+  margin-top: 8px;
+  color: var(--tf-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.tf-tax-package-scope {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--tf-text);
+  font-size: 0.82rem;
+}
+
+.tf-tax-package-checkbox {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tf-text);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.tf-tax-package-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tf-tax-package-status-label {
+  font-weight: 700;
+  color: var(--tf-text);
+}
+
+.tf-tax-package-downloads {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tf-tax-package-failure {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  display: grid;
+  gap: 4px;
+}
+
+.tf-tax-package-preview-loading {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
+  font-size: 0.82rem;
+}
+
+.tf-tax-package-warning {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+.tf-tax-package-warning--confirmed {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.tf-tax-package-warning-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #7c2d12;
+}
+
+.tf-tax-package-warning-description {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.tf-tax-package-warning-list {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.tf-tax-package-warning-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+}
+
+.tf-tax-package-warning-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tf-tax-package-warning-item-label {
+  font-weight: 700;
+  color: #7c2d12;
+}
+
+.tf-tax-package-warning-item-help {
+  margin-top: 6px;
+  color: #9a3412;
+  line-height: 1.5;
 }
 
 
@@ -529,11 +735,19 @@
 }
 
 @media (max-width: 640px) {
+  .tf-form-selector-header {
+    align-items: stretch;
+  }
+
   .tf-form-tabs {
     flex-direction: column;
   }
 
   .tf-form-tab {
+    width: 100%;
+  }
+
+  .tf-tax-package-btn {
     width: 100%;
   }
 
@@ -600,4 +814,11 @@
     border: none;
     background: transparent;
   }
+}
+
+@media (max-width: 768px) {
+  .tf-generate-row { align-items: stretch; }
+  .tf-year-inline,
+  .tf-action-group { width: 100%; justify-content: center; }
+  .tf-action-group .btn { flex: 1 1 220px; }
 }

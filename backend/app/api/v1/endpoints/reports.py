@@ -2,13 +2,16 @@
 import io
 import json
 import logging
-from datetime import datetime
+import os
+import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from celery.result import AsyncResult
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import and_, func, extract, or_
 from pydantic import BaseModel
 from typing import Optional
 
@@ -17,6 +20,7 @@ from app.core.security import get_current_user
 from app.api.deps import require_feature
 from app.services.feature_gate_service import Feature
 from app.services.credit_service import CreditService, InsufficientCreditsError
+from app.celery_app import celery_app
 from app.services.report_transaction_filters import (
     requires_profit_loss_category,
     should_include_in_ea_report,
@@ -26,16 +30,59 @@ from app.models.transaction import Transaction, TransactionType
 from app.models.transaction_line_item import LineItemPostingType
 from app.models.document import Document
 from app.services.posting_line_utils import sum_postings, total_vat_recoverable, transaction_has_deductible_expense
+from app.services.tax_package_export_service import (
+    TaxPackageExportService,
+    cache_tax_package_export_state,
+    delete_cached_tax_package_export_state,
+    load_cached_tax_package_export_state,
+    sanitize_tax_package_export_state,
+)
+from app.tasks.tax_package_export_tasks import async_export_tax_package
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
+def _document_matches_tax_year(tax_year: int):
+    return or_(
+        extract("year", Document.document_date) == tax_year,
+        and_(Document.document_date.is_(None), Document.document_year == tax_year),
+        and_(
+            Document.document_date.is_(None),
+            Document.document_year.is_(None),
+            extract("year", Document.uploaded_at) == tax_year,
+        ),
+    )
+
+
 class ReportRequest(BaseModel):
     tax_year: int
     report_type: str = "pdf"
     language: str = "de"
+
+
+class TaxPackageExportCreateRequest(BaseModel):
+    tax_year: int
+    language: Optional[str] = "de"
+    include_foundation_materials: bool = False
+
+
+class TaxPackageExportPreviewRequest(BaseModel):
+    tax_year: int
+    language: Optional[str] = "de"
+    include_foundation_materials: bool = False
+
+
+def _assert_tax_package_export_owner(state: Optional[dict], current_user: User) -> dict:
+    if not state:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    owner_id = state.get("user_id")
+    if owner_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+    return state
 
 
 def _deduct_report_credits(
@@ -150,7 +197,7 @@ def get_audit_checklist(
     # Check 2: Supporting documents
     doc_count = db.query(func.count(Document.id)).filter(
         Document.user_id == current_user.id,
-        extract("year", Document.uploaded_at) == tax_year,
+        _document_matches_tax_year(tax_year),
     ).scalar() or 0
 
     deductible_count = sum(1 for t in report_transactions if transaction_has_deductible_expense(t))
@@ -766,6 +813,136 @@ def export_user_data(
             "Content-Disposition": "attachment; filename=taxja-user-data.json",
         },
     )
+
+
+@router.post(
+    "/tax-package/exports/preview",
+    dependencies=[Depends(require_feature(Feature.E1_GENERATION))],
+)
+def preview_tax_package_export(
+    request: TaxPackageExportPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    language = request.language or getattr(current_user, "language", "de") or "de"
+    service = TaxPackageExportService(
+        db=db,
+        user=current_user,
+        tax_year=request.tax_year,
+        language=language,
+        include_foundation_materials=request.include_foundation_materials,
+    )
+    return service.build_preview()
+
+
+@router.post(
+    "/tax-package/exports",
+    dependencies=[Depends(require_feature(Feature.E1_GENERATION))],
+)
+def create_tax_package_export(
+    request: TaxPackageExportCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a prepared tax package export task and return its initial state."""
+    use_celery = os.getenv("CELERY_EXPORT", "false").lower() == "true"
+    language = request.language or getattr(current_user, "language", "de") or "de"
+
+    if use_celery:
+        task = async_export_tax_package.delay(
+            user_id=current_user.id,
+            tax_year=request.tax_year,
+            language=language,
+            include_foundation_materials=request.include_foundation_materials,
+        )
+        pending_state = {
+            "export_id": task.id,
+            "user_id": current_user.id,
+            "status": "pending",
+            "tax_year": request.tax_year,
+            "language": language,
+            "include_foundation_materials": request.include_foundation_materials,
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat(),
+        }
+        cache_tax_package_export_state(task.id, pending_state)
+        return sanitize_tax_package_export_state(pending_state)
+
+    export_id = str(uuid.uuid4())
+    service = TaxPackageExportService(
+        db=db,
+        user=current_user,
+        tax_year=request.tax_year,
+        language=language,
+        include_foundation_materials=request.include_foundation_materials,
+    )
+    service.build_status_payload(export_id, "processing")
+    return sanitize_tax_package_export_state(service.export_to_storage(export_id))
+
+
+@router.get(
+    "/tax-package/exports/{export_id}",
+    dependencies=[Depends(require_feature(Feature.E1_GENERATION))],
+)
+def get_tax_package_export_status(
+    export_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the current state for a prepared tax package export."""
+    cached = load_cached_tax_package_export_state(export_id)
+    if cached:
+        owned_state = _assert_tax_package_export_owner(cached, current_user)
+        return sanitize_tax_package_export_state(owned_state)
+
+    result = AsyncResult(export_id, app=celery_app)
+    if result.state == "PENDING":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+    if result.state in {"STARTED", "RETRY"}:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+    if result.state == "SUCCESS":
+        owned_state = _assert_tax_package_export_owner(result.result or {}, current_user)
+        return sanitize_tax_package_export_state(owned_state)
+    if result.state == "FAILURE":
+        owned_state = _assert_tax_package_export_owner(result.result or {}, current_user)
+        return sanitize_tax_package_export_state(owned_state)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
+
+
+@router.delete(
+    "/tax-package/exports/{export_id}",
+    dependencies=[Depends(require_feature(Feature.E1_GENERATION))],
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_tax_package_export(
+    export_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete cached metadata and uploaded parts for a tax package export."""
+    state = load_cached_tax_package_export_state(export_id)
+    if not state:
+        result = AsyncResult(export_id, app=celery_app)
+        if result.state == "SUCCESS":
+            state = result.result or {}
+        elif result.state == "FAILURE":
+            state = result.result or {}
+
+    state = _assert_tax_package_export_owner(state, current_user)
+
+    storage_paths = list(state.get("storage_paths") or [])
+    if storage_paths:
+        package_service = TaxPackageExportService(
+            db=db,
+            user=current_user,
+            tax_year=int(state.get("tax_year") or datetime.utcnow().year),
+            language=state.get("language") or getattr(current_user, "language", "de"),
+            include_foundation_materials=bool(state.get("include_foundation_materials")),
+        )
+        for path in storage_paths:
+            package_service.storage.delete_file(path)
+
+    delete_cached_tax_package_export_state(export_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

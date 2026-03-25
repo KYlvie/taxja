@@ -69,6 +69,12 @@ vi.mock('../components/common/ConfirmDialog', () => ({
 }));
 
 describe('ClassificationRules', () => {
+  const openSection = async (label: string) => {
+    const toggle = await screen.findByRole('button', { name: new RegExp(label, 'i') });
+    fireEvent.click(toggle);
+    return toggle.closest('section') as HTMLElement;
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -87,6 +93,20 @@ describe('ClassificationRules', () => {
             confidence: 0.92,
             rule_type: 'strict',
             frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+          {
+            id: 2,
+            normalized_description: 'frozen grocery rule',
+            original_description: 'Frozen grocery rule',
+            txn_type: 'expense',
+            category: 'groceries',
+            hit_count: 1,
+            confidence: 0.92,
+            rule_type: 'strict',
+            frozen: true,
             conflict_count: 0,
             last_hit_at: null,
             created_at: null,
@@ -113,6 +133,8 @@ describe('ClassificationRules', () => {
     render(<ClassificationRules />);
 
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2));
+    await openSection('Category rules');
+    await openSection('Deductibility overrides');
 
     expect(screen.getByText('Category rules')).toBeInTheDocument();
     expect(screen.getByText('Deductibility overrides')).toBeInTheDocument();
@@ -121,6 +143,134 @@ describe('ClassificationRules', () => {
     expect(screen.getByText('Vehicle')).toBeInTheDocument();
     expect(screen.getByText('Deductible')).toBeInTheDocument();
     expect(screen.getByText('Saved from your manual category correction.')).toBeInTheDocument();
+  });
+
+  it('keeps all rule sections collapsed by default', async () => {
+    apiGet
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            normalized_description: 'parking one',
+            original_description: 'Parking One',
+            txn_type: 'expense',
+            category: 'vehicle',
+            hit_count: 1,
+            confidence: 1,
+            rule_type: 'strict',
+            frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    render(<ClassificationRules />);
+
+    await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByRole('button', { name: /Category rules/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Automatic handling rules/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Deductibility overrides/i })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Parking One')).not.toBeInTheDocument();
+  });
+
+  it('hides repeated reason, confidence, and status columns when a section has no variation', async () => {
+    apiGet
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            normalized_description: 'parking one',
+            original_description: 'Parking One',
+            txn_type: 'expense',
+            category: 'vehicle',
+            hit_count: 1,
+            confidence: 1,
+            rule_type: 'strict',
+            frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+          {
+            id: 2,
+            normalized_description: 'parking two',
+            original_description: 'Parking Two',
+            txn_type: 'expense',
+            category: 'vehicle',
+            hit_count: 1,
+            confidence: 1,
+            rule_type: 'strict',
+            frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    render(<ClassificationRules />);
+
+    const categorySection = await openSection('Category rules');
+    await waitFor(() => expect(screen.getByText('Parking One')).toBeInTheDocument());
+
+    expect(within(categorySection).queryByText('Reason')).not.toBeInTheDocument();
+    expect(within(categorySection).queryByText('Conf.')).not.toBeInTheDocument();
+    expect(within(categorySection).queryByText('Status')).not.toBeInTheDocument();
+  });
+
+  it('renders automatic handling rules in their own collapsible section', async () => {
+    apiGet
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 1,
+            normalized_description: 'brunn consulting',
+            original_description: 'BRUNN Consulting',
+            txn_type: 'expense',
+            category: 'professional_services',
+            hit_count: 2,
+            confidence: 1,
+            rule_type: 'strict',
+            frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+          {
+            id: 2,
+            normalized_description: 'helvetia policy premium',
+            original_description: 'Helvetia Policy Premium',
+            txn_type: 'expense',
+            category: 'insurance',
+            hit_count: 3,
+            confidence: 1,
+            rule_type: 'auto',
+            frozen: false,
+            conflict_count: 0,
+            last_hit_at: null,
+            created_at: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ data: [] });
+
+    render(<ClassificationRules />);
+
+    const automationSection = await openSection('Automatic handling rules');
+    expect(automationSection).not.toBeNull();
+
+    expect(screen.getByText('Helvetia Policy Premium')).toBeInTheDocument();
+    expect(screen.getByText('Auto-create')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Automatic handling rules/i }));
+    expect(within(automationSection as HTMLElement).queryByText('Helvetia Policy Premium')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Automatic handling rules/i }));
+    expect(await within(automationSection as HTMLElement).findByText('Helvetia Policy Premium')).toBeInTheDocument();
   });
 
   it('supports bulk deleting selected classification rules', async () => {
@@ -162,9 +312,8 @@ describe('ClassificationRules', () => {
 
     render(<ClassificationRules />);
 
+    const categorySection = await openSection('Category rules');
     await waitFor(() => expect(screen.getByText('Parking One')).toBeInTheDocument());
-
-    const categorySection = screen.getByText('Category rules').closest('section');
     expect(categorySection).not.toBeNull();
     const section = categorySection as HTMLElement;
 
@@ -172,6 +321,8 @@ describe('ClassificationRules', () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Delete selected (2)' }));
     const deleteButtons = screen.getAllByRole('button', { name: 'Delete' });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    expect(within(section).queryByText('Delete')).not.toBeInTheDocument();
 
     await waitFor(() => expect(apiDelete).toHaveBeenNthCalledWith(1, '/classification-rules/1'));
     await waitFor(() => expect(apiDelete).toHaveBeenNthCalledWith(2, '/classification-rules/2'));
@@ -202,6 +353,7 @@ describe('ClassificationRules', () => {
 
     render(<ClassificationRules />);
 
+    await openSection('Category rules');
     await waitFor(() => expect(screen.getByText('Rule 1')).toBeInTheDocument());
     expect(screen.queryByText('Rule 11')).not.toBeInTheDocument();
 
@@ -222,6 +374,8 @@ describe('ClassificationRules', () => {
 
     expect(screen.getByText('Category rules')).toBeInTheDocument();
     expect(screen.getByText('Deductibility overrides')).toBeInTheDocument();
+    await openSection('Category rules');
+    await openSection('Deductibility overrides');
     expect(
       screen.getByText('No category rules yet. They will appear after you correct a transaction category.')
     ).toBeInTheDocument();

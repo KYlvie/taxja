@@ -939,6 +939,11 @@
   },
   "documents": {
     "title": "Dokumenty",
+    "sortMode": {
+      "label": "Sortuj według",
+      "uploadDate": "Data przesłania",
+      "documentDate": "Data dokumentu"
+    },
     "description": "Przesyłaj i zarządzaj dokumentami podatkowymi z automatycznym rozpoznawaniem",
     "uploadDocument": "Prześlij dokument",
     "documentType": "Typ dokumentu",

@@ -20,6 +20,7 @@ interface TransactionDetailProps {
   onDelete: () => void;
   onClose: () => void;
   onMarkReviewed?: (id: number) => void;
+  hideLinkedDocumentSection?: boolean;
 }
 
 const TransactionDetail = ({
@@ -28,6 +29,7 @@ const TransactionDetail = ({
   onDelete,
   onClose,
   onMarkReviewed,
+  hideLinkedDocumentSection = false,
 }: TransactionDetailProps) => {
   const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
@@ -330,7 +332,7 @@ const TransactionDetail = ({
             </div>
           )}
 
-          {transaction.document_id && (
+          {transaction.document_id && !hideLinkedDocumentSection && (
             <div className="detail-section">
               <h3>{t('transactions.linkedDocument')}</h3>
               <div className="document-info">

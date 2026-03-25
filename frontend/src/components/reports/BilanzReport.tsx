@@ -84,34 +84,38 @@ const BilanzReport = () => {
   return (
     <div className="bilanz-report">
       <div className="bilanz-controls">
-        <div className="form-group">
-          <label htmlFor="bilanz-year">{t('reports.taxYear')}</label>
-          <Select
-            id="bilanz-year"
-            value={String(taxYear)}
-            onChange={(value) => setTaxYear(Number(value))}
-            options={Array.from({ length: 5 }, (_, index) => ({
-              value: String(currentYear - index),
-              label: String(currentYear - index),
-            }))}
-            size="sm"
-          />
-        </div>
+        <div className="bilanz-generate-row">
+          <div className="bilanz-year-inline">
+            <label htmlFor="bilanz-year">{t('reports.taxYear')}</label>
+            <Select
+              id="bilanz-year"
+              value={String(taxYear)}
+              onChange={(value) => setTaxYear(Number(value))}
+              options={Array.from({ length: 5 }, (_, index) => ({
+                value: String(currentYear - index),
+                label: String(currentYear - index),
+              }))}
+              size="sm"
+            />
+          </div>
 
-        {!report ? (
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
-            {loading ? t('common.loading') : t('reports.bilanz.generate')}
-          </button>
-        ) : (
-          <>
-            <button className="btn btn-secondary" onClick={handlePrint}>
-              {t('reports.ea.print')}
-            </button>
-            <button className="btn btn-primary" onClick={handleDownloadPDF}>
-              {t('reports.ea.downloadPDF')}
-            </button>
-          </>
-        )}
+          <div className="bilanz-action-group">
+            {!report ? (
+              <button className="btn btn-primary" onClick={handleGenerate} disabled={loading}>
+                {loading ? t('common.loading') : t('reports.bilanz.generate')}
+              </button>
+            ) : (
+              <>
+                <button className="btn btn-secondary" onClick={handlePrint}>
+                  {t('reports.ea.print')}
+                </button>
+                <button className="btn btn-primary" onClick={handleDownloadPDF}>
+                  {t('reports.ea.downloadPDF')}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       <YearWarning taxYear={taxYear} />

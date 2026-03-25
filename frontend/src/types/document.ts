@@ -121,6 +121,10 @@ export interface Document {
   updated_at: string;
   uploaded_at?: string;
   processed_at?: string;
+  document_date?: string | null;
+  document_year?: number | null;
+  year_basis?: string | null;
+  year_confidence?: number | null;
   message?: string;
   deduplicated?: boolean;
   duplicate_of_document_id?: number | null;

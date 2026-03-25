@@ -20,6 +20,69 @@ export interface DataExportResponse {
   expires_at: string;
 }
 
+export interface TaxPackageExportPart {
+  part_number: number;
+  file_name: string;
+  download_url: string;
+  size_bytes: number;
+}
+
+export interface TaxPackageExportFailure {
+  reason: string;
+  document_count?: number;
+  estimated_total_size_bytes?: number;
+  max_total_size_bytes?: number;
+  max_parts?: number;
+  max_documents?: number;
+  largest_family?: {
+    family: string;
+    label: string;
+    estimated_size_bytes: number;
+  } | null;
+  largest_files?: Array<{
+    document_id: number;
+    file_name: string;
+    family: string;
+    estimated_size_bytes: number;
+  }>;
+}
+
+export interface TaxPackageExportPreviewWarning {
+  key: 'pending_tx_count' | 'pending_docs' | 'uncertain_year_docs' | 'skipped_files';
+  label: string;
+  count: number;
+}
+
+export interface TaxPackageExportPreviewSummary {
+  pending_tx_count: number;
+  pending_document_count: number;
+  uncertain_year_docs: number;
+  skipped_files: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface TaxPackageExportPreview {
+  tax_year: number;
+  language?: string;
+  include_foundation_materials?: boolean;
+  has_warnings: boolean;
+  summary: TaxPackageExportPreviewSummary;
+  warnings: TaxPackageExportPreviewWarning[];
+}
+
+export interface TaxPackageExportStatus {
+  export_id: string;
+  status: 'pending' | 'processing' | 'ready' | 'failed';
+  tax_year?: number;
+  language?: string;
+  include_foundation_materials?: boolean;
+  expires_at?: string;
+  part_count?: number;
+  parts?: TaxPackageExportPart[];
+  summary?: Record<string, unknown>;
+  failure?: TaxPackageExportFailure;
+}
+
 export interface EAReportSection {
   key: string;
   label: string;
@@ -446,6 +509,42 @@ const reportService = {
       property_id: propertyId || null,
     }, { responseType: 'blob' });
     return response.data;
+  },
+
+  // Create prepared yearly tax package export
+  previewTaxPackageExport: async (
+    taxYear: number,
+    language: string = 'de',
+    includeFoundationMaterials: boolean = false,
+  ): Promise<TaxPackageExportPreview> => {
+    const response = await api.post('/reports/tax-package/exports/preview', {
+      tax_year: taxYear,
+      language,
+      include_foundation_materials: includeFoundationMaterials,
+    });
+    return response.data;
+  },
+
+  createTaxPackageExport: async (
+    taxYear: number,
+    language: string = 'de',
+    includeFoundationMaterials: boolean = false,
+  ): Promise<TaxPackageExportStatus> => {
+    const response = await api.post('/reports/tax-package/exports', {
+      tax_year: taxYear,
+      language,
+      include_foundation_materials: includeFoundationMaterials,
+    });
+    return response.data;
+  },
+
+  getTaxPackageExportStatus: async (exportId: string): Promise<TaxPackageExportStatus> => {
+    const response = await api.get(`/reports/tax-package/exports/${exportId}`);
+    return response.data;
+  },
+
+  deleteTaxPackageExport: async (exportId: string): Promise<void> => {
+    await api.delete(`/reports/tax-package/exports/${exportId}`);
   },
 
   // Download E/A Rechnung PDF

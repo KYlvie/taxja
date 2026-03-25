@@ -275,6 +275,52 @@ class TestCurrentReportEndpoints:
         assert "missing_documents" in data
         assert any("transactions recorded" in item["message"] for item in data["items"])
 
+    def test_audit_checklist_counts_documents_by_document_year_when_exact_date_missing(
+        self,
+        reporting_authenticated_client,
+        reporting_enabled_user,
+        db,
+    ):
+        db.add(
+            Transaction(
+                user_id=reporting_enabled_user.id,
+                type=TransactionType.EXPENSE,
+                amount=Decimal("72.78"),
+                transaction_date=date(2024, 12, 16),
+                description="T-Mobile bill",
+                expense_category=ExpenseCategory.TELECOM,
+                is_deductible=True,
+            )
+        )
+        db.add(
+            Document(
+                user_id=reporting_enabled_user.id,
+                document_type=DocumentType.BANK_STATEMENT,
+                file_path="documents/statement-2024.pdf",
+                file_name="statement-2024.pdf",
+                uploaded_at=datetime(2026, 3, 24, 10, 0, 0),
+                processed_at=datetime(2026, 3, 24, 10, 0, 0),
+                document_date=None,
+                document_year=2024,
+                year_basis="statement_period_start",
+                year_confidence=Decimal("1.00"),
+                ocr_result={"document_year": 2024},
+                raw_text="statement 2024",
+                confidence_score=Decimal("0.95"),
+            )
+        )
+        db.commit()
+
+        response = reporting_authenticated_client.get(
+            "/api/v1/reports/audit-checklist?tax_year=2024"
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        documents_item = next(item for item in payload["items"] if item["category"] == "documents")
+        assert documents_item["status"] == "pass"
+        assert "1 supporting documents uploaded" in documents_item["message"]
+
     def test_audit_checklist_ignores_legacy_loan_repayment_for_category_warning(
         self,
         reporting_authenticated_client,

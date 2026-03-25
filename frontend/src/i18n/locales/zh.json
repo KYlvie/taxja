@@ -550,6 +550,11 @@
   },
   "documents": {
     "title": "文档",
+    "sortMode": {
+      "label": "排序方式",
+      "uploadDate": "上传日期",
+      "documentDate": "文档日期"
+    },
     "description": "上传和管理您的税务文档，支持自动识别",
     "uploadDocument": "上传文档",
     "documentType": "文档类型",
@@ -1658,15 +1663,16 @@
       "status": {
         "autoCreated": "已自动创建",
         "matchedExisting": "已匹配现有交易",
-        "ignoredDuplicate": "已忽略重复",
+        "ignoredDuplicate": "已忽略",
         "pendingReview": "待确认"
       },
       "actions": {
         "create": "新增交易",
         "match": "匹配已有交易",
-        "ignore": "忽略重复",
+        "ignore": "忽略",
         "undoCreate": "撤销创建",
-        "unmatch": "取消匹配"
+        "unmatch": "取消匹配",
+        "viewUnavailable": "暂无可预览交易"
       },
       "emptyPending": "当前没有需要确认的银行流水。",
       "emptyResolved": "暂时还没有自动处理的流水。",
@@ -1681,8 +1687,8 @@
           "description": "这些流水已经自动创建交易，或已匹配到现有交易。"
         },
         "ignored": {
-          "title": "已忽略重复项",
-          "description": "这些流水已作为重复项忽略，不会再生成交易。"
+          "title": "已忽略",
+          "description": "这些流水已被忽略，不会再生成交易。"
         }
       }
     }
@@ -4334,14 +4340,25 @@
     }
   },
   "assetOverview": {
-    "pageTitle": "资产负债概览",
-    "pageSubtitle": "资产、负债、净值和各项报告集中于此。",
-    "liabilitySummary": "资产负债摘要",
-    "liabilitySummarySubtitle": "总资产、总负债和净资产的高级快照。",
+    "pageTitle": "资产总览",
+    "pageSubtitle": "资产、折旧、净值和各项报告集中于此。",
+    "summaryTitle": "资产总览",
     "totalAssets": "总资产",
+    "totalAssetsNote": "所有已登记资产的账面价值",
     "totalLiabilities": "总负债",
-    "netWorth": "净值",
+    "totalLiabilitiesNote": "所有活跃负债的未偿余额",
+    "netWorth": "净资产",
+    "netWorthNote": "资产减去负债",
+    "propertyCount": "房产",
+    "propertyCountNote": "活跃的不动产数量",
+    "otherAssetCount": "其他资产",
+    "otherAssetCountNote": "设备、车辆和工具",
     "monthlyDebtService": "月偿债额",
+    "monthlyDebtServiceNote": "当前已登记的计划还款",
+    "balanceSnapshot": "余额快照",
+    "balanceSnapshotHint": "当前资产账面价值与所有已追踪负债的合并展示。",
+    "annualDepreciation": "年度折旧",
+    "annualDepreciationHint": "当年所有房产和其他资产的折旧总额。",
     "noSummary": "暂无摘要数据。请添加资产或负债以填充概览。"
   },
   "taxTools": {

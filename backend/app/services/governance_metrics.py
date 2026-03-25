@@ -17,6 +17,7 @@ from app.models.classification_correction import ClassificationCorrection
 from app.models.user_classification_rule import UserClassificationRule
 
 logger = logging.getLogger(__name__)
+STRICT_LIKE_RULE_TYPES = ("strict", "auto")
 
 
 class GovernanceMetricsService:
@@ -53,14 +54,14 @@ class GovernanceMetricsService:
                 "avg_strict_confidence": 0.0,
             }
 
-        strict_count = q.filter(UserClassificationRule.rule_type == "strict").count()
+        strict_count = q.filter(UserClassificationRule.rule_type.in_(STRICT_LIKE_RULE_TYPES)).count()
         soft_count = q.filter(UserClassificationRule.rule_type == "soft").count()
         frozen_count = q.filter(UserClassificationRule.frozen == True).count()
 
         # Hit counts by type
         strict_hits = (
             self.db.query(func.coalesce(func.sum(UserClassificationRule.hit_count), 0))
-            .filter(UserClassificationRule.rule_type == "strict")
+            .filter(UserClassificationRule.rule_type.in_(STRICT_LIKE_RULE_TYPES))
         )
         soft_hits = (
             self.db.query(func.coalesce(func.sum(UserClassificationRule.hit_count), 0))
@@ -81,7 +82,7 @@ class GovernanceMetricsService:
         )
         avg_strict = (
             self.db.query(func.avg(UserClassificationRule.confidence))
-            .filter(UserClassificationRule.rule_type == "strict")
+            .filter(UserClassificationRule.rule_type.in_(STRICT_LIKE_RULE_TYPES))
         )
         if user_id:
             avg_soft = avg_soft.filter(UserClassificationRule.user_id == user_id)
