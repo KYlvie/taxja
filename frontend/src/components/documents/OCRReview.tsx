@@ -432,6 +432,13 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     return 'confidence-low';
   };
 
+  /** Field-level confidence: suppress coloring when document is confirmed or field has no confidence data */
+  const getFieldConfidenceClass = (confidence?: number) => {
+    if (isConfirmed) return '';
+    if (confidence === undefined || confidence === null) return '';
+    return getConfidenceClass(confidence);
+  };
+
   const getConfidenceLabel = (confidence?: number) => {
     if (!confidence) return t('documents.review.confidence.unknown');
     if (confidence >= 0.8) return t('documents.review.confidence.high');
@@ -482,8 +489,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     0,
     translatedSuggestions.length - suggestionPreview.length,
   );
-  const showExpandedSuggestions = document.needs_review && translatedSuggestions.length > 0;
-  const showSuggestionPopover = !document.needs_review && translatedSuggestions.length > 0;
+  const showExpandedSuggestions = !isConfirmed && document.needs_review && translatedSuggestions.length > 0;
+  const showSuggestionPopover = !isConfirmed && !document.needs_review && translatedSuggestions.length > 0;
   const purchaseContractKind = String(
     editedData.purchase_contract_kind
       || extracted_data.purchase_contract_kind
@@ -781,7 +788,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         </div>
       )}
 
-      {document.needs_review && (
+      {!isConfirmed && document.needs_review && (
         <div className="review-warning">
           {t('documents.review.needsReview')}
         </div>
@@ -1099,7 +1106,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                               : nextValue
                           );
                         }}
-                        className={getConfidenceClass(fieldConfidence)}
+                        className={getFieldConfidenceClass(fieldConfidence)}
                       />
                       {fieldConfidence && (
                         <span className="field-confidence">
@@ -1194,7 +1201,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                     <DateInput
                       value={editedData.date || ''}
                       onChange={(val) => handleFieldChange('date', val)}
-                      className={getConfidenceClass(extracted_data.confidence?.date)}
+                      className={getFieldConfidenceClass(extracted_data.confidence?.date)}
                       locale={getLocaleForLanguage(i18n.language)}
                       todayLabel={String(t('common.today', 'Today'))}
                     />
@@ -1214,7 +1221,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                       onChange={(e) =>
                         handleFieldChange('amount', parseFloat(e.target.value))
                       }
-                      className={getConfidenceClass(extracted_data.confidence?.amount)}
+                      className={getFieldConfidenceClass(extracted_data.confidence?.amount)}
                     />
                     {extracted_data.confidence?.amount && (
                       <span className="field-confidence">
@@ -1229,7 +1236,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                       type="text"
                       value={editedData.merchant || ''}
                       onChange={(e) => handleFieldChange('merchant', e.target.value)}
-                      className={getConfidenceClass(extracted_data.confidence?.merchant)}
+                      className={getFieldConfidenceClass(extracted_data.confidence?.merchant)}
                     />
                     {extracted_data.confidence?.merchant && (
                       <span className="field-confidence">

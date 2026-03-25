@@ -86,36 +86,36 @@ def capture_ddl() -> str:
 
 SEED_SQL = """
 -- Plans (Free, Plus, Pro)
-INSERT INTO plans (plan_type, name, monthly_price, yearly_price, features, quotas, monthly_credits, overage_price_per_credit)
+INSERT INTO plans (plan_type, name, monthly_price, yearly_price, features, quotas, monthly_credits, overage_price_per_credit, created_at, updated_at)
 VALUES
   ('free', 'Free', 0.00, 0.00,
    '{"ai_assistant": true, "ocr_scanning": true, "basic_tax_calc": true, "multi_language": true, "transaction_entry": true}',
-   '{}', 100, NULL),
+   '{}', 100, NULL, NOW(), NOW()),
   ('plus', 'Plus', 4.90, 49.00,
    '{"svs_calc": true, "vat_calc": true, "bank_import": true, "ai_assistant": true, "ocr_scanning": true, "full_tax_calc": true, "basic_tax_calc": true, "multi_language": true, "transaction_entry": true, "property_management": true, "recurring_suggestions": true, "unlimited_transactions": true}',
-   '{}', 500, 0.0400),
+   '{}', 500, 0.0400, NOW(), NOW()),
   ('pro', 'Pro', 12.90, 129.00,
    '{"svs_calc": true, "vat_calc": true, "api_access": true, "bank_import": true, "ai_assistant": true, "ocr_scanning": true, "e1_generation": true, "full_tax_calc": true, "unlimited_ocr": true, "basic_tax_calc": true, "multi_language": true, "advanced_reports": true, "priority_support": true, "transaction_entry": true, "property_management": true, "recurring_suggestions": true, "unlimited_transactions": true}',
-   '{}', 2000, 0.0300)
+   '{}', 2000, 0.0300, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
 -- Credit cost configs
-INSERT INTO credit_cost_configs (operation, credit_cost, description, min_plan_level, is_active)
+INSERT INTO credit_cost_configs (operation, credit_cost, description, pricing_version, is_active, updated_at)
 VALUES
-  ('ocr_scan', 5, 'OCR document scan', 0, true),
-  ('ai_conversation', 3, 'AI assistant conversation', 0, true),
-  ('transaction_entry', 1, 'Transaction entry', 0, true),
-  ('bank_import', 10, 'Bank statement import', 1, true),
-  ('e1_generation', 20, 'E1 tax form generation', 1, true),
-  ('tax_calc', 2, 'Tax calculation', 1, true)
+  ('ocr_scan', 5, 'OCR document scan', 1, true, NOW()),
+  ('ai_conversation', 3, 'AI assistant conversation', 1, true, NOW()),
+  ('transaction_entry', 1, 'Transaction entry', 1, true, NOW()),
+  ('bank_import', 10, 'Bank statement import', 1, true, NOW()),
+  ('e1_generation', 20, 'E1 tax form generation', 1, true, NOW()),
+  ('tax_calc', 2, 'Tax calculation', 1, true, NOW())
 ON CONFLICT DO NOTHING;
 
 -- Credit topup packages
-INSERT INTO credit_topup_packages (name, credits, price, is_active)
+INSERT INTO credit_topup_packages (name, credits, price, is_active, created_at)
 VALUES
-  ('Small Pack', 100, 4.99, true),
-  ('Medium Pack', 300, 12.99, true),
-  ('Large Pack', 1000, 39.99, true)
+  ('Small Pack', 100, 4.99, true, NOW()),
+  ('Medium Pack', 300, 12.99, true, NOW()),
+  ('Large Pack', 1000, 39.99, true, NOW())
 ON CONFLICT DO NOTHING;
 
 -- Tax configurations are seeded by the application on startup.

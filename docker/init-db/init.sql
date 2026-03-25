@@ -1,6 +1,6 @@
 -- =============================================================
 -- Taxja Database Initialization Script
--- Generated: 2026-03-25 19:51
+-- Generated: 2026-03-25 22:35
 -- Latest migration: 073_add_document_year_fields
 -- =============================================================
 
@@ -145,21 +145,21 @@ CREATE TABLE users (
 	PRIMARY KEY (id)
 );
 
-CREATE INDEX ix_users_id ON users (id);
-
-CREATE UNIQUE INDEX ix_users_google_subject ON users (google_subject);
-
 CREATE INDEX ix_users_email_verification_token ON users (email_verification_token);
 
 CREATE INDEX ix_users_account_status ON users (account_status);
 
 CREATE INDEX ix_users_trial_end_date ON users (trial_end_date);
 
-CREATE UNIQUE INDEX ix_users_email ON users (email);
+CREATE UNIQUE INDEX ix_users_google_subject ON users (google_subject);
 
 CREATE INDEX ix_users_subscription_id ON users (subscription_id);
 
+CREATE INDEX ix_users_id ON users (id);
+
 CREATE INDEX ix_users_password_reset_token ON users (password_reset_token);
+
+CREATE UNIQUE INDEX ix_users_email ON users (email);
 
 CREATE TABLE transactions (
 	id SERIAL NOT NULL, 
@@ -1021,9 +1021,9 @@ CREATE TABLE employer_annual_archives (
 	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE INDEX ix_employer_annual_archives_id ON employer_annual_archives (id);
-
 CREATE INDEX ix_employer_annual_archives_status ON employer_annual_archives (status);
+
+CREATE INDEX ix_employer_annual_archives_id ON employer_annual_archives (id);
 
 CREATE INDEX ix_employer_annual_archives_user_id ON employer_annual_archives (user_id);
 
@@ -1363,25 +1363,25 @@ ALTER TABLE transactions ADD FOREIGN KEY(source_recurring_id) REFERENCES recurri
 
 ALTER TABLE property_loans ADD FOREIGN KEY(loan_contract_document_id) REFERENCES documents (id) ON DELETE SET NULL;
 
+ALTER TABLE liabilities ADD FOREIGN KEY(source_document_id) REFERENCES documents (id) ON DELETE SET NULL;
+
 ALTER TABLE subscriptions ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
 
-ALTER TABLE liabilities ADD FOREIGN KEY(source_document_id) REFERENCES documents (id) ON DELETE SET NULL;
+ALTER TABLE transactions ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
 
 ALTER TABLE documents ADD FOREIGN KEY(parent_document_id) REFERENCES documents (id) ON DELETE SET NULL;
 
 ALTER TABLE subscriptions ADD FOREIGN KEY(plan_id) REFERENCES plans (id) ON DELETE RESTRICT;
 
-ALTER TABLE transactions ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
-
 ALTER TABLE transactions ADD FOREIGN KEY(document_id) REFERENCES documents (id) ON DELETE SET NULL;
 
 ALTER TABLE recurring_transactions ADD FOREIGN KEY(property_id) REFERENCES properties (id) ON DELETE CASCADE;
 
-ALTER TABLE users ADD FOREIGN KEY(subscription_id) REFERENCES subscriptions (id) ON DELETE SET NULL;
+ALTER TABLE properties ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
 
 ALTER TABLE recurring_transactions ADD FOREIGN KEY(loan_id) REFERENCES property_loans (id) ON DELETE CASCADE;
 
-ALTER TABLE properties ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
+ALTER TABLE users ADD FOREIGN KEY(subscription_id) REFERENCES subscriptions (id) ON DELETE SET NULL;
 
 ALTER TABLE liabilities ADD FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE;
 
@@ -1408,36 +1408,36 @@ ALTER TABLE properties ADD FOREIGN KEY(mietvertrag_document_id) REFERENCES docum
 -- =============================================================
 
 -- Plans (Free, Plus, Pro)
-INSERT INTO plans (plan_type, name, monthly_price, yearly_price, features, quotas, monthly_credits, overage_price_per_credit)
+INSERT INTO plans (plan_type, name, monthly_price, yearly_price, features, quotas, monthly_credits, overage_price_per_credit, created_at, updated_at)
 VALUES
   ('free', 'Free', 0.00, 0.00,
    '{"ai_assistant": true, "ocr_scanning": true, "basic_tax_calc": true, "multi_language": true, "transaction_entry": true}',
-   '{}', 100, NULL),
+   '{}', 100, NULL, NOW(), NOW()),
   ('plus', 'Plus', 4.90, 49.00,
    '{"svs_calc": true, "vat_calc": true, "bank_import": true, "ai_assistant": true, "ocr_scanning": true, "full_tax_calc": true, "basic_tax_calc": true, "multi_language": true, "transaction_entry": true, "property_management": true, "recurring_suggestions": true, "unlimited_transactions": true}',
-   '{}', 500, 0.0400),
+   '{}', 500, 0.0400, NOW(), NOW()),
   ('pro', 'Pro', 12.90, 129.00,
    '{"svs_calc": true, "vat_calc": true, "api_access": true, "bank_import": true, "ai_assistant": true, "ocr_scanning": true, "e1_generation": true, "full_tax_calc": true, "unlimited_ocr": true, "basic_tax_calc": true, "multi_language": true, "advanced_reports": true, "priority_support": true, "transaction_entry": true, "property_management": true, "recurring_suggestions": true, "unlimited_transactions": true}',
-   '{}', 2000, 0.0300)
+   '{}', 2000, 0.0300, NOW(), NOW())
 ON CONFLICT DO NOTHING;
 
 -- Credit cost configs
-INSERT INTO credit_cost_configs (operation, credit_cost, description, min_plan_level, is_active)
+INSERT INTO credit_cost_configs (operation, credit_cost, description, pricing_version, is_active, updated_at)
 VALUES
-  ('ocr_scan', 5, 'OCR document scan', 0, true),
-  ('ai_conversation', 3, 'AI assistant conversation', 0, true),
-  ('transaction_entry', 1, 'Transaction entry', 0, true),
-  ('bank_import', 10, 'Bank statement import', 1, true),
-  ('e1_generation', 20, 'E1 tax form generation', 1, true),
-  ('tax_calc', 2, 'Tax calculation', 1, true)
+  ('ocr_scan', 5, 'OCR document scan', 1, true, NOW()),
+  ('ai_conversation', 3, 'AI assistant conversation', 1, true, NOW()),
+  ('transaction_entry', 1, 'Transaction entry', 1, true, NOW()),
+  ('bank_import', 10, 'Bank statement import', 1, true, NOW()),
+  ('e1_generation', 20, 'E1 tax form generation', 1, true, NOW()),
+  ('tax_calc', 2, 'Tax calculation', 1, true, NOW())
 ON CONFLICT DO NOTHING;
 
 -- Credit topup packages
-INSERT INTO credit_topup_packages (name, credits, price, is_active)
+INSERT INTO credit_topup_packages (name, credits, price, is_active, created_at)
 VALUES
-  ('Small Pack', 100, 4.99, true),
-  ('Medium Pack', 300, 12.99, true),
-  ('Large Pack', 1000, 39.99, true)
+  ('Small Pack', 100, 4.99, true, NOW()),
+  ('Medium Pack', 300, 12.99, true, NOW()),
+  ('Large Pack', 1000, 39.99, true, NOW())
 ON CONFLICT DO NOTHING;
 
 -- Tax configurations are seeded by the application on startup.
