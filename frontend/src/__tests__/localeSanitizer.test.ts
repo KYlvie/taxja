@@ -136,6 +136,7 @@ describe('localeSanitizer', () => {
       'tour.taxTools.assetReport.title',
       'tour.taxTools.assetReport.message',
       'documents.reviewAction',
+      'documents.reviewActionHint',
       'documents.confirmReview',
       'documents.receiptReview.editing',
       'documents.receiptReview.expandDetails',
@@ -208,18 +209,29 @@ describe('localeSanitizer', () => {
       '\u6536\u5165\u7b14\u6570'
     );
     expect(getValue(locales.de, 'documents.reviewAction')).toBe('Weiter pruefen');
+    expect(getValue(locales.de, 'documents.reviewActionHint')).toBe('Klicken, um die Bestaetigung abzuschliessen');
     expect(getValue(locales.en, 'documents.reviewAction')).toBe('Continue review');
+    expect(getValue(locales.en, 'documents.reviewActionHint')).toBe('Click to complete confirmation');
     expect(getValue(locales.zh, 'documents.confirmReview')).toBe('\u786e\u8ba4\u5b8c\u6210\u5ba1\u6838\uff1f');
+    expect(getValue(locales.zh, 'documents.reviewActionHint')).toBe('\u70b9\u51fb\u5b8c\u6210\u786e\u8ba4');
     expect(getValue(locales.fr, 'documents.reviewAction')).toBe('Poursuivre la verification');
+    expect(getValue(locales.fr, 'documents.reviewActionHint')).toBe('Cliquer pour terminer la confirmation');
     expect(getValue(locales.ru, 'documents.confirmReview')).toBe(
       '\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443?'
     );
+    expect(getValue(locales.ru, 'documents.reviewActionHint')).toBe(
+      '\u041d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435'
+    );
     expect(getValue(locales.hu, 'documents.reviewAction')).toBe('Ellenorzes folytatasa');
+    expect(getValue(locales.hu, 'documents.reviewActionHint')).toBe('Kattintson a jovahagyas befejezesehez');
     expect(getValue(locales.pl, 'tour.taxTools.audit.title')).toBe('Lista kontrolna audytu');
     expect(getValue(locales.pl, 'documents.confirmReview')).toBe('Zakonczyc przeglad?');
+    expect(getValue(locales.pl, 'documents.reviewActionHint')).toBe('Kliknij, aby zakonczyc potwierdzenie');
     expect(getValue(locales.tr, 'transactions.exportCsv')).toBe('CSV olarak disa aktar');
     expect(getValue(locales.tr, 'documents.reviewAction')).toBe('Incelemeye devam et');
+    expect(getValue(locales.tr, 'documents.reviewActionHint')).toBe('Onayi tamamlamak icin tiklayin');
     expect(getValue(locales.bs, 'documents.confirmReview')).toBe('Zavrsiti pregled?');
+    expect(getValue(locales.bs, 'documents.reviewActionHint')).toBe('Kliknite da dovrsite potvrdu');
     expect(getValue(locales.zh, 'ai.proactive.healthSummaryReminder')).toBe(
       '\u60a8\u6709 {{count}} \u9879\u7a0e\u52a1\u5065\u5eb7\u63d0\u9192\u5f85\u5904\u7406\uff0c\u5f53\u524d\u5065\u5eb7\u5206\u4e3a {{score}} \u5206\u3002'
     );

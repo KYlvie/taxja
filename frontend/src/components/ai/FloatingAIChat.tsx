@@ -587,7 +587,7 @@ const FloatingAIChat = () => {
               {panelOpen && (
                 <button
                   type="button"
-                  onClick={handleMaximize}
+                  onClick={(e) => { e.stopPropagation(); handleMaximize(); }}
                   className="ai-dock-btn"
                   aria-label={isMaximized ? t('ai.collapse', 'Restore') : t('ai.expand', 'Maximize')}
                 >
@@ -596,7 +596,7 @@ const FloatingAIChat = () => {
               )}
               <button
                 type="button"
-                onClick={togglePanel}
+                onClick={(e) => { e.stopPropagation(); togglePanel(); }}
                 className="ai-dock-btn"
                 aria-label={panelOpen ? t('ai.collapse', 'Collapse') : t('ai.expand', 'Expand')}
               >

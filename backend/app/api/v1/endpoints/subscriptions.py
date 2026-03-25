@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
 from app.models.user import User
-from app.models.plan import Plan, BillingCycle
+from app.models.plan import Plan, PlanType, BillingCycle
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.schemas.subscription import (
     PlanResponse,
@@ -37,6 +37,33 @@ def _is_stripe_configured() -> bool:
     if "your_" in key or key.startswith("sk_test_your"):
         return False
     return True
+
+
+def _build_subscription_response_with_credits(
+    subscription: Subscription,
+    current_user: User,
+    db: Session,
+) -> SubscriptionResponse:
+    response = SubscriptionResponse.model_validate(subscription)
+    try:
+        credit_service = CreditService(db)
+        balance_info = credit_service.get_balance(current_user.id)
+        response.credit_balance = SubscriptionCreditInfo(
+            plan_balance=balance_info.plan_balance,
+            topup_balance=balance_info.topup_balance,
+            total_balance=balance_info.total_balance,
+            available_without_overage=balance_info.available_without_overage,
+            monthly_credits=balance_info.monthly_credits,
+            overage_enabled=balance_info.overage_enabled,
+            overage_credits_used=balance_info.overage_credits_used,
+            overage_price_per_credit=balance_info.overage_price_per_credit,
+            estimated_overage_cost=balance_info.estimated_overage_cost,
+            has_unpaid_overage=balance_info.has_unpaid_overage,
+            reset_date=balance_info.reset_date,
+        )
+    except Exception:
+        logger.warning(f"Failed to fetch credit balance for user {current_user.id}", exc_info=True)
+    return response
 
 
 @router.get("/plans", response_model=List[PlanResponse])
@@ -138,29 +165,7 @@ def get_current_subscription(
             detail="No active subscription found"
         )
     
-    # Build response with credit balance info (transition period compatibility)
-    response = SubscriptionResponse.model_validate(subscription)
-    try:
-        credit_service = CreditService(db)
-        balance_info = credit_service.get_balance(current_user.id)
-        response.credit_balance = SubscriptionCreditInfo(
-            plan_balance=balance_info.plan_balance,
-            topup_balance=balance_info.topup_balance,
-            total_balance=balance_info.total_balance,
-            available_without_overage=balance_info.available_without_overage,
-            monthly_credits=balance_info.monthly_credits,
-            overage_enabled=balance_info.overage_enabled,
-            overage_credits_used=balance_info.overage_credits_used,
-            overage_price_per_credit=balance_info.overage_price_per_credit,
-            estimated_overage_cost=balance_info.estimated_overage_cost,
-            has_unpaid_overage=balance_info.has_unpaid_overage,
-            reset_date=balance_info.reset_date,
-        )
-    except Exception:
-        logger.warning(f"Failed to fetch credit balance for user {current_user.id}", exc_info=True)
-        # credit_balance stays None — old clients unaffected
-    
-    return response
+    return _build_subscription_response_with_credits(subscription, current_user, db)
 
 
 @router.post("/checkout", response_model=CheckoutSessionResponse)
@@ -196,9 +201,11 @@ def create_checkout_session(
             f"Dev mode checkout: activating {plan.plan_type} for user {current_user.id}"
         )
         subscription_service = SubscriptionService(db)
+        previous = subscription_service.get_user_subscription(current_user.id)
+        previous_plan_type = previous.plan.plan_type if previous and previous.plan else None
 
         # Check for existing subscription
-        existing = subscription_service.get_user_subscription(current_user.id)
+        existing = previous
         if existing:
             # Update existing subscription
             existing.plan_id = plan.id
@@ -218,6 +225,12 @@ def create_checkout_session(
                 plan_id=plan.id,
                 billing_cycle=request.billing_cycle,
                 status=SubscriptionStatus.ACTIVE,
+            )
+
+        if previous_plan_type in {None, PlanType.FREE}:
+            CreditService(db).grant_plan_allowance_for_activation(
+                current_user.id,
+                reason=f"subscription_activation:{(previous_plan_type.value if previous_plan_type else 'none')}->{plan.plan_type.value}",
             )
 
         # Build success redirect URL
@@ -246,6 +259,44 @@ def create_checkout_session(
             session_id=session_data["session_id"],
             url=session_data["url"],
         )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post("/checkout/sync", response_model=SubscriptionResponse)
+def sync_checkout_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Reconcile a completed checkout session into local state.
+
+    Useful on the checkout success page so local/dev environments remain
+    correct even when Stripe webhooks are delayed or not reachable.
+    """
+    subscription_service = SubscriptionService(db)
+
+    if not _is_stripe_configured():
+        subscription = subscription_service.get_user_subscription(current_user.id)
+        if not subscription:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found",
+            )
+        return _build_subscription_response_with_credits(subscription, current_user, db)
+
+    from app.services.stripe_payment_service import StripePaymentService
+
+    stripe_service = StripePaymentService(db)
+    try:
+        subscription = stripe_service.sync_checkout_session(
+            session_id=session_id,
+            user_id=current_user.id,
+        )
+        return _build_subscription_response_with_credits(subscription, current_user, db)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

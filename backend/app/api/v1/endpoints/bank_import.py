@@ -63,6 +63,7 @@ def _serialize_line(line: BankStatementLine) -> Dict[str, Any]:
         "normalized_fingerprint": line.normalized_fingerprint,
         "review_status": line.review_status.value if line.review_status else None,
         "suggested_action": line.suggested_action.value if line.suggested_action else None,
+        "resolution_reason": line.resolution_reason,
         "confidence_score": (
             str(line.confidence_score)
             if line.confidence_score is not None

@@ -11,6 +11,7 @@ from app.models.bank_statement_import import (
     BankStatementImport,
     BankStatementImportSourceType,
     BankStatementLine,
+    BankStatementLineResolutionReason,
     BankStatementLineStatus,
     BankStatementSuggestedAction,
 )
@@ -642,6 +643,7 @@ def test_undo_create_line_deletes_created_transaction_and_resets_line(
     assert undo_response.status_code == 200
     payload = undo_response.json()
     assert payload["line"]["review_status"] == "pending_review"
+    assert payload["line"]["resolution_reason"] == "revoked_create"
     assert payload["line"]["created_transaction_id"] is None
     assert payload["line"]["linked_transaction_id"] is None
 
@@ -706,6 +708,7 @@ def test_unmatch_line_resets_to_pending_and_clears_previous_match_candidate(
     payload = unmatch_response.json()
     assert payload["line"]["review_status"] == "pending_review"
     assert payload["line"]["suggested_action"] == "create_new"
+    assert payload["line"]["resolution_reason"] == "revoked_match"
     assert payload["line"]["created_transaction_id"] is None
     assert payload["line"]["linked_transaction_id"] is None
 
@@ -804,6 +807,11 @@ def test_get_import_endpoints_repair_orphaned_bank_line_states(
         "create_new",
         "create_new",
     ]
+    assert [line["resolution_reason"] for line in lines_payload] == [
+        "orphan_repaired",
+        "orphan_repaired",
+        "orphan_repaired",
+    ]
     assert all(line["linked_transaction_id"] is None for line in lines_payload)
     assert all(line["created_transaction_id"] is None for line in lines_payload)
 
@@ -816,5 +824,9 @@ def test_get_import_endpoints_repair_orphaned_bank_line_states(
     )
     assert all(line.review_status == BankStatementLineStatus.PENDING_REVIEW for line in repaired_lines)
     assert all(line.suggested_action == BankStatementSuggestedAction.CREATE_NEW for line in repaired_lines)
+    assert all(
+        line.resolution_reason == BankStatementLineResolutionReason.ORPHAN_REPAIRED.value
+        for line in repaired_lines
+    )
     assert all(line.reviewed_at is None for line in repaired_lines)
     assert all(line.reviewed_by is None for line in repaired_lines)

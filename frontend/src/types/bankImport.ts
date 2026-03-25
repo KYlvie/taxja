@@ -11,6 +11,12 @@ export type BankStatementSuggestedAction =
   | 'match_existing'
   | 'ignore';
 
+export type BankStatementLineResolutionReason =
+  | 'new'
+  | 'revoked_create'
+  | 'revoked_match'
+  | 'orphan_repaired';
+
 export interface BankStatementPeriod {
   start?: string | null;
   end?: string | null;
@@ -56,6 +62,7 @@ export interface BankStatementLine {
   normalized_fingerprint?: string | null;
   review_status?: BankStatementLineStatus | null;
   suggested_action?: BankStatementSuggestedAction | null;
+  resolution_reason?: BankStatementLineResolutionReason | null;
   confidence_score?: string | null;
   linked_transaction_id?: number | null;
   created_transaction_id?: number | null;

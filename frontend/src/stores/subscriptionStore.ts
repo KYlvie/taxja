@@ -131,6 +131,7 @@ interface SubscriptionState {
     successUrl: string,
     cancelUrl: string
   ) => Promise<{ session_id: string; url: string }>;
+  syncCheckoutSession: (sessionId: string) => Promise<void>;
   upgradeSubscription: (planId: number, billingCycle: 'monthly' | 'yearly') => Promise<void>;
   downgradeSubscription: (planId: number) => Promise<void>;
   cancelSubscription: () => Promise<void>;
@@ -280,6 +281,34 @@ export const useSubscriptionStore = create<SubscriptionState>()(
           return result;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to create checkout session';
+          set({
+            error: errorMessage,
+            loading: false,
+          });
+          throw error;
+        }
+      },
+
+      syncCheckoutSession: async (sessionId) => {
+        set({ loading: true, error: null });
+
+        try {
+          const subscription = await apiCall(
+            `/subscriptions/checkout/sync?session_id=${encodeURIComponent(sessionId)}`,
+            { method: 'POST' }
+          );
+
+          const plans = await apiCall('/subscriptions/plans');
+          const currentPlan = plans.find((p: Plan) => p.id === subscription.plan_id);
+
+          set({
+            subscription,
+            currentPlan,
+            creditBalance: subscription.credit_balance ?? null,
+            loading: false,
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to sync checkout session';
           set({
             error: errorMessage,
             loading: false,

@@ -373,6 +373,11 @@
   color: var(--color-primary);
 }
 
+.bank-workbench-line__status--revoked {
+  background: rgba(245, 158, 11, 0.14);
+  color: #b45309;
+}
+
 .bank-workbench-line__status--auto_created,
 .bank-workbench-line__status--matched_existing {
   background: rgba(22, 163, 74, 0.12);

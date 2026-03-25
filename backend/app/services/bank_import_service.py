@@ -16,6 +16,7 @@ from app.models.bank_statement_import import (
     BankStatementImport,
     BankStatementImportSourceType,
     BankStatementLine,
+    BankStatementLineResolutionReason,
     BankStatementLineStatus,
     BankStatementSuggestedAction,
 )
@@ -293,32 +294,32 @@ class BankImportService:
                     or line.linked_transaction_id in ids
                 )
             ):
-                line.created_transaction_id = None
-                line.linked_transaction_id = None
-                line.review_status = BankStatementLineStatus.PENDING_REVIEW
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 line_changed = True
             elif (
                 line.review_status == BankStatementLineStatus.MATCHED_EXISTING
                 and line.linked_transaction_id in ids
             ):
-                line.linked_transaction_id = None
-                line.review_status = BankStatementLineStatus.PENDING_REVIEW
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 line_changed = True
             elif (
                 line.review_status == BankStatementLineStatus.PENDING_REVIEW
                 and line.suggested_action == BankStatementSuggestedAction.MATCH_EXISTING
                 and line.linked_transaction_id in ids
             ):
-                line.linked_transaction_id = None
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 line_changed = True
 
             if line_changed:
@@ -382,28 +383,28 @@ class BankImportService:
         changed = 0
         for line in orphaned_lines:
             if line.review_status == BankStatementLineStatus.AUTO_CREATED:
-                line.created_transaction_id = None
-                line.linked_transaction_id = None
-                line.review_status = BankStatementLineStatus.PENDING_REVIEW
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 changed += 1
             elif line.review_status == BankStatementLineStatus.MATCHED_EXISTING:
-                line.linked_transaction_id = None
-                line.review_status = BankStatementLineStatus.PENDING_REVIEW
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 changed += 1
             elif (
                 line.review_status == BankStatementLineStatus.PENDING_REVIEW
                 and line.suggested_action == BankStatementSuggestedAction.MATCH_EXISTING
             ):
-                line.linked_transaction_id = None
-                line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-                line.reviewed_at = None
-                line.reviewed_by = None
+                self._reset_line_to_pending(
+                    line,
+                    suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+                    resolution_reason=BankStatementLineResolutionReason.ORPHAN_REPAIRED,
+                )
                 changed += 1
 
         if changed:
@@ -423,6 +424,7 @@ class BankImportService:
         line.linked_transaction_id = transaction.id
         line.review_status = BankStatementLineStatus.AUTO_CREATED
         line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+        line.resolution_reason = None
         line.confidence_score = classification_confidence
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
@@ -460,6 +462,7 @@ class BankImportService:
         line.linked_transaction_id = target_transaction.id
         line.review_status = BankStatementLineStatus.MATCHED_EXISTING
         line.suggested_action = BankStatementSuggestedAction.MATCH_EXISTING
+        line.resolution_reason = None
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
         self.db.commit()
@@ -470,6 +473,7 @@ class BankImportService:
         line = self._get_line_for_user(line_id, user.id)
         line.review_status = BankStatementLineStatus.IGNORED_DUPLICATE
         line.suggested_action = BankStatementSuggestedAction.IGNORE
+        line.resolution_reason = None
         line.reviewed_at = datetime.utcnow()
         line.reviewed_by = user.id
         self.db.commit()
@@ -492,12 +496,11 @@ class BankImportService:
         if transaction is not None:
             self.db.delete(transaction)
 
-        line.created_transaction_id = None
-        line.linked_transaction_id = None
-        line.review_status = BankStatementLineStatus.PENDING_REVIEW
-        line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-        line.reviewed_at = None
-        line.reviewed_by = None
+        self._reset_line_to_pending(
+            line,
+            suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+            resolution_reason=BankStatementLineResolutionReason.REVOKED_CREATE,
+        )
         self.db.commit()
         self.db.refresh(line)
         return line
@@ -525,12 +528,11 @@ class BankImportService:
         # Reset the line to a clean pending state. Once the user explicitly
         # unmatched it, the line should no longer look like it still has a
         # suggested bank-match candidate attached.
-        line.created_transaction_id = None
-        line.linked_transaction_id = None
-        line.review_status = BankStatementLineStatus.PENDING_REVIEW
-        line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
-        line.reviewed_at = None
-        line.reviewed_by = None
+        self._reset_line_to_pending(
+            line,
+            suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+            resolution_reason=BankStatementLineResolutionReason.REVOKED_MATCH,
+        )
         self.db.commit()
         self.db.refresh(line)
         return line
@@ -675,6 +677,7 @@ class BankImportService:
             normalized_fingerprint=self._build_fingerprint(parsed_transaction),
             review_status=BankStatementLineStatus.PENDING_REVIEW,
             suggested_action=BankStatementSuggestedAction.CREATE_NEW,
+            resolution_reason=BankStatementLineResolutionReason.NEW.value,
             confidence_score=Decimal("0"),
         )
 
@@ -705,6 +708,7 @@ class BankImportService:
                 line.linked_transaction_id = best_match.id
                 line.review_status = BankStatementLineStatus.MATCHED_EXISTING
                 line.suggested_action = BankStatementSuggestedAction.MATCH_EXISTING
+                line.resolution_reason = None
                 line.confidence_score = Decimal(str(round(similarity, 3)))
                 result.matched_existing_count += 1
                 continue
@@ -712,6 +716,7 @@ class BankImportService:
             if best_match is not None and similarity >= self.SUGGEST_MATCH_SIMILARITY:
                 line.linked_transaction_id = best_match.id
                 line.suggested_action = BankStatementSuggestedAction.MATCH_EXISTING
+                line.resolution_reason = BankStatementLineResolutionReason.NEW.value
                 line.confidence_score = Decimal(str(round(similarity, 3)))
                 line.review_status = BankStatementLineStatus.PENDING_REVIEW
                 result.pending_review_count += 1
@@ -729,12 +734,14 @@ class BankImportService:
                     line.linked_transaction_id = transaction.id
                     line.review_status = BankStatementLineStatus.AUTO_CREATED
                     line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                    line.resolution_reason = None
                     line.confidence_score = classification_confidence
                     result.auto_created_count += 1
                     result.transactions.append(transaction)
                     continue
 
                 line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
+                line.resolution_reason = BankStatementLineResolutionReason.NEW.value
                 line.confidence_score = classification_confidence
                 line.review_status = BankStatementLineStatus.PENDING_REVIEW
                 result.pending_review_count += 1
@@ -742,6 +749,7 @@ class BankImportService:
 
             line.suggested_action = BankStatementSuggestedAction.CREATE_NEW
             line.review_status = BankStatementLineStatus.PENDING_REVIEW
+            line.resolution_reason = BankStatementLineResolutionReason.NEW.value
             line.confidence_score = Decimal("0")
             result.pending_review_count += 1
 
@@ -879,6 +887,21 @@ class BankImportService:
         if line is None:
             raise ValueError("Bank statement line not found")
         return line
+
+    @staticmethod
+    def _reset_line_to_pending(
+        line: BankStatementLine,
+        *,
+        suggested_action: BankStatementSuggestedAction,
+        resolution_reason: BankStatementLineResolutionReason,
+    ) -> None:
+        line.created_transaction_id = None
+        line.linked_transaction_id = None
+        line.review_status = BankStatementLineStatus.PENDING_REVIEW
+        line.suggested_action = suggested_action
+        line.resolution_reason = resolution_reason.value
+        line.reviewed_at = None
+        line.reviewed_by = None
 
     def _match_similarity(self, line: BankStatementLine, transaction: Transaction) -> float:
         line_text = " ".join(filter(None, [line.counterparty or "", line.purpose or "", line.raw_reference or ""])).strip()

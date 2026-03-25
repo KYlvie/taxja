@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import reportService, { AuditChecklist as AuditChecklistType } from '../../services/reportService';
+import { getApiErrorMessage, getFeatureGatePlan } from '../../utils/apiError';
 import './AuditChecklist.css';
 
 interface AuditChecklistProps {

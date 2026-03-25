@@ -15,14 +15,35 @@ const CheckoutSuccess: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { fetchSubscription, currentPlan } = useSubscriptionStore();
+  const { fetchSubscription, fetchCreditBalance, syncCheckoutSession, currentPlan } = useSubscriptionStore();
   
   const sessionId = searchParams.get('session_id');
   
   useEffect(() => {
-    // Fetch updated subscription after successful checkout
-    fetchSubscription();
-  }, [fetchSubscription]);
+    let cancelled = false;
+
+    const loadSubscriptionState = async () => {
+      try {
+        if (sessionId && !sessionId.startsWith('dev_mode_')) {
+          await syncCheckoutSession(sessionId);
+        } else {
+          await fetchSubscription();
+          await fetchCreditBalance();
+        }
+      } catch {
+        if (!cancelled) {
+          await fetchSubscription();
+          await fetchCreditBalance();
+        }
+      }
+    };
+
+    void loadSubscriptionState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCreditBalance, fetchSubscription, sessionId, syncCheckoutSession]);
   
   const handleContinue = () => {
     navigate('/dashboard');

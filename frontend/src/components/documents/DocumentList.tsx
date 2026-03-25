@@ -663,8 +663,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
               className="review-btn"
               onClick={(event) => handleReviewClick(document, event)}
               disabled={confirmingId === document.id}
-              title={t('documents.review.confirmed', 'Reviewed')}
-              aria-label={t('documents.review.confirmed', 'Reviewed')}
+              title={t('documents.reviewActionHint', 'Click to complete confirmation')}
+              aria-label={t('documents.reviewActionHint', 'Click to complete confirmation')}
             >
               <ReviewIcon />
             </button>
@@ -750,8 +750,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
               className="review-btn"
               onClick={(event) => handleReviewClick(document, event)}
               disabled={confirmingId === document.id}
-              title={t('documents.review.confirmed', 'Reviewed')}
-              aria-label={t('documents.review.confirmed', 'Reviewed')}
+              title={t('documents.reviewActionHint', 'Click to complete confirmation')}
+              aria-label={t('documents.reviewActionHint', 'Click to complete confirmation')}
             >
               <ReviewIcon />
             </button>

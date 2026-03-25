@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import reportService from '../../services/reportService';
+import { getApiErrorMessage, getFeatureGatePlan } from '../../utils/apiError';
 import './DataExport.css';
 
 const DataExport = () => {

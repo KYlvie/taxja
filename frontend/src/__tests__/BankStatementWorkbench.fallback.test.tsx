@@ -580,6 +580,7 @@ describe('BankStatementWorkbench local fallback', () => {
 
     await waitFor(() => expect(screen.getByText('Import summary')).toBeInTheDocument());
     expect(screen.getAllByText('Pending review').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('The linked transaction is no longer available. Review this line again.').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'View transaction' })).not.toBeInTheDocument();
   });
@@ -614,6 +615,7 @@ describe('BankStatementWorkbench local fallback', () => {
     const pendingLine = {
       ...autoCreatedLine,
       review_status: 'pending_review',
+      resolution_reason: 'revoked_create',
       linked_transaction_id: null,
       created_transaction_id: null,
       linked_transaction: null,
@@ -673,6 +675,7 @@ describe('BankStatementWorkbench local fallback', () => {
 
     await waitFor(() => expect(undoCreateLine).toHaveBeenCalledWith(88));
     await waitFor(() => expect(getImport).toHaveBeenCalledWith(12));
+    await waitFor(() => expect(screen.getAllByText('Create undone').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0));
   });
 
@@ -755,6 +758,7 @@ describe('BankStatementWorkbench local fallback', () => {
       ...matchedLine,
       review_status: 'pending_review',
       suggested_action: 'create_new',
+      resolution_reason: 'revoked_match',
       linked_transaction_id: null,
       linked_transaction: null,
     };
@@ -812,6 +816,7 @@ describe('BankStatementWorkbench local fallback', () => {
 
     await waitFor(() => expect(unmatchLine).toHaveBeenCalledWith(89));
     await waitFor(() => expect(getImport).toHaveBeenCalledWith(12));
+    await waitFor(() => expect(screen.getAllByText('Match removed').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Create transaction' }).length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: 'Match existing' })).not.toBeInTheDocument();
   });

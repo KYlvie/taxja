@@ -272,6 +272,24 @@ const buildBankWorkbenchHotfix = (config: {
   },
 });
 
+const buildBankWorkbenchResolutionHotfix = (config: {
+  statusRevokedCreate: string;
+  statusRevokedMatch: string;
+  reasonOrphanRepaired: string;
+}): LocaleObject => ({
+  documents: {
+    bankWorkbench: {
+      status: {
+        revokedCreate: config.statusRevokedCreate,
+        revokedMatch: config.statusRevokedMatch,
+      },
+      reason: {
+        orphanRepaired: config.reasonOrphanRepaired,
+      },
+    },
+  },
+});
+
 const buildProactiveReminderHotfix = (healthSummaryReminder: string): LocaleObject => ({
   ai: {
     proactive: {
@@ -285,6 +303,7 @@ const buildDocumentReviewHotfix = (config: {
   confirmedSuccess: string;
   saveChanges: string;
   reviewAction: string;
+  reviewActionHint: string;
   confirmReview: string;
   receiptEditing: string;
   receiptExpandDetails: string;
@@ -293,6 +312,7 @@ const buildDocumentReviewHotfix = (config: {
 }): LocaleObject => ({
   documents: {
     reviewAction: config.reviewAction,
+    reviewActionHint: config.reviewActionHint,
     confirmReview: config.confirmReview,
     receiptReview: {
       editing: config.receiptEditing,
@@ -447,11 +467,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Kontoauszugs-Arbeitsbereich oeffnen',
       bankWorkbenchHint: 'Oeffnen Sie den Kontoauszugs-Arbeitsbereich, um Eintraege mit niedriger Konfidenz zu pruefen, bestehende Transaktionen zuzuordnen und neue Transaktionen zu bestaetigen.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Erstellung rueckgaengig',
+        statusRevokedMatch: 'Zuordnung aufgehoben',
+        reasonOrphanRepaired: 'Die verknuepfte Transaktion ist nicht mehr verfuegbar. Bitte pruefen Sie diese Zeile erneut.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Bestaetigt',
         confirmedSuccess: 'Dokument bestaetigt',
         saveChanges: 'Aenderungen speichern',
         reviewAction: 'Weiter pruefen',
+        reviewActionHint: 'Klicken, um die Bestaetigung abzuschliessen',
         confirmReview: 'Pruefung abschliessen?',
         receiptEditing: 'Bearbeitung',
         receiptExpandDetails: 'Details einblenden',
@@ -543,11 +569,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Open bank statement workbench',
       bankWorkbenchHint: 'Open the bank statement workbench to review low-confidence items, match existing transactions, and confirm new transactions.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Create undone',
+        statusRevokedMatch: 'Match removed',
+        reasonOrphanRepaired: 'The linked transaction is no longer available. Review this line again.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Confirmed',
         confirmedSuccess: 'Document confirmed',
         saveChanges: 'Save changes',
         reviewAction: 'Continue review',
+        reviewActionHint: 'Click to complete confirmation',
         confirmReview: 'Complete review?',
         receiptEditing: 'Editing',
         receiptExpandDetails: 'Expand details',
@@ -645,11 +677,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: '\u6253\u5f00\u94f6\u884c\u6d41\u6c34\u5de5\u4f5c\u53f0',
       bankWorkbenchHint: '\u6253\u5f00\u94f6\u884c\u6d41\u6c34\u5de5\u4f5c\u53f0\uff0c\u590d\u6838\u4f4e\u7f6e\u4fe1\u5ea6\u9879\u76ee\uff0c\u5339\u914d\u5df2\u6709\u4ea4\u6613\uff0c\u5e76\u786e\u8ba4\u9700\u8981\u65b0\u589e\u7684\u4ea4\u6613\u3002',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: '\u5df2\u64a4\u9500\u521b\u5efa',
+        statusRevokedMatch: '\u5df2\u53d6\u6d88\u5339\u914d',
+        reasonOrphanRepaired: '\u5173\u8054\u4ea4\u6613\u5df2\u5931\u6548\uff0c\u8bf7\u91cd\u65b0\u68c0\u67e5\u8fd9\u6761\u6d41\u6c34\u3002',
+      }),
       buildDocumentReviewHotfix({
         confirmed: '\u5df2\u786e\u8ba4',
         confirmedSuccess: '\u6587\u6863\u5df2\u786e\u8ba4',
         saveChanges: '\u4fdd\u5b58\u66f4\u6539',
         reviewAction: '\u7ee7\u7eed\u5ba1\u6838',
+        reviewActionHint: '\u70b9\u51fb\u5b8c\u6210\u786e\u8ba4',
         confirmReview: '\u786e\u8ba4\u5b8c\u6210\u5ba1\u6838\uff1f',
         receiptEditing: '\u7f16\u8f91\u4e2d',
         receiptExpandDetails: '\u5c55\u5f00\u8be6\u60c5',
@@ -746,11 +784,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Ouvrir l espace de traitement',
       bankWorkbenchHint: 'Ouvrez l espace de traitement du releve bancaire pour verifier les elements a faible confiance, rapprocher les transactions existantes et confirmer les nouvelles transactions.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Creation annulee',
+        statusRevokedMatch: 'Correspondance retiree',
+        reasonOrphanRepaired: 'La transaction liee n est plus disponible. Verifiez de nouveau cette ligne.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Confirme',
         confirmedSuccess: 'Document confirme',
         saveChanges: 'Enregistrer les modifications',
         reviewAction: 'Poursuivre la verification',
+        reviewActionHint: 'Cliquer pour terminer la confirmation',
         confirmReview: 'Terminer la verification ?',
         receiptEditing: 'Modification',
         receiptExpandDetails: 'Afficher les details',
@@ -872,11 +916,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: '\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0440\u0430\u0431\u043e\u0447\u0443\u044e \u043e\u0431\u043b\u0430\u0441\u0442\u044c',
       bankWorkbenchHint: '\u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u0440\u0430\u0431\u043e\u0447\u0443\u044e \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u043e\u0439 \u0432\u044b\u043f\u0438\u0441\u043a\u0438, \u0447\u0442\u043e\u0431\u044b \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u0441 \u043d\u0438\u0437\u043a\u043e\u0439 \u0443\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c\u044e, \u0441\u043e\u043f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0435 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0438 \u0438 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043d\u043e\u0432\u044b\u0435 \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0438.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: '\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u043e',
+        statusRevokedMatch: '\u0421\u0432\u044f\u0437\u044c \u0441\u043d\u044f\u0442\u0430',
+        reasonOrphanRepaired: '\u0421\u0432\u044f\u0437\u0430\u043d\u043d\u0430\u044f \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u044f \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0430. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u044d\u0442\u0443 \u0441\u0442\u0440\u043e\u043a\u0443 \u0435\u0449\u0435 \u0440\u0430\u0437.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e',
         confirmedSuccess: '\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d',
         saveChanges: '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f',
         reviewAction: '\u041f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443',
+        reviewActionHint: '\u041d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435',
         confirmReview: '\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443?',
         receiptEditing: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435',
         receiptExpandDetails: '\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438',
@@ -993,11 +1043,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Munkafelulet megnyitasa',
       bankWorkbenchHint: 'Nyissa meg a bankszamlakivonat munkafeluletet az alacsony megbizhatosagu elemek ellenorzesehez, a meglevo tranzakciok parositasahoz es az uj tranzakciok megerositesehez.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Letrehozas visszavonva',
+        statusRevokedMatch: 'Parositas torolve',
+        reasonOrphanRepaired: 'A kapcsolt tranzakcio mar nem erheto el. Ellenorizze ujra ezt a sort.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Megerositve',
         confirmedSuccess: 'Dokumentum megerositve',
         saveChanges: 'Valtoztatasok mentese',
         reviewAction: 'Ellenorzes folytatasa',
+        reviewActionHint: 'Kattintson a jovahagyas befejezesehez',
         confirmReview: 'Ellenorzes befejezese?',
         receiptEditing: 'Szerkesztes',
         receiptExpandDetails: 'Reszletek megjelenitese',
@@ -1120,11 +1176,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Otworz panel wyciagu bankowego',
       bankWorkbenchHint: 'Otworz panel wyciagu bankowego, aby sprawdzic pozycje o niskiej pewnosci, dopasowac istniejace transakcje i potwierdzic nowe transakcje.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Cofnieto utworzenie',
+        statusRevokedMatch: 'Usunieto dopasowanie',
+        reasonOrphanRepaired: 'Powiazana transakcja nie jest juz dostepna. Sprawdz ponownie ten wiersz.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Potwierdzone',
         confirmedSuccess: 'Dokument potwierdzony',
         saveChanges: 'Zapisz zmiany',
         reviewAction: 'Kontynuuj przeglad',
+        reviewActionHint: 'Kliknij, aby zakonczyc potwierdzenie',
         confirmReview: 'Zakonczyc przeglad?',
         receiptEditing: 'Edycja',
         receiptExpandDetails: 'Pokaz szczegoly',
@@ -1252,11 +1314,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Calisma alanini ac',
       bankWorkbenchHint: 'Dusuk guvenli ogeleri incelemek, mevcut islemleri eslestirmek ve yeni islemleri onaylamak icin banka hesap ozeti calisma alanini acin.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Olusturma geri alindi',
+        statusRevokedMatch: 'Eslestirme kaldirildi',
+        reasonOrphanRepaired: 'Bagli islem artik kullanilabilir degil. Bu satiri yeniden inceleyin.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Onaylandi',
         confirmedSuccess: 'Belge onaylandi',
         saveChanges: 'Degisiklikleri kaydet',
         reviewAction: 'Incelemeye devam et',
+        reviewActionHint: 'Onayi tamamlamak icin tiklayin',
         confirmReview: 'Incelemeyi tamamla?',
         receiptEditing: 'Duzenleniyor',
         receiptExpandDetails: 'Ayrintilari genislet',
@@ -1378,11 +1446,17 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
       openBankWorkbench: 'Otvori radni prostor',
       bankWorkbenchHint: 'Otvorite radni prostor bankovnog izvoda da pregledate stavke sa niskom pouzdanoscu, povezete postojece transakcije i potvrdite nove transakcije.',
     }),
+      buildBankWorkbenchResolutionHotfix({
+        statusRevokedCreate: 'Kreiranje ponisteno',
+        statusRevokedMatch: 'Povezivanje uklonjeno',
+        reasonOrphanRepaired: 'Povezana transakcija vise nije dostupna. Ponovo pregledajte ovu stavku.',
+      }),
       buildDocumentReviewHotfix({
         confirmed: 'Potvrdjeno',
         confirmedSuccess: 'Dokument potvrdjen',
         saveChanges: 'Sacuvaj izmjene',
         reviewAction: 'Nastavi pregled',
+        reviewActionHint: 'Kliknite da dovrsite potvrdu',
         confirmReview: 'Zavrsiti pregled?',
         receiptEditing: 'Uredjivanje',
         receiptExpandDetails: 'Prikazi detalje',

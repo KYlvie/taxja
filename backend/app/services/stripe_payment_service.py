@@ -458,53 +458,139 @@ class StripePaymentService:
             return handler(event)
         return {"status": "unhandled", "event_type": event["type"]}
 
-    # ── Webhook handlers ──────────────────────────────────────────────
-    def _on_checkout_completed(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Activate subscription after successful checkout."""
-        session = event["data"]["object"]
-        user_id = int(session["metadata"].get("user_id", 0))
-        plan_id = int(session["metadata"].get("plan_id", 0))
-        billing_cycle_str = session["metadata"].get("billing_cycle", "monthly")
+    def _grant_initial_paid_plan_allowance(
+        self,
+        user_id: int,
+        previous_plan_type: Optional[PlanType],
+        subscription: Subscription,
+    ) -> None:
+        if subscription.plan is None:
+            return
+
+        new_plan_type = subscription.plan.plan_type
+        if new_plan_type == PlanType.FREE:
+            return
+
+        if previous_plan_type not in {None, PlanType.FREE}:
+            return
+
+        from app.services.credit_service import CreditService
+
+        CreditService(self.db).grant_plan_allowance_for_activation(
+            user_id=user_id,
+            reason=f"subscription_activation:{previous_plan_type or 'none'}->{new_plan_type.value}",
+        )
+
+    def _activate_subscription_from_checkout_session(
+        self,
+        session: Dict[str, Any],
+        expected_user_id: Optional[int] = None,
+    ) -> Subscription:
+        metadata = session.get("metadata", {}) or {}
+        user_id = int(metadata.get("user_id", 0))
+        plan_id = int(metadata.get("plan_id", 0))
+        billing_cycle_str = metadata.get("billing_cycle", "monthly")
         stripe_subscription_id = session.get("subscription")
         stripe_customer_id = session.get("customer")
 
         if not user_id or not plan_id:
-            logger.error(f"Missing metadata in checkout session: {session['id']}")
-            return {"status": "error", "reason": "missing_metadata"}
+            raise ValueError("Missing checkout metadata")
+
+        if expected_user_id is not None and user_id != expected_user_id:
+            raise ValueError("Checkout session does not belong to the current user")
 
         billing_cycle = (
             BillingCycle.YEARLY if billing_cycle_str == "yearly" else BillingCycle.MONTHLY
         )
 
-        if stripe_subscription_id:
-            try:
-                stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
-                self._sync_local_subscription_from_stripe(
-                    stripe_sub,
-                    user_id=user_id,
-                    fallback_plan_id=plan_id,
-                    fallback_billing_cycle=billing_cycle,
-                )
-            except stripe.error.StripeError as e:
-                logger.warning(
-                    "Failed to retrieve Stripe subscription %s after checkout; falling back to checkout metadata: %s",
-                    stripe_subscription_id,
-                    e,
-                )
-                self._sync_local_subscription_from_stripe(
-                    {
-                        "id": stripe_subscription_id,
-                        "customer": stripe_customer_id,
-                        "status": "active",
-                        "cancel_at_period_end": False,
-                        "current_period_start": int(datetime.utcnow().timestamp()),
-                        "current_period_end": None,
-                        "items": {"data": []},
-                    },
-                    user_id=user_id,
-                    fallback_plan_id=plan_id,
-                    fallback_billing_cycle=billing_cycle,
-                )
+        previous_subscription = self._get_subscription(user_id)
+        previous_plan_type = (
+            previous_subscription.plan.plan_type
+            if previous_subscription and previous_subscription.plan
+            else None
+        )
+
+        if not stripe_subscription_id:
+            raise ValueError("Completed checkout session has no subscription reference")
+
+        try:
+            stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
+            subscription = self._sync_local_subscription_from_stripe(
+                stripe_sub,
+                user_id=user_id,
+                fallback_plan_id=plan_id,
+                fallback_billing_cycle=billing_cycle,
+            )
+        except stripe.error.StripeError as e:
+            logger.warning(
+                "Failed to retrieve Stripe subscription %s after checkout; falling back to checkout metadata: %s",
+                stripe_subscription_id,
+                e,
+            )
+            subscription = self._sync_local_subscription_from_stripe(
+                {
+                    "id": stripe_subscription_id,
+                    "customer": stripe_customer_id,
+                    "status": "active",
+                    "cancel_at_period_end": False,
+                    "current_period_start": int(datetime.utcnow().timestamp()),
+                    "current_period_end": None,
+                    "items": {"data": []},
+                },
+                user_id=user_id,
+                fallback_plan_id=plan_id,
+                fallback_billing_cycle=billing_cycle,
+            )
+
+        self._grant_initial_paid_plan_allowance(
+            user_id=user_id,
+            previous_plan_type=previous_plan_type,
+            subscription=subscription,
+        )
+        return subscription
+
+    def sync_checkout_session(self, session_id: str, user_id: int) -> Subscription:
+        """Actively reconcile a completed Stripe Checkout session."""
+        if not session_id:
+            raise ValueError("Missing checkout session id")
+
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+        except stripe.error.StripeError as e:
+            logger.error("Stripe checkout session retrieval error for %s: %s", session_id, e)
+            raise ValueError(f"Failed to retrieve checkout session: {str(e)}")
+
+        if session.get("mode") != "subscription":
+            raise ValueError("Checkout session is not a subscription checkout")
+
+        if session.get("status") != "complete":
+            raise ValueError("Checkout session is not complete yet")
+
+        payment_status = session.get("payment_status")
+        if payment_status not in {None, "paid", "no_payment_required"}:
+            raise ValueError("Checkout session payment is not completed")
+
+        return self._activate_subscription_from_checkout_session(
+            session=session,
+            expected_user_id=user_id,
+        )
+
+    # ── Webhook handlers ──────────────────────────────────────────────
+    def _on_checkout_completed(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Activate subscription after successful checkout."""
+        session = event["data"]["object"]
+        user_id = int((session.get("metadata") or {}).get("user_id", 0))
+        plan_id = int((session.get("metadata") or {}).get("plan_id", 0))
+
+        if not user_id or not plan_id:
+            logger.error(f"Missing metadata in checkout session: {session['id']}")
+            return {"status": "error", "reason": "missing_metadata"}
+
+        try:
+            self._activate_subscription_from_checkout_session(session)
+        except ValueError as e:
+            logger.error("Checkout completion processing failed for %s: %s", session.get("id"), e)
+            return {"status": "error", "reason": str(e)}
 
         logger.info(f"Checkout completed: user {user_id} → plan {plan_id}")
         return {"status": "processed", "action": "subscription_activated"}

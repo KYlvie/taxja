@@ -31,7 +31,7 @@ const translations: Record<string, string> = {
   'documents.types.receipt': 'Receipt',
   'documents.title': 'Documents',
   'documents.filters.needsReview': 'Needs review',
-  'documents.review.confirmed': 'Reviewed',
+  'documents.reviewActionHint': 'Click to complete confirmation',
   'documents.review.confirmedSuccess': 'Document confirmed',
   'documents.reviewActionFailed': 'Review failed',
   'documents.pageSize': 'Page size',
@@ -183,7 +183,7 @@ describe('DocumentList review status', () => {
 
     confirmOCR.mockResolvedValue(undefined);
 
-    const reviewButton = await screen.findByRole('button', { name: 'Reviewed' });
+    const reviewButton = await screen.findByRole('button', { name: 'Click to complete confirmation' });
     fireEvent.click(reviewButton);
 
     await waitFor(() => {
@@ -191,7 +191,7 @@ describe('DocumentList review status', () => {
     });
 
     expect(getDocuments).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('button', { name: 'Reviewed' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Click to complete confirmation' })).not.toBeInTheDocument();
   });
 
   it('confirms the document directly instead of opening the detail flow', async () => {
@@ -238,7 +238,7 @@ describe('DocumentList review status', () => {
     const yearToggle = screen.getByRole('button', { expanded: false });
     fireEvent.click(yearToggle);
 
-    const reviewButton = await screen.findByRole('button', { name: 'Reviewed' });
+    const reviewButton = await screen.findByRole('button', { name: 'Click to complete confirmation' });
     fireEvent.click(reviewButton);
 
     await waitFor(() => {

@@ -6,6 +6,7 @@ import { Document } from '../../types/document';
 import type {
   BankStatementImportSummary,
   BankStatementLine,
+  BankStatementLineResolutionReason,
   BankStatementLineStatus,
   BankStatementPeriod,
   BankStatementTransactionSummary,
@@ -40,6 +41,7 @@ interface BankStatementWorkbenchProps {
 type BankStatementWorkbenchMode = 'remote' | 'fallback';
 type BankWorkbenchFilter = 'all' | BankStatementLineStatus;
 type AmountTone = 'credit' | 'debit' | 'neutral';
+type BankStatementDisplayStatusTone = BankStatementLineStatus | 'revoked';
 
 interface FallbackBankStatementSummary {
   bank_name?: string | null;
@@ -521,25 +523,31 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       let reviewStatus: BankStatementLineStatus =
         (line.review_status as BankStatementLineStatus | null) ?? 'pending_review';
       let suggestedAction = line.suggested_action ?? 'create_new';
+      let resolutionReason: BankStatementLineResolutionReason | null =
+        (line.resolution_reason as BankStatementLineResolutionReason | null) ?? null;
 
       if (reviewStatus === 'auto_created' && !hasCreatedTransaction) {
         reviewStatus = 'pending_review';
         suggestedAction = 'create_new';
+        resolutionReason = resolutionReason ?? 'orphan_repaired';
       } else if (reviewStatus === 'matched_existing' && !hasLinkedTransaction) {
         reviewStatus = 'pending_review';
         suggestedAction = 'create_new';
+        resolutionReason = resolutionReason ?? 'orphan_repaired';
       } else if (
         reviewStatus === 'pending_review'
         && suggestedAction === 'match_existing'
         && !hasLinkedTransaction
       ) {
         suggestedAction = 'create_new';
+        resolutionReason = resolutionReason ?? 'orphan_repaired';
       }
 
       return {
         ...line,
         review_status: reviewStatus,
         suggested_action: suggestedAction,
+        resolution_reason: resolutionReason,
       };
     }),
     [lines],
@@ -738,18 +746,49 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     await confirmFallbackLines(pendingFallbackLines);
   }, [confirmFallbackLines, fallbackLines]);
 
-  const renderLineStatus = useCallback((status: BankStatementLine['review_status']) => {
-    switch (status) {
-      case 'auto_created':
-        return t('documents.bankWorkbench.status.autoCreated', 'Auto-created');
-      case 'matched_existing':
-        return t('documents.bankWorkbench.status.matchedExisting', 'Matched existing');
-      case 'ignored_duplicate':
-        return t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored duplicate');
-      case 'pending_review':
-      default:
-        return t('documents.bankWorkbench.status.pendingReview', 'Pending review');
+  const getDisplayStatus = useCallback((line: BankStatementLine): {
+    label: string;
+    tone: BankStatementDisplayStatusTone;
+  } => {
+    if (line.review_status === 'pending_review') {
+      if (line.resolution_reason === 'revoked_create') {
+        return {
+          label: t('documents.bankWorkbench.status.revokedCreate', 'Create undone'),
+          tone: 'revoked',
+        };
+      }
+
+      if (line.resolution_reason === 'revoked_match') {
+        return {
+          label: t('documents.bankWorkbench.status.revokedMatch', 'Match removed'),
+          tone: 'revoked',
+        };
+      }
+
+      return {
+        label: t('documents.bankWorkbench.status.pendingReview', 'Pending review'),
+        tone: 'pending_review',
+      };
     }
+
+    if (line.review_status === 'auto_created') {
+      return {
+        label: t('documents.bankWorkbench.status.autoCreated', 'Auto-created'),
+        tone: 'auto_created',
+      };
+    }
+
+    if (line.review_status === 'matched_existing') {
+      return {
+        label: t('documents.bankWorkbench.status.matchedExisting', 'Matched existing'),
+        tone: 'matched_existing',
+      };
+    }
+
+    return {
+      label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored duplicate'),
+      tone: 'ignored_duplicate',
+    };
   }, [t]);
 
   const renderFallbackDirection = useCallback((direction: FallbackTransactionDirection) => {
@@ -778,6 +817,14 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       return null;
     }
 
+    if (
+      line.resolution_reason === 'revoked_create'
+      || line.resolution_reason === 'revoked_match'
+      || line.resolution_reason === 'orphan_repaired'
+    ) {
+      return null;
+    }
+
     if (line.suggested_action === 'match_existing' && line.linked_transaction_id) {
       return t('documents.bankWorkbench.suggested.match', 'Suggested match');
     }
@@ -789,6 +836,20 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
 
   const getSuggestedActionHint = useCallback((line: BankStatementLine): string | null => {
     if (line.review_status !== 'pending_review') {
+      return null;
+    }
+
+    if (line.resolution_reason === 'orphan_repaired') {
+      return t(
+        'documents.bankWorkbench.reason.orphanRepaired',
+        'The linked transaction is no longer available. Review this line again.'
+      );
+    }
+
+    if (
+      line.resolution_reason === 'revoked_create'
+      || line.resolution_reason === 'revoked_match'
+    ) {
       return null;
     }
 
@@ -960,6 +1021,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                   {filteredRemoteLines.map((line) => {
                     const disabled = actingLineId === line.id || bulkActing;
                     const confidenceLabel = formatConfidence(line.confidence_score);
+                    const displayStatus = getDisplayStatus(line);
                     const actualLinkedTransaction = getActualLinkedTransaction(line);
                     const actualLinkedTransactionId = getActualLinkedTransactionId(line);
                     const linkedReference = actualLinkedTransactionId
@@ -1022,8 +1084,8 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                         </td>
                         <td>
                           <div className="bank-workbench-cell">
-                            <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
-                              {renderLineStatus(line.review_status)}
+                            <span className={`bank-workbench-line__status bank-workbench-line__status--${displayStatus.tone}`}>
+                              {displayStatus.label}
                             </span>
                             {confidenceLabel && (
                               <div className="bank-workbench-cell__secondary">
@@ -1131,7 +1193,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                               </div>
                             ) : (
                               <span className="bank-workbench-table__static-action">
-                                {renderLineStatus(line.review_status)}
+                                {displayStatus.label}
                               </span>
                             )
                           )}
@@ -1147,6 +1209,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
               {filteredRemoteLines.map((line) => {
                 const disabled = actingLineId === line.id || bulkActing;
                 const confidenceLabel = formatConfidence(line.confidence_score);
+                const displayStatus = getDisplayStatus(line);
                 const actualLinkedTransaction = getActualLinkedTransaction(line);
                 const actualLinkedTransactionId = getActualLinkedTransactionId(line);
                 const actualTransactionLabel = actualLinkedTransaction?.description
@@ -1177,8 +1240,8 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                     {renderPurposeCell(line.purpose || line.raw_reference, line.raw_reference)}
 
                     <div className="bank-workbench-mobile-card__meta">
-                      <span className={`bank-workbench-line__status bank-workbench-line__status--${line.review_status || 'pending_review'}`}>
-                        {renderLineStatus(line.review_status)}
+                      <span className={`bank-workbench-line__status bank-workbench-line__status--${displayStatus.tone}`}>
+                        {displayStatus.label}
                       </span>
                       {actualTransactionLabel && (
                         <span className="bank-workbench-mobile-card__meta-item">

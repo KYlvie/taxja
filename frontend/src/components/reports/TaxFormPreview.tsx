@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Select from '../common/Select';
 import reportService, { TaxFormData, TaxFormField, EligibleForm } from '../../services/reportService';
 import YearWarning from './YearWarning';
+import { getApiErrorMessage, getFeatureGatePlan } from '../../utils/apiError';
 import { getLocaleForLanguage } from '../../utils/locale';
 import exportElementToPdf from '../../utils/exportElementToPdf';
 import './TaxFormPreview.css';

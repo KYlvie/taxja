@@ -881,6 +881,45 @@ class CreditService:
         self._cache_delete(user_id)
         return self._build_balance_info(balance, user_id)
 
+    def grant_plan_allowance_for_activation(
+        self,
+        user_id: int,
+        reason: str = "subscription_activation",
+    ) -> CreditBalanceInfo:
+        """Set the plan bucket to the current plan's monthly allowance.
+
+        This is used when a user completes an initial paid checkout from the
+        free tier and should immediately receive the new plan's allowance,
+        without waiting for the next monthly reset.
+        """
+        balance = self._get_or_create_balance(user_id)
+        monthly_credits, _ = self._get_plan_credit_info(user_id)
+
+        if balance.plan_balance != monthly_credits:
+            delta = monthly_credits - balance.plan_balance
+            balance.plan_balance = monthly_credits
+
+            if delta != 0:
+                self.db.add(CreditLedger(
+                    user_id=user_id,
+                    operation=CreditOperation.ADMIN_ADJUSTMENT,
+                    operation_detail="plan_activation_grant",
+                    status=CreditLedgerStatus.SETTLED,
+                    credit_amount=delta,
+                    source=CreditSource.PLAN,
+                    plan_balance_after=balance.plan_balance,
+                    topup_balance_after=balance.topup_balance,
+                    is_overage=False,
+                    overage_portion=0,
+                    reason=reason,
+                    pricing_version=1,
+                ))
+
+        self.db.commit()
+        self.db.refresh(balance)
+        self._cache_delete(user_id)
+        return self._build_balance_info(balance, user_id)
+
     def get_ledger(
         self,
         user_id: int,

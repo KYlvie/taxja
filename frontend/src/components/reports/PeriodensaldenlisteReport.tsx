@@ -5,6 +5,7 @@ import reportService, {
   PeriodensaldenlisteReport as PeriodensaldenlisteData,
 } from '../../services/reportService';
 import YearWarning from './YearWarning';
+import { getApiErrorMessage, getFeatureGatePlan } from '../../utils/apiError';
 import { getLocaleForLanguage } from '../../utils/locale';
 import exportElementToPdf from '../../utils/exportElementToPdf';
 import './PeriodensaldenlisteReport.css';

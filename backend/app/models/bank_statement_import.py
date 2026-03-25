@@ -49,6 +49,15 @@ class BankStatementSuggestedAction(str, Enum):
     IGNORE = "ignore"
 
 
+class BankStatementLineResolutionReason(str, Enum):
+    """Secondary reason explaining why a line is currently pending."""
+
+    NEW = "new"
+    REVOKED_CREATE = "revoked_create"
+    REVOKED_MATCH = "revoked_match"
+    ORPHAN_REPAIRED = "orphan_repaired"
+
+
 class BankStatementImport(Base):
     """Represents one imported bank statement or bank-statement document."""
 
@@ -128,6 +137,11 @@ class BankStatementLine(Base):
         ),
         nullable=False,
         default=BankStatementSuggestedAction.CREATE_NEW,
+    )
+    resolution_reason = Column(
+        String(64),
+        nullable=True,
+        default=BankStatementLineResolutionReason.NEW.value,
     )
     confidence_score = Column(Numeric(4, 3), nullable=False, default=0)
     linked_transaction_id = Column(
