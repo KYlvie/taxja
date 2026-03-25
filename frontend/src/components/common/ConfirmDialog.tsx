@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useThemeStore } from '../../stores/themeStore';
 import RobotMascot from './RobotMascot';
 import './ConfirmDialog.css';
 
@@ -32,6 +33,9 @@ const ConfirmDialog = ({
   onCancel,
 }: ConfirmDialogProps) => {
   const { t } = useTranslation();
+  const theme = useThemeStore((s) => s.theme);
+  const isCyber = theme === 'cyber';
+
   const [visible, setVisible] = useState(false);
   const [showBubble, setShowBubble] = useState(false);
   const [typedText, setTypedText] = useState('');
@@ -46,35 +50,40 @@ const ConfirmDialog = ({
       setShowBubble(false);
       setShowButtons(false);
 
-      // Show bubble after robot entrance animation
-      const bubbleTimer = setTimeout(() => {
+      if (isCyber) {
+        // Cyber mode: typing animation with robot
+        const bubbleTimer = setTimeout(() => {
+          setShowBubble(true);
+          let i = 0;
+          const speed = Math.max(8, Math.min(25, 600 / message.length));
+          const typeInterval = setInterval(() => {
+            i++;
+            setTypedText(message.slice(0, i));
+            if (i >= message.length) {
+              clearInterval(typeInterval);
+              setTimeout(() => setShowButtons(true), 200);
+            }
+          }, speed);
+          return () => clearInterval(typeInterval);
+        }, 500);
+        return () => clearTimeout(bubbleTimer);
+      } else {
+        // Classic mode: show immediately, no typing animation
         setShowBubble(true);
-        // Type out the message
-        let i = 0;
-        const speed = Math.max(8, Math.min(25, 600 / message.length));
-        const typeInterval = setInterval(() => {
-          i++;
-          setTypedText(message.slice(0, i));
-          if (i >= message.length) {
-            clearInterval(typeInterval);
-            setTimeout(() => setShowButtons(true), 200);
-          }
-        }, speed);
-        return () => clearInterval(typeInterval);
-      }, 500);
-
-      return () => clearTimeout(bubbleTimer);
+        setTypedText(message);
+        setShowButtons(true);
+      }
     } else {
       if (visible) {
         setExiting(true);
         const exitTimer = setTimeout(() => {
           setVisible(false);
           setExiting(false);
-        }, 400);
+        }, isCyber ? 400 : 200);
         return () => clearTimeout(exitTimer);
       }
     }
-  }, [isOpen, message]);
+  }, [isOpen, message, isCyber]);
 
   if (!visible) return null;
 
@@ -89,62 +98,88 @@ const ConfirmDialog = ({
     setExiting(true);
     setTimeout(() => {
       onConfirm();
-    }, 300);
+    }, isCyber ? 300 : 150);
   };
 
   const handleCancel = () => {
     setExiting(true);
     setTimeout(() => {
       onCancel?.();
-    }, 300);
+    }, isCyber ? 300 : 150);
   };
 
+  /* ── Cyber mode: full-screen robot ── */
+  if (isCyber) {
+    return createPortal(
+      <div
+        className={`cfd-robot-overlay ${exiting ? 'cfd-robot-overlay--exit' : ''}`}
+        onClick={handleCancel}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="cfd-robot-scene" onClick={(e) => e.stopPropagation()}>
+          <div className="cfd-robot-container">
+            <RobotMascot size={ROBOT_SIZE} />
+          </div>
+          {showBubble && (
+            <div className={`cfd-robot-bubble cfd-robot-bubble--${variant}`}>
+              {title && <div className="cfd-robot-bubble-title">{title}</div>}
+              <div className="cfd-robot-bubble-text">
+                {typedText}
+                {typedText.length >= message.length && messageNode && (
+                  <div className="cfd-robot-bubble-extra">{messageNode}</div>
+                )}
+              </div>
+              <div className={`cfd-robot-actions ${showButtons ? 'cfd-robot-actions--visible' : ''}`}>
+                {showCancel && (
+                  <button className="cfd-robot-btn cfd-robot-btn--cancel" onClick={handleCancel}>
+                    {cancelText || t('common.cancel')}
+                  </button>
+                )}
+                <button
+                  className="cfd-robot-btn cfd-robot-btn--confirm"
+                  style={{ '--btn-color': variantColors[variant] } as React.CSSProperties}
+                  onClick={handleConfirm}
+                  disabled={!showButtons}
+                >
+                  {confirmText || t('common.confirm')}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  /* ── Classic mode: standard modal ── */
   return createPortal(
     <div
-      className={`cfd-robot-overlay ${exiting ? 'cfd-robot-overlay--exit' : ''}`}
+      className={`cfd-overlay ${exiting ? 'cfd-overlay--exit' : ''}`}
       onClick={handleCancel}
       role="dialog"
       aria-modal="true"
     >
-      <div className="cfd-robot-scene" onClick={(e) => e.stopPropagation()}>
-        {/* 3D Robot */}
-        <div className="cfd-robot-container">
-          <RobotMascot size={ROBOT_SIZE} />
+      <div className={`cfd-modal cfd-modal--${variant}`} onClick={(e) => e.stopPropagation()}>
+        {title && <div className="cfd-modal-title">{title}</div>}
+        <div className="cfd-modal-body">
+          {message}
+          {messageNode && <div className="cfd-modal-extra">{messageNode}</div>}
         </div>
-
-        {/* Floating text bubble */}
-        {showBubble && (
-          <div className={`cfd-robot-bubble cfd-robot-bubble--${variant}`}>
-            {title && (
-              <div className="cfd-robot-bubble-title">
-                {title}
-              </div>
-            )}
-            <div className="cfd-robot-bubble-text">
-              {typedText}
-              {typedText.length >= message.length && messageNode && (
-                <div className="cfd-robot-bubble-extra">{messageNode}</div>
-              )}
-            </div>
-
-            {/* Action buttons inside bubble */}
-            <div className={`cfd-robot-actions ${showButtons ? 'cfd-robot-actions--visible' : ''}`}>
-              {showCancel && (
-                <button className="cfd-robot-btn cfd-robot-btn--cancel" onClick={handleCancel}>
-                  {cancelText || t('common.cancel')}
-                </button>
-              )}
-              <button
-                className="cfd-robot-btn cfd-robot-btn--confirm"
-                style={{ '--btn-color': variantColors[variant] } as React.CSSProperties}
-                onClick={handleConfirm}
-                disabled={!showButtons}
-              >
-                {confirmText || t('common.confirm')}
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="cfd-modal-actions">
+          {showCancel && (
+            <button className="cfd-modal-btn cfd-modal-btn--cancel" onClick={handleCancel}>
+              {cancelText || t('common.cancel')}
+            </button>
+          )}
+          <button
+            className={`cfd-modal-btn cfd-modal-btn--confirm cfd-modal-btn--${variant}`}
+            onClick={handleConfirm}
+          >
+            {confirmText || t('common.confirm')}
+          </button>
+        </div>
       </div>
     </div>,
     document.body

@@ -1,4 +1,145 @@
-/* ConfirmDialog — Full-screen Robot style (matching OnboardingGuide) */
+/* ═══════════════════════════════════════════════════════════════
+   ConfirmDialog — Classic (Standard) mode
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Overlay ── */
+.cfd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  animation: cfdFadeIn 0.2s ease-out;
+}
+
+.cfd-overlay--exit {
+  animation: cfdFadeOut 0.2s ease-in forwards;
+}
+
+@keyframes cfdFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cfdFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ── Modal card ── */
+.cfd-modal {
+  width: 90%;
+  max-width: 460px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 20px;
+  padding: 28px 28px 24px;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  animation: cfdModalIn 0.25s ease-out;
+}
+
+@keyframes cfdModalIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Variant top accent */
+.cfd-modal--danger  { border-top: 3px solid #dc2626; }
+.cfd-modal--warning { border-top: 3px solid #d97706; }
+.cfd-modal--success { border-top: 3px solid #16a34a; }
+.cfd-modal--info    { border-top: 3px solid var(--color-primary, #6366f1); }
+
+/* ── Title ── */
+.cfd-modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text, #1f2937);
+  margin-bottom: 10px;
+}
+
+/* ── Body ── */
+.cfd-modal-body {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--color-text-secondary, #4b5563);
+}
+
+.cfd-modal-extra {
+  margin-top: 12px;
+}
+
+.cfd-modal-extra a {
+  color: var(--color-primary, #6366f1);
+  text-decoration: underline;
+}
+
+/* ── Actions ── */
+.cfd-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  justify-content: flex-end;
+}
+
+.cfd-modal-btn {
+  padding: 10px 22px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.cfd-modal-btn--cancel {
+  background: var(--color-bg-soft, #f3f4f6);
+  color: var(--color-text-secondary, #4b5563);
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+.cfd-modal-btn--cancel:hover {
+  background: var(--color-surface-hover, #e5e7eb);
+}
+
+.cfd-modal-btn--confirm {
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cfd-modal-btn--confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cfd-modal-btn--info    { background: var(--color-primary, #6366f1); }
+.cfd-modal-btn--warning { background: #d97706; }
+.cfd-modal-btn--danger  { background: #dc2626; }
+.cfd-modal-btn--success { background: #16a34a; }
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .cfd-modal {
+    padding: 22px 20px 20px;
+    border-radius: 16px;
+  }
+
+  .cfd-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .cfd-modal-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ConfirmDialog — Cyber Robot mode
+   ═══════════════════════════════════════════════════════════════ */
 
 /* ── Overlay (dark, full screen) ── */
 .cfd-robot-overlay {

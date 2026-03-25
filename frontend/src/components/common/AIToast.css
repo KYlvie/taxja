@@ -141,6 +141,11 @@
   }
 }
 
+/* ── Standard (classic) mode: cleaner look, no bot avatar ── */
+.ai-toast--standard {
+  border-radius: 12px;
+}
+
 /* Mobile */
 @media (max-width: 480px) {
   .ai-toast-container {
