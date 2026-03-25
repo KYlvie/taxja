@@ -2147,6 +2147,21 @@ async def delete_transaction(
     affected_rule_context = get_transaction_rule_context(transaction, current_user)
     BankImportService(db=db).handle_deleted_transactions([transaction_id], current_user.id)
 
+    # If transaction was bank-reconciled with a document, update that document's
+    # import suggestion count so it stays in sync.
+    if transaction.bank_reconciled and transaction.document_id:
+        reconciled_doc = db.query(Document).filter(Document.id == transaction.document_id).first()
+        if reconciled_doc and reconciled_doc.ocr_result:
+            updated_ocr = dict(reconciled_doc.ocr_result)
+            suggestion = updated_ocr.get("import_suggestion")
+            if isinstance(suggestion, dict):
+                current_count = suggestion.get("imported_count", 0)
+                if current_count > 0:
+                    suggestion["imported_count"] = current_count - 1
+                    reconciled_doc.ocr_result = updated_ocr
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(reconciled_doc, "ocr_result")
+
     # Clear document references to this transaction to avoid FK violation
     docs = db.query(Document).filter(Document.transaction_id == transaction_id).all()
     for doc in docs:
