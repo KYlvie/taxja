@@ -17,6 +17,7 @@ import EmployerReviewPanel from '../components/documents/EmployerReviewPanel';
 import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
+import TransactionDetail from '../components/transactions/TransactionDetail';
 import {
   documentService,
   type AssetSuggestionConfirmationPayload,
@@ -24,12 +25,11 @@ import {
 } from '../services/documentService';
 import { useDocumentStore } from '../stores/documentStore';
 import { transactionService } from '../services/transactionService';
-import TransactionDetail from '../components/transactions/TransactionDetail';
 import { propertyService } from '../services/propertyService';
 import { Document } from '../types/document';
 import type { BankStatementTransactionSummary } from '../types/bankImport';
 import { Property } from '../types/property';
-import { ExpenseCategory, IncomeCategory, Transaction } from '../types/transaction';
+import { ExpenseCategory, IncomeCategory, Transaction, TransactionType } from '../types/transaction';
 import { saveBlobWithNativeShare } from '../mobile/files';
 import { useRefreshStore } from '../stores/refreshStore';
 import { aiToast } from '../stores/aiToastStore';
@@ -907,6 +907,7 @@ const DocumentsPage = () => {
   const [reviewingDocument, setReviewingDocument] = useState<Document | null>(null);
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
   const [linkedTransaction, setLinkedTransaction] = useState<Transaction | null>(null);
+  const [inlineTransaction, setInlineTransaction] = useState<Transaction | null>(null);
   const [linkedAsset, setLinkedAsset] = useState<Property | null>(null);
   const [viewerBlobUrl, setViewerBlobUrl] = useState<string | null>(null);
   const [confirmingAction, setConfirmingAction] = useState<string | null>(null);
@@ -950,8 +951,6 @@ const DocumentsPage = () => {
       && currentFilters.end_date === nextFilters.end_date
       && currentFilters.document_type === undefined
       && currentFilters.search === undefined
-      && currentFilters.is_deductible === undefined
-      && currentFilters.is_recurring === undefined
     ) {
       return;
     }
@@ -965,8 +964,6 @@ const DocumentsPage = () => {
     currentFilters.end_date,
     currentFilters.document_type,
     currentFilters.search,
-    currentFilters.is_deductible,
-    currentFilters.is_recurring,
     setDocumentFilters,
   ]);
 
@@ -1096,9 +1093,6 @@ const DocumentsPage = () => {
   const [receiptItemDrafts, setReceiptItemDrafts] = useState<Record<number, ReceiptDraftItem[]>>({});
   const [receiptPresentationDrafts, setReceiptPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
   const [expandedReceiptIndexes, setExpandedReceiptIndexes] = useState<number[]>([]);
-  const [, setInlineTransactionId] = useState<number | null>(null);
-  const [inlineTransaction, setInlineTransaction] = useState<any | null>(null);
-  const [inlineTransactionLoading, setInlineTransactionLoading] = useState(false);
   const [editingReceiptIndex, setEditingReceiptIndex] = useState<number | null>(null);
   const [savingReceiptIndex, setSavingReceiptIndex] = useState<number | null>(null);
   const [receiptItemSaveResult, setReceiptItemSaveResult] = useState<{
@@ -1680,6 +1674,7 @@ const DocumentsPage = () => {
   const handleCloseViewer = () => {
     setViewingDocument(null);
     setLinkedTransaction(null);
+    setInlineTransaction(null);
     setLinkedAsset(null);
     setConfirmResult(null);
     setTaxOverrides({});
@@ -1921,116 +1916,79 @@ const DocumentsPage = () => {
     navigateToDocument,
   ]);
 
-  const closeInlineTransaction = useCallback(() => {
-    setInlineTransaction(null);
-    setInlineTransactionId(null);
-    setInlineTransactionLoading(false);
-  }, []);
-
-  function buildInlineTransactionFallback(
-    transactionId: number,
-    previewTransaction?: BankStatementTransactionSummary | null,
-    fallbackLineDate?: string | null,
-    fallbackLineAmount?: string | null,
-  ): Transaction | null {
-    if (!previewTransaction && !fallbackLineDate && !fallbackLineAmount) {
-      return null;
-    }
-
-    const summaryAmount = previewTransaction?.amount != null ? Number(previewTransaction.amount) : NaN;
-    const lineAmount = fallbackLineAmount != null ? Number(fallbackLineAmount) : NaN;
-    const amountSource = Number.isFinite(summaryAmount)
-      ? Math.abs(summaryAmount)
-      : (Number.isFinite(lineAmount) ? Math.abs(lineAmount) : 0);
-
-    const inferredType = previewTransaction?.type
-      ?? ((Number.isFinite(lineAmount) ? lineAmount : 0) < 0 ? 'expense' : 'income');
-    const transactionDate = previewTransaction?.transaction_date
-      ?? fallbackLineDate
-      ?? new Date().toISOString();
-    const category = previewTransaction?.expense_category
-      ?? previewTransaction?.income_category
-      ?? null;
-    const classificationConfidence = previewTransaction?.classification_confidence != null
-      ? Number(previewTransaction.classification_confidence)
-      : undefined;
-
-    return {
-      id: transactionId,
-      type: inferredType as Transaction['type'],
-      amount: amountSource,
-      date: transactionDate,
-      description: previewTransaction?.description || t('documents.bankWorkbench.linkedTransaction', 'Linked transaction'),
-      category,
-      is_deductible: false,
-      line_items: [],
-      classification_confidence: Number.isFinite(classificationConfidence ?? NaN)
-        ? classificationConfidence
-        : undefined,
-      bank_reconciled: previewTransaction?.bank_reconciled ?? true,
-      bank_reconciled_at: previewTransaction?.bank_reconciled_at ?? undefined,
-    };
-  }
-
   async function handleOpenTransactionInline(
     transactionId: number,
     previewTransaction?: BankStatementTransactionSummary | null,
     fallbackLineDate?: string | null,
     fallbackLineAmount?: string | null,
   ) {
-    const fallbackTransaction = buildInlineTransactionFallback(
-      transactionId,
-      previewTransaction,
-      fallbackLineDate,
-      fallbackLineAmount,
-    );
-    setInlineTransactionId(transactionId);
-    setInlineTransaction(fallbackTransaction);
-    setInlineTransactionLoading(true);
-    try {
-      const txn = await transactionService.getById(transactionId);
-      setInlineTransaction(txn);
-    } catch {
-      if (!fallbackTransaction) {
-        setInlineTransactionId(null);
-        setInlineTransaction(null);
-        aiToast(t('documents.linkedTransaction.loadFailed', 'Unable to load transaction details.'), 'error');
+    const inferTransactionType = (): TransactionType => {
+      if (
+        previewTransaction?.type
+        && Object.values(TransactionType).includes(previewTransaction.type as TransactionType)
+      ) {
+        return previewTransaction.type as TransactionType;
       }
-    } finally {
-      setInlineTransactionLoading(false);
+
+      const numericAmount = Number(previewTransaction?.amount ?? fallbackLineAmount ?? 0);
+      return numericAmount < 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
+    };
+
+    const buildPreviewTransaction = (): Transaction => ({
+      id: transactionId,
+      type: inferTransactionType(),
+      amount: Number(previewTransaction?.amount ?? fallbackLineAmount ?? 0),
+      date:
+        previewTransaction?.transaction_date
+        ?? fallbackLineDate
+        ?? new Date().toISOString().slice(0, 10),
+      description:
+        previewTransaction?.description
+        || t('documents.linkedTransaction.fallbackDescription', 'Linked transaction'),
+      category:
+        previewTransaction?.expense_category
+        ?? previewTransaction?.income_category
+        ?? undefined,
+      is_deductible: false,
+      classification_confidence:
+        previewTransaction?.classification_confidence != null
+          ? Number(previewTransaction.classification_confidence)
+          : undefined,
+      bank_reconciled: previewTransaction?.bank_reconciled,
+      bank_reconciled_at: previewTransaction?.bank_reconciled_at ?? undefined,
+      line_items: [],
+    });
+
+    try {
+      const transaction = await transactionService.getById(transactionId);
+      setInlineTransaction(transaction);
+    } catch (error) {
+      console.error('Failed to load transaction detail inline:', error);
+      if (previewTransaction || fallbackLineDate || fallbackLineAmount) {
+        setInlineTransaction(buildPreviewTransaction());
+        return;
+      }
+      aiToast(t('documents.linkedTransaction.loadFailed', 'Could not load transaction details.'), 'error');
     }
   }
 
-  const renderInlineTransactionOverlay = useCallback(() => (
-    <>
-      {inlineTransactionLoading && !inlineTransaction && (
-        <div className="transaction-detail-overlay" onClick={closeInlineTransaction}>
-          <div className="transaction-detail" onClick={(event) => event.stopPropagation()}>
-            <div className="detail-header">
-              <h2>{t('transactions.transactionDetails')}</h2>
-              <button className="btn-close" onClick={closeInlineTransaction}>
-                ×
-              </button>
-            </div>
-            <div className="detail-body">
-              <div className="detail-section">
-                <p>{t('common.loading', 'Loading')}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {inlineTransaction && (
-        <TransactionDetail
-          transaction={inlineTransaction}
-          hideLinkedDocumentSection
-          onClose={closeInlineTransaction}
-          onEdit={() => { closeInlineTransaction(); navigate(`/transactions?transactionId=${inlineTransaction.id}`); }}
-          onDelete={closeInlineTransaction}
-        />
-      )}
-    </>
-  ), [closeInlineTransaction, inlineTransaction, inlineTransactionLoading, navigate, t]);
+  const handleCloseInlineTransaction = useCallback(() => {
+    setInlineTransaction(null);
+  }, []);
+
+  function renderInlineTransactionOverlay() {
+    if (!inlineTransaction) return null;
+
+    return (
+      <TransactionDetail
+        transaction={inlineTransaction}
+        hideLinkedDocumentSection
+        onClose={handleCloseInlineTransaction}
+        onEdit={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
+        onDelete={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
+      />
+    );
+  }
 
   const handleOpenLinkedAsset = () => {
     const assetId = linkedAsset?.id || getAssetOutcome(viewingDocument?.ocr_result)?.asset_id;
@@ -2281,6 +2239,7 @@ const DocumentsPage = () => {
         {normalizeDocumentType(reviewingDocument.document_type as string, reviewingDocument) === 'bank_statement'
           ? renderBankStatementReview(reviewingDocument)
           : renderGenericDocumentReview(reviewingDocument)}
+        {renderInlineTransactionOverlay()}
       </div>
     );
   }
@@ -2330,7 +2289,6 @@ const DocumentsPage = () => {
               />
             )}
           />
-          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -2339,7 +2297,6 @@ const DocumentsPage = () => {
       return (
         <div className="documents-page">
           {renderBankStatementReview(viewingDocument)}
-          {renderInlineTransactionOverlay()}
         </div>
       );
     }
@@ -3699,7 +3656,6 @@ const DocumentsPage = () => {
             );
           })()}
         </div>
-      {renderInlineTransactionOverlay()}
       </div>
     );
   }

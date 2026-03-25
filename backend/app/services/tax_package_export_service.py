@@ -1048,20 +1048,18 @@ class TaxPackageExportService:
         return None, "unknown"
 
     def _document_needs_review(self, document: Document) -> bool:
+        """Unified needs_review logic — must match DocumentDetail.from_orm and get_documents filter."""
+        if not getattr(document, "processed_at", None):
+            return False
+        # Low confidence
+        score = float(document.confidence_score) if document.confidence_score is not None else 0
+        if score < 0.6:
+            return True
+        # OCR result exists but not confirmed
         ocr_result = document.ocr_result or {}
-        if ocr_result.get("needs_review") or ocr_result.get("requires_review"):
+        if ocr_result and not ocr_result.get("confirmed"):
             return True
-
-        suggestion = ocr_result.get("import_suggestion") or {}
-        if isinstance(suggestion, dict):
-            if suggestion.get("status") in {"pending", "pending_review", "ready_to_confirm"}:
-                return True
-
-        tax_review = ocr_result.get("tax_review") or {}
-        if isinstance(tax_review, dict) and tax_review.get("needs_review"):
-            return True
-
-        return bool(getattr(document, "transaction_id", None) is None and document.confidence_score and float(document.confidence_score) < 0.8)
+        return False
 
     def _document_type_value(self, document: Document) -> str:
         raw = getattr(document, "document_type", None)

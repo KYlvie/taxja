@@ -1539,6 +1539,8 @@ def get_documents(
 
     search_text: Optional[str] = Query(None),
 
+    needs_review: Optional[bool] = Query(None),
+
     sort_by: Optional[SortByOption] = Query(None),
 
     page: int = Query(1, ge=1),
@@ -1555,7 +1557,7 @@ def get_documents(
 
     Get list of documents with filtering and search
 
-    
+
 
     - Filter by document type, date range, transaction
 
@@ -1564,6 +1566,8 @@ def get_documents(
     - Paginated results
 
     - sort_by: 'upload_date' (default) or 'document_date'
+
+    - needs_review: filter by review status (confidence_score < 0.6)
 
     """
 
@@ -1608,7 +1612,35 @@ def get_documents(
 
         query = query.filter(Document.raw_text.ilike(f"%{search_text}%"))
 
-    
+    if needs_review is not None:
+        from sqlalchemy import or_, and_, cast, String
+        if needs_review is True:
+            # Match frontend isPendingReview logic:
+            # needs_review (confidence < 0.6) OR (has ocr_result AND not confirmed)
+            # Only include processed documents (processed_at IS NOT NULL)
+            query = query.filter(
+                Document.processed_at.isnot(None),
+                or_(
+                    Document.confidence_score < 0.6,
+                    Document.confidence_score.is_(None),
+                    and_(
+                        Document.ocr_result.isnot(None),
+                        or_(
+                            cast(Document.ocr_result["confirmed"], String) != "true",
+                            Document.ocr_result["confirmed"].is_(None),
+                        ),
+                    ),
+                ),
+            )
+        else:
+            # Not needing review: high confidence AND OCR confirmed
+            query = query.filter(
+                Document.confidence_score >= 0.6,
+                or_(
+                    Document.ocr_result.is_(None),
+                    cast(Document.ocr_result["confirmed"], String) == "true",
+                ),
+            )
 
     # Get total count
 

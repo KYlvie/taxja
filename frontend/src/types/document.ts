@@ -161,6 +161,4 @@ export interface DocumentFilter {
   end_date?: string;
   search?: string;
   needs_review?: boolean;
-  is_deductible?: boolean;
-  is_recurring?: boolean;
 }

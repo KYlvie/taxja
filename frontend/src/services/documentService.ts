@@ -155,21 +155,20 @@ export const documentService = {
     if (filters?.search) {
       params.append('search_text', filters.search);
     }
+    if (filters?.needs_review !== undefined) {
+      params.append('needs_review', String(filters.needs_review));
+    }
 
     const response = await api.get(`/documents?${params.toString()}`);
     const data = response.data;
     // Map backend field names to frontend Document type
-    let documents = (data.documents || []).map((doc: any) => ({
+    const documents = (data.documents || []).map((doc: any) => ({
       ...doc,
       created_at: doc.created_at || doc.uploaded_at,
       updated_at: doc.updated_at || doc.processed_at || doc.uploaded_at,
       needs_review: doc.needs_review ?? (doc.confidence_score != null && doc.confidence_score < 0.7),
     }));
-    // Client-side filter for needs_review (not supported by backend)
-    if (filters?.needs_review) {
-      documents = documents.filter((doc: any) => doc.needs_review);
-    }
-    return { documents, total: filters?.needs_review ? documents.length : (data.total || 0) };
+    return { documents, total: data.total || 0 };
   },
 
   // Get single document

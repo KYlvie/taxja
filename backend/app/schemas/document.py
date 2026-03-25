@@ -134,11 +134,15 @@ class DocumentDetail(BaseModel):
 
     @classmethod
     def from_orm(cls, obj):
-        """Override to compute needs_review from confidence_score"""
+        """Override to compute needs_review from confidence_score and OCR confirmation"""
         instance = super().from_orm(obj)
         instance.ocr_status = derive_document_ocr_status(obj)
-        if not hasattr(obj, 'needs_review') or obj.needs_review is None:
-            instance.needs_review = (instance.confidence_score or 0) < 0.6
+        # needs_review: low confidence OR OCR result not yet confirmed
+        is_processed = getattr(obj, 'processed_at', None) is not None
+        low_confidence = (instance.confidence_score or 0) < 0.6
+        ocr_result = getattr(obj, 'ocr_result', None) or {}
+        ocr_not_confirmed = bool(ocr_result and not ocr_result.get('confirmed'))
+        instance.needs_review = is_processed and (low_confidence or ocr_not_confirmed)
         return instance
 
 

@@ -508,8 +508,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   };
 
   const needsConfirmation = (doc: Document): boolean => {
+    if (!isPendingReview(doc)) return false;
     const ocr = (doc.ocr_result || {}) as Record<string, any>;
-    return Boolean(isPendingReview(doc) && doc.ocr_result && !ocr.confirmed);
+    // Show review button if OCR not yet confirmed, OR if needs_review regardless
+    return Boolean((doc.ocr_result && !ocr.confirmed) || doc.needs_review);
   };
 
   const formatDate = (dateString: string) => {
@@ -933,34 +935,6 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
                 options={Object.values(DocumentType)
                   .filter((v) => v !== DocumentType.UNKNOWN)
                   .map((v) => ({ value: v, label: t(`documents.types.${v}`) }))}
-              />
-            </div>
-
-            <div className="filter-group">
-              <label>{t('transactions.deductible', '可抵扣')}</label>
-              <Select
-                value={filters.is_deductible === undefined ? '' : String(filters.is_deductible)}
-                onChange={(v) => handleFilterChange('is_deductible', v === '' ? undefined : v === 'true')}
-                placeholder={t('transactions.filters.all')}
-                size="sm"
-                options={[
-                  { value: 'true', label: t('transactions.filters.deductibleOnly') },
-                  { value: 'false', label: t('transactions.filters.nonDeductible') },
-                ]}
-              />
-            </div>
-
-            <div className="filter-group">
-              <label>{t('transactions.filters.recurring', '定期交易')}</label>
-              <Select
-                value={filters.is_recurring === undefined ? '' : String(filters.is_recurring)}
-                onChange={(v) => handleFilterChange('is_recurring', v === '' ? undefined : v === 'true')}
-                placeholder={t('transactions.filters.all')}
-                size="sm"
-                options={[
-                  { value: 'true', label: t('transactions.filters.recurringOnly') },
-                  { value: 'false', label: t('transactions.filters.oneTimeOnly') },
-                ]}
               />
             </div>
 
