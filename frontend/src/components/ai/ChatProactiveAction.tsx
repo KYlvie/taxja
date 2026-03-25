@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Check, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight, Check, X, Loader2 } from 'lucide-react';
 import { documentService } from '../../services/documentService';
 import { dashboardService } from '../../services/dashboardService';
 import { useAIAdvisorStore, type ProactiveMessage } from '../../stores/aiAdvisorStore';
@@ -67,7 +67,7 @@ function getDetailItems(message: ProactiveMessage): ReminderDetailItem[] {
 
   return rawItems
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    .map((item) => ({
+    .map((item): ReminderDetailItem => ({
       kind: item.kind === 'document' ? 'document' : 'asset',
       href: typeof item.href === 'string' ? item.href : '',
       label: typeof item.label === 'string' ? item.label : '',
@@ -296,17 +296,6 @@ export default function ChatProactiveAction({ message }: ChatProactiveActionProp
     <>
       {isPending && !result && (
         <div className="chat-recurring-card">
-          {canExpand && (
-            <button
-              type="button"
-              onClick={() => setExpanded((value) => !value)}
-              className="chat-proactive-toggle"
-            >
-              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              {expanded ? t('ai.proactive.hideDetails', 'Hide details') : t('ai.proactive.expandDetails', 'Expand details')}
-            </button>
-          )}
-
           {expanded && canExpand && (
             <div className="chat-recurring-details">
               {detailItems.length > 0 && (

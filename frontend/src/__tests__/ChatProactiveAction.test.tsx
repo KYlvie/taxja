@@ -6,9 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ChatProactiveAction from '../components/ai/ChatProactiveAction';
 import type { ProactiveMessage } from '../stores/aiAdvisorStore';
 
-const mockNavigate = vi.fn();
-const mockAcknowledge = vi.fn();
-const mockSnooze = vi.fn();
+const {
+  mockNavigate,
+  mockAcknowledge,
+  mockSnooze,
+} = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockAcknowledge: vi.fn(),
+  mockSnooze: vi.fn(),
+}));
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -95,7 +101,8 @@ describe('ChatProactiveAction', () => {
 
     render(<ChatProactiveAction message={message} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand details' }));
+    const expandButtons = screen.getAllByRole('button', { name: 'Expand details' });
+    fireEvent.click(expandButtons[1]);
     expect(screen.getByText('macbook')).toBeInTheDocument();
 
     const detailButtons = screen.getAllByRole('button', { name: 'View details' });
