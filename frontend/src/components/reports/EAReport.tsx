@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Select from '../common/Select';
 import reportService, { EAReport as EAReportData } from '../../services/reportService';
@@ -18,6 +18,12 @@ const EAReport = () => {
   const reportRef = useRef<HTMLDivElement | null>(null);
 
   const lang = i18n.language.split('-')[0] || 'de';
+
+  // Clear report when tax year changes
+  useEffect(() => {
+    setReport(null);
+    setError(null);
+  }, [taxYear]);
 
   const handleGenerate = async () => {
     setLoading(true);

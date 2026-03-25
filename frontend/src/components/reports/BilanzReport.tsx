@@ -20,6 +20,13 @@ const BilanzReport = () => {
   const lang = i18n.language.split('-')[0] || 'de';
   const priorYear = taxYear - 1;
 
+
+  // Clear report when tax year changes
+  useEffect(() => {
+    setReport(null);
+    setError(null);
+  }, [taxYear]);
+
   const handleGenerate = async () => {
     setLoading(true);
     setError(null);

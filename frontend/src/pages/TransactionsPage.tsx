@@ -688,6 +688,7 @@ const TransactionsPage = () => {
             }}
             onDelete={handleDeleteTransaction}
             onView={openTransactionDetail}
+            onOpenDocument={(documentId) => navigate(`/documents/${documentId}`)}
             onPause={handlePauseRecurring}
             onResume={handleResumeRecurring}
             onEditRecurring={() => navigate('/recurring')}

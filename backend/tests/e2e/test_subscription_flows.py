@@ -10,17 +10,20 @@ These tests are aligned to the current API contracts:
 
 import pytest
 from datetime import datetime, timedelta
+from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from unittest.mock import Mock, patch
 
 from app.main import app
 from app.api.deps import get_current_admin, get_current_user as api_get_current_user, get_db
+from app.api.v1.endpoints import subscriptions as subscriptions_endpoint
 from app.core.security import get_current_user as core_get_current_user
 from app.models.user import User, UserType
 from app.models.plan import BillingCycle, Plan
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.usage_record import ResourceType
+from app.services.stripe_payment_service import StripePaymentService
 
 
 @pytest.fixture
@@ -222,6 +225,65 @@ class TestUserSignupTrialUpgradeFlow:
 
         assert webhook_response.status_code == 200
         webhook_stripe.return_value.handle_webhook_event.assert_called_once()
+
+    def test_checkout_sync_endpoint_reconciles_completed_session(
+        self,
+        authenticated_client,
+        db_session,
+        pro_plan,
+        monkeypatch,
+    ):
+        """Checkout success page can force a local subscription sync via session_id."""
+        subscription = build_subscription(
+            id=21,
+            user_id=1,
+            plan_id=pro_plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            billing_cycle=BillingCycle.MONTHLY,
+            stripe_subscription_id="sub_test_sync_123",
+            stripe_customer_id="cus_test_sync_123",
+        )
+
+        monkeypatch.setattr(subscriptions_endpoint, "_is_stripe_configured", lambda: True)
+
+        def fake_sync(self, session_id: str, user_id: int):
+            assert session_id == "cs_test_sync_123"
+            assert user_id == 1
+            return subscription
+
+        class FakeBalance:
+            plan_balance = 2000
+            topup_balance = 0
+            total_balance = 2000
+            available_without_overage = 2000
+            monthly_credits = 2000
+            overage_enabled = False
+            overage_credits_used = 0
+            overage_price_per_credit = Decimal("0.03")
+            estimated_overage_cost = Decimal("0.00")
+            has_unpaid_overage = False
+            reset_date = None
+
+        monkeypatch.setattr(
+            StripePaymentService,
+            "sync_checkout_session",
+            fake_sync,
+        )
+        monkeypatch.setattr(
+            subscriptions_endpoint.CreditService,
+            "get_balance",
+            lambda self, user_id: FakeBalance(),
+        )
+
+        response = authenticated_client.post(
+            "/api/v1/subscriptions/checkout/sync",
+            params={"session_id": "cs_test_sync_123"},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["plan_id"] == pro_plan.id
+        assert payload["credit_balance"]["plan_balance"] == 2000
 
 
 class TestUsageCompatibilityFlow:

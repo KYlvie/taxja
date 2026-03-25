@@ -37,6 +37,7 @@ interface TransactionListProps {
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: number) => void;
   onView: (transaction: Transaction) => void;
+  onOpenDocument?: (documentId: number) => void;
   onPause?: (id: number) => void;
   onResume?: (id: number) => void;
   onEditRecurring?: (recurringId: number) => void;
@@ -50,6 +51,7 @@ const TransactionList = ({
   onEdit,
   onDelete,
   onView,
+  onOpenDocument,
   onPause,
   onResume,
   onEditRecurring,
@@ -163,13 +165,20 @@ const TransactionList = ({
         {hasIndicators ? (
           <span className="transaction-action-secondary">
             {transaction.document_id ? (
-              <span
-                className="transaction-action-indicator"
-                title={t('transactions.hasDocument')}
-                aria-label={t('transactions.hasDocument')}
+              <button
+                type="button"
+                className="transaction-action-btn"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (onOpenDocument) {
+                    onOpenDocument(transaction.document_id!);
+                  }
+                }}
+                title={t('transactions.viewDocument')}
+                aria-label={t('transactions.viewDocument')}
               >
                 <Paperclip size={16} />
-              </span>
+              </button>
             ) : null}
 
             {transaction.bank_reconciled ? (
