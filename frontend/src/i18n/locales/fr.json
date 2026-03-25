@@ -3666,350 +3666,354 @@
   "onboarding": {
     "welcome": {
       "title": "Bienvenue sur Taxja !",
-      "message": "Bonjour ! Je suis votre assistant Taxja. Je vais vous montrer rapidement les fonctionnalités clés de la plateforme pour gérer vos impôts facilement. C'est parti !"
+      "message": "Bonjour ! Je suis votre assistant IA Taxja. Je vais vous guider à travers la plateforme — de la numérisation automatique de documents et l’import de relevés bancaires aux calculs fiscaux en temps réel, aux conseils fiscaux par IA et à la déclaration en un clic. Taxja prend en charge 9 langues et convient aux salariés, indépendants, bailleurs et entreprises. Laissez-moi vous faire visiter !"
     },
     "documents": {
-      "title": "Télécharger des documents",
-      "message": "Téléchargez simplement vos factures, reçus ou contrats. Nous reconnaîtrons automatiquement le contenu, le classerons et créerons une transaction pour vous. Aucune saisie manuelle nécessaire !"
+      "title": "Traitement intelligent des documents",
+      "message": "Téléchargez factures, reçus, contrats ou relevés bancaires ici. Notre moteur OCR et IA extrait automatiquement les données, classe les documents et crée les transactions — aucune saisie manuelle nécessaire. Les relevés bancaires sont traités via un espace de rapprochement dédié, et les certificats fiscaux de l’employeur (Lohnzettel) disposent de leur propre panneau de vérification. Vérifiez et confirmez les données extraites par l’IA avant leur intégration dans votre dossier fiscal."
     },
     "dashboard": {
-      "title": "Votre tableau de bord",
-      "message": "Le tableau de bord vous offre un aperçu complet : revenus et dépenses en un coup d'il, conseils d'économies fiscales et rappels d'actions. Tout ce qu'il vous faut en un seul endroit."
+      "title": "Votre centre de commande fiscal",
+      "message": "Le tableau de bord vous offre une vue en temps réel : revenus vs dépenses, impôt estimé, impôts payés, solde restant, revenu net et suivi du seuil de TVA. Des graphiques interactifs montrent les tendances mensuelles et les répartitions par catégorie. Utilisez le sélecteur d’année pour changer d’exercice fiscal, le glisser-déposer pour télécharger des documents, et consultez le statut de votre abonnement — tout sur un seul écran."
     },
     "transactions": {
-      "title": "Transactions",
-      "message": "Consultez, filtrez et gérez tous vos enregistrements de revenus et dépenses ici. Les transactions sont créées automatiquement à partir des documents téléchargés, ou vous pouvez les ajouter manuellement. Chaque entrée est catégorisée pour une déclaration fiscale précise."
+      "title": "Gestion des transactions",
+      "message": "Consultez, filtrez et gérez tous vos enregistrements de revenus et de dépenses. Les transactions sont créées automatiquement à partir des documents et des imports de relevés bancaires, ou vous pouvez les ajouter manuellement. Utilisez les filtres pour trouver des entrées spécifiques, la sélection multiple pour les opérations groupées, l’export en CSV/PDF et la gestion des règles de classification. Les transactions rapprochées avec la banque affichent une icône de banque cliquable."
     },
     "reports": {
-      "title": "Rapports fiscaux",
-      "message": "Générez des rapports fiscaux professionnels comprenant le calcul E/A, le Saldenliste et les aperçus de formulaires fiscaux. Exportez en PDF ou CSV à tout moment  tout est prêt pour votre comptable ou le Finanzamt."
+      "title": "Rapports fiscaux et déclaration",
+      "message": "Générez des rapports professionnels : compte de résultat E/A, bilan (Bilanz), balance des comptes (Saldenliste) et balance périodique. Prévisualisez et générez les formulaires fiscaux officiels (E1, E1a, U30) avec des données pré-remplies. Exportez un dossier fiscal complet avec toutes les pièces justificatives, ou soumettez électroniquement via FinanzOnline."
     },
     "ai": {
-      "title": "Assistant IA",
-      "message": "Vous avez une question fiscale ? Utilisez le chat IA en bas de l'écran à tout moment. Je peux vous aider avec les déductions, les règles fiscales et des conseils personnalisés."
+      "title": "Conseiller fiscal IA",
+      "message": "Votre conseiller fiscal IA personnel est toujours disponible. Posez n’importe quelle question sur le droit fiscal autrichien, les déductions, la TVA ou votre situation — il connaît votre profil, vos biens, vos transactions et vos documents. Chaque réponse est personnalisée. Il suggère également des optimisations de manière proactive et signale les problèmes potentiels avant votre déclaration."
     },
     "profile": {
-      "title": "Complétez votre profil",
-      "message": "Rendez-vous dans les paramètres de votre profil pour configurer votre statut TVA, type de revenus et autres détails. Cela nous aide à vous fournir des calculs fiscaux et des recommandations plus précis."
+      "title": "Votre profil fiscal",
+      "message": "Configurez votre type de revenus, numéro fiscal, statut TVA, informations professionnelles, employeur et données de trajet pour le Pendlerpauschale. Définissez votre situation familiale pour les crédits d’impôt et vos jours de télétravail pour le Homeoffice-Pauschale. Plus votre profil est complet, plus vos calculs seront précis. Gérez également la sécurité, exportez vos données ou supprimez votre compte ici."
     },
     "skip": "Passer le guide",
     "next": "Suivant →",
     "prev": "← Précédent",
-    "finish": "C'est parti !"
+    "finish": "C’est parti !"
   },
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Sélecteur d'année",
-        "message": "Changez d'année fiscale ici. Tous les chiffres du tableau de bord  revenus, dépenses et estimations fiscales  seront mis à jour pour l'année sélectionnée."
+        "title": "Sélecteur d’année fiscale",
+        "message": "Choisissez l’année fiscale sur laquelle travailler. Toutes les données du tableau de bord se mettent à jour instantanément lorsque vous changez d’année."
       },
       "upload": {
-        "title": "Téléchargement rapide",
-        "message": "Déposez factures, reçus ou contrats directement ici sur le tableau de bord. Notre moteur OCR numérise et crée les transactions automatiquement  sans quitter la page."
+        "title": "Téléchargement rapide de documents",
+        "message": "Glissez-déposez des fichiers ici ou cliquez pour parcourir. Taxja accepte les factures, reçus, contrats, relevés bancaires et formulaires fiscaux. Le traitement OCR démarre automatiquement."
       },
       "overview": {
-        "title": "Aperçu financier",
-        "message": "Ces cartes affichent vos indicateurs financiers clés : revenus totaux, dépenses totales, impôt estimé, résultat net, seuil TVA et documents en attente de vérification."
+        "title": "Cartes de synthèse financière",
+        "message": "Vos indicateurs clés en un coup d’œil : revenus cumulés, dépenses, impôt estimé, impôt payé, solde restant, revenu net et distance au seuil de TVA."
       },
       "trends": {
         "title": "Graphiques de tendances",
-        "message": "Des graphiques visuels suivent vos revenus et dépenses dans le temps. Identifiez les tendances saisonnières et comparez mois par mois."
+        "message": "Des graphiques interactifs montrant revenus vs dépenses mensuels, répartitions par catégorie et comparaisons d’une année sur l’autre."
       },
       "plan": {
-        "title": "Abonnement et statut",
-        "message": "Consultez votre plan actuel et le slogan ici. Cliquez pour gerer votre abonnement ou changer de plan."
+        "title": "Abonnement et crédits",
+        "message": "Consultez votre forfait actuel, vos crédits IA restants et le statut de votre essai. Cliquez pour gérer votre abonnement ou acheter des crédits."
       },
       "language": {
-        "title": "Changement de langue",
-        "message": "Taxja prend en charge 9 langues. Toute interface s adapte instantanement a la langue choisie."
+        "title": "Sélecteur de langue",
+        "message": "Basculez entre 9 langues prises en charge : allemand, anglais, chinois, français, russe, hongrois, polonais, turc et bosniaque."
       },
       "theme": {
-        "title": "Changer de theme",
-        "message": "Basculez entre le theme clair et le mode sombre Cyber pour reduire la fatigue oculaire."
+        "title": "Changement de thème",
+        "message": "Basculez entre le thème Classic (clair) et le thème Cyber (sombre)."
       }
     },
     "transactions": {
-      "filters": {
-        "title": "Filtres",
-        "message": "Affinez vos transactions par période, type (revenu/dépense), catégorie, propriété ou statut. Combinez plusieurs filtres pour des résultats précis."
-      },
-      "list": {
-        "title": "Liste des transactions",
-        "message": "Toutes vos transactions apparaissent ici. Cliquez sur une ligne pour voir les détails, modifier les montants ou changer la catégorie."
-      },
-      "paging": {
-        "title": "Pagination",
-        "message": "Naviguez entre les pages de transactions. Vous pouvez aussi modifier le nombre d'éléments affichés par page."
-      },
       "classRules": {
-        "title": "Memoire de classification",
-        "message": "Le systeme apprend de vos corrections. Consultez et gerez les regles de classification ici."
+        "title": "Règles de classification",
+        "message": "Ouvrez le gestionnaire de règles pour consulter et modifier les règles de catégorisation automatique. Taxja apprend de vos corrections."
       },
       "export": {
-        "title": "Exporter en CSV",
-        "message": "Exportez toutes les transactions filtrees en fichier CSV pour votre comptable ou Excel."
+        "title": "Exporter les transactions",
+        "message": "Téléchargez vos transactions en CSV ou PDF pour vos archives, votre conseiller fiscal ou le Finanzamt."
       },
       "addNew": {
         "title": "Ajouter une transaction",
-        "message": "Creez une nouvelle transaction manuellement. Saisissez le montant, la categorie, la date et les details optionnels."
+        "message": "Créez manuellement une nouvelle entrée de revenu ou de dépense avec montant, date, catégorie, taux de TVA et postes détaillés."
+      },
+      "filters": {
+        "title": "Filtres de transactions",
+        "message": "Filtrez par année, catégorie, type, statut à vérifier. Utilisez « À vérifier » pour trouver les transactions nécessitant une confirmation."
+      },
+      "list": {
+        "title": "Liste des transactions",
+        "message": "Tableau triable et paginé. Icône banque = rapproché avec la banque (cliquez pour voir le relevé). Trombone = document joint. Cases à cocher pour les opérations groupées."
+      },
+      "paging": {
+        "title": "Pagination",
+        "message": "Naviguez entre les pages. Ajustez le nombre d’éléments par page."
       }
     },
     "documents": {
       "upload": {
-        "title": "Zone de téléchargement",
-        "message": "Glissez-déposez des fichiers ici ou cliquez pour parcourir. Formats supportés : PDF, JPG et PNG. Notre moteur OCR extrait les données automatiquement."
+        "title": "Télécharger des documents",
+        "message": "Téléchargez factures, reçus, relevés bancaires, formulaires fiscaux, documents d’emploi. Glissez-déposez plusieurs fichiers. L’OCR extrait les données automatiquement."
       },
       "tabs": {
-        "title": "Onglets de catégorie",
-        "message": "Les documents sont regroupés par type  factures, reçus, contrats, formulaires fiscaux, etc. Changez d'onglet pour trouver rapidement ce que vous cherchez."
+        "title": "Catégories de documents",
+        "message": "Organisés par type/statut : Tous, En attente de vérification (badge jaune), Factures, Reçus, Relevés bancaires, Formulaires fiscaux, Documents d’emploi."
       },
       "list": {
         "title": "Liste des documents",
-        "message": "Parcourez tous les documents téléchargés. Chaque entrée affiche le type reconnu, le montant extrait, l'état de traitement et la transaction liée."
+        "message": "Parcourez les documents avec recherche et filtres. Cliquez sur un document pour la vue détaillée avec les données OCR et les transactions liées."
+      }
+    },
+    "documentDetail": {
+      "header": {
+        "title": "En-tête du document",
+        "message": "Nom du document, type, date de téléchargement, statut. Boutons d’action pour relancer l’OCR, télécharger ou supprimer."
+      },
+      "preview": {
+        "title": "Aperçu du document",
+        "message": "Visualisez le document original. Zoomez pour vérifier les données extraites par l’IA."
+      },
+      "ocrData": {
+        "title": "Données extraites par l’IA",
+        "message": "Champs extraits par OCR/IA : montant, date, fournisseur, catégorie, TVA, postes détaillés. Les valeurs à faible confiance sont mises en évidence."
+      },
+      "linked": {
+        "title": "Enregistrements liés",
+        "message": "Consultez la transaction, l’actif ou la ligne de relevé bancaire lié(e). Créez de nouveaux liens ou accédez à l’enregistrement lié."
+      },
+      "editMode": {
+        "title": "Édition et confirmation",
+        "message": "Modifiez les valeurs extraites par l’IA. La confirmation verrouille les données et retire le badge de vérification. Vos corrections améliorent l’IA future."
       }
     },
     "reports": {
       "tabs": {
-        "title": "Onglets de rapport",
-        "message": "Choisissez le type de rapport : calcul E/A, balance des comptes, bilan, aperçu des formulaires fiscaux (E1, L1, U1) et plus."
+        "title": "Types de rapports",
+        "message": "Compte de résultat E/A, Bilan (Bilanz), Balance des comptes (Saldenliste), Balance périodique (Periodensaldenliste), Aperçu des formulaires fiscaux (E1/E1a/U30)."
+      },
+      "generate": {
+        "title": "Générer le rapport",
+        "message": "Calculez le rapport pour l’année fiscale sélectionnée avec les dernières données de transactions."
+      },
+      "print": {
+        "title": "Imprimer le rapport",
+        "message": "Imprimez depuis le navigateur, optimisé pour le format A4."
       },
       "content": {
         "title": "Contenu du rapport",
-        "message": "Le rapport généré apparaît ici. Vérifiez les chiffres puis exportez en PDF ou CSV pour votre comptable ou l'administration fiscale."
-      },
-      "generate": {
-        "title": "Generer le rapport",
-        "message": "Cliquez ici pour generer le rapport selectionne pour l annee fiscale choisie."
-      },
-      "print": {
-        "title": "Imprimer",
-        "message": "Imprimez le rapport genere directement ou enregistrez-le en PDF via la boite de dialogue d impression."
+        "message": "Calcul fiscal détaillé mappé sur les champs officiels du formulaire avec des sections de transactions dépliables."
       },
       "finanzOnline": {
-        "title": "Ouvrir FinanzOnline",
-        "message": "Ouvre le portail fiscal autrichien FinanzOnline dans un nouvel onglet pour deposer votre declaration."
+        "title": "Intégration FinanzOnline",
+        "message": "Soumettez votre déclaration fiscale électroniquement au Finanzamt autrichien via FinanzOnline."
       },
       "downloadForm": {
-        "title": "Telecharger le formulaire officiel",
-        "message": "Telechargez le formulaire fiscal officiel du BMF (PDF) et remplissez-le avec les valeurs de la previsualisation."
+        "title": "Téléchargement et export",
+        "message": "Téléchargez le formulaire fiscal pré-rempli en PDF, ou exportez le dossier fiscal complet avec tous les documents."
       }
     },
     "properties": {
-      "cards": {
-        "title": "Tous les actifs",
-        "message": "Vos biens immobiliers, appareils, véhicules et autres actifs dans une liste unifiée. Cliquez sur une fiche pour consulter les détails, modifier ou gérer l'amortissement."
-      },
       "overview": {
-        "title": "Aperçu des actifs",
-        "message": "Ouvrez le tableau de bord du portefeuille pour comparer tous vos biens et actifs côte à côte."
+        "title": "Vue d’ensemble du portefeuille",
+        "message": "Tableau de bord du portefeuille d’actifs avec analyses agrégées, plans d’amortissement et analyses comparatives."
       },
       "add": {
         "title": "Ajouter un actif",
-        "message": "Ajoutez manuellement un nouveau bien immobilier, vehicule ou autre actif. L amortissement est calcule automatiquement."
+        "message": "Enregistrez un bien immobilier, véhicule, équipement, machine ou outil. Calcul automatique de l’amortissement (AfA)."
+      },
+      "cards": {
+        "title": "Fiches d’actifs",
+        "message": "Chaque fiche affiche le nom, le type, la date d’achat, le coût, la valeur comptable et le statut d’amortissement."
       },
       "edit": {
-        "title": "Modifier l actif",
-        "message": "Cliquez sur l icone crayon pour modifier les details d un actif."
+        "title": "Modifier l’actif",
+        "message": "Mettez à jour le prix d’achat, la méthode d’amortissement, la durée d’utilisation, les informations de cession. Recalcul automatique des plans."
       },
       "archive": {
-        "title": "Archiver et filtrer",
-        "message": "Archivez les actifs que vous ne gerez plus activement. Cochez cette case pour afficher ou masquer les elements archives."
+        "title": "Basculer l’archivage",
+        "message": "Affichez ou masquez les actifs archivés. Conservés pendant la période de 7 ans (BAO §132)."
+      }
+    },
+    "assetInsights": {
+      "summary": {
+        "title": "Résumé des actifs",
+        "message": "Coût total d’acquisition, valeur comptable, amortissement annuel, revenu locatif net."
+      },
+      "portfolio": {
+        "title": "Comparaison du portefeuille",
+        "message": "Comparez vos biens sur le rendement, le taux d’occupation, la maintenance et le retour sur investissement."
+      },
+      "otherAssets": {
+        "title": "Autres actifs",
+        "message": "Actifs non immobiliers : véhicules, équipements, machines, actifs incorporels."
+      },
+      "reports": {
+        "title": "Rapports d’actifs",
+        "message": "Rapports d’amortissement et inventaires d’actifs par type et par année."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Actions sur le bien",
+        "message": "Modifier, consulter l’amortissement, céder/vendre ou archiver."
+      },
+      "info": {
+        "title": "Informations sur le bien",
+        "message": "Adresse, date d’achat, coût, superficie, méthode d’amortissement, durée d’utilisation, valeur comptable."
+      },
+      "contracts": {
+        "title": "Contrats de location",
+        "message": "Gérez locataires, montants des loyers, dépôts de garantie et durées de bail pour la location et l’affermage (Vermietung & Verpachtung)."
+      },
+      "transactions": {
+        "title": "Transactions du bien",
+        "message": "Revenus et dépenses liés : revenus locatifs, maintenance, assurance, intérêts."
+      }
+    },
+    "liabilities": {
+      "overview": {
+        "title": "Tableau de bord des passifs",
+        "message": "Total en cours, paiements mensuels, intérêts payés, ratio dette/actifs."
+      },
+      "add": {
+        "title": "Ajouter un passif",
+        "message": "Enregistrez un prêt/hypothèque/crédit. Saisissez le capital, le taux d’intérêt et l’échéancier. Liez à un bien pour les intérêts déductibles."
+      },
+      "list": {
+        "title": "Liste des passifs",
+        "message": "Tous les prêts avec solde, taux et prochain paiement. Cliquez pour le tableau d’amortissement."
+      },
+      "detail": {
+        "title": "Tableau d’amortissement",
+        "message": "Répartition capital/intérêts par paiement. Solde restant, intérêts totaux, bien lié."
       }
     },
     "recurring": {
       "create": {
         "title": "Créer une récurrence",
-        "message": "Configurez une nouvelle transaction récurrente  loyer, remboursement de prêt, assurance ou toute dépense régulière. Choisissez la fréquence et la date de début."
+        "message": "Transaction à répétition automatique : quotidienne/hebdomadaire/mensuelle/trimestrielle/annuelle."
       },
       "filters": {
-        "title": "Filtres",
-        "message": "Filtrez les transactions récurrentes par type, fréquence, propriété ou statut actif/en pause."
+        "title": "Filtrer les récurrences",
+        "message": "Filtrez par fréquence, catégorie, statut actif/en pause, montant."
       },
       "list": {
-        "title": "Liste des récurrences",
-        "message": "Toutes vos transactions récurrentes sont listées ici. Voyez la prochaine exécution, mettez en pause ou reprenez, ou modifiez les détails."
+        "title": "Récurrences",
+        "message": "Toutes les récurrences, y compris celles détectées automatiquement depuis les relevés bancaires. Mettre en pause/modifier/supprimer."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Gestion des actifs et passifs",
-        "message": "Gérez vos biens immobiliers, équipements et passifs. Suivez l'amortissement, consultez votre portefeuille et gérez vos emprunts et prêts."
+        "title": "Actifs et passifs",
+        "message": "Gérez les actifs amortissables avec l’AfA et suivez les prêts avec leur tableau d’amortissement."
       },
       "automation": {
         "title": "Règles et automatisation",
-        "message": "Configurez les transactions récurrentes et gérez la mémoire de classification. Le système apprend de vos corrections pour catégoriser automatiquement les futures transactions."
+        "message": "Transactions récurrentes et règles de classification. Taxja apprend de vos corrections."
       },
       "taxtools": {
         "title": "Espace fiscal",
-        "message": "Votre centre fiscal tout-en-un : préparez les déclarations, vérifiez la disponibilité des documents, obtenez des conseils IA et générez des rapports  tout en un seul endroit."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Barre d actions",
-        "message": "Toutes les actions pour cet actif sont ici."
-      },
-      "info": {
-        "title": "Details de l actif",
-        "message": "Tous les details en un coup d oeil."
-      },
-      "contracts": {
-        "title": "Contrats de location",
-        "message": "Tous les contrats de location lies a ce bien."
-      },
-      "transactions": {
-        "title": "Transactions liees",
-        "message": "Tous les revenus et depenses regroupes par annee."
-      }
-    },
-    "documentDetail": {
-      "header": {
-        "title": "Actions d en-tete",
-        "message": "Retournez a la liste des documents, telechargez le fichier original ou relancez le traitement OCR si l extraction initiale etait incomplete."
-      },
-      "preview": {
-        "title": "Apercu du document",
-        "message": "Le document original est affiche ici  les fichiers PDF sont integres, les images sont rendues directement. Utilisez cet apercu pour verifier les donnees extraites."
-      },
-      "ocrData": {
-        "title": "Donnees extraites",
-        "message": "Tous les champs extraits par OCR et IA apparaissent ici : montants, dates, noms de fournisseurs, taux de TVA et plus. Le score de confiance indique la fiabilite de l extraction."
-      },
-      "linked": {
-        "title": "Transaction liee",
-        "message": "Lorsqu un document est associe a une transaction ou un actif, le lien apparait ici. Cliquez pour acceder directement a l enregistrement lie."
-      },
-      "editMode": {
-        "title": "Edition en ligne",
-        "message": "Cliquez sur un champ extrait pour le corriger. Vos corrections entrainent le systeme et ameliorent les extractions futures. Les modifications sont enregistrees immediatement."
-      }
-    },
-    "assetInsights": {
-      "summary": {
-        "title": "Résumé actifs-passifs",
-        "message": "Consultez d'un coup d'il le total de vos actifs, passifs, patrimoine net et service mensuel de la dette."
-      },
-      "portfolio": {
-        "title": "Portefeuille immobilier",
-        "message": "Comparez les revenus locatifs, les dépenses et le rendement net de tous vos biens."
-      },
-      "otherAssets": {
-        "title": "Autres actifs",
-        "message": "Consultez appareils, véhicules et équipements avec valeurs d'achat et détails d'amortissement."
-      },
-      "reports": {
-        "title": "Rapports individuels",
-        "message": "Générez des comptes de résultat et des plans d'amortissement pour un actif spécifique."
-      }
-    },
-    "liabilities": {
-      "overview": {
-        "title": "Aperçu actifs-passifs",
-        "message": "Faites défiler pour voir le résumé combiné de vos actifs et passifs avec les indicateurs clés."
-      },
-      "add": {
-        "title": "Ajouter un passif",
-        "message": "Enregistrez un nouvel emprunt ou autre passif. Définissez les plans de remboursement et liez-les aux biens."
-      },
-      "list": {
-        "title": "Liste des passifs",
-        "message": "Parcourez tous vos passifs actifs. Chaque fiche affiche le solde restant et la progression du remboursement."
-      },
-      "detail": {
-        "title": "Détail du passif",
-        "message": "Consultez le plan de remboursement, le graphique d'évolution des intérêts et les transactions liées au passif sélectionné."
+        "message": "Estimation de remboursement, simulateur « Et si », comparaison forfaitaire, récapitulatif fiscal, documents employeur, liste de contrôle d’audit."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Situation fiscale et remboursement",
-        "message": "Votre remboursement d'impôt estimé ou votre dette fiscale en un coup d'il. En fonction de vos revenus, de l'impôt retenu et de vos déductions, le système calcule si vous pouvez espérer un remboursement."
+        "title": "Estimation du remboursement fiscal",
+        "message": "Remboursement ou impôt à payer estimé en fonction de vos revenus, déductions et impôt retenu à la source."
       },
       "whatIf": {
         "title": "Simulateur « Et si »",
-        "message": "Modélisez des scénarios hypothétiques : ajoutez des revenus supplémentaires, des déductions ou modifiez votre statut fiscal pour voir l'impact sur votre impôt estimé. Idéal pour la planification fiscale."
+        "message": "Modélisez des scénarios : revenus supplémentaires, déductions ajustées, dépenses modifiées."
       },
       "flatRate": {
         "title": "Comparaison forfaitaire",
-        "message": "Comparez vos dépenses réelles avec la déduction forfaitaire autrichienne (Pauschalierung). Découvrez quelle méthode vous fait économiser le plus d'impôts en tant qu'indépendant."
+        "message": "Dépenses réelles vs Betriebsausgabenpauschale. Pour les indépendants."
       },
       "filing": {
-        "title": "Récapitulatif annuel des données fiscales",
-        "message": "Examinez les revenus confirmés, les déductions et les données de TVA par année fiscale. Sélectionnez une année pour voir les totaux, détecter les conflits et vérifier les documents sources avant la déclaration."
+        "title": "Récapitulatif fiscal annuel",
+        "message": "Vue d’ensemble complète de l’année fiscale avec détection des conflits."
       },
-      "assetReport": {
-        "title": "Rapport sur les actifs",
-        "message": "Sélectionnez un bien immobilier ou un actif suivi pour générer des relevés de revenus détaillés et des plans d'amortissement."
+      "employer": {
+        "title": "Documents employeur",
+        "message": "Téléchargez et vérifiez les fiches de paie (Lohnzettel L16). Extraction du salaire, des retenues et des cotisations sociales."
+      },
+      "audit": {
+        "title": "Liste de contrôle d’audit",
+        "message": "Vérifiez l’exhaustivité de votre dossier avant la déclaration."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Informations personnelles",
-        "message": "Votre nom, e-mail, rôles fiscaux (salarié, bailleur, indépendant) et détails professionnels. Ceux-ci déterminent les fonctionnalités fiscales et les déductions qui vous sont accessibles."
+        "message": "Nom, e-mail, préférences d’affichage."
       },
       "taxInfo": {
-        "title": "Profil fiscal",
-        "message": "Numéro fiscal, statut TVA et méthode de détermination du bénéfice. Compléter ces champs active l'automatisation complète pour la création d'actifs et l'extraction OCR."
+        "title": "Profil fiscal et professionnel",
+        "message": "Numéro fiscal (Steuernummer), identifiant TVA (USt-ID), statut TVA, type de revenus, informations professionnelles."
       },
       "commuting": {
-        "title": "Trajet domicile-travail et télétravail",
-        "message": "Définissez votre distance de trajet et la disponibilité des transports en commun pour le calcul du Pendlerpauschale. Les jours de télétravail sont utilisés pour la déduction Telearbeit (jusqu'à 100 jours à 3 EUR/jour)."
+        "title": "Emploi et trajet",
+        "message": "Détails de l’employeur, kilomètres de trajet pour le Pendlerpauschale, jours de télétravail (Telearbeit) pour le Homeoffice-Pauschale, situation familiale."
       },
       "security": {
         "title": "Paramètres de sécurité",
-        "message": "Activez l'authentification à deux facteurs (2FA) pour une protection supplémentaire de votre compte. Gérez votre mot de passe et consultez les sessions actives."
+        "message": "Mot de passe, sessions, authentification à deux facteurs (2FA)."
       },
       "dataExport": {
-        "title": "Export de données et compte",
-        "message": "Exportez toutes vos données sous forme d'archive ZIP pour sauvegarde ou migration. Vous pouvez également gérer les paramètres de votre compte et votre abonnement depuis cet espace."
+        "title": "Données et confidentialité",
+        "message": "Exportez vos données, gérez votre abonnement, supprimez votre compte. Conforme au RGPD."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Mémoire de classification",
-        "message": "Lorsque vous corrigez la catégorie d'une transaction, le système crée une règle afin que les futures transactions avec des descriptions similaires soient automatiquement classées de la même manière."
+        "title": "Classification intelligente",
+        "message": "Catégorisation automatique des transactions par reconnaissance de modèles. Le système apprend de vos corrections."
       },
       "list": {
         "title": "Liste des règles",
-        "message": "Toutes vos règles de classification apprises apparaissent ici. Chaque règle affiche le modèle qu'elle reconnaît, la catégorie attribuée et le nombre de fois où elle a été appliquée."
+        "message": "Consultez, modifiez ou supprimez les règles qui associent des modèles à des catégories."
       },
       "autoLearn": {
-        "title": "Apprentissage automatique",
-        "message": "Les règles sont créées automatiquement à partir de vos corrections. Vous pouvez également geler des règles pour empêcher leur écrasement, ou supprimer celles dont vous n'avez plus besoin."
+        "title": "Règles apprises par l’IA",
+        "message": "Règles créées automatiquement avec compteurs de classification."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "Conseiller fiscal AI",
-        "message": "Posez des questions sur le droit fiscal autrichien, la déductibilité des dépenses, les échéances de déclaration ou les stratégies d'optimisation. L'assistant utilise votre profil et vos données de transactions pour des réponses personnalisées."
+        "title": "Assistant fiscal IA",
+        "message": "Conseiller IA personnel pour le droit fiscal autrichien, disponible en 9 langues."
       },
       "input": {
         "title": "Saisie du chat",
-        "message": "Saisissez votre question fiscale ici. Vous pouvez également joindre des documents pour que l'AI les analyse. Chaque message consomme des crédits de votre forfait."
+        "message": "Posez vos questions ou utilisez les suggestions sur les déductions, la TVA, les échéances et l’amortissement."
       },
       "proactive": {
         "title": "Suggestions proactives",
-        "message": "L'AI peut suggérer de manière proactive des transactions récurrentes à confirmer, des documents manquants à téléverser ou des fiches de paie à traiter en fonction de vos habitudes."
+        "message": "L’IA suggère des optimisations, signale les documents manquants et vous avertit des échéances."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Forfait actuel",
-        "message": "Consultez votre forfait d'abonnement actif, le cycle de facturation et la prochaine date de facturation. Vous pouvez passer à un niveau supérieur, inférieur ou résilier depuis cet espace."
+        "title": "Votre abonnement",
+        "message": "Forfait actuel, cycle de facturation, fonctionnalités. Niveaux Gratuit/Plus/Pro."
       },
       "billing": {
-        "title": "Historique de facturation",
-        "message": "Consultez les factures passées et les relevés de paiement. Les moyens de paiement sont gérés de manière sécurisée via Stripe."
+        "title": "Facturation et paiements",
+        "message": "Historique des paiements, gestion via Stripe, annulation/réactivation."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Filtrer les opérations",
-        "message": "Filtrez votre historique de crédits par type d'opération : déductions, remboursements, réinitialisations mensuelles, rechargements ou règlements de dépassement."
+        "title": "Filtrer les crédits",
+        "message": "Filtrez par type : déductions, remboursements, réinitialisations, recharges, expirations, dépassements, migrations."
       },
       "list": {
-        "title": "Registre des crédits",
-        "message": "Chaque transaction de crédits est enregistrée ici avec le type d'opération, le motif, l'horodatage et le montant. Les montants positifs sont des crédits ajoutés, les montants négatifs sont des crédits consommés."
+        "title": "Transactions de crédits",
+        "message": "Journal complet de l’activité des crédits avec suivi de l’utilisation."
       }
     }
   },

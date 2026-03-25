@@ -3754,31 +3754,31 @@
   "onboarding": {
     "welcome": {
       "title": "Welcome to Taxja!",
-      "message": "Hi! I'm your Taxja AI assistant. I'll walk you through the main features of the platform — automatic document scanning, real-time tax overview, AI-powered advice, and more. Let me show you around!"
+      "message": "Hi! I'm your Taxja AI assistant. I'll guide you through the platform — from automatic document scanning and bank statement import to real-time tax calculations, AI-powered tax advice, and one-click tax filing. Taxja supports 9 languages and works for employees, freelancers, landlords, and businesses alike. Let me show you around!"
     },
     "documents": {
       "title": "Smart Document Processing",
-      "message": "Upload your invoices, receipts, or contracts here. Our system scans, classifies, and creates transactions for you automatically — no manual data entry needed. It also recognizes assets and detects duplicates."
+      "message": "Upload invoices, receipts, contracts, or bank statements here. Our OCR and AI engine automatically extracts data, classifies documents, and creates transactions — no manual entry needed. Bank statements are processed through a dedicated reconciliation workbench, and employer tax certificates (Lohnzettel) have their own review panel. Review and confirm AI-extracted data before it enters your tax record."
     },
     "dashboard": {
       "title": "Your Tax Command Center",
-      "message": "The Dashboard gives you a real-time overview of your finances: income vs. expenses, tax estimates, what-if simulations, and personalized saving tips. Everything in one view — including deadline reminders and quick actions."
+      "message": "The Dashboard gives you a real-time overview: income vs. expenses, estimated tax, paid taxes, remaining balance, net income, and VAT threshold tracking. Interactive trend charts show monthly patterns and category breakdowns. Use the year selector to switch tax years, drag-and-drop to upload documents, and check your subscription status — all in one screen."
     },
     "transactions": {
-      "title": "Transactions",
-      "message": "View, filter, and manage all your income and expense records here. Transactions are created automatically from uploaded documents, or you can add them manually. Each entry is categorized for accurate tax reporting."
+      "title": "Transaction Management",
+      "message": "View, filter, and manage all income and expense records. Transactions are created automatically from documents and bank statement imports, or you can add them manually. Use filters to find specific entries, bulk-select for batch operations, export to CSV/PDF, and manage classification rules. Bank-reconciled transactions show a linked bank icon you can click."
     },
     "reports": {
-      "title": "Tax Reports",
-      "message": "Generate professional tax reports including E/A calculation, Saldenliste, and tax form previews. Export to PDF or CSV anytime — everything is ready for your accountant or the Finanzamt."
+      "title": "Tax Reports & Filing",
+      "message": "Generate professional reports: E/A income statement, balance sheet (Bilanz), trial balance (Saldenliste), and period trial balance. Preview and generate official tax forms (E1, E1a, U30) with pre-filled data. Export a complete tax package with all supporting documents, or submit electronically via FinanzOnline."
     },
     "ai": {
       "title": "AI Tax Advisor",
-      "message": "Your personal AI tax consultant is always available right here. Ask any tax question — it knows your profile, your properties, and your transaction history, so every answer is personalized to you."
+      "message": "Your personal AI tax consultant is always available. Ask anything about Austrian tax law, deductions, VAT, or your situation — it knows your profile, properties, transactions, and documents. Every answer is personalized. It also proactively suggests optimizations and flags potential issues before you file."
     },
     "profile": {
-      "title": "Set Up Your Tax Profile",
-      "message": "Configure your income type, VAT status, properties, and preferences here. The more complete your profile, the more accurate your tax calculations and recommendations will be."
+      "title": "Your Tax Profile",
+      "message": "Configure your income type, tax number, VAT status, business details, employer info, and commuting data for Pendlerpauschale. Set family status for tax credits and home-office days for Homeoffice-Pauschale. The more complete your profile, the more accurate your calculations. Also manage security, export your data, or delete your account here."
     },
     "skip": "Skip guide",
     "next": "Next →",
@@ -3788,320 +3788,320 @@
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Tax Year",
-        "message": "Select the tax year you want to work with. All data on the dashboard will update accordingly."
+        "title": "Tax Year Selector",
+        "message": "Choose the tax year to work with. All dashboard data — income, expenses, tax estimates, and charts — updates instantly when you switch years."
       },
       "upload": {
-        "title": "Quick Upload",
-        "message": "Drag and drop documents here to upload them instantly. Taxja will classify and extract data automatically."
+        "title": "Quick Document Upload",
+        "message": "Drag and drop files here or click to browse. Taxja accepts invoices, receipts, contracts, bank statements, and tax forms. OCR processing starts automatically and creates transactions from extracted data."
       },
       "overview": {
-        "title": "Financial Overview",
-        "message": "Your income, expenses, and tax summary at a glance. Each card shows a key metric for the selected year."
+        "title": "Financial Overview Cards",
+        "message": "Key metrics at a glance: year-to-date income, expenses, estimated tax, paid tax, remaining balance, net income, and distance to VAT threshold. Each card is clickable for more details."
       },
       "trends": {
         "title": "Trend Charts",
-        "message": "Track how your income and expenses develop over time. Spot patterns and plan ahead."
+        "message": "Interactive charts showing monthly income vs. expenses, income category breakdown (pie chart), expense category breakdown, and year-over-year comparisons. Spot patterns and plan your tax strategy."
       },
       "plan": {
-        "title": "Subscription Status",
-        "message": "See your current plan and remaining credits. Upgrade anytime to unlock more features."
+        "title": "Subscription & Credits",
+        "message": "View your current plan (Free, Plus, or Pro), remaining AI credits, and trial status. Click to manage your subscription or purchase additional credits."
       },
       "language": {
-        "title": "Language",
-        "message": "Switch the interface language. Taxja supports German, English, Chinese, and more."
+        "title": "Language Selector",
+        "message": "Switch between 9 supported languages: German, English, Chinese, French, Russian, Hungarian, Polish, Turkish, and Bosnian. The entire interface updates instantly."
       },
       "theme": {
-        "title": "Theme",
-        "message": "Toggle between light and dark mode to suit your preference."
+        "title": "Theme Toggle",
+        "message": "Switch between Classic (light) and Cyber (dark) themes. Classic mode uses clean, standard UI elements. Cyber mode features the animated robot assistant and dark backgrounds."
       }
     },
     "transactions": {
       "classRules": {
         "title": "Classification Rules",
-        "message": "Manage rules that automatically categorise your transactions. Taxja learns from your corrections."
+        "message": "Open the rules manager to view and edit automatic categorization rules. Taxja learns from your manual corrections and builds rules that auto-classify future transactions by description patterns."
       },
       "export": {
-        "title": "Export",
-        "message": "Download your transactions as CSV or PDF for your records or your tax advisor."
+        "title": "Export Transactions",
+        "message": "Download your transactions as CSV or PDF. Choose the format and date range for your records, tax advisor, or Finanzamt submission."
       },
       "addNew": {
         "title": "Add Transaction",
-        "message": "Manually create a new income or expense entry when you do not have a document to upload."
+        "message": "Manually create a new income or expense entry. Use this when you don't have a document to upload — enter amount, date, category, VAT rate, and optional line items."
       },
       "filters": {
-        "title": "Filters",
-        "message": "Narrow down transactions by date, category, type, or amount to find exactly what you need."
+        "title": "Transaction Filters",
+        "message": "Filter by year, category, type (income/expense), needs-review status, and more. Combine filters to find exactly what you need. Use 'Needs Review' to quickly find transactions requiring confirmation."
       },
       "list": {
         "title": "Transaction List",
-        "message": "All your transactions in one place. Click any row to view details, edit, or link a document."
+        "message": "All transactions in a sortable, paginated table. Each row shows date, description, amount, category, and status. The bank icon indicates bank-reconciled entries — click it to view the linked bank statement. The paperclip links to attached documents. Use checkboxes for bulk operations."
       },
       "paging": {
         "title": "Pagination",
-        "message": "Navigate through pages of transactions. Adjust the page size to see more or fewer entries."
+        "message": "Navigate through pages of transactions. Adjust the page size to show more or fewer entries per page."
       }
     },
     "documents": {
       "upload": {
         "title": "Upload Documents",
-        "message": "Upload invoices, receipts, or tax forms. Taxja will extract data using OCR and AI."
+        "message": "Upload invoices, receipts, bank statements, tax forms, employment documents, contracts, and more. Drag and drop multiple files at once. Taxja's OCR engine automatically extracts amounts, dates, vendors, and tax details."
       },
       "tabs": {
-        "title": "Document Groups",
-        "message": "Documents are organised by status: pending review, processed, and archived. Switch tabs to filter."
+        "title": "Document Categories",
+        "message": "Documents are organized by type and status: All, Pending Review (yellow triangle badge), Invoices, Receipts, Bank Statements, Tax Forms, Employment Documents, and more. The 'Needs Review' tab shows documents where AI extraction needs your confirmation."
       },
       "list": {
         "title": "Document List",
-        "message": "Browse all uploaded documents. Click any item to review extracted data and link it to a transaction."
+        "message": "Browse all uploaded documents with search and filters. Each entry shows the document name, type, upload date, and processing status. Click any document to open its detail view with OCR data, preview, and linked transactions."
       }
     },
     "documentDetail": {
       "header": {
         "title": "Document Header",
-        "message": "See the document name, upload date, and processing status. Use actions to re-process or delete."
+        "message": "Shows the document name, type, upload date, and processing status. Action buttons let you re-process OCR, download the original file, or delete the document."
       },
       "preview": {
         "title": "Document Preview",
-        "message": "View the original document. Zoom in to check details against the extracted data."
+        "message": "View the original uploaded document (PDF, image, etc.). Zoom in to verify details against the AI-extracted data on the right panel."
       },
       "ocrData": {
-        "title": "Extracted Data",
-        "message": "Fields extracted by OCR and AI. Review each value and correct any errors before confirming."
+        "title": "AI-Extracted Data",
+        "message": "All fields extracted by OCR and AI: amount, date, vendor, category, VAT rate, line items, and more. Low-confidence fields are highlighted. Review each value and correct errors before confirming."
       },
       "linked": {
         "title": "Linked Records",
-        "message": "See which transaction or asset is linked to this document. Create new links directly from here."
+        "message": "See which transaction, asset, or bank statement line is linked to this document. Create new links or navigate to the linked record directly from here."
       },
       "editMode": {
-        "title": "Edit Fields",
-        "message": "Switch to edit mode to correct extracted values. Your changes improve future AI accuracy."
+        "title": "Edit & Confirm",
+        "message": "Switch to edit mode to correct AI-extracted values. Once you confirm, the data is locked in and the yellow review badge is removed. Your corrections also improve future AI accuracy."
       }
     },
     "reports": {
       "tabs": {
         "title": "Report Types",
-        "message": "Choose between income tax, VAT, and other report types. Each tab shows a different view."
+        "message": "Switch between report types: E/A Income Statement (self-employed), Balance Sheet (Bilanz), Trial Balance (Saldenliste), Period Trial Balance (Periodensaldenliste), and Tax Form Preview (E1/E1a/U30)."
       },
       "generate": {
         "title": "Generate Report",
-        "message": "Calculate your tax report for the selected period. The report updates with your latest data."
+        "message": "Calculate the report for the selected tax year. The system pulls your latest transaction data and generates a detailed breakdown matching official Austrian tax form fields."
       },
       "print": {
-        "title": "Print",
-        "message": "Print the report directly from the browser for your paper records."
+        "title": "Print Report",
+        "message": "Print the report directly from the browser. The print layout is optimized for A4 paper with proper headers and page breaks."
       },
       "content": {
         "title": "Report Content",
-        "message": "The detailed breakdown of your tax calculation. Each line maps to a field on the official tax form."
+        "message": "The detailed tax calculation with each line mapped to official form fields. Expandable sections show the underlying transactions for each line item."
       },
       "finanzOnline": {
-        "title": "FinanzOnline",
-        "message": "Submit your tax return electronically to the Austrian tax authority via FinanzOnline."
+        "title": "FinanzOnline Integration",
+        "message": "Submit your tax return electronically to the Austrian tax authority (Finanzamt) via FinanzOnline. The form data is pre-filled from your transactions and documents."
       },
       "downloadForm": {
-        "title": "Download Form",
-        "message": "Download the pre-filled official tax form (E1, E1a, U30, etc.) as a PDF."
+        "title": "Download & Export",
+        "message": "Download the pre-filled official tax form as PDF, or export a complete tax package containing your tax return, all supporting documents, and a summary report in a single archive."
       }
     },
     "properties": {
       "overview": {
         "title": "Portfolio Overview",
-        "message": "View aggregated insights for all your properties and assets in one dashboard."
+        "message": "Navigate to the asset portfolio dashboard for aggregated insights: total asset values, depreciation schedules, and comparative analytics across all your properties and assets."
       },
       "add": {
-        "title": "Add Property",
-        "message": "Register a new property or asset. Taxja will track depreciation (AfA) and rental income automatically."
+        "title": "Add Asset",
+        "message": "Register a new asset: real estate, vehicles, equipment, machinery, or tools. Taxja calculates depreciation (AfA) based on Austrian tax law and tracks book values over time."
       },
       "cards": {
-        "title": "Property Cards",
-        "message": "Each card shows a property with key details: address, rental status, and current book value."
+        "title": "Asset Cards",
+        "message": "Each card shows an asset with key details: name, type, purchase date, original cost, current book value, and depreciation status. Click to open the full detail view."
       },
       "edit": {
-        "title": "Edit Property",
-        "message": "Update property details such as purchase price, area, or depreciation method."
+        "title": "Edit Asset",
+        "message": "Update asset details: purchase price, depreciation method (linear/degressive), useful life, or disposal information. Changes automatically recalculate depreciation schedules."
       },
       "archive": {
         "title": "Archive Toggle",
-        "message": "Show or hide archived properties. Archived items are kept for the 7-year retention period (BAO §132)."
+        "message": "Show or hide archived/disposed assets. Archived items are retained for the 7-year legal retention period (BAO §132) but hidden from the main view."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Summary",
-        "message": "Key figures across all assets: total value, annual depreciation, and net rental income."
+        "title": "Asset Summary",
+        "message": "Key figures across all assets: total acquisition cost, current book value, annual depreciation expense, and net rental income from properties."
       },
       "portfolio": {
         "title": "Portfolio Comparison",
-        "message": "Compare properties side by side on yield, occupancy, and other metrics."
+        "message": "Compare properties side by side on key metrics: yield, occupancy rate, maintenance costs, and return on investment."
       },
       "otherAssets": {
         "title": "Other Assets",
-        "message": "Non-property assets like vehicles, equipment, or intangible assets tracked here."
+        "message": "Non-property depreciable assets: vehicles, office equipment, machinery, and intangible assets. Each tracked with its own depreciation schedule."
       },
       "reports": {
         "title": "Asset Reports",
-        "message": "Generate detailed asset reports for your tax advisor or for internal analysis."
+        "message": "Generate detailed depreciation reports and asset inventories. Select the report type and year for comprehensive asset documentation."
       }
     },
     "propertyDetail": {
       "actions": {
-        "title": "Actions",
-        "message": "Edit, archive, or delete this property. Access additional tools like depreciation schedules."
+        "title": "Property Actions",
+        "message": "Edit property details, view the depreciation schedule, dispose/sell the asset, or archive it. Access all management tools from this action menu."
       },
       "info": {
         "title": "Property Information",
-        "message": "Core details: address, purchase date, price, area, and depreciation parameters."
+        "message": "Core details: address, purchase date, acquisition cost, area (m²), depreciation method, useful life, and current book value."
       },
       "contracts": {
         "title": "Rental Contracts",
-        "message": "Manage rental contracts for this property. Track tenants, rent amounts, and contract periods."
+        "message": "Manage rental contracts: add tenants, set rent amounts and periods, track deposits, and monitor lease terms. Essential for Vermietung & Verpachtung reporting."
       },
       "transactions": {
-        "title": "Transactions",
-        "message": "All income and expenses linked to this property. Useful for Anlage V reporting."
+        "title": "Property Transactions",
+        "message": "All income and expenses linked to this property: rental income, maintenance costs, insurance, interest payments. Used directly for tax reporting."
       }
     },
     "liabilities": {
       "overview": {
-        "title": "Liabilities Overview",
-        "message": "See aggregated debt metrics: total outstanding, monthly payments, and interest totals."
+        "title": "Liabilities Dashboard",
+        "message": "Aggregated view of all debts: total outstanding balance, monthly payment obligations, total interest paid, and debt-to-asset ratio."
       },
       "add": {
         "title": "Add Liability",
-        "message": "Record a new loan or liability. Track repayments and deductible interest automatically."
+        "message": "Record a new loan, mortgage, or credit facility. Enter principal amount, interest rate, and repayment schedule. Link to a property if applicable — interest may be tax-deductible."
       },
       "list": {
         "title": "Liability List",
-        "message": "All your loans and liabilities in one place. Click any item to see payment schedules."
+        "message": "All your loans and liabilities in one place. See current balance, interest rate, and next payment date. Click any item to view the full amortization schedule."
       },
       "detail": {
-        "title": "Detail Panel",
-        "message": "View repayment schedules, remaining balance, and linked property or asset."
+        "title": "Amortization Schedule",
+        "message": "Detailed repayment schedule showing principal and interest split for each payment. Track remaining balance, total interest paid, and linked property or asset."
       }
     },
     "recurring": {
       "create": {
-        "title": "Create Recurring",
-        "message": "Set up a recurring transaction that will be created automatically on a schedule."
+        "title": "Create Recurring Pattern",
+        "message": "Set up a recurring transaction that repeats automatically: daily, weekly, monthly, quarterly, or yearly. Ideal for regular expenses like rent, subscriptions, or insurance premiums."
       },
       "filters": {
-        "title": "Filters",
-        "message": "Filter recurring entries by frequency, category, or active status."
+        "title": "Filter Patterns",
+        "message": "Filter recurring entries by frequency, category, active/paused status, or amount range."
       },
       "list": {
-        "title": "Recurring List",
-        "message": "View and manage all recurring transactions. Pause, edit, or delete schedules as needed."
+        "title": "Recurring Patterns",
+        "message": "View and manage all recurring transaction patterns. Taxja also auto-detects recurring patterns from your bank statements. Pause, edit, or delete schedules as needed."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Assets & Properties",
-        "message": "Manage real estate, vehicles, and other depreciable assets. Track AfA and book values."
+        "title": "Assets & Liabilities",
+        "message": "Manage real estate, vehicles, equipment, and other depreciable assets with automatic AfA calculation. Also track loans, mortgages, and other liabilities with amortization schedules."
       },
       "automation": {
-        "title": "Automation",
-        "message": "Set up recurring transactions, classification rules, and automated workflows."
+        "title": "Rules & Automation",
+        "message": "Set up recurring transactions for regular payments, and manage classification rules that automatically categorize transactions. Taxja learns from your corrections over time."
       },
       "taxtools": {
-        "title": "Tax Tools",
-        "message": "Advanced calculators for refund estimation, what-if scenarios, and audit preparation."
+        "title": "Tax Workspace",
+        "message": "Advanced tax tools: refund estimator, what-if simulator, flat-rate comparison, annual tax data summary, employer documents workbench, and audit checklist."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Refund Estimate",
-        "message": "Estimate your expected tax refund based on current income, deductions, and withheld tax."
+        "title": "Tax Refund Estimate",
+        "message": "Estimate your expected tax refund or liability based on current income, deductions, and withheld tax. Shows a detailed breakdown of taxable income and applicable rates."
       },
       "whatIf": {
-        "title": "What-If Scenarios",
-        "message": "Simulate changes like additional income or deductions to see how they affect your tax."
+        "title": "What-If Simulator",
+        "message": "Model hypothetical scenarios: add extra income, adjust deductions, or change business expenses to see how they impact your tax position. Compare different scenarios side by side."
       },
       "flatRate": {
         "title": "Flat Rate Comparison",
-        "message": "Compare actual expenses against the Betriebsausgabenpauschale to find the better option."
+        "message": "Compare your actual documented expenses against the Betriebsausgabenpauschale (flat-rate business expenses). Shows which option gives you a better tax result — available for self-employed users."
       },
       "filing": {
-        "title": "Filing Summary",
-        "message": "Review a complete summary of all data before filing. Check for missing items or errors."
+        "title": "Annual Tax Summary",
+        "message": "Complete overview of your tax year: taxable income, estimated tax, withheld tax, estimated refund, income and deduction breakdowns, VAT summary, and conflict detection with warnings."
       },
       "employer": {
-        "title": "Employer Tax Certificate",
-        "message": "Enter data from your Lohnzettel (L16) to include employment income in your tax calculation."
+        "title": "Employer Documents",
+        "message": "Upload and review your Lohnzettel (L16) and other employment tax certificates. Taxja extracts employer info, gross salary, tax withholdings, and social insurance contributions. Supports multiple employers."
       },
       "audit": {
         "title": "Audit Checklist",
-        "message": "Verify your records are complete and compliant before submitting your tax return."
+        "message": "Verify your tax records are complete before filing: checks for missing documents, unreviewed transactions, incomplete categories, and compliance with Austrian tax requirements."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Personal Information",
-        "message": "Your name, email, and contact details. Keep these up to date for tax correspondence."
+        "message": "Your name, email, and display preferences. Keep these current for tax correspondence and account recovery."
       },
       "taxInfo": {
-        "title": "Tax Profile",
-        "message": "Your tax number (Steuernummer), VAT status, and income types. Essential for correct calculations."
+        "title": "Tax & Business Profile",
+        "message": "Configure your tax number (Steuernummer), VAT ID (USt-ID), VAT status (small business exemption, regular), income type, business name, and industry. Essential for correct tax calculations."
       },
       "commuting": {
-        "title": "Commuting",
-        "message": "Enter your commuting details to calculate the Pendlerpauschale deduction automatically."
+        "title": "Employment & Commuting",
+        "message": "Set up employer details, commuting distance (km) for Pendlerpauschale, public transport availability, home-office (Telearbeit) days for Homeoffice-Pauschale, and family status for tax credits."
       },
       "security": {
-        "title": "Security",
-        "message": "Change your password and review active sessions. Enable two-factor authentication for extra safety."
+        "title": "Security Settings",
+        "message": "Change your password, review active sessions, and enable two-factor authentication (2FA) for enhanced account security."
       },
       "dataExport": {
         "title": "Data & Privacy",
-        "message": "Export all your data or request account deletion. Your data belongs to you."
+        "message": "Export all your data (documents, transactions, reports), manage subscription settings, or request account deletion. Your data belongs to you — fully GDPR compliant."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Classification Rules",
-        "message": "Rules automatically categorise transactions based on patterns. Taxja learns from your manual corrections too."
+        "title": "Smart Classification",
+        "message": "Classification rules automatically assign tax categories to transactions based on description patterns. Taxja creates rules from your manual corrections, building a personalized classification engine that improves over time."
       },
       "list": {
         "title": "Rules List",
-        "message": "View, edit, or delete existing rules. Each rule matches a text pattern to a tax category."
+        "message": "View, edit, or delete classification rules. Each rule matches a text pattern (from transaction descriptions) to a specific tax category and deductibility status."
       },
       "autoLearn": {
-        "title": "Auto-Learned Rules",
-        "message": "Rules created automatically by the AI. Review and approve them to keep classification accurate."
+        "title": "AI-Learned Rules",
+        "message": "Rules automatically created by the AI from your past decisions. The counter shows how many transactions each rule has classified. Review and fine-tune as needed."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "AI Assistant",
-        "message": "Ask questions about Austrian tax law, your finances, or how to use Taxja. Powered by AI."
+        "title": "AI Tax Assistant",
+        "message": "Your personal AI tax advisor for Austrian tax law. Ask questions in any of the 9 supported languages. The AI accesses your full profile, transactions, documents, and properties for personalized answers."
       },
       "input": {
         "title": "Chat Input",
-        "message": "Type your question here. You can ask in German, English, or any supported language."
+        "message": "Type your tax question or use suggested prompts. Ask about deductions, VAT rules, filing deadlines, property depreciation, or any Austrian tax topic."
       },
       "proactive": {
         "title": "Proactive Insights",
-        "message": "The assistant may suggest optimisations or flag potential issues based on your data."
+        "message": "The AI proactively analyzes your data and suggests tax optimizations, flags missing documents, warns about approaching deadlines, and identifies potential errors before you file."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Your Plan",
-        "message": "View your current subscription tier and included features. Upgrade to unlock more."
+        "title": "Your Subscription",
+        "message": "View your current plan (Free, Plus, or Pro), billing cycle, next payment date, and included features. Free includes basic features, Plus adds advanced reports, Pro unlocks AI assistant and tax form generation."
       },
       "billing": {
-        "title": "Billing History",
-        "message": "Review past invoices, payment methods, and credit usage."
+        "title": "Billing & Payments",
+        "message": "Review payment history, manage your payment method via Stripe, cancel or reactivate your subscription, and view remaining trial days if applicable."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Filter",
-        "message": "Filter credit transactions by type, date, or status to find specific entries."
+        "title": "Filter Credits",
+        "message": "Filter credit history by type: deductions (OCR/AI usage), refunds, monthly resets, top-up purchases, expired top-ups, overage settlements, or plan migrations."
       },
       "list": {
-        "title": "Credit History",
-        "message": "A detailed log of all credit purchases, usage, and remaining balance."
+        "title": "Credit Transactions",
+        "message": "Detailed log of all credit activity: when credits were used, how many, what for, and your remaining balance. Track AI usage across document processing and chat interactions."
       }
     }
   },

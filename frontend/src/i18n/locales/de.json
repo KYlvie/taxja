@@ -3740,31 +3740,31 @@
   "onboarding": {
     "welcome": {
       "title": "Willkommen bei Taxja!",
-      "message": "Hallo! Ich bin dein Taxja KI-Assistent. Ich zeige dir die wichtigsten Funktionen  automatische Belegerkennung, Echtzeit-Steuerübersicht, KI-gestützte Beratung und mehr. Lass mich dir alles zeigen!"
+      "message": "Hallo! Ich bin dein Taxja KI-Assistent. Ich führe dich durch die gesamte Plattform — von der automatischen Belegerkennung und dem Kontoauszugsimport über Echtzeit-Steuerberechnungen und KI-gestützte Steuerberatung bis hin zur Steuererklärung per Knopfdruck. Taxja unterstützt 9 Sprachen und eignet sich für Arbeitnehmer, Selbständige, Vermieter und Unternehmer gleichermaßen. Lass mich dir alles zeigen!"
     },
     "documents": {
       "title": "Intelligente Dokumentenverarbeitung",
-      "message": "Lade hier deine Rechnungen, Belege oder Verträge hoch. Unser System scannt, klassifiziert und erstellt automatisch Buchungen  keine manuelle Eingabe nötig. Anlagen werden erkannt und Duplikate geprüft."
+      "message": "Lade hier Rechnungen, Belege, Verträge oder Kontoauszüge hoch. Unsere OCR- und KI-Engine extrahiert automatisch die Daten, klassifiziert Dokumente und erstellt Buchungen — ganz ohne manuelle Eingabe. Kontoauszüge werden über eine eigene Abstimmungs-Workbench verarbeitet, und Lohnzettel haben ein eigenes Prüfpanel. Überprüfe und bestätige die KI-extrahierten Daten, bevor sie in deine Steuerakte übernommen werden."
     },
     "dashboard": {
       "title": "Deine Steuerzentrale",
-      "message": "Das Dashboard zeigt dir in Echtzeit deine Finanzen: Einnahmen vs. Ausgaben, Steuerschätzungen, Was-wäre-wenn-Simulationen und personalisierte Spartipps. Alles in einer Ansicht  inklusive Fristenerinnerungen und Schnellaktionen."
+      "message": "Das Dashboard bietet dir eine Echtzeitübersicht: Einnahmen vs. Ausgaben, geschätzte Steuer, bereits bezahlte Steuer, offener Restbetrag, Nettoeinkommen und USt-Schwellen-Tracking. Interaktive Trenddiagramme zeigen monatliche Muster und Kategorieaufschlüsselungen. Nutze die Jahresauswahl zum Wechseln des Steuerjahres, lade Dokumente per Drag-and-Drop hoch und prüfe deinen Abonnementstatus — alles auf einem Bildschirm."
     },
     "transactions": {
-      "title": "Buchungen",
-      "message": "Hier siehst, filterst und verwaltest du alle Einnahmen und Ausgaben. Buchungen werden automatisch aus hochgeladenen Dokumenten erstellt, oder du kannst sie manuell hinzufügen. Jeder Eintrag ist für die Steuererklärung kategorisiert."
+      "title": "Buchungsverwaltung",
+      "message": "Sieh, filtere und verwalte alle Einnahmen- und Ausgabenbuchungen. Buchungen werden automatisch aus Dokumenten und Kontoauszugsimporten erstellt, oder du kannst sie manuell anlegen. Nutze Filter, um bestimmte Einträge zu finden, wähle mehrere Einträge für Stapelverarbeitung aus, exportiere als CSV/PDF und verwalte Klassifizierungsregeln. Bank-abgestimmte Buchungen zeigen ein verknüpftes Banksymbol, auf das du klicken kannst."
     },
     "reports": {
-      "title": "Steuerberichte",
-      "message": "Erstelle professionelle Steuerberichte: E/A-Rechnung, Saldenliste und Steuerformular-Vorschau. Exportiere jederzeit als PDF oder CSV  alles bereit für deinen Steuerberater oder das Finanzamt."
+      "title": "Steuerberichte & Abgabe",
+      "message": "Erstelle professionelle Berichte: E/A-Rechnung, Bilanz, Saldenliste und Periodensaldenliste. Sieh dir offizielle Steuerformulare (E1, E1a, U30) in der Vorschau an und generiere sie mit vorausgefüllten Daten. Exportiere ein vollständiges Steuerpaket mit allen Belegen oder reiche elektronisch über FinanzOnline ein."
     },
     "ai": {
       "title": "KI-Steuerberater",
-      "message": "Dein persönlicher KI-Steuerberater ist hier immer verfügbar. Stell jede Steuerfrage  er kennt dein Profil, deine Immobilien und deine Buchungshistorie, sodass jede Antwort individuell auf dich zugeschnitten ist."
+      "message": "Dein persönlicher KI-Steuerberater ist jederzeit verfügbar. Frag alles zum österreichischen Steuerrecht, zu Absetzbeträgen, Umsatzsteuer oder deiner individuellen Situation — die KI kennt dein Profil, deine Immobilien, Buchungen und Dokumente. Jede Antwort ist personalisiert. Zusätzlich schlägt die KI proaktiv Optimierungen vor und weist auf mögliche Probleme hin, bevor du deine Steuererklärung abgibst."
     },
     "profile": {
-      "title": "Steuerprofil einrichten",
-      "message": "Konfiguriere hier deine Einkunftsart, USt-Status, Immobilien und Präferenzen. Je vollständiger dein Profil, desto genauer sind deine Steuerberechnungen und Empfehlungen."
+      "title": "Dein Steuerprofil",
+      "message": "Konfiguriere deine Einkunftsart, Steuernummer, USt-Status, Geschäftsdetails, Arbeitgeberdaten und Pendlerdaten für die Pendlerpauschale. Lege den Familienstand für Steuerabsetzbeträge und Homeoffice-Tage für die Homeoffice-Pauschale fest. Je vollständiger dein Profil, desto genauer die Berechnungen. Hier kannst du auch Sicherheitseinstellungen verwalten, deine Daten exportieren oder dein Konto löschen."
     },
     "skip": "Einführung überspringen",
     "next": "Weiter →",
@@ -3774,320 +3774,320 @@
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Jahresauswahl",
-        "message": "Wechsle hier zwischen Steuerjahren. Alle Zahlen auf dem Dashboard  Einnahmen, Ausgaben und Steuerschätzungen  werden für das gewählte Jahr aktualisiert."
+        "title": "Steuerjahr-Auswahl",
+        "message": "Wähle das Steuerjahr, mit dem du arbeiten möchtest. Alle Dashboard-Daten — Einnahmen, Ausgaben, Steuerschätzungen und Diagramme — aktualisieren sich sofort beim Jahreswechsel."
       },
       "upload": {
-        "title": "Schnell-Upload",
-        "message": "Lade Rechnungen, Belege oder Verträge direkt hier auf dem Dashboard hoch. Unsere OCR-Engine scannt und erstellt automatisch Buchungen  ohne die Seite zu verlassen."
+        "title": "Schneller Dokumenten-Upload",
+        "message": "Ziehe Dateien hierher oder klicke zum Durchsuchen. Taxja akzeptiert Rechnungen, Belege, Verträge, Kontoauszüge und Steuerformulare. Die OCR-Verarbeitung startet automatisch und erstellt Buchungen aus den extrahierten Daten."
       },
       "overview": {
-        "title": "Finanzübersicht",
-        "message": "Diese Karten zeigen deine wichtigsten Finanzkennzahlen auf einen Blick: Gesamteinnahmen, Gesamtausgaben, geschätzte Steuerlast, Nettoergebnis, USt-Schwelle und ausstehende Belegprüfungen."
+        "title": "Finanzübersicht-Karten",
+        "message": "Die wichtigsten Kennzahlen auf einen Blick: Einnahmen, Ausgaben, geschätzte Steuer, bezahlte Steuer, offener Restbetrag, Nettoeinkommen und Abstand zur USt-Schwelle seit Jahresbeginn. Jede Karte ist klickbar für weitere Details."
       },
       "trends": {
         "title": "Trenddiagramme",
-        "message": "Visuelle Diagramme, die deine Einnahmen und Ausgaben über die Zeit verfolgen. Erkenne saisonale Muster und vergleiche Monat für Monat."
+        "message": "Interaktive Diagramme mit monatlichen Einnahmen vs. Ausgaben, Einnahmenkategorien-Aufschlüsselung (Tortendiagramm), Ausgabenkategorien-Aufschlüsselung und Jahresvergleichen. Erkenne Muster und plane deine Steuerstrategie."
       },
       "plan": {
-        "title": "Abonnement & Status",
-        "message": "Hier sehen Sie Ihren aktuellen Plan und den Slogan. Klicken Sie darauf, um Ihr Abonnement zu verwalten oder den Plan zu wechseln."
+        "title": "Abonnement & Guthaben",
+        "message": "Sieh deinen aktuellen Plan (Free, Plus oder Pro), verbleibende KI-Guthaben und Teststatus. Klicke, um dein Abonnement zu verwalten oder zusätzliche Guthaben zu kaufen."
       },
       "language": {
         "title": "Sprachauswahl",
-        "message": "Taxja unterstuetzt 9 Sprachen. Die gesamte Oberflaeche wird sofort in Ihre gewaehlte Sprache uebersetzt."
+        "message": "Wechsle zwischen 9 unterstützten Sprachen: Deutsch, Englisch, Chinesisch, Französisch, Russisch, Ungarisch, Polnisch, Türkisch und Bosnisch. Die gesamte Oberfläche aktualisiert sich sofort."
       },
       "theme": {
         "title": "Design umschalten",
-        "message": "Wechseln Sie zwischen hellem und dunklem Cyber-Modus fuer geringere Augenbelastung bei Nachtarbeit."
+        "message": "Wechsle zwischen Classic (hell) und Cyber (dunkel). Der Classic-Modus nutzt ein sauberes, Standard-Design. Der Cyber-Modus bietet den animierten Roboter-Assistenten und dunkle Hintergründe."
       }
     },
     "transactions": {
+      "classRules": {
+        "title": "Klassifizierungsregeln",
+        "message": "Öffne den Regelmanager, um automatische Kategorisierungsregeln anzuzeigen und zu bearbeiten. Taxja lernt aus deinen manuellen Korrekturen und erstellt Regeln, die zukünftige Buchungen anhand von Beschreibungsmustern automatisch klassifizieren."
+      },
+      "export": {
+        "title": "Buchungen exportieren",
+        "message": "Lade deine Buchungen als CSV oder PDF herunter. Wähle Format und Zeitraum für deine Unterlagen, deinen Steuerberater oder die Einreichung beim Finanzamt."
+      },
+      "addNew": {
+        "title": "Buchung hinzufügen",
+        "message": "Erstelle manuell eine neue Einnahmen- oder Ausgabenbuchung. Verwende dies, wenn du keinen Beleg zum Hochladen hast — gib Betrag, Datum, Kategorie, USt-Satz und optionale Einzelpositionen ein."
+      },
       "filters": {
-        "title": "Filter",
-        "message": "Grenze deine Buchungen nach Zeitraum, Typ (Einnahme/Ausgabe), Kategorie, Immobilie oder Status ein. Kombiniere mehrere Filter für präzise Ergebnisse."
+        "title": "Buchungsfilter",
+        "message": "Filtere nach Jahr, Kategorie, Typ (Einnahme/Ausgabe), Prüfstatus und mehr. Kombiniere Filter, um genau das zu finden, was du suchst. Nutze „Prüfung erforderlich“, um schnell Buchungen zu finden, die eine Bestätigung benötigen."
       },
       "list": {
         "title": "Buchungsliste",
-        "message": "Alle deine Buchungen erscheinen hier. Klicke auf eine Zeile, um Details zu sehen, Beträge zu bearbeiten, Kategorien zu ändern oder sie einer Immobilie zuzuordnen."
+        "message": "Alle Buchungen in einer sortierbaren, paginierten Tabelle. Jede Zeile zeigt Datum, Beschreibung, Betrag, Kategorie und Status. Das Banksymbol kennzeichnet bank-abgestimmte Einträge — klicke darauf, um den verknüpften Kontoauszug anzuzeigen. Die Büroklammer verlinkt zu angehängten Dokumenten. Verwende Checkboxen für Stapelverarbeitung."
       },
       "paging": {
         "title": "Seitennavigation",
-        "message": "Navigiere zwischen Seiten der Buchungen. Du kannst auch ändern, wie viele Einträge pro Seite angezeigt werden."
-      },
-      "classRules": {
-        "title": "Klassifizierungsspeicher",
-        "message": "Das System lernt aus Ihren Korrekturen. Hier sehen und verwalten Sie die gelernten Zuordnungsregeln, damit zukuenftige Transaktionen automatisch richtig kategorisiert werden."
-      },
-      "export": {
-        "title": "CSV-Export",
-        "message": "Exportieren Sie alle gefilterten Transaktionen als CSV-Datei fuer Ihren Steuerberater, Excel oder andere Buchhaltungssysteme."
-      },
-      "addNew": {
-        "title": "Transaktion hinzufuegen",
-        "message": "Erstellen Sie eine neue Transaktion manuell. Geben Sie Betrag, Kategorie, Datum und optionale Details wie Belegnummer oder Kommentar ein."
+        "message": "Navigiere durch die Seiten der Buchungen. Passe die Seitengröße an, um mehr oder weniger Einträge pro Seite anzuzeigen."
       }
     },
     "documents": {
       "upload": {
-        "title": "Upload-Bereich",
-        "message": "Ziehe Dateien hierher oder klicke zum Durchsuchen. Unterstützte Formate: PDF, JPG und PNG. Unsere OCR-Engine extrahiert die Daten automatisch."
+        "title": "Dokumente hochladen",
+        "message": "Lade Rechnungen, Belege, Kontoauszüge, Steuerformulare, Lohnzettel, Verträge und mehr hoch. Ziehe mehrere Dateien gleichzeitig hierher. Taxjas OCR-Engine extrahiert automatisch Beträge, Daten, Lieferanten und Steuerdetails."
       },
       "tabs": {
-        "title": "Kategorien-Tabs",
-        "message": "Dokumente sind nach Typ gruppiert  Rechnungen, Belege, Verträge, Steuerformulare und mehr. Wechsle zwischen Tabs, um schnell zu finden, was du suchst."
+        "title": "Dokumentenkategorien",
+        "message": "Dokumente sind nach Typ und Status geordnet: Alle, Prüfung ausstehend (gelbes Dreieck), Rechnungen, Belege, Kontoauszüge, Steuerformulare, Lohnzettel und mehr. Der Tab „Prüfung erforderlich“ zeigt Dokumente, bei denen die KI-Extraktion deine Bestätigung benötigt."
       },
       "list": {
         "title": "Dokumentenliste",
-        "message": "Durchsuche alle hochgeladenen Dokumente. Jeder Eintrag zeigt den erkannten Typ, extrahierten Betrag, Verarbeitungsstatus und verknüpfte Buchung."
-      }
-    },
-    "reports": {
-      "tabs": {
-        "title": "Berichts-Tabs",
-        "message": "Wähle den Berichtstyp: E/A-Rechnung, Saldenliste, Bilanz, Steuerformular-Vorschau (E1, L1, U1) und mehr."
-      },
-      "content": {
-        "title": "Berichtsinhalt",
-        "message": "Der generierte Bericht erscheint hier. Überprüfe die Zahlen und exportiere dann als PDF oder CSV für deinen Steuerberater oder das Finanzamt."
-      },
-      "generate": {
-        "title": "Bericht erstellen",
-        "message": "Klicken Sie hier, um den ausgewaehlten Bericht fuer das gewaehlte Steuerjahr zu erstellen. Je nach Berichtstyp koennen Sie E/A-Rechnung, Saldenliste, Bilanz oder Steuerformulare generieren."
-      },
-      "print": {
-        "title": "Drucken",
-        "message": "Drucken Sie den generierten Bericht direkt aus oder speichern Sie ihn als PDF ueber das Druckdialogfeld Ihres Browsers."
-      },
-      "finanzOnline": {
-        "title": "FinanzOnline oeffnen",
-        "message": "Oeffnet das oesterreichische Steuerportal FinanzOnline in einem neuen Tab. Dort koennen Sie Ihre Steuererklärung mit den hier vorbereiteten Daten einreichen."
-      },
-      "downloadForm": {
-        "title": "Offizielles Formular herunterladen",
-        "message": "Laden Sie das offizielle BMF-Steuerformular (PDF) herunter. Fuellen Sie es mit den Werten aus der Vorschau oben aus und reichen Sie es bei Ihrem Finanzamt ein."
-      }
-    },
-    "properties": {
-      "cards": {
-        "title": "Alle Vermögenswerte",
-        "message": "Ihre Immobilien, Geräte, Fahrzeuge und andere Vermögenswerte in einer einheitlichen Liste. Klicken Sie auf eine Karte für Details."
-      },
-      "overview": {
-        "title": "Vermögensübersicht",
-        "message": "Öffnen Sie das Portfolio-Dashboard, um alle Immobilien und Vermögenswerte zu vergleichen."
-      },
-      "add": {
-        "title": "Vermoegenswert hinzufuegen",
-        "message": "Fuegen Sie manuell eine neue Immobilie, ein Fahrzeug oder eine andere Anlage hinzu. Geben Sie Adresse, Kaufpreis, Baudatum und andere Details ein -- die AfA wird automatisch berechnet."
-      },
-      "edit": {
-        "title": "Bearbeiten",
-        "message": "Klicken Sie auf das Stift-Symbol, um die Details eines Vermoegenswerts zu bearbeiten: Adresse, Typ, Kaufpreis, AfA-Satz und mehr."
-      },
-      "archive": {
-        "title": "Archivieren & Filtern",
-        "message": "Archivieren Sie Vermoegenswerte, die Sie nicht mehr aktiv verwalten. Aktivieren Sie diese Checkbox, um archivierte Objekte in der Liste ein- oder auszublenden."
-      }
-    },
-    "recurring": {
-      "create": {
-        "title": "Neue Daueraufträge",
-        "message": "Richte eine neue wiederkehrende Buchung ein  Mieteinnahmen, Kreditraten, Versicherung oder regelmäßige Ausgaben. Wähle Häufigkeit und Startdatum."
-      },
-      "filters": {
-        "title": "Filter",
-        "message": "Filtere wiederkehrende Buchungen nach Typ, Häufigkeit, Immobilie oder Aktiv/Pausiert-Status."
-      },
-      "list": {
-        "title": "Wiederkehrende Buchungen",
-        "message": "Alle wiederkehrenden Buchungen sind hier aufgelistet. Sieh, wann die nächste Ausführung fällig ist, pausiere oder setze Einträge fort oder bearbeite Details."
-      }
-    },
-    "advanced": {
-      "assets": {
-        "title": "Vermögens- und Schuldenverwaltung",
-        "message": "Verwalten Sie Immobilien, Ausrüstung und Verbindlichkeiten. Verfolgen Sie Abschreibungen, sehen Sie Ihr Portfolio und verwalten Sie Darlehen."
-      },
-      "automation": {
-        "title": "Regeln & Automatisierung",
-        "message": "Richte wiederkehrende Buchungen ein und verwalte deinen Klassifizierungsspeicher. Das System lernt aus deinen Korrekturen, um zukünftige Buchungen automatisch zu kategorisieren."
-      },
-      "taxtools": {
-        "title": "Steuer-Workspace",
-        "message": "Dein All-in-One Steuer-Hub: Meldungen vorbereiten, Belegbereitschaft prüfen, KI-gestützte Beratung erhalten und Berichte erstellen  alles an einem Ort."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Aktionsleiste",
-        "message": "Hier finden Sie alle Aktionen: Kaufvertrag hochladen, Mietvertraege anzeigen, bearbeiten oder archivieren."
-      },
-      "info": {
-        "title": "Objektdetails",
-        "message": "Adresse, Kaufpreis, Baujahr, AfA-Satz, aufgelaufene Abschreibung, Restwert und Nebenkosten auf einen Blick."
-      },
-      "contracts": {
-        "title": "Mietvertraege",
-        "message": "Alle Mietvertraege mit Miete, Laufzeit und Status. Neue Vertraege hinzufuegen oder bestehende bearbeiten."
-      },
-      "transactions": {
-        "title": "Verknuepfte Transaktionen",
-        "message": "Alle Einnahmen und Ausgaben nach Jahr gruppiert mit Zusammenfassung pro Jahr."
+        "message": "Durchsuche alle hochgeladenen Dokumente mit Suche und Filtern. Jeder Eintrag zeigt Dokumentenname, Typ, Uploaddatum und Verarbeitungsstatus. Klicke auf ein Dokument, um die Detailansicht mit OCR-Daten, Vorschau und verknüpften Buchungen zu öffnen."
       }
     },
     "documentDetail": {
       "header": {
-        "title": "Kopfzeilen-Aktionen",
-        "message": "Zurueck zur Dokumentenliste, Originaldatei herunterladen oder das Dokument erneut durch die OCR-Pipeline verarbeiten, falls die erste Extraktion unvollstaendig war."
+        "title": "Dokumentenkopf",
+        "message": "Zeigt Dokumentenname, Typ, Uploaddatum und Verarbeitungsstatus. Aktionsschaltflächen ermöglichen erneute OCR-Verarbeitung, Download der Originaldatei oder Löschen des Dokuments."
       },
       "preview": {
         "title": "Dokumentvorschau",
-        "message": "Das Originaldokument wird hier angezeigt  PDF-Dateien inline, Bilder direkt gerendert. Vergleichen Sie die extrahierten Daten mit der Quelle."
+        "message": "Sieh das hochgeladene Originaldokument (PDF, Bild usw.). Zoome hinein, um Details mit den KI-extrahierten Daten im rechten Panel abzugleichen."
       },
       "ocrData": {
-        "title": "Extrahierte Daten",
-        "message": "Alle per OCR und KI extrahierten Felder erscheinen hier: Betraege, Daten, Lieferantennamen, Steuersaetze und mehr. Der Konfidenzwert zeigt die Zuverlaessigkeit der Extraktion."
+        "title": "KI-extrahierte Daten",
+        "message": "Alle per OCR und KI extrahierten Felder: Betrag, Datum, Lieferant, Kategorie, USt-Satz, Einzelpositionen und mehr. Felder mit niedriger Konfidenz sind hervorgehoben. Überprüfe jeden Wert und korrigiere Fehler vor der Bestätigung."
       },
       "linked": {
-        "title": "Verknuepfte Transaktion",
-        "message": "Wenn ein Dokument einer Transaktion oder einem Vermoegenswert zugeordnet ist, erscheint die Verknuepfung hier. Klicken Sie, um direkt zum verknuepften Datensatz zu springen."
+        "title": "Verknüpfte Datensätze",
+        "message": "Sieh, welche Buchung, welcher Vermögenswert oder welche Kontoauszugsposition mit diesem Dokument verknüpft ist. Erstelle neue Verknüpfungen oder navigiere direkt zum verknüpften Datensatz."
       },
       "editMode": {
-        "title": "Inline-Bearbeitung",
-        "message": "Klicken Sie auf ein extrahiertes Feld, um es zu korrigieren. Ihre Korrekturen trainieren das System und verbessern zukuenftige Extraktionen. Aenderungen werden sofort gespeichert."
+        "title": "Bearbeiten & Bestätigen",
+        "message": "Wechsle in den Bearbeitungsmodus, um KI-extrahierte Werte zu korrigieren. Nach der Bestätigung werden die Daten gesperrt und das gelbe Prüf-Symbol entfernt. Deine Korrekturen verbessern auch die zukünftige KI-Genauigkeit."
+      }
+    },
+    "reports": {
+      "tabs": {
+        "title": "Berichtstypen",
+        "message": "Wechsle zwischen Berichtstypen: E/A-Rechnung (Selbständige), Bilanz, Saldenliste, Periodensaldenliste und Steuerformular-Vorschau (E1/E1a/U30)."
+      },
+      "generate": {
+        "title": "Bericht erstellen",
+        "message": "Berechne den Bericht für das gewählte Steuerjahr. Das System verwendet deine aktuellen Buchungsdaten und erstellt eine detaillierte Aufschlüsselung entsprechend den offiziellen österreichischen Steuerformularfeldern."
+      },
+      "print": {
+        "title": "Bericht drucken",
+        "message": "Drucke den Bericht direkt aus dem Browser. Das Drucklayout ist für A4-Papier mit korrekten Kopfzeilen und Seitenumbrüchen optimiert."
+      },
+      "content": {
+        "title": "Berichtsinhalt",
+        "message": "Die detaillierte Steuerberechnung mit jeder Zeile, die den offiziellen Formularfeldern zugeordnet ist. Aufklappbare Abschnitte zeigen die zugrunde liegenden Buchungen für jede Position."
+      },
+      "finanzOnline": {
+        "title": "FinanzOnline-Integration",
+        "message": "Reiche deine Steuererklärung elektronisch beim österreichischen Finanzamt über FinanzOnline ein. Die Formulardaten werden automatisch aus deinen Buchungen und Dokumenten vorausgefüllt."
+      },
+      "downloadForm": {
+        "title": "Download & Export",
+        "message": "Lade das vorausgefüllte offizielle Steuerformular als PDF herunter oder exportiere ein vollständiges Steuerpaket mit Steuererklärung, allen Belegen und einem Zusammenfassungsbericht in einem einzelnen Archiv."
+      }
+    },
+    "properties": {
+      "overview": {
+        "title": "Portfolio-Übersicht",
+        "message": "Navigiere zum Vermögensportfolio-Dashboard für aggregierte Einblicke: Gesamtvermögenswerte, Abschreibungspläne und vergleichende Analysen über alle deine Immobilien und Vermögenswerte."
+      },
+      "add": {
+        "title": "Vermögenswert hinzufügen",
+        "message": "Erfasse einen neuen Vermögenswert: Immobilie, Fahrzeug, Ausrüstung, Maschine oder Werkzeug. Taxja berechnet die Absetzung für Abnutzung (AfA) nach österreichischem Steuerrecht und verfolgt Buchwerte über die Zeit."
+      },
+      "cards": {
+        "title": "Vermögenswert-Karten",
+        "message": "Jede Karte zeigt einen Vermögenswert mit den wichtigsten Details: Name, Typ, Kaufdatum, Anschaffungskosten, aktueller Buchwert und Abschreibungsstatus. Klicke für die vollständige Detailansicht."
+      },
+      "edit": {
+        "title": "Vermögenswert bearbeiten",
+        "message": "Aktualisiere Vermögenswert-Details: Kaufpreis, Abschreibungsmethode (linear/degressiv), Nutzungsdauer oder Veräußerungsinformationen. Änderungen berechnen die Abschreibungspläne automatisch neu."
+      },
+      "archive": {
+        "title": "Archiv-Umschalter",
+        "message": "Zeige oder verberge archivierte/veräußerte Vermögenswerte. Archivierte Einträge werden für die 7-jährige gesetzliche Aufbewahrungspflicht (BAO §132) beibehalten, sind aber in der Hauptansicht ausgeblendet."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Vermögens-Schulden-Übersicht",
-        "message": "Sehen Sie Gesamtvermögen, Schulden, Nettovermögen und monatliche Schuldentilgung auf einen Blick."
+        "title": "Vermögensübersicht",
+        "message": "Schlüsselkennzahlen über alle Vermögenswerte: Gesamtanschaffungskosten, aktueller Buchwert, jährlicher Abschreibungsaufwand und Nettomieteinnahmen aus Immobilien."
       },
       "portfolio": {
-        "title": "Immobilienportfolio",
-        "message": "Vergleichen Sie Mieteinnahmen, Ausgaben und Nettorendite aller Immobilien."
+        "title": "Portfolio-Vergleich",
+        "message": "Vergleiche Immobilien nebeneinander anhand wichtiger Kennzahlen: Rendite, Auslastung, Instandhaltungskosten und Kapitalrendite."
       },
       "otherAssets": {
-        "title": "Andere Vermögenswerte",
-        "message": "Geräte, Fahrzeuge und Ausrüstung mit Kaufwerten und Abschreibungsdetails anzeigen."
+        "title": "Sonstige Vermögenswerte",
+        "message": "Nicht-immobilienbezogene abschreibbare Vermögenswerte: Fahrzeuge, Büroausstattung, Maschinen und immaterielle Vermögensgegenstände. Jeder wird mit eigenem Abschreibungsplan verfolgt."
       },
       "reports": {
-        "title": "Einzelberichte",
-        "message": "Erstellen Sie Einnahmen-Ausgaben-Berichte und Abschreibungspläne für einzelne Vermögenswerte."
+        "title": "Vermögensberichte",
+        "message": "Erstelle detaillierte Abschreibungsberichte und Vermögensinventare. Wähle den Berichtstyp und das Jahr für eine umfassende Vermögensdokumentation."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Immobilien-Aktionen",
+        "message": "Bearbeite Immobiliendetails, sieh den Abschreibungsplan ein, veräußere/verkaufe den Vermögenswert oder archiviere ihn. Greife über dieses Aktionsmenü auf alle Verwaltungswerkzeuge zu."
+      },
+      "info": {
+        "title": "Immobilieninformationen",
+        "message": "Kerndetails: Adresse, Kaufdatum, Anschaffungskosten, Fläche (m²), Abschreibungsmethode, Nutzungsdauer und aktueller Buchwert."
+      },
+      "contracts": {
+        "title": "Mietverträge",
+        "message": "Verwalte Mietverträge: Mieter hinzufügen, Mietbeträge und Zeiträume festlegen, Kautionen verfolgen und Vertragslaufzeiten überwachen. Unverzichtbar für die Berichterstattung zu Vermietung & Verpachtung."
+      },
+      "transactions": {
+        "title": "Immobilien-Buchungen",
+        "message": "Alle Einnahmen und Ausgaben, die mit dieser Immobilie verknüpft sind: Mieteinnahmen, Instandhaltungskosten, Versicherung, Zinszahlungen. Werden direkt für die Steuererklärung verwendet."
       }
     },
     "liabilities": {
       "overview": {
-        "title": "Vermögens-Schulden-Übersicht",
-        "message": "Scrollen Sie nach unten für eine kombinierte Vermögens- und Schuldenübersicht mit Kennzahlen."
+        "title": "Verbindlichkeiten-Dashboard",
+        "message": "Gesamtübersicht aller Schulden: ausstehender Gesamtbetrag, monatliche Zahlungsverpflichtungen, insgesamt gezahlte Zinsen und Verschuldungsgrad."
       },
       "add": {
         "title": "Verbindlichkeit hinzufügen",
-        "message": "Erfassen Sie ein neues Darlehen oder eine andere Verbindlichkeit. Legen Sie Tilgungspläne fest und verknüpfen Sie mit Immobilien."
+        "message": "Erfasse ein neues Darlehen, eine Hypothek oder einen Kredit. Gib Darlehenssumme, Zinssatz und Tilgungsplan ein. Verknüpfe mit einer Immobilie, falls zutreffend — Zinsen können steuerlich absetzbar sein."
       },
       "list": {
         "title": "Verbindlichkeitenliste",
-        "message": "Durchsuchen Sie alle aktiven Verbindlichkeiten. Jede Karte zeigt den Restbetrag und den Tilgungsfortschritt."
+        "message": "Alle deine Darlehen und Verbindlichkeiten an einem Ort. Sieh den aktuellen Saldo, Zinssatz und das nächste Zahlungsdatum. Klicke auf einen Eintrag, um den vollständigen Tilgungsplan anzuzeigen."
       },
       "detail": {
-        "title": "Verbindlichkeit-Details",
-        "message": "Sehen Sie Tilgungsplan, Zinsentwicklung und verknüpfte Transaktionen der ausgewählten Verbindlichkeit."
+        "title": "Tilgungsplan",
+        "message": "Detaillierter Rückzahlungsplan mit Aufteilung von Tilgung und Zinsen für jede Zahlung. Verfolge Restschuld, insgesamt gezahlte Zinsen und verknüpfte Immobilie oder Vermögenswert."
+      }
+    },
+    "recurring": {
+      "create": {
+        "title": "Wiederkehrendes Muster erstellen",
+        "message": "Richte eine wiederkehrende Buchung ein, die sich automatisch wiederholt: täglich, wöchentlich, monatlich, vierteljährlich oder jährlich. Ideal für regelmäßige Ausgaben wie Miete, Abonnements oder Versicherungsprämien."
+      },
+      "filters": {
+        "title": "Muster filtern",
+        "message": "Filtere wiederkehrende Einträge nach Häufigkeit, Kategorie, Aktiv-/Pausiert-Status oder Betragsbereich."
+      },
+      "list": {
+        "title": "Wiederkehrende Muster",
+        "message": "Sieh und verwalte alle wiederkehrenden Buchungsmuster. Taxja erkennt auch automatisch wiederkehrende Muster aus deinen Kontoauszügen. Pausiere, bearbeite oder lösche Muster nach Bedarf."
+      }
+    },
+    "advanced": {
+      "assets": {
+        "title": "Vermögenswerte & Verbindlichkeiten",
+        "message": "Verwalte Immobilien, Fahrzeuge, Ausrüstung und andere abschreibbare Vermögenswerte mit automatischer AfA-Berechnung. Verfolge außerdem Darlehen, Hypotheken und andere Verbindlichkeiten mit Tilgungsplänen."
+      },
+      "automation": {
+        "title": "Regeln & Automatisierung",
+        "message": "Richte wiederkehrende Buchungen für regelmäßige Zahlungen ein und verwalte Klassifizierungsregeln, die Buchungen automatisch kategorisieren. Taxja lernt mit der Zeit aus deinen Korrekturen."
+      },
+      "taxtools": {
+        "title": "Steuer-Workspace",
+        "message": "Erweiterte Steuerwerkzeuge: Rückerstattungsrechner, Was-wäre-wenn-Simulator, Pauschalierungsvergleich, Jahresdatenzusammenfassung, Lohnzettel-Workbench und Prüfungscheckliste."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Steuerstand & Rueckerstattung",
-        "message": "Ihre geschaetzte Steuerrueckerstattung oder Nachzahlung auf einen Blick. Basierend auf Einnahmen, einbehaltener Steuer und Absetzbetraegen berechnet das System, ob Sie Geld zurueckbekommen."
+        "title": "Steuerrückerstattungs-Schätzung",
+        "message": "Schätze deine erwartete Steuerrückerstattung oder Nachzahlung basierend auf aktuellen Einkünften, Absetzbeträgen und einbehaltener Steuer. Zeigt eine detaillierte Aufschlüsselung des zu versteuernden Einkommens und der geltenden Steuersätze."
       },
       "whatIf": {
-        "title": "Was-waere-wenn-Simulator",
-        "message": "Simulieren Sie hypothetische Szenarien: zusaetzliche Einnahmen, Absetzbetraege oder andere Veranlagungsart  und sehen Sie sofort die Auswirkung auf Ihre Steuerlast."
+        "title": "Was-wäre-wenn-Simulator",
+        "message": "Simuliere hypothetische Szenarien: zusätzliche Einkünfte hinzufügen, Absetzbeträge anpassen oder Betriebsausgaben ändern, um die Auswirkung auf deine Steuerlast zu sehen. Vergleiche verschiedene Szenarien nebeneinander."
       },
       "flatRate": {
         "title": "Pauschalierungsvergleich",
-        "message": "Vergleichen Sie Ihre tatsaechlichen Ausgaben mit der oesterreichischen Pauschalierung. Sehen Sie, welche Methode Ihnen als Selbstaendiger mehr Steuer spart."
-      },
-      "audit": {
-        "title": "Pruefungscheckliste",
-        "message": "Pruefen Sie Ihre Steuerbereitschaft mit einer umfassenden Checkliste. Stellen Sie sicher, dass alle erforderlichen Dokumente, Meldungen und Unterlagen fuer eine moegliche Pruefung bereit sind."
+        "message": "Vergleiche deine tatsächlichen dokumentierten Ausgaben mit der Betriebsausgabenpauschale. Zeigt, welche Option dir ein besseres Steuerergebnis bringt — verfügbar für Selbständige."
       },
       "filing": {
-        "title": "Jahresuebersicht Steuerdaten",
-        "message": "Pruefen Sie bestaetigte Einkuenfte, Absetzbetraege und USt-Daten nach Steuerjahr. Waehlen Sie ein Jahr, um Summen zu sehen, Konflikte zu erkennen und Quelldokumente zu pruefen."
+        "title": "Jahressteuerübersicht",
+        "message": "Vollständige Übersicht deines Steuerjahres: zu versteuerndes Einkommen, geschätzte Steuer, einbehaltene Steuer, geschätzte Rückerstattung, Einkommens- und Absetzbetragsaufschlüsselungen, USt-Zusammenfassung und Konflikterkennung mit Warnungen."
       },
-      "assetReport": {
-        "title": "Vermoegensbericht",
-        "message": "Waehlen Sie eine Immobilie oder einen Vermoegenswert, um detaillierte Einnahmen-Ausgaben-Berichte und Abschreibungsplaene zu erstellen."
+      "employer": {
+        "title": "Arbeitgeberdokumente",
+        "message": "Lade deine Lohnzettel (L16) und andere Arbeitnehmerveranlagungsbescheinigungen hoch und überprüfe sie. Taxja extrahiert Arbeitgeberdaten, Bruttogehalt, Lohnsteuerabzüge und Sozialversicherungsbeiträge. Unterstützt mehrere Arbeitgeber."
+      },
+      "audit": {
+        "title": "Prüfungscheckliste",
+        "message": "Überprüfe, ob deine Steuerunterlagen vor der Abgabe vollständig sind: Kontrolle auf fehlende Dokumente, ungeprüfte Buchungen, unvollständige Kategorien und Einhaltung der österreichischen Steuervorschriften."
       }
     },
     "profile": {
       "basicInfo": {
-        "title": "Persoenliche Daten",
-        "message": "Name, E-Mail, Steuerrollen (Arbeitnehmer, Vermieter, Selbstaendiger) und Geschaeftsdetails. Diese bestimmen, welche Steuerfunktionen und Absetzbetraege Ihnen zur Verfuegung stehen."
+        "title": "Persönliche Daten",
+        "message": "Dein Name, deine E-Mail-Adresse und Anzeigeeinstellungen. Halte diese aktuell für Steuerkorrespondenz und Kontowiederherstellung."
       },
       "taxInfo": {
-        "title": "Steuerprofil",
-        "message": "Steuernummer, USt-Status und Gewinnermittlungsart. Durch Ausfuellen dieser Felder wird die volle Automatisierung fuer Anlagenerstellung und OCR-Extraktion aktiviert."
+        "title": "Steuer- & Geschäftsprofil",
+        "message": "Konfiguriere deine Steuernummer, USt-ID, USt-Status (Kleinunternehmerregelung, Regelbesteuerung), Einkunftsart, Firmenname und Branche. Essentiell für korrekte Steuerberechnungen."
       },
       "commuting": {
-        "title": "Pendlerpauschale & Homeoffice",
-        "message": "Geben Sie Ihre Entfernung zum Arbeitsplatz und die Verfuegbarkeit oeffentlicher Verkehrsmittel an. Homeoffice-Tage werden fuer die Telearbeit-Pauschale berechnet (bis 100 Tage zu 3 EUR/Tag)."
+        "title": "Arbeitgeber & Pendlerpauschale",
+        "message": "Richte Arbeitgeberdaten ein, Pendlerstrecke (km) für die Pendlerpauschale, Verfügbarkeit öffentlicher Verkehrsmittel, Homeoffice-Tage (Telearbeit) für die Homeoffice-Pauschale und Familienstand für Steuerabsetzbeträge."
       },
       "security": {
         "title": "Sicherheitseinstellungen",
-        "message": "Aktivieren Sie die Zwei-Faktor-Authentifizierung (2FA) fuer zusaetzlichen Kontoschutz. Verwalten Sie Ihr Passwort und pruefen Sie aktive Sitzungen."
+        "message": "Ändere dein Passwort, überprüfe aktive Sitzungen und aktiviere die Zwei-Faktor-Authentifizierung (2FA) für erhöhte Kontosicherheit."
       },
       "dataExport": {
-        "title": "Datenexport & Konto",
-        "message": "Exportieren Sie alle Ihre Daten als ZIP-Archiv fuer Backup oder Migration. Hier koennen Sie auch Ihre Kontoeinstellungen und Ihr Abonnement verwalten."
+        "title": "Daten & Datenschutz",
+        "message": "Exportiere alle deine Daten (Dokumente, Buchungen, Berichte), verwalte Abonnementeinstellungen oder beantrage die Kontolöschung. Deine Daten gehören dir — vollständig DSGVO-konform."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Klassifizierungsspeicher",
-        "message": "Wenn Sie eine Transaktionskategorie korrigieren, erstellt das System eine Regel, damit zukuenftige Transaktionen mit aehnlichen Beschreibungen automatisch gleich kategorisiert werden."
+        "title": "Intelligente Klassifizierung",
+        "message": "Klassifizierungsregeln weisen Buchungen automatisch Steuerkategorien anhand von Beschreibungsmustern zu. Taxja erstellt Regeln aus deinen manuellen Korrekturen und baut eine personalisierte Klassifizierungs-Engine auf, die sich mit der Zeit verbessert."
       },
       "list": {
         "title": "Regelliste",
-        "message": "Alle gelernten Zuordnungsregeln erscheinen hier. Jede Regel zeigt das Muster, die zugewiesene Kategorie und wie oft sie angewendet wurde."
+        "message": "Sieh, bearbeite oder lösche Klassifizierungsregeln. Jede Regel ordnet ein Textmuster (aus Buchungsbeschreibungen) einer bestimmten Steuerkategorie und Absetzbarkeit zu."
       },
       "autoLearn": {
-        "title": "Automatisches Lernen",
-        "message": "Regeln werden automatisch aus Ihren Korrekturen erstellt. Sie koennen Regeln auch einfrieren, um sie vor Ueberschreiben zu schuetzen, oder nicht mehr benoetigte Regeln loeschen."
+        "title": "KI-gelernte Regeln",
+        "message": "Regeln, die automatisch von der KI aus deinen früheren Entscheidungen erstellt wurden. Der Zähler zeigt, wie viele Buchungen jede Regel klassifiziert hat. Überprüfe und optimiere nach Bedarf."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "KI-Steuerberater",
-        "message": "Stellen Sie Fragen zu oesterreichischem Steuerrecht, Absetzbarkeit von Ausgaben, Fristen oder Optimierungsstrategien. Der Assistent nutzt Ihr Profil und Ihre Transaktionsdaten fuer personalisierte Antworten."
+        "title": "KI-Steuerassistent",
+        "message": "Dein persönlicher KI-Steuerberater für österreichisches Steuerrecht. Stelle Fragen in einer der 9 unterstützten Sprachen. Die KI greift auf dein vollständiges Profil, deine Buchungen, Dokumente und Immobilien für personalisierte Antworten zu."
       },
       "input": {
         "title": "Chat-Eingabe",
-        "message": "Geben Sie hier Ihre Steuerfrage ein. Sie koennen auch Dokumente anhaengen, die die KI analysieren soll. Jede Nachricht verbraucht Credits aus Ihrem Plan."
+        "message": "Gib deine Steuerfrage ein oder nutze die vorgeschlagenen Eingabeaufforderungen. Frag nach Absetzbeträgen, USt-Regeln, Abgabefristen, Immobilien-AfA oder jedem anderen österreichischen Steuerthema."
       },
       "proactive": {
-        "title": "Proaktive Vorschlaege",
-        "message": "Die KI kann proaktiv wiederkehrende Transaktionen zur Bestaetigung vorschlagen, fehlende Dokumente zum Hochladen empfehlen oder Lohndateien zur Verarbeitung vorschlagen."
+        "title": "Proaktive Einblicke",
+        "message": "Die KI analysiert proaktiv deine Daten und schlägt Steueroptimierungen vor, weist auf fehlende Dokumente hin, warnt vor nahenden Fristen und identifiziert mögliche Fehler, bevor du deine Steuererklärung abgibst."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Aktueller Plan",
-        "message": "Sehen Sie Ihren aktiven Abonnementplan, Abrechnungszyklus und naechstes Abrechnungsdatum. Hier koennen Sie upgraden, downgraden oder kuendigen."
+        "title": "Dein Abonnement",
+        "message": "Sieh deinen aktuellen Plan (Free, Plus oder Pro), Abrechnungszyklus, nächstes Zahlungsdatum und enthaltene Funktionen. Free umfasst Basisfunktionen, Plus fügt erweiterte Berichte hinzu, Pro schaltet den KI-Assistenten und die Steuerformulargenerierung frei."
       },
       "billing": {
-        "title": "Abrechnungsverlauf",
-        "message": "Pruefen Sie vergangene Rechnungen und Zahlungsbelege. Zahlungsmethoden werden sicher ueber Stripe verwaltet."
+        "title": "Abrechnung & Zahlungen",
+        "message": "Überprüfe die Zahlungshistorie, verwalte deine Zahlungsmethode über Stripe, kündige oder reaktiviere dein Abonnement und sieh verbleibende Testtage, falls zutreffend."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Vorgaenge filtern",
-        "message": "Filtern Sie Ihren Credit-Verlauf nach Vorgangsart: Abbuchungen, Gutschriften, monatliche Resets, Aufladungen oder Ueberschreitungsabrechnungen."
+        "title": "Guthaben filtern",
+        "message": "Filtere den Guthabenverlauf nach Typ: Abzüge (OCR/KI-Nutzung), Erstattungen, monatliche Resets, Aufladungen, abgelaufene Aufladungen, Überschreitungsabrechnungen oder Planwechsel."
       },
       "list": {
-        "title": "Credit-Verlauf",
-        "message": "Jede Credit-Transaktion wird hier mit Vorgangsart, Grund, Zeitstempel und Betrag protokolliert. Positive Betraege sind Gutschriften, negative sind verbrauchte Credits."
+        "title": "Guthaben-Transaktionen",
+        "message": "Detailliertes Protokoll aller Guthabenaktivitäten: wann Guthaben verbraucht wurden, wie viele, wofür und dein verbleibender Saldo. Verfolge die KI-Nutzung bei der Dokumentenverarbeitung und Chat-Interaktionen."
       }
     }
   },

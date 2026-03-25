@@ -3676,354 +3676,354 @@
   "onboarding": {
     "welcome": {
       "title": "Dobrodošli u Taxja!",
-      "message": "Zdravo! Ja sam vaš Taxja asistent. Brzo ću vam pokazati ključne funkcije platforme kako biste bez napora upravljali svojim porezima. Počnimo!"
+      "message": "Zdravo! Ja sam vaš Taxja AI asistent. Provest ću vas kroz platformu — od automatskog skeniranja dokumenata i uvoza bankovnih izvoda do poreznih obračuna u realnom vremenu, AI poreznih savjeta i podnošenja porezne prijave jednim klikom. Taxja podržava 9 jezika i namijenjena je zaposlenicima, freelancerima, iznajmljivačima i firmama. Hajde da vam pokažem!"
     },
     "documents": {
-      "title": "Upload dokumenata",
-      "message": "Jednostavno uploadujte vaše fakture, račune ili ugovore. Automatski ćemo prepoznati sadržaj, klasificirati ga i kreirati transakciju za vas. Bez ručnog unosa podataka!"
+      "title": "Pametna obrada dokumenata",
+      "message": "Učitajte fakture, račune, ugovore ili bankovne izvode ovdje. Naš OCR i AI sistem automatski izdvaja podatke, klasificira dokumente i kreira transakcije — bez ručnog unosa. Bankovni izvodi se obrađuju kroz posebnu radnu površinu za usklađivanje, a potvrde poslodavca (Lohnzettel) imaju vlastiti panel za pregled. Pregledajte i potvrdite AI-izdvojene podatke prije nego uđu u vaš porezni zapis."
     },
     "dashboard": {
-      "title": "Vaša kontrolna ploča",
-      "message": "Kontrolna ploča vam daje potpuni pregled: prihodi i rashodi na prvi pogled, savjeti za uštedu poreza i podsjetnici za akcije. Sve što vam treba na jednom mjestu."
+      "title": "Vaš porezni komandni centar",
+      "message": "Kontrolna ploča vam daje pregled u realnom vremenu: prihodi naspram rashoda, procijenjeni porez, plaćeni porez, preostali saldo, neto prihod i praćenje praga za PDV. Interaktivni grafikoni trendova prikazuju mjesečne obrasce i raščlambu po kategorijama. Koristite birač godine za promjenu poreznih godina, prevucite i ispustite dokumente za učitavanje, te provjerite status pretplate — sve na jednom ekranu."
     },
     "transactions": {
-      "title": "Transakcije",
-      "message": "Pregledajte, filtrirajte i upravljajte svim zapisima prihoda i rashoda ovdje. Transakcije se kreiraju automatski iz uploadovanih dokumenata, ili ih možete dodati ručno. Svaki unos je kategoriziran za tačno porezno izvještavanje."
+      "title": "Upravljanje transakcijama",
+      "message": "Pregledajte, filtrirajte i upravljajte svim zapisima prihoda i rashoda. Transakcije se kreiraju automatski iz dokumenata i uvoza bankovnih izvoda, ili ih možete dodati ručno. Koristite filtere za pronalaženje specifičnih unosa, grupno označavanje za batch operacije, izvoz u CSV/PDF i upravljanje pravilima klasifikacije. Bankovne transakcije prikazuju ikonu banke na koju možete kliknuti."
     },
     "reports": {
-      "title": "Poreski izvještaji",
-      "message": "Generirajte profesionalne porezne izvještaje uključujući E/A obračun, Saldenliste i preglede poreznih obrazaca. Izvezite u PDF ili CSV u bilo kojem trenutku — sve je spremno za vašeg računovođu ili Finanzamt."
+      "title": "Porezni izvještaji i podnošenje",
+      "message": "Generirajte profesionalne izvještaje: E/A obračun prihoda, bilansu (Bilanz), saldenlistu (Saldenliste) i periodičnu saldenlistu. Pregledajte i generirajte službene porezne obrasce (E1, E1a, U30) s unaprijed popunjenim podacima. Izvezite kompletni porezni paket sa svim pratećim dokumentima ili podnesite elektronski putem FinanzOnline."
     },
     "ai": {
-      "title": "AI Asistent",
-      "message": "Imate pitanje o porezu? Koristite AI chat na dnu ekrana u bilo koje vrijeme. Mogu vam pomoći s odbitcima, poreznim pravilima i personaliziranim savjetima."
+      "title": "AI porezni savjetnik",
+      "message": "Vaš lični AI porezni konsultant je uvijek dostupan. Pitajte bilo šta o austrijskom poreznom pravu, odbitcima, PDV-u ili vašoj situaciji — poznaje vaš profil, nekretnine, transakcije i dokumente. Svaki odgovor je personaliziran. Također proaktivno predlaže optimizacije i upozorava na potencijalne probleme prije podnošenja prijave."
     },
     "profile": {
-      "title": "Dopunite profil",
-      "message": "Idite u postavke profila da konfigurirate vaš PDV status, tip prihoda i ostale detalje. To nam pomaže da vam pružimo preciznije porezne kalkulacije i preporuke."
+      "title": "Vaš porezni profil",
+      "message": "Konfigurirajte tip prihoda, porezni broj, PDV status, poslovne podatke, informacije o poslodavcu i podatke o putovanju za Pendlerpauschale. Postavite porodični status za porezne olakšice i dane rada od kuće za Homeoffice-Pauschale. Što je profil potpuniji, to su obračuni tačniji. Ovdje također upravljate sigurnošću, izvozite podatke ili brišete račun."
     },
-    "skip": "Preskoči",
+    "skip": "Preskoči vodič",
     "next": "Dalje →",
     "prev": "← Nazad",
-    "finish": "Idemo!"
+    "finish": "Počnimo!"
   },
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Porezna godina",
-        "message": "Odaberite poreznu godinu s kojom želite raditi. Svi podaci na kontrolnoj ploči će se ažurirati."
+        "title": "Birač porezne godine",
+        "message": "Odaberite poreznu godinu s kojom želite raditi. Svi podaci na kontrolnoj ploči — prihodi, rashodi, porezne procjene i grafikoni — ažuriraju se odmah kada promijenite godinu."
       },
       "upload": {
-        "title": "Brzo učitavanje",
-        "message": "Prevucite dokumente ovdje za trenutno učitavanje. Taxja automatski klasificira i izdvaja podatke."
+        "title": "Brzo učitavanje dokumenata",
+        "message": "Prevucite i ispustite datoteke ovdje ili kliknite za pretraživanje. Taxja prihvata fakture, račune, ugovore, bankovne izvode i porezne obrasce. OCR obrada počinje automatski i kreira transakcije iz izdvojenih podataka."
       },
       "overview": {
-        "title": "Finansijski pregled",
-        "message": "Prihodi, rashodi i porezni sažetak na jednom mjestu. Svaka kartica prikazuje ključni pokazatelj za odabranu godinu."
+        "title": "Kartice finansijskog pregleda",
+        "message": "Ključni pokazatelji na prvi pogled: prihodi od početka godine, rashodi, procijenjeni porez, plaćeni porez, preostali saldo, neto prihod i udaljenost od praga za PDV. Svaka kartica je klikabilna za više detalja."
       },
       "trends": {
         "title": "Grafikoni trendova",
-        "message": "Pratite razvoj prihoda i rashoda tokom vremena. Otkrijte obrasce i planirajte unaprijed."
+        "message": "Interaktivni grafikoni koji prikazuju mjesečne prihode naspram rashoda, raščlambu kategorija prihoda (tortni grafikon), raščlambu kategorija rashoda i usporedbe iz godine u godinu. Uočite obrasce i planirajte svoju poreznu strategiju."
       },
       "plan": {
-        "title": "Status pretplate",
-        "message": "Pogledajte trenutni plan i preostale kredite. Nadogradite u bilo koje vrijeme za više funkcija."
+        "title": "Pretplata i krediti",
+        "message": "Pogledajte svoj trenutni plan (Besplatni, Plus ili Pro), preostale AI kredite i status probnog perioda. Kliknite za upravljanje pretplatom ili kupovinu dodatnih kredita."
       },
       "language": {
-        "title": "Jezik",
-        "message": "Promijenite jezik sučelja. Taxja podržava njemački, engleski, kineski i druge jezike."
+        "title": "Birač jezika",
+        "message": "Prebacujte se između 9 podržanih jezika: njemački, engleski, kineski, francuski, ruski, mađarski, poljski, turski i bosanski. Cijelo sučelje se ažurira odmah."
       },
       "theme": {
-        "title": "Tema",
-        "message": "Prebacujte se između svijetlog i tamnog načina prema vašim preferencijama."
+        "title": "Preklopnik teme",
+        "message": "Prebacujte se između Klasične (svijetle) i Cyber (tamne) teme. Klasični način koristi čist, standardni dizajn. Cyber način ima animiranog robot-asistenta i tamnu pozadinu."
       }
     },
     "transactions": {
       "classRules": {
         "title": "Pravila klasifikacije",
-        "message": "Upravljajte pravilima koja automatski kategoriziraju vaše transakcije. Taxja uči iz vaših ispravki."
+        "message": "Otvorite upravitelj pravila za pregled i uređivanje pravila automatske kategorizacije. Taxja uči iz vaših ručnih ispravki i gradi pravila koja automatski klasificiraju buduće transakcije prema obrascima u opisima."
       },
       "export": {
-        "title": "Izvoz",
-        "message": "Preuzmite transakcije u CSV ili PDF formatu za vaše zapise ili poreznog savjetnika."
+        "title": "Izvoz transakcija",
+        "message": "Preuzmite transakcije kao CSV ili PDF. Odaberite format i raspon datuma za vaše zapise, poreznog savjetnika ili podnošenje Finanzamtu."
       },
       "addNew": {
         "title": "Dodaj transakciju",
-        "message": "Ručno kreirajte novi unos prihoda ili rashoda kada nemate dokument za učitavanje."
+        "message": "Ručno kreirajte novi unos prihoda ili rashoda. Koristite ovo kada nemate dokument za učitavanje — unesite iznos, datum, kategoriju, stopu PDV-a i opcionalne stavke."
       },
       "filters": {
-        "title": "Filteri",
-        "message": "Filtrirajte transakcije po datumu, kategoriji, tipu ili iznosu."
+        "title": "Filteri transakcija",
+        "message": "Filtrirajte po godini, kategoriji, tipu (prihod/rashod), statusu pregleda i više. Kombinirajte filtere da nađete tačno ono što vam treba. Koristite 'Treba pregled' za brzo pronalaženje transakcija koje zahtijevaju potvrdu."
       },
       "list": {
         "title": "Lista transakcija",
-        "message": "Sve transakcije na jednom mjestu. Kliknite na red za detalje, uređivanje ili povezivanje dokumenta."
+        "message": "Sve transakcije u tabeli koja se može sortirati i paginirati. Svaki red prikazuje datum, opis, iznos, kategoriju i status. Ikona banke označava usklađene unose — kliknite za pregled povezanog bankovnog izvoda. Spajalica vodi do priloženih dokumenata. Koristite potvrdne okvire za grupne operacije."
       },
       "paging": {
-        "title": "Straničenje",
-        "message": "Krećite se kroz stranice transakcija. Prilagodite broj stavki po stranici."
+        "title": "Paginacija",
+        "message": "Krećite se kroz stranice transakcija. Prilagodite veličinu stranice za prikaz više ili manje unosa po stranici."
       }
     },
     "documents": {
       "upload": {
         "title": "Učitavanje dokumenata",
-        "message": "Učitajte fakture, račune ili porezne obrasce. Taxja izdvaja podatke pomoću OCR i AI."
+        "message": "Učitajte fakture, račune, bankovne izvode, porezne obrasce, dokumente o zaposlenju, ugovore i više. Prevucite i ispustite više datoteka odjednom. Taxja OCR sistem automatski izdvaja iznose, datume, dobavljače i porezne detalje."
       },
       "tabs": {
-        "title": "Grupe dokumenata",
-        "message": "Dokumenti su sortirani po statusu: na pregledu, obrađeni i arhivirani. Prebacite kartice za filtriranje."
+        "title": "Kategorije dokumenata",
+        "message": "Dokumenti su organizirani po tipu i statusu: Svi, Na pregledu (žuti trokut), Fakture, Računi, Bankovni izvodi, Porezni obrasci, Dokumenti o zaposlenju i više. Kartica 'Treba pregled' prikazuje dokumente gdje AI ekstrakcija treba vašu potvrdu."
       },
       "list": {
         "title": "Lista dokumenata",
-        "message": "Pregledajte sve učitane dokumente. Kliknite na stavku za provjeru izdvojenih podataka."
+        "message": "Pregledajte sve učitane dokumente uz pretragu i filtere. Svaki unos prikazuje naziv dokumenta, tip, datum učitavanja i status obrade. Kliknite na bilo koji dokument da otvorite detaljni pregled s OCR podacima, pregledom i povezanim transakcijama."
       }
     },
     "documentDetail": {
       "header": {
         "title": "Zaglavlje dokumenta",
-        "message": "Naziv dokumenta, datum učitavanja i status obrade. Koristite akcije za ponovnu obradu ili brisanje."
+        "message": "Prikazuje naziv dokumenta, tip, datum učitavanja i status obrade. Dugmad za akcije omogućavaju ponovnu OCR obradu, preuzimanje originalne datoteke ili brisanje dokumenta."
       },
       "preview": {
         "title": "Pregled dokumenta",
-        "message": "Pregledajte originalni dokument. Zumirajte da provjerite detalje u odnosu na izdvojene podatke."
+        "message": "Pregledajte originalni učitani dokument (PDF, slika itd.). Zumirajte da provjerite detalje u odnosu na AI-izdvojene podatke na desnom panelu."
       },
       "ocrData": {
-        "title": "Izdvojeni podaci",
-        "message": "Polja izdvojena OCR-om i AI-jem. Provjerite svaku vrijednost i ispravite greške prije potvrde."
+        "title": "AI-izdvojeni podaci",
+        "message": "Sva polja izdvojena OCR-om i AI-jem: iznos, datum, dobavljač, kategorija, stopa PDV-a, stavke i više. Polja s niskim povjerenjem su označena. Pregledajte svaku vrijednost i ispravite greške prije potvrde."
       },
       "linked": {
         "title": "Povezani zapisi",
-        "message": "Pogledajte koja transakcija ili imovina je povezana s ovim dokumentom. Kreirajte nove veze direktno."
+        "message": "Pogledajte koja transakcija, imovina ili stavka bankovnog izvoda je povezana s ovim dokumentom. Kreirajte nove veze ili navigirajte do povezanog zapisa direktno odavde."
       },
       "editMode": {
-        "title": "Uređivanje polja",
-        "message": "Prebacite se u način uređivanja da ispravite izdvojene vrijednosti. Vaše izmjene poboljšavaju tačnost AI."
+        "title": "Uređivanje i potvrda",
+        "message": "Prebacite se u način uređivanja da ispravite AI-izdvojene vrijednosti. Kada potvrdite, podaci se zaključavaju i žuta oznaka pregleda se uklanja. Vaše ispravke također poboljšavaju tačnost budućeg AI prepoznavanja."
       }
     },
     "reports": {
       "tabs": {
         "title": "Tipovi izvještaja",
-        "message": "Odaberite između poreza na dohodak, PDV-a i drugih tipova izvještaja."
+        "message": "Prebacujte se između tipova izvještaja: E/A obračun prihoda (za samozaposlene), bilansa (Bilanz), saldenlista (Saldenliste), periodična saldenlista (Periodensaldenliste) i pregled poreznih obrazaca (E1/E1a/U30)."
       },
       "generate": {
         "title": "Generiši izvještaj",
-        "message": "Izračunajte porezni izvještaj za odabrani period. Izvještaj se ažurira najnovijim podacima."
+        "message": "Izračunajte izvještaj za odabranu poreznu godinu. Sistem povlači vaše najnovije podatke o transakcijama i generiše detaljnu raščlambu koja odgovara poljima službenog austrijskog poreznog obrasca."
       },
       "print": {
-        "title": "Štampaj",
-        "message": "Štampajte izvještaj direktno iz preglednika za papirnate zapise."
+        "title": "Štampaj izvještaj",
+        "message": "Štampajte izvještaj direktno iz preglednika. Format štampe je optimiziran za A4 papir s odgovarajućim zaglavljima i prijelomima stranica."
       },
       "content": {
         "title": "Sadržaj izvještaja",
-        "message": "Detaljna razrada poreznog obračuna. Svaka linija odgovara polju službenog obrasca."
+        "message": "Detaljan porezni obračun sa svakom stavkom mapiranom na polja službenog obrasca. Proširive sekcije prikazuju transakcije u osnovi svake stavke."
       },
       "finanzOnline": {
-        "title": "FinanzOnline",
-        "message": "Podnesite poreznu prijavu elektronski austrijskoj poreznoj upravi putem FinanzOnline."
+        "title": "FinanzOnline integracija",
+        "message": "Podnesite poreznu prijavu elektronski austrijskoj poreznoj upravi (Finanzamt) putem FinanzOnline. Podaci obrasca su unaprijed popunjeni iz vaših transakcija i dokumenata."
       },
       "downloadForm": {
-        "title": "Preuzmi obrazac",
-        "message": "Preuzmite unaprijed popunjen službeni porezni obrazac (E1, E1a, U30 itd.) kao PDF."
+        "title": "Preuzimanje i izvoz",
+        "message": "Preuzmite unaprijed popunjeni službeni porezni obrazac kao PDF ili izvezite kompletni porezni paket koji sadrži poreznu prijavu, sve prateće dokumente i sumarni izvještaj u jednoj arhivi."
       }
     },
     "properties": {
       "overview": {
         "title": "Pregled portfelja",
-        "message": "Pogledajte agregirane pokazatelje svih nekretnina i imovine na jednoj kontrolnoj ploči."
+        "message": "Navigirajte na kontrolnu ploču portfelja imovine za agregirane uvide: ukupne vrijednosti imovine, rasporedi amortizacije i komparativna analitika svih vaših nekretnina i imovine."
       },
       "add": {
-        "title": "Dodaj nekretninu",
-        "message": "Registrirajte novu nekretninu ili imovinu. Taxja automatski računa amortizaciju (AfA) i prihod od najma."
+        "title": "Dodaj imovinu",
+        "message": "Registrirajte novu imovinu: nekretnine, vozila, opremu, mašine ili alate. Taxja računa amortizaciju (AfA) prema austrijskom poreznom pravu i prati knjigovodstvene vrijednosti tokom vremena."
       },
       "cards": {
-        "title": "Kartice nekretnina",
-        "message": "Svaka kartica prikazuje nekretninu s ključnim detaljima: adresa, status najma i trenutna knjigovodstvena vrijednost."
+        "title": "Kartice imovine",
+        "message": "Svaka kartica prikazuje imovinu s ključnim detaljima: naziv, tip, datum kupovine, nabavna cijena, trenutna knjigovodstvena vrijednost i status amortizacije. Kliknite za otvaranje potpunog detaljnog pregleda."
       },
       "edit": {
-        "title": "Uredi nekretninu",
-        "message": "Ažurirajte detalje poput kupovne cijene, površine ili metode amortizacije."
+        "title": "Uredi imovinu",
+        "message": "Ažurirajte detalje imovine: nabavnu cijenu, metodu amortizacije (linearna/degresivna), korisni vijek trajanja ili podatke o rashodovanju. Promjene automatski preračunavaju rasporede amortizacije."
       },
       "archive": {
         "title": "Preklopnik arhive",
-        "message": "Prikažite ili sakrijte arhivirane nekretnine. Arhivirane stavke čuvaju se 7 godina (BAO §132)."
+        "message": "Prikažite ili sakrijte arhiviranu/rashodovanu imovinu. Arhivirane stavke se čuvaju za zakonski rok čuvanja od 7 godina (BAO §132) ali su skrivene iz glavnog pregleda."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Sažetak",
-        "message": "Ključni pokazatelji svih imovina: ukupna vrijednost, godišnja amortizacija i neto prihod od najma."
+        "title": "Sažetak imovine",
+        "message": "Ključni pokazatelji za svu imovinu: ukupna nabavna cijena, trenutna knjigovodstvena vrijednost, godišnji trošak amortizacije i neto prihod od najma nekretnina."
       },
       "portfolio": {
         "title": "Usporedba portfelja",
-        "message": "Usporedite nekretnine uporedo po prinosu, popunjenosti i drugim pokazateljima."
+        "message": "Usporedite nekretnine uporedo po ključnim pokazateljima: prinos, stopa popunjenosti, troškovi održavanja i povrat na investiciju."
       },
       "otherAssets": {
         "title": "Ostala imovina",
-        "message": "Nekretninska imovina poput vozila, opreme ili nematerijalne imovine prati se ovdje."
+        "message": "Nekretninska imovina koja se amortizira: vozila, kancelarijska oprema, mašine i nematerijalna imovina. Svaka se prati s vlastitim rasporedom amortizacije."
       },
       "reports": {
         "title": "Izvještaji o imovini",
-        "message": "Generirajte detaljne izvještaje za poreznog savjetnika ili internu analizu."
+        "message": "Generirajte detaljne izvještaje o amortizaciji i inventare imovine. Odaberite tip izvještaja i godinu za sveobuhvatnu dokumentaciju imovine."
       }
     },
     "propertyDetail": {
       "actions": {
-        "title": "Akcije",
-        "message": "Uredite, arhivirajte ili obrišite ovu nekretninu. Pristupite dodatnim alatima poput planova amortizacije."
+        "title": "Akcije nekretnine",
+        "message": "Uredite detalje nekretnine, pogledajte raspored amortizacije, rashodujte/prodajte imovinu ili je arhivirajte. Pristupite svim alatima za upravljanje iz ovog menija akcija."
       },
       "info": {
         "title": "Informacije o nekretnini",
-        "message": "Osnovni podaci: adresa, datum kupovine, cijena, površina i parametri amortizacije."
+        "message": "Osnovni podaci: adresa, datum kupovine, nabavna cijena, površina (m²), metoda amortizacije, korisni vijek trajanja i trenutna knjigovodstvena vrijednost."
       },
       "contracts": {
         "title": "Ugovori o najmu",
-        "message": "Upravljajte ugovorima o najmu za ovu nekretninu. Pratite stanare, iznose najma i trajanje ugovora."
+        "message": "Upravljajte ugovorima o najmu: dodajte stanare, postavite iznose najma i periode, pratite depozite i nadgledajte uslove najma. Neophodno za izvještavanje po Vermietung & Verpachtung."
       },
       "transactions": {
-        "title": "Transakcije",
-        "message": "Svi prihodi i rashodi povezani s ovom nekretninom. Korisno za izvještavanje po Anlage V."
+        "title": "Transakcije nekretnine",
+        "message": "Svi prihodi i rashodi povezani s ovom nekretninom: prihod od najma, troškovi održavanja, osiguranje, kamate na kredite. Koristi se direktno za porezno izvještavanje."
       }
     },
     "liabilities": {
       "overview": {
-        "title": "Pregled obaveza",
-        "message": "Agregirani pokazatelji duga: ukupni saldo, mjesečne rate i ukupne kamate."
+        "title": "Kontrolna ploča obaveza",
+        "message": "Agregirani pregled svih dugova: ukupni preostali saldo, mjesečne obaveze plaćanja, ukupne plaćene kamate i omjer duga i imovine."
       },
       "add": {
         "title": "Dodaj obavezu",
-        "message": "Zabilježite novi kredit ili obavezu. Otplate i odbitne kamate prate se automatski."
+        "message": "Zabilježite novi kredit, hipoteku ili kreditnu liniju. Unesite iznos glavnice, kamatnu stopu i raspored otplate. Povežite s nekretninom ako je primjenjivo — kamate mogu biti porezno odbitne."
       },
       "list": {
         "title": "Lista obaveza",
-        "message": "Svi krediti i obaveze na jednom mjestu. Kliknite na stavku za plan otplate."
+        "message": "Svi vaši krediti i obaveze na jednom mjestu. Pogledajte trenutni saldo, kamatnu stopu i datum sljedeće rate. Kliknite na bilo koju stavku za potpuni plan otplate."
       },
       "detail": {
-        "title": "Panel detalja",
-        "message": "Pogledajte planove otplate, preostali saldo i povezanu nekretninu ili imovinu."
+        "title": "Plan otplate",
+        "message": "Detaljan raspored otplate koji prikazuje razdvajanje glavnice i kamata za svaku ratu. Pratite preostali saldo, ukupne plaćene kamate i povezanu nekretninu ili imovinu."
       }
     },
     "recurring": {
       "create": {
-        "title": "Kreiraj ponavljajuću",
-        "message": "Postavite ponavljajuću transakciju koja će se automatski kreirati po rasporedu."
+        "title": "Kreiraj ponavljajući obrazac",
+        "message": "Postavite ponavljajuću transakciju koja se ponavlja automatski: dnevno, sedmično, mjesečno, kvartalno ili godišnje. Idealno za redovne rashode poput najma, pretplata ili premija osiguranja."
       },
       "filters": {
-        "title": "Filteri",
-        "message": "Filtrirajte ponavljajuće unose po učestalosti, kategoriji ili statusu aktivnosti."
+        "title": "Filtriranje obrazaca",
+        "message": "Filtrirajte ponavljajuće unose po učestalosti, kategoriji, aktivnom/pauziranom statusu ili rasponu iznosa."
       },
       "list": {
-        "title": "Ponavljajuća lista",
-        "message": "Pregledajte i upravljajte svim ponavljajućim transakcijama. Pauzirajte, uredite ili obrišite."
+        "title": "Ponavljajući obrasci",
+        "message": "Pregledajte i upravljajte svim ponavljajućim obrascima transakcija. Taxja također automatski detektuje ponavljajuće obrasce iz vaših bankovnih izvoda. Pauzirajte, uredite ili obrišite rasporede po potrebi."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Imovina i nekretnine",
-        "message": "Upravljajte nekretninama, vozilima i drugom amortiziranom imovinom. Pratite AfA i knjigovodstvene vrijednosti."
+        "title": "Imovina i obaveze",
+        "message": "Upravljajte nekretninama, vozilima, opremom i drugom amortiziranom imovinom s automatskim obračunom AfA. Također pratite kredite, hipoteke i druge obaveze s planovima otplate."
       },
       "automation": {
-        "title": "Automatizacija",
-        "message": "Postavite ponavljajuće transakcije, pravila klasifikacije i automatizovane procese."
+        "title": "Pravila i automatizacija",
+        "message": "Postavite ponavljajuće transakcije za redovna plaćanja i upravljajte pravilima klasifikacije koja automatski kategoriziraju transakcije. Taxja uči iz vaših ispravki tokom vremena."
       },
       "taxtools": {
-        "title": "Porezni alati",
-        "message": "Napredni kalkulatori za procjenu povrata, što-ako scenarije i pripremu revizije."
+        "title": "Porezni radni prostor",
+        "message": "Napredni porezni alati: procjena povrata, što-ako simulator, paušalno poređenje, godišnji porezni sažetak, radna površina za dokumente poslodavca i kontrolna lista revizije."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Procjena povrata",
-        "message": "Procijenite očekivani porezni povrat na osnovu trenutnog dohotka, odbitaka i zadržanog poreza."
+        "title": "Procjena poreznog povrata",
+        "message": "Procijenite očekivani porezni povrat ili obavezu na osnovu trenutnog dohotka, odbitaka i zadržanog poreza. Prikazuje detaljnu raščlambu oporezivog dohotka i primjenjivih stopa."
       },
       "whatIf": {
-        "title": "Što-ako scenariji",
-        "message": "Simulirajte promjene poput dodatnog dohotka ili odbitaka i pogledajte porezne posljedice."
+        "title": "Što-ako simulator",
+        "message": "Modelirajte hipotetičke scenarije: dodajte dodatni dohodak, prilagodite odbitke ili promijenite poslovne rashode da vidite kako utječu na vašu poreznu poziciju. Uporedite različite scenarije uporedo."
       },
       "flatRate": {
         "title": "Paušalno poređenje",
-        "message": "Usporedite stvarne troškove s Betriebsausgabenpauschale da nađete bolju opciju."
+        "message": "Uporedite vaše stvarne dokumentirane rashode s Betriebsausgabenpauschale (paušalnim poslovnim rashodima). Prikazuje koja opcija vam daje bolji porezni rezultat — dostupno za samozaposlene korisnike."
       },
       "filing": {
-        "title": "Sažetak podnošenja",
-        "message": "Pregledajte potpuni sažetak svih podataka prije podnošenja. Provjerite nedostajuće stavke ili greške."
+        "title": "Godišnji porezni sažetak",
+        "message": "Potpuni pregled vaše porezne godine: oporezivi dohodak, procijenjeni porez, zadržani porez, procijenjeni povrat, raščlambe prihoda i odbitaka, PDV sažetak te detekcija konflikata s upozorenjima."
       },
       "employer": {
-        "title": "Potvrda poslodavca",
-        "message": "Unesite podatke iz vašeg Lohnzettel (L16) da uključite dohodak iz zaposlenja u porezni obračun."
+        "title": "Dokumenti poslodavca",
+        "message": "Učitajte i pregledajte svoj Lohnzettel (L16) i ostale potvrde o zaposlenju. Taxja izdvaja podatke o poslodavcu, bruto platu, zadržane poreze i doprinose za socijalno osiguranje. Podržava više poslodavaca."
       },
       "audit": {
         "title": "Kontrolna lista revizije",
-        "message": "Provjerite da su vaši zapisi potpuni i usklađeni prije podnošenja porezne prijave."
+        "message": "Provjerite da su vaši porezni zapisi potpuni prije podnošenja: provjere nedostajućih dokumenata, nepregledanih transakcija, nepotpunih kategorija i usklađenosti s austrijskim poreznim zahtjevima."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Lični podaci",
-        "message": "Vaše ime, e-mail adresa i kontakt podaci. Održavajte ih ažurnim za poreznu korespondenciju."
+        "message": "Vaše ime, e-mail adresa i preferencije prikaza. Održavajte ih ažurnim za poreznu korespondenciju i oporavak računa."
       },
       "taxInfo": {
-        "title": "Porezni profil",
-        "message": "Vaš porezni broj (Steuernummer), PDV status i vrste dohotka. Neophodno za tačne obračune."
+        "title": "Porezni i poslovni profil",
+        "message": "Konfigurirajte porezni broj (Steuernummer), PDV identifikacijski broj (USt-ID), PDV status (oslobođenje za male poduzetnike, redovno), tip prihoda, naziv firme i djelatnost. Neophodno za tačne porezne obračune."
       },
       "commuting": {
-        "title": "Putovanje na posao",
-        "message": "Unesite podatke o putovanju za automatski obračun odbitka Pendlerpauschale."
+        "title": "Zaposlenje i putovanje na posao",
+        "message": "Postavite podatke o poslodavcu, udaljenost putovanja (km) za Pendlerpauschale, dostupnost javnog prijevoza, dane rada od kuće (Telearbeit) za Homeoffice-Pauschale i porodični status za porezne olakšice."
       },
       "security": {
-        "title": "Sigurnost",
-        "message": "Promijenite lozinku i pregledajte aktivne sesije. Omogućite dvofaktorsku autentifikaciju za dodatnu zaštitu."
+        "title": "Sigurnosne postavke",
+        "message": "Promijenite lozinku, pregledajte aktivne sesije i omogućite dvofaktorsku autentifikaciju (2FA) za poboljšanu sigurnost računa."
       },
       "dataExport": {
         "title": "Podaci i privatnost",
-        "message": "Izvezite sve podatke ili zatražite brisanje računa. Vaši podaci pripadaju vama."
+        "message": "Izvezite sve svoje podatke (dokumente, transakcije, izvještaje), upravljajte postavkama pretplate ili zatražite brisanje računa. Vaši podaci pripadaju vama — potpuno usklađeno s GDPR-om."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Pravila klasifikacije",
-        "message": "Pravila automatski kategoriziraju transakcije prema obrascima. Taxja također uči iz vaših ručnih ispravki."
+        "title": "Pametna klasifikacija",
+        "message": "Pravila klasifikacije automatski dodjeljuju porezne kategorije transakcijama na osnovu obrazaca u opisima. Taxja kreira pravila iz vaših ručnih ispravki, gradeći personalizirani sistem klasifikacije koji se poboljšava tokom vremena."
       },
       "list": {
         "title": "Lista pravila",
-        "message": "Pregledajte, uredite ili obrišite postojeća pravila. Svako pravilo mapira tekstualni obrazac na poreznu kategoriju."
+        "message": "Pregledajte, uredite ili obrišite pravila klasifikacije. Svako pravilo uparuje tekstualni obrazac (iz opisa transakcija) sa specifičnom poreznom kategorijom i statusom odbitnosti."
       },
       "autoLearn": {
-        "title": "Automatski naučena pravila",
-        "message": "Pravila koja je AI automatski kreirao. Pregledajte i odobrite ih za tačnu klasifikaciju."
+        "title": "AI-naučena pravila",
+        "message": "Pravila koja je AI automatski kreirao iz vaših prošlih odluka. Brojač prikazuje koliko transakcija je svako pravilo klasificiralo. Pregledajte i fino podesite po potrebi."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "AI Asistent",
-        "message": "Postavite pitanja o austrijskom poreznom pravu, vašim finansijama ili korištenju Taxja."
+        "title": "AI porezni asistent",
+        "message": "Vaš lični AI porezni savjetnik za austrijsko porezno pravo. Postavljajte pitanja na bilo kojem od 9 podržanih jezika. AI pristupa vašem kompletnom profilu, transakcijama, dokumentima i nekretninama za personalizirane odgovore."
       },
       "input": {
-        "title": "Unos chata",
-        "message": "Unesite svoje pitanje ovdje. Možete pitati na njemačkom, engleskom ili bilo kojem podržanom jeziku."
+        "title": "Unos u chat",
+        "message": "Unesite svoje porezno pitanje ili koristite predložene upite. Pitajte o odbitcima, PDV pravilima, rokovima za podnošenje, amortizaciji nekretnina ili bilo kojoj austrijskoj poreznoj temi."
       },
       "proactive": {
-        "title": "Proaktivni savjeti",
-        "message": "Asistent može predložiti optimizacije ili ukazati na potencijalne probleme na osnovu vaših podataka."
+        "title": "Proaktivni uvidi",
+        "message": "AI proaktivno analizira vaše podatke i predlaže porezne optimizacije, označava nedostajuće dokumente, upozorava na približavajuće rokove i identificira potencijalne greške prije podnošenja prijave."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Vaš plan",
-        "message": "Pogledajte trenutni nivo pretplate i uključene funkcije. Nadogradite za više mogućnosti."
+        "title": "Vaša pretplata",
+        "message": "Pogledajte svoj trenutni plan (Besplatni, Plus ili Pro), ciklus naplate, datum sljedeće uplate i uključene funkcije. Besplatni plan uključuje osnovne funkcije, Plus dodaje napredne izvještaje, Pro otključava AI asistenta i generisanje poreznih obrazaca."
       },
       "billing": {
-        "title": "Historija naplate",
-        "message": "Pregledajte prošle fakture, metode plaćanja i korištenje kredita."
+        "title": "Naplata i plaćanja",
+        "message": "Pregledajte historiju plaćanja, upravljajte metodom plaćanja putem Stripe-a, otkažite ili reaktivirajte pretplatu i pogledajte preostale dane probnog perioda ako je primjenjivo."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Filter",
-        "message": "Filtrirajte kreditne transakcije po tipu, datumu ili statusu za pronalaženje specifičnih unosa."
+        "title": "Filtriranje kredita",
+        "message": "Filtrirajte historiju kredita po tipu: odbitci (korištenje OCR/AI), povrati, mjesečna resetiranja, dopune, istekle dopune, obračuni prekoračenja ili migracije plana."
       },
       "list": {
-        "title": "Historija kredita",
-        "message": "Detaljan zapis svih kupovina, korištenja i preostalog salda kredita."
+        "title": "Kreditne transakcije",
+        "message": "Detaljan zapis sve kreditne aktivnosti: kada su krediti korišteni, koliko, za šta i vaš preostali saldo. Pratite korištenje AI-a kroz obradu dokumenata i chat interakcije."
       }
     }
   },

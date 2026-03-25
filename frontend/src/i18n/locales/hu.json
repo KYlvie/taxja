@@ -3676,354 +3676,354 @@
   "onboarding": {
     "welcome": {
       "title": "Üdvözöljük a Taxja-ban!",
-      "message": "Szia! A Taxja asszisztensed vagyok. Gyorsan megmutatom a platform legfontosabb funkcióit, hogy könnyedén kezeld az adóügyeidet. Kezdjük!"
+      "message": "Szia! A Taxja MI asszisztensed vagyok. Végigvezetlek a platformon — az automatikus dokumentumfeldolgozástól és bankkivonat-importálástól a valós idejű adószámításokon, MI-alapú adótanácsadáson át az egykattintásos adóbevallásig. A Taxja 9 nyelvet támogat, és alkalmazottaknak, szabadúszóknak, bérbeadóknak és vállalkozásoknak egyaránt használható. Hadd mutassam meg!"
     },
     "documents": {
-      "title": "Dokumentumok feltöltése",
-      "message": "Egyszerűen töltsd fel a számláidat, nyugtáidat vagy szerződéseidet. Automatikusan felismerjük a tartalmat, kategorizáljuk és létrehozunk egy tranzakciót. Nincs szükség kézi adatbevitelre!"
+      "title": "Intelligens dokumentumfeldolgozás",
+      "message": "Töltsön fel számlákat, nyugtákat, szerződéseket vagy bankkivonatokat. Az OCR és MI motor automatikusan kinyeri az adatokat, osztályozza a dokumentumokat és létrehozza a tranzakciókat — nincs szükség kézi adatbevitelre. A bankkivonatokat egy dedikált egyeztetési munkafelületen dolgozzuk fel, a munkáltatói adóigazolásoknak (Lohnzettel) pedig saját ellenőrző paneljük van. Ellenőrizze és hagyja jóvá az MI által kinyert adatokat, mielőtt azok bekerülnek az adónyilvántartásba."
     },
     "dashboard": {
-      "title": "Irányítópult",
-      "message": "Az irányítópult teljes áttekintést nyújt: bevételek és kiadások egy pillantásra, adómegtakarítási tippek és teendő emlékeztetők. Minden egy helyen."
+      "title": "Az adóügyek vezérlőpultja",
+      "message": "Az irányítópult valós idejű áttekintést nyújt: bevételek és kiadások, becsült adó, befizetett adó, fennmaradó egyenleg, nettó jövedelem és ÁFA-határérték követése. Az interaktív trenddiagramok havi mintákat és kategóriabontásokat mutatnak. Használja az évválasztót az adóévek közötti váltáshoz, húzza ide a dokumentumokat a feltöltéshez, és ellenőrizze előfizetési állapotát — minden egy képernyőn."
     },
     "transactions": {
-      "title": "Tranzakciók",
-      "message": "Itt tekintheti meg, szűrheti és kezelheti az összes bevételi és kiadási nyilvántartást. A tranzakciók automatikusan jönnek létre a feltöltött dokumentumokból, vagy manuálisan is hozzáadhatja őket. Minden bejegyzés kategorizálva van a pontos adóbevalláshoz."
+      "title": "Tranzakciókezelés",
+      "message": "Tekintse meg, szűrje és kezelje az összes bevételi és kiadási bejegyzést. A tranzakciók automatikusan jönnek létre dokumentumokból és bankkivonat-importálásból, de manuálisan is hozzáadhatók. Szűrőkkel kereshet konkrét tételeket, tömeges műveleteket végezhet, CSV/PDF-be exportálhat, és osztályozási szabályokat kezelhet. A bank által egyeztetett tranzakcióknál egy bank ikon jelzi a kapcsolatot, amelyre kattinthat."
     },
     "reports": {
-      "title": "Adójelentések",
-      "message": "Készítsen professzionális adójelentéseket, beleértve az E/A számítást, a Saldenliste-t és az adóűrlap-előnézeteket. Bármikor exportáljon PDF-be vagy CSV-be — minden készen áll a könyvelőjének vagy a Finanzamt számára."
+      "title": "Adójelentések és bevallás",
+      "message": "Készítsen professzionális jelentéseket: E/A bevétel-kiadás kimutatás, mérleg (Bilanz), főkönyvi kivonat (Saldenliste) és időszaki kivonat. Tekintse meg és generálja a hivatalos adónyomtatványokat (E1, E1a, U30) előre kitöltött adatokkal. Exportáljon teljes adócsomagot az összes igazoló dokumentummal, vagy nyújtsa be elektronikusan a FinanzOnline-on keresztül."
     },
     "ai": {
-      "title": "AI Asszisztens",
-      "message": "Van adókérdésed? Használd bármikor az AI csevegést a képernyő alján. Segítek a levonásokkal, adószabályokkal és személyre szabott tanácsokkal."
+      "title": "MI adótanácsadó",
+      "message": "Személyes MI adótanácsadója mindig elérhető. Kérdezzen bármit az osztrák adójogról, levonásokról, ÁFA-ról vagy az Ön helyzetéről — ismeri profilját, ingatlanait, tranzakcióit és dokumentumait. Minden válasz személyre szabott. Emellett proaktívan javasol optimalizálásokat és jelzi a lehetséges problémákat a bevallás előtt."
     },
     "profile": {
-      "title": "Profil kiegészítése",
-      "message": "Menj a Profil beállításokhoz, és állítsd be az ÁFA státuszodat, jövedelemtípusodat és egyéb adataidat. Ez segít nekünk pontosabb adószámításokat és javaslatokat adni."
+      "title": "Az Ön adóprofilja",
+      "message": "Állítsa be jövedelemtípusát, adószámát, ÁFA-státuszát, vállalkozási adatait, munkáltatói információit és az ingázási adatokat a Pendlerpauschale-hoz. Adja meg a családi állapotot az adókedvezményekhez és az otthoni munkavégzés napjait a Homeoffice-Pauschale-hoz. Minél teljesebb a profilja, annál pontosabbak a számítások. Itt kezelheti a biztonságot, exportálhatja adatait, vagy törölheti fiókját is."
     },
-    "skip": "Átugrás",
-    "next": "Tovább →",
-    "prev": "← Vissza",
-    "finish": "Rajta!"
+    "skip": "Útmutató kihagyása",
+    "next": "Következő →",
+    "prev": "← Előző",
+    "finish": "Kezdjük!"
   },
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Adóév",
-        "message": "Válassza ki a kívánt adóévet. Az irányítópult összes adata ennek megfelelően frissül."
+        "title": "Adóév választó",
+        "message": "Válassza ki a kívánt adóévet. Az irányítópult összes adata — bevételek, kiadások, adóbecslések és diagramok — azonnal frissül az év váltásakor."
       },
       "upload": {
-        "title": "Gyors feltöltés",
-        "message": "Húzza ide a dokumentumokat az azonnali feltöltéshez. A Taxja automatikusan osztályozza és kinyeri az adatokat."
+        "title": "Gyors dokumentumfeltöltés",
+        "message": "Húzza ide a fájlokat, vagy kattintson a tallózáshoz. A Taxja számlákat, nyugtákat, szerződéseket, bankkivonatokat és adónyomtatványokat fogad. Az OCR feldolgozás automatikusan elindul, és a kinyert adatokból tranzakciókat hoz létre."
       },
       "overview": {
-        "title": "Pénzügyi áttekintés",
-        "message": "Bevételek, kiadások és adóösszesítés egy pillantásra. Minden kártya egy kulcsfontosságú mutatót jelenít meg."
+        "title": "Pénzügyi áttekintő kártyák",
+        "message": "Kulcsmutatók egy pillantásra: éves bevétel, kiadás, becsült adó, befizetett adó, fennmaradó egyenleg, nettó jövedelem és az ÁFA-határértéktől való távolság. Minden kártya kattintható a részletekért."
       },
       "trends": {
         "title": "Trenddiagramok",
-        "message": "Kövesse nyomon bevételei és kiadásai időbeli alakulását. Fedezzen fel mintákat és tervezzen előre."
+        "message": "Interaktív diagramok: havi bevétel és kiadás összehasonlítás, bevételi kategória bontás (kördiagram), kiadási kategória bontás és éves összehasonlítás. Fedezze fel a mintákat és tervezze meg adóstratégiáját."
       },
       "plan": {
-        "title": "Előfizetési állapot",
-        "message": "Tekintse meg jelenlegi csomagját és a fennmaradó krediteket. Bármikor válthat magasabb csomagra."
+        "title": "Előfizetés és kreditek",
+        "message": "Tekintse meg jelenlegi csomagját (Ingyenes, Plus vagy Pro), a fennmaradó MI krediteket és a próbaidőszak állapotát. Kattintson az előfizetés kezeléséhez vagy további kreditek vásárlásához."
       },
       "language": {
-        "title": "Nyelv",
-        "message": "Váltson felületi nyelvet. A Taxja támogatja a németet, angolt, kínait és más nyelveket."
+        "title": "Nyelvválasztó",
+        "message": "Váltson a 9 támogatott nyelv között: német, angol, kínai, francia, orosz, magyar, lengyel, török és bosnyák. A teljes felület azonnal frissül."
       },
       "theme": {
-        "title": "Téma",
-        "message": "Váltson a világos és sötét mód között ízlése szerint."
+        "title": "Témaváltó",
+        "message": "Váltson a Klasszikus (világos) és Cyber (sötét) témák között. A Klasszikus mód letisztult, szabványos felületet használ. A Cyber mód animált robot asszisztenssel és sötét háttérrel rendelkezik."
       }
     },
     "transactions": {
       "classRules": {
         "title": "Osztályozási szabályok",
-        "message": "Kezelje a tranzakciókat automatikusan kategorizáló szabályokat. A Taxja tanul a javításaiból."
+        "message": "Nyissa meg a szabálykezelőt az automatikus kategorizálási szabályok megtekintéséhez és szerkesztéséhez. A Taxja tanul a manuális javításaiból, és szabályokat épít, amelyek a leírási minták alapján automatikusan osztályozzák a jövőbeli tranzakciókat."
       },
       "export": {
-        "title": "Exportálás",
-        "message": "Töltse le tranzakcióit CSV vagy PDF formátumban nyilvántartásához vagy adótanácsadójának."
+        "title": "Tranzakciók exportálása",
+        "message": "Töltse le tranzakcióit CSV vagy PDF formátumban. Válassza ki a formátumot és az időszakot nyilvántartásához, adótanácsadójának vagy a Finanzamt számára."
       },
       "addNew": {
         "title": "Tranzakció hozzáadása",
-        "message": "Manuálisan hozzon létre új bevételi vagy kiadási bejegyzést, ha nincs feltöltendő dokumentum."
+        "message": "Hozzon létre manuálisan új bevételi vagy kiadási bejegyzést. Használja, ha nincs feltöltendő dokumentum — adja meg az összeget, dátumot, kategóriát, ÁFA-kulcsot és opcionális tételsorokat."
       },
       "filters": {
-        "title": "Szűrők",
-        "message": "Szűrje a tranzakciókat dátum, kategória, típus vagy összeg szerint."
+        "title": "Tranzakciószűrők",
+        "message": "Szűrjön év, kategória, típus (bevétel/kiadás), ellenőrzési állapot és egyéb szempontok szerint. Kombináljon szűrőket a pontos kereséshez. Az 'Ellenőrzésre vár' szűrővel gyorsan megtalálja a jóváhagyásra váró tranzakciókat."
       },
       "list": {
         "title": "Tranzakciólista",
-        "message": "Minden tranzakció egy helyen. Kattintson bármely sorra a részletekért, szerkesztéshez vagy dokumentum csatolásához."
+        "message": "Minden tranzakció rendezhető, lapozható táblázatban. Minden sor mutatja a dátumot, leírást, összeget, kategóriát és állapotot. A bank ikon a bank által egyeztetett tételeket jelzi — kattintson a kapcsolódó bankkivonat megtekintéséhez. A gemkapocs a csatolt dokumentumokra mutat. Jelölőnégyzetekkel tömeges műveleteket végezhet."
       },
       "paging": {
         "title": "Lapozás",
-        "message": "Navigáljon a tranzakciós oldalak között. Állítsa be az oldalankénti elemszámot."
+        "message": "Navigáljon a tranzakciós oldalak között. Állítsa be az oldalankénti elemszámot a kívánt megjelenítéshez."
       }
     },
     "documents": {
       "upload": {
         "title": "Dokumentumok feltöltése",
-        "message": "Töltsön fel számlákat, nyugtákat vagy adónyomtatványokat. A Taxja OCR-rel és MI-vel nyeri ki az adatokat."
+        "message": "Töltsön fel számlákat, nyugtákat, bankkivonatokat, adónyomtatványokat, munkáltatói igazolásokat, szerződéseket és egyebeket. Húzzon be egyszerre több fájlt. A Taxja OCR motorja automatikusan kinyeri az összegeket, dátumokat, partnerneveket és adórészleteket."
       },
       "tabs": {
-        "title": "Dokumentumcsoportok",
-        "message": "A dokumentumok állapot szerint vannak rendezve: ellenőrzésre vár, feldolgozott és archivált. Váltson füleket a szűréshez."
+        "title": "Dokumentumkategóriák",
+        "message": "A dokumentumok típus és állapot szerint rendezve: Összes, Ellenőrzésre vár (sárga háromszög jelvény), Számlák, Nyugták, Bankkivonatok, Adónyomtatványok, Munkáltatói dokumentumok és egyéb. Az 'Ellenőrzésre vár' fül azokat a dokumentumokat mutatja, ahol az MI kinyerés jóváhagyásra szorul."
       },
       "list": {
         "title": "Dokumentumlista",
-        "message": "Böngésszen az összes feltöltött dokumentum között. Kattintson egy elemre a kinyert adatok ellenőrzéséhez."
+        "message": "Böngésszen az összes feltöltött dokumentum között kereséssel és szűrőkkel. Minden bejegyzés mutatja a dokumentum nevét, típusát, feltöltési dátumát és feldolgozási állapotát. Kattintson bármelyikre a részletes nézet megnyitásához az OCR adatokkal, előnézettel és kapcsolódó tranzakciókkal."
       }
     },
     "documentDetail": {
       "header": {
         "title": "Dokumentum fejléce",
-        "message": "Dokumentum neve, feltöltési dátuma és feldolgozási állapota. Használja a műveleteket az újrafeldolgozáshoz vagy törléshez."
+        "message": "A dokumentum neve, típusa, feltöltési dátuma és feldolgozási állapota. A műveletgombokkal újrafeldolgozhatja az OCR-t, letöltheti az eredeti fájlt, vagy törölheti a dokumentumot."
       },
       "preview": {
         "title": "Dokumentum előnézet",
-        "message": "Tekintse meg az eredeti dokumentumot. Nagyítson a részletekre a kinyert adatokkal való összehasonlításhoz."
+        "message": "Tekintse meg az eredeti feltöltött dokumentumot (PDF, kép stb.). Nagyítson rá a részletekre a jobb oldali panelen látható MI által kinyert adatokkal való összehasonlításhoz."
       },
       "ocrData": {
-        "title": "Kinyert adatok",
-        "message": "OCR-rel és MI-vel kinyert mezők. Ellenőrizzen minden értéket és javítsa a hibákat a megerősítés előtt."
+        "title": "MI által kinyert adatok",
+        "message": "Az OCR és MI által kinyert összes mező: összeg, dátum, partner, kategória, ÁFA-kulcs, tételsorok és egyebek. Az alacsony megbízhatóságú mezők kiemelve jelennek meg. Ellenőrizzen minden értéket és javítsa a hibákat a megerősítés előtt."
       },
       "linked": {
         "title": "Kapcsolódó rekordok",
-        "message": "Tekintse meg, melyik tranzakció vagy eszköz kapcsolódik ehhez a dokumentumhoz. Hozzon létre új kapcsolatokat közvetlenül."
+        "message": "Tekintse meg, melyik tranzakció, eszköz vagy bankkivonat-sor kapcsolódik ehhez a dokumentumhoz. Hozzon létre új kapcsolatokat, vagy navigáljon közvetlenül a kapcsolódó rekordhoz."
       },
       "editMode": {
-        "title": "Mezők szerkesztése",
-        "message": "Váltson szerkesztési módba a kinyert értékek javításához. Módosításai javítják az MI jövőbeli pontosságát."
+        "title": "Szerkesztés és megerősítés",
+        "message": "Váltson szerkesztési módba az MI által kinyert értékek javításához. A megerősítés után az adatok rögzítésre kerülnek, és a sárga ellenőrzési jelvény eltűnik. Javításai az MI jövőbeli pontosságát is növelik."
       }
     },
     "reports": {
       "tabs": {
         "title": "Jelentéstípusok",
-        "message": "Válasszon jövedelemadó, áfa és más jelentéstípusok közül."
+        "message": "Váltson a jelentéstípusok között: E/A bevétel-kiadás kimutatás (egyéni vállalkozóknak), Mérleg (Bilanz), Főkönyvi kivonat (Saldenliste), Időszaki kivonat (Periodensaldenliste) és Adónyomtatvány előnézet (E1/E1a/U30)."
       },
       "generate": {
         "title": "Jelentés generálása",
-        "message": "Számítsa ki az adójelentést a kiválasztott időszakra. A jelentés a legfrissebb adatokkal frissül."
+        "message": "Számítsa ki a jelentést a kiválasztott adóévre. A rendszer a legfrissebb tranzakciós adatokat használja, és részletes bontást készít a hivatalos osztrák adónyomtatvány mezőinek megfelelően."
       },
       "print": {
-        "title": "Nyomtatás",
-        "message": "Nyomtassa ki a jelentést közvetlenül a böngészőből papíralapú nyilvántartáshoz."
+        "title": "Jelentés nyomtatása",
+        "message": "Nyomtassa ki a jelentést közvetlenül a böngészőből. A nyomtatási elrendezés A4-es papírra optimalizált, megfelelő fejlécekkel és oldaltörésekkel."
       },
       "content": {
         "title": "Jelentés tartalma",
-        "message": "Az adószámítás részletes bontása. Minden sor megfelel a hivatalos nyomtatvány egy mezőjének."
+        "message": "A részletes adószámítás, ahol minden sor a hivatalos nyomtatvány egy mezőjének felel meg. A kibontható részek mutatják az egyes tételekhez tartozó alaptranzakciókat."
       },
       "finanzOnline": {
-        "title": "FinanzOnline",
-        "message": "Nyújtsa be adóbevallását elektronikusan az osztrák adóhatóságnak a FinanzOnline-on keresztül."
+        "title": "FinanzOnline integráció",
+        "message": "Nyújtsa be adóbevallását elektronikusan az osztrák adóhatóságnak (Finanzamt) a FinanzOnline-on keresztül. A nyomtatvány adatai automatikusan kitöltésre kerülnek a tranzakciókból és dokumentumokból."
       },
       "downloadForm": {
-        "title": "Nyomtatvány letöltése",
-        "message": "Töltse le az előre kitöltött hivatalos adónyomtatványt (E1, E1a, U30 stb.) PDF formátumban."
+        "title": "Letöltés és exportálás",
+        "message": "Töltse le az előre kitöltött hivatalos adónyomtatványt PDF formátumban, vagy exportáljon teljes adócsomagot, amely tartalmazza az adóbevallást, az összes igazoló dokumentumot és egy összefoglaló jelentést egyetlen archívumban."
       }
     },
     "properties": {
       "overview": {
         "title": "Portfólió áttekintés",
-        "message": "Tekintse meg az összes ingatlan és eszköz összesített mutatóit egyetlen irányítópulton."
+        "message": "Navigáljon az eszközportfólió irányítópultra az összesített elemzésekért: teljes eszközérték, értékcsökkenési ütemtervek és összehasonlító elemzések az összes ingatlanra és eszközre."
       },
       "add": {
-        "title": "Ingatlan hozzáadása",
-        "message": "Regisztráljon új ingatlant vagy eszközt. A Taxja automatikusan számítja az értékcsökkenést (AfA) és a bérbevételt."
+        "title": "Eszköz hozzáadása",
+        "message": "Regisztráljon új eszközt: ingatlan, jármű, berendezés, gép vagy szerszám. A Taxja az osztrák adójog alapján automatikusan számítja az értékcsökkenést (AfA) és nyomon követi a könyv szerinti értéket."
       },
       "cards": {
-        "title": "Ingatlankártyák",
-        "message": "Minden kártya egy ingatlant mutat kulcsfontosságú adatokkal: cím, bérleti állapot és aktuális könyv szerinti érték."
+        "title": "Eszközkártyák",
+        "message": "Minden kártya egy eszközt mutat kulcsfontosságú adatokkal: név, típus, vásárlás dátuma, eredeti költség, aktuális könyv szerinti érték és értékcsökkenési állapot. Kattintson a teljes részletes nézet megnyitásához."
       },
       "edit": {
-        "title": "Ingatlan szerkesztése",
-        "message": "Frissítse az adatokat: vételár, terület vagy értékcsökkenési módszer."
+        "title": "Eszköz szerkesztése",
+        "message": "Frissítse az eszköz adatait: vételár, értékcsökkenési módszer (lineáris/degresszív), hasznos élettartam vagy értékesítési információk. A módosítások automatikusan újraszámítják az értékcsökkenési ütemtervet."
       },
       "archive": {
         "title": "Archívum kapcsoló",
-        "message": "Jelenítse meg vagy rejtse el az archivált ingatlanokat. Az archivált tételek a BAO §132 szerint 7 évig megőrződnek."
+        "message": "Jelenítse meg vagy rejtse el az archivált/értékesített eszközöket. Az archivált tételek a 7 éves törvényi megőrzési időszak (BAO §132) alatt megmaradnak, de elrejtődnek a fő nézetből."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Összefoglaló",
-        "message": "Kulcsmutatók az összes eszközre: összérték, éves értékcsökkenés és nettó bérbevétel."
+        "title": "Eszköz összefoglaló",
+        "message": "Kulcsmutatók az összes eszközre: teljes beszerzési költség, aktuális könyv szerinti érték, éves értékcsökkenési költség és nettó bérleti bevétel az ingatlanokból."
       },
       "portfolio": {
         "title": "Portfólió összehasonlítás",
-        "message": "Hasonlítsa össze az ingatlanokat egymás mellett hozam, kihasználtság és más mutatók alapján."
+        "message": "Hasonlítsa össze az ingatlanokat egymás mellett kulcsmutatók alapján: hozam, kihasználtsági ráta, karbantartási költségek és befektetés megtérülése."
       },
       "otherAssets": {
         "title": "Egyéb eszközök",
-        "message": "Nem ingatlan eszközök: járművek, berendezések vagy immateriális javak nyilvántartása itt történik."
+        "message": "Nem ingatlan jellegű amortizálható eszközök: járművek, irodai berendezések, gépek és immateriális javak. Mindegyik saját értékcsökkenési ütemtervvel rendelkezik."
       },
       "reports": {
         "title": "Eszközjelentések",
-        "message": "Készítsen részletes eszközjelentéseket adótanácsadójának vagy belső elemzéshez."
+        "message": "Készítsen részletes értékcsökkenési jelentéseket és eszközleltárakat. Válassza ki a jelentés típusát és évét az átfogó eszközdokumentációhoz."
       }
     },
     "propertyDetail": {
       "actions": {
-        "title": "Műveletek",
-        "message": "Szerkessze, archiválja vagy törölje ezt az ingatlant. Hozzáférés további eszközökhöz, például értékcsökkenési ütemtervekhez."
+        "title": "Ingatlan műveletek",
+        "message": "Szerkessze az ingatlan adatait, tekintse meg az értékcsökkenési ütemtervet, értékesítse az eszközt, vagy archiválja. Minden kezelési eszköz elérhető ebből a műveletmenüből."
       },
       "info": {
         "title": "Ingatlaninformációk",
-        "message": "Alapadatok: cím, vásárlás dátuma, ár, terület és értékcsökkenési paraméterek."
+        "message": "Alapadatok: cím, vásárlás dátuma, beszerzési költség, terület (m²), értékcsökkenési módszer, hasznos élettartam és aktuális könyv szerinti érték."
       },
       "contracts": {
         "title": "Bérleti szerződések",
-        "message": "Kezelje az ingatlan bérleti szerződéseit. Kövesse nyomon a bérlőket, bérleti díjakat és szerződési időszakokat."
+        "message": "Kezelje a bérleti szerződéseket: bérlők hozzáadása, bérleti díjak és időszakok megadása, kauciók nyomon követése és bérleti feltételek figyelése. Elengedhetetlen a Vermietung & Verpachtung (bérbeadás) jelentéséhez."
       },
       "transactions": {
-        "title": "Tranzakciók",
-        "message": "Az ingatlanhoz kapcsolódó összes bevétel és kiadás. Hasznos az Anlage V jelentéséhez."
+        "title": "Ingatlan tranzakciók",
+        "message": "Az ingatlanhoz kapcsolódó összes bevétel és kiadás: bérleti bevétel, karbantartási költségek, biztosítás, kamatkiadások. Közvetlenül az adójelentéshez használatos."
       }
     },
     "liabilities": {
       "overview": {
         "title": "Kötelezettségek áttekintése",
-        "message": "Összesített adósságmutatók: teljes egyenleg, havi törlesztések és kamatok összesen."
+        "message": "Összesített adósságnézet: teljes fennálló egyenleg, havi törlesztési kötelezettségek, összes fizetett kamat és adósság-eszköz arány."
       },
       "add": {
         "title": "Kötelezettség hozzáadása",
-        "message": "Rögzítsen új hitelt vagy kötelezettséget. A törlesztések és levonható kamatok automatikusan nyomon követhetők."
+        "message": "Rögzítsen új hitelt, jelzálogot vagy hitelkeretet. Adja meg a tőkeösszeget, kamatlábat és törlesztési ütemtervet. Ha van, kapcsolja össze ingatlannal — a kamat adólevonható lehet."
       },
       "list": {
         "title": "Kötelezettséglista",
-        "message": "Minden hitel és kötelezettség egy helyen. Kattintson egy elemre a törlesztési ütemterv megtekintéséhez."
+        "message": "Minden hitele és kötelezettsége egy helyen. Tekintse meg az aktuális egyenleget, kamatlábat és következő törlesztési dátumot. Kattintson bármelyikre a teljes törlesztési ütemterv megtekintéséhez."
       },
       "detail": {
-        "title": "Részletek panel",
-        "message": "Tekintse meg a törlesztési ütemtervet, a fennmaradó egyenleget és a kapcsolódó ingatlant vagy eszközt."
+        "title": "Törlesztési ütemterv",
+        "message": "Részletes törlesztési ütemterv, amely mutatja a tőke és kamat megoszlását minden egyes befizetésnél. Kövesse nyomon a fennmaradó egyenleget, az összes fizetett kamatot és a kapcsolódó ingatlant vagy eszközt."
       }
     },
     "recurring": {
       "create": {
-        "title": "Ismétlődő létrehozása",
-        "message": "Állítson be ismétlődő tranzakciót, amely automatikusan létrejön ütemezés szerint."
+        "title": "Ismétlődő minta létrehozása",
+        "message": "Állítson be automatikusan ismétlődő tranzakciót: napi, heti, havi, negyedéves vagy éves gyakorisággal. Ideális rendszeres kiadásokhoz, mint bérleti díj, előfizetések vagy biztosítási díjak."
       },
       "filters": {
-        "title": "Szűrők",
-        "message": "Szűrje az ismétlődő bejegyzéseket gyakoriság, kategória vagy aktív állapot szerint."
+        "title": "Minták szűrése",
+        "message": "Szűrje az ismétlődő bejegyzéseket gyakoriság, kategória, aktív/szüneteltetett állapot vagy összeg-tartomány szerint."
       },
       "list": {
-        "title": "Ismétlődő lista",
-        "message": "Tekintse meg és kezelje az összes ismétlődő tranzakciót. Szüneteltesse, szerkessze vagy törölje."
+        "title": "Ismétlődő minták",
+        "message": "Tekintse meg és kezelje az összes ismétlődő tranzakciós mintát. A Taxja automatikusan felismeri az ismétlődő mintákat a bankkivonatokból is. Szüneteltesse, szerkessze vagy törölje az ütemezéseket szükség szerint."
       }
     },
     "advanced": {
       "assets": {
-        "title": "Eszközök és ingatlanok",
-        "message": "Kezelje az ingatlanokat, járműveket és más amortizálható eszközöket. Kövesse az AfA-t és könyv szerinti értékeket."
+        "title": "Eszközök és kötelezettségek",
+        "message": "Kezelje az ingatlanokat, járműveket, berendezéseket és más amortizálható eszközöket automatikus AfA-számítással. Kövesse nyomon a hiteleket, jelzálogokat és egyéb kötelezettségeket törlesztési ütemtervekkel."
       },
       "automation": {
-        "title": "Automatizálás",
-        "message": "Állítson be ismétlődő tranzakciókat, osztályozási szabályokat és automatizált folyamatokat."
+        "title": "Szabályok és automatizálás",
+        "message": "Állítson be ismétlődő tranzakciókat a rendszeres fizetésekhez, és kezelje az automatikus kategorizálási szabályokat. A Taxja idővel tanul a javításaiból."
       },
       "taxtools": {
-        "title": "Adóeszközök",
-        "message": "Haladó kalkulátorok: visszatérítés becslése, mi-lenne-ha forgatókönyvek és ellenőrzési felkészülés."
+        "title": "Adó munkaterület",
+        "message": "Haladó adóeszközök: visszatérítés becslése, mi-lenne-ha szimulátor, átalány-összehasonlítás, éves adóadat-összefoglaló, munkáltatói dokumentumok munkafelülete és ellenőrzési lista."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Visszatérítés becslése",
-        "message": "Becsülje meg a várható adó-visszatérítést jelenlegi jövedelme, levonásai és visszatartott adója alapján."
+        "title": "Adó-visszatérítés becslése",
+        "message": "Becsülje meg a várható adó-visszatérítést vagy adófizetési kötelezettséget a jelenlegi jövedelem, levonások és visszatartott adó alapján. Részletes bontást mutat az adóköteles jövedelemről és az alkalmazandó adókulcsokról."
       },
       "whatIf": {
-        "title": "Mi-lenne-ha forgatókönyvek",
-        "message": "Szimulálja a változásokat, például további jövedelmet vagy levonásokat, és nézze meg az adóhatást."
+        "title": "Mi-lenne-ha szimulátor",
+        "message": "Modellezzen hipotetikus forgatókönyveket: adjon hozzá extra jövedelmet, módosítsa a levonásokat, vagy változtassa meg az üzleti kiadásokat, hogy lássa hatásukat az adópozíciójára. Hasonlítson össze különböző forgatókönyveket egymás mellett."
       },
       "flatRate": {
-        "title": "Átalány összehasonlítás",
-        "message": "Hasonlítsa össze a tényleges kiadásokat a Betriebsausgabenpauschale-val a jobb opció megtalálásához."
+        "title": "Átalány-összehasonlítás",
+        "message": "Hasonlítsa össze a ténylegesen dokumentált kiadásait a Betriebsausgabenpauschale-val (átalány üzleti kiadások). Megmutatja, melyik opció eredményez kedvezőbb adóeredményt — egyéni vállalkozóknak elérhető."
       },
       "filing": {
-        "title": "Beadási összefoglaló",
-        "message": "Tekintse át az összes adat teljes összefoglalóját beadás előtt. Ellenőrizze a hiányzó tételeket vagy hibákat."
+        "title": "Éves adó-összefoglaló",
+        "message": "Teljes áttekintés az adóévről: adóköteles jövedelem, becsült adó, visszatartott adó, becsült visszatérítés, jövedelem- és levonás-bontás, ÁFA-összefoglaló, valamint ütközésérzékelés figyelmeztetésekkel."
       },
       "employer": {
-        "title": "Munkáltatói igazolás",
-        "message": "Adja meg a Lohnzettel (L16) adatait, hogy a munkaviszonyból származó jövedelmet belefoglalja az adószámításba."
+        "title": "Munkáltatói dokumentumok",
+        "message": "Töltse fel és ellenőrizze Lohnzettel (L16) igazolásait és egyéb munkáltatói adódokumentumokat. A Taxja kinyeri a munkáltatói adatokat, bruttó fizetést, adólevonásokat és társadalombiztosítási járulékokat. Több munkáltató is támogatott."
       },
       "audit": {
         "title": "Ellenőrzési lista",
-        "message": "Ellenőrizze, hogy nyilvántartásai teljesek és megfelelőek-e az adóbevallás benyújtása előtt."
+        "message": "Ellenőrizze adónyilvántartásai teljességét a bevallás előtt: hiányzó dokumentumok, nem ellenőrzött tranzakciók, hiányos kategóriák és az osztrák adókövetelmények betartásának vizsgálata."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Személyes adatok",
-        "message": "Neve, e-mail címe és elérhetősége. Tartsa naprakészen az adólevelezéshez."
+        "message": "Neve, e-mail címe és megjelenítési beállításai. Tartsa ezeket naprakészen az adólevelezéshez és a fiók-helyreállításhoz."
       },
       "taxInfo": {
-        "title": "Adóprofil",
-        "message": "Adószáma (Steuernummer), áfaállapota és jövedelemtípusok. Elengedhetetlen a pontos számításokhoz."
+        "title": "Adó- és vállalkozási profil",
+        "message": "Állítsa be adószámát (Steuernummer), ÁFA-azonosítóját (USt-ID), ÁFA-státuszát (kisadózói mentesség, általános), jövedelemtípusát, cégnevet és iparágat. Elengedhetetlen a helyes adószámításokhoz."
       },
       "commuting": {
-        "title": "Ingázás",
-        "message": "Adja meg ingázási adatait a Pendlerpauschale levonás automatikus számításához."
+        "title": "Munkaviszony és ingázás",
+        "message": "Adja meg munkáltatói adatait, ingázási távolságot (km) a Pendlerpauschale-hoz, tömegközlekedés elérhetőségét, otthoni munkavégzés (Telearbeit) napjait a Homeoffice-Pauschale-hoz, és családi állapotot az adókedvezményekhez."
       },
       "security": {
-        "title": "Biztonság",
-        "message": "Változtassa meg jelszavát és tekintse meg az aktív munkameneteket. Engedélyezze a kétfaktoros hitelesítést."
+        "title": "Biztonsági beállítások",
+        "message": "Változtassa meg jelszavát, tekintse meg az aktív munkameneteket és engedélyezze a kétfaktoros hitelesítést (2FA) a fokozott fiókbiztonság érdekében."
       },
       "dataExport": {
         "title": "Adatok és adatvédelem",
-        "message": "Exportálja összes adatát vagy kérje fiókja törlését. Az adatai az Öné."
+        "message": "Exportálja összes adatát (dokumentumok, tranzakciók, jelentések), kezelje az előfizetési beállításokat, vagy kérje fiókja törlését. Az adatai az Öné — teljes mértékben GDPR-kompatibilis."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Osztályozási szabályok",
-        "message": "A szabályok automatikusan kategorizálják a tranzakciókat minták alapján. A Taxja a manuális javításaiból is tanul."
+        "title": "Intelligens osztályozás",
+        "message": "Az osztályozási szabályok automatikusan adókategóriákat rendelnek a tranzakciókhoz a leírási minták alapján. A Taxja szabályokat hoz létre a manuális javításaiból, személyre szabott osztályozási motort építve, amely idővel egyre pontosabbá válik."
       },
       "list": {
         "title": "Szabálylista",
-        "message": "Tekintse meg, szerkessze vagy törölje a meglévő szabályokat. Minden szabály egy szöveges mintát rendel egy adókategóriához."
+        "message": "Tekintse meg, szerkessze vagy törölje az osztályozási szabályokat. Minden szabály egy szöveges mintát (a tranzakció leírásából) rendel egy adott adókategóriához és levonhatósági állapothoz."
       },
       "autoLearn": {
-        "title": "Automatikusan tanult szabályok",
-        "message": "Az MI által automatikusan létrehozott szabályok. Ellenőrizze és hagyja jóvá őket a pontos osztályozás érdekében."
+        "title": "MI által tanult szabályok",
+        "message": "Az MI által automatikusan létrehozott szabályok a korábbi döntései alapján. A számláló mutatja, hány tranzakciót osztályozott az egyes szabályok. Ellenőrizze és finomítsa szükség szerint."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "MI Asszisztens",
-        "message": "Kérdezzen az osztrák adójogról, pénzügyeiről vagy a Taxja használatáról."
+        "title": "MI adótanácsadó",
+        "message": "Személyes MI adótanácsadója az osztrák adójoghoz. Kérdezzen a 9 támogatott nyelv bármelyikén. Az MI hozzáfér teljes profiljához, tranzakcióihoz, dokumentumaihoz és ingatlanaihoz a személyre szabott válaszokhoz."
       },
       "input": {
         "title": "Chat bevitel",
-        "message": "Írja be kérdését itt. Kérdezhet németül, angolul vagy bármely támogatott nyelven."
+        "message": "Írja be adókérdését, vagy használja a javasolt kérdéseket. Kérdezzen levonásokról, ÁFA-szabályokról, bevallási határidőkről, ingatlan értékcsökkenésről (AfA) vagy bármely osztrák adótémáról."
       },
       "proactive": {
-        "title": "Proaktív javaslatok",
-        "message": "Az asszisztens optimalizálásokat javasolhat vagy felhívhatja a figyelmet lehetséges problémákra az adatai alapján."
+        "title": "Proaktív elemzések",
+        "message": "Az MI proaktívan elemzi adatait és adóoptimalizálásokat javasol, jelzi a hiányzó dokumentumokat, figyelmeztet a közelgő határidőkre, és azonosítja a lehetséges hibákat a bevallás benyújtása előtt."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Az Ön csomagja",
-        "message": "Tekintse meg jelenlegi előfizetési szintjét és a benne foglalt funkciókat. Váltson magasabb csomagra a több lehetőségért."
+        "title": "Az Ön előfizetése",
+        "message": "Tekintse meg jelenlegi csomagját (Ingyenes, Plus vagy Pro), számlázási ciklust, következő fizetési dátumot és a benne foglalt funkciókat. Az Ingyenes alapfunkciókat tartalmaz, a Plus haladó jelentéseket ad hozzá, a Pro feloldja az MI asszisztenst és az adónyomtatvány-generálást."
       },
       "billing": {
-        "title": "Számlázási előzmények",
-        "message": "Tekintse meg korábbi számláit, fizetési módokat és a kreditfelhasználást."
+        "title": "Számlázás és fizetések",
+        "message": "Tekintse meg a fizetési előzményeket, kezelje fizetési módját a Stripe-on keresztül, mondja le vagy aktiválja újra előfizetését, és nézze meg a fennmaradó próbanapokat, ha van."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Szűrő",
-        "message": "Szűrje a kredittranzakciókat típus, dátum vagy állapot szerint konkrét bejegyzések kereséséhez."
+        "title": "Kreditek szűrése",
+        "message": "Szűrje a kreditelőzményeket típus szerint: levonások (OCR/MI használat), visszatérítések, havi visszaállítások, kredit-feltöltések, lejárt feltöltések, túlhasználati elszámolások vagy csomagváltások."
       },
       "list": {
-        "title": "Kreditelőzmények",
-        "message": "Részletes napló az összes kreditvásárlásról, felhasználásról és fennmaradó egyenlegről."
+        "title": "Kredittranzakciók",
+        "message": "Részletes napló az összes kredittevékenységről: mikor használtak krediteket, mennyit, mire és a fennmaradó egyenleg. Kövesse nyomon az MI használatot a dokumentumfeldolgozás és a csevegés során."
       }
     }
   },
