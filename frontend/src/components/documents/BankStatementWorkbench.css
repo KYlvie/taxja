@@ -257,11 +257,11 @@
 
 .bank-workbench-table--reconciliation th:nth-child(6),
 .bank-workbench-table--reconciliation td:nth-child(6) {
-  min-width: 112px;
+  min-width: 136px;
 }
 
 .bank-workbench-table__actions {
-  width: 104px;
+  width: 92px;
 }
 
 .bank-workbench-table__static-action {
@@ -272,7 +272,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
@@ -280,8 +280,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--color-border);
   border-radius: 9px;
   background: var(--color-surface);
@@ -296,8 +296,8 @@
 }
 
 .bank-workbench-utility-btn .icon-svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .bank-workbench-utility-btn:hover:not(:disabled) {
@@ -367,6 +367,8 @@
 .bank-workbench-line__status {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 72px;
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.8rem;

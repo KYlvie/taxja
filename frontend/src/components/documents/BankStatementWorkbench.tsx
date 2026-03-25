@@ -831,7 +831,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     if (line.suggested_action === 'ignore') {
       return t('documents.bankWorkbench.suggested.ignore', 'Suggested ignore');
     }
-    return t('documents.bankWorkbench.suggested.create', 'Suggested create');
+    return null;
   }, [t]);
 
   const getSuggestedActionHint = useCallback((line: BankStatementLine): string | null => {
@@ -955,7 +955,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       { key: 'pending_review', label: t('documents.bankWorkbench.pendingReview', 'Pending review'), count: pendingLines.length },
       { key: 'matched_existing', label: t('documents.bankWorkbench.status.matchedExisting', 'Matched existing'), count: matchedLines.length },
       { key: 'auto_created', label: t('documents.bankWorkbench.status.autoCreated', 'Auto-created'), count: createdLines.length },
-      { key: 'ignored_duplicate', label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored duplicate'), count: ignoredLines.length },
+    { key: 'ignored_duplicate', label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored'), count: ignoredLines.length },
     ];
 
     return (
@@ -1032,6 +1032,14 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                     const suggestedActionHint = getSuggestedActionHint(line);
                     const dateDelta = getDateDistanceDays(line.line_date, actualLinkedTransaction?.transaction_date);
                     const isPending = line.review_status === 'pending_review';
+                    const showSuggestedCreateInLinkedColumn = (
+                      isPending
+                      && !actualTransactionLabel
+                      && line.suggested_action === 'create_new'
+                      && line.resolution_reason !== 'revoked_create'
+                      && line.resolution_reason !== 'revoked_match'
+                      && line.resolution_reason !== 'orphan_repaired'
+                    );
 
                     return (
                       <tr key={line.id}>
@@ -1064,20 +1072,35 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                           </span>
                         </td>
                         <td>
-                          {actualTransactionLabel && (
+                          {(actualTransactionLabel || showSuggestedCreateInLinkedColumn) && (
                             <div className="bank-workbench-cell">
-                              <div className="bank-workbench-cell__primary">
-                                {actualTransactionLabel}
-                              </div>
-                              {actualLinkedTransaction?.transaction_date && (
-                                <div className="bank-workbench-cell__secondary">
-                                  {t('transactions.date', 'Date')}: {formatDate(actualLinkedTransaction.transaction_date, i18n.language)}
-                                </div>
-                              )}
-                              {dateDelta !== null && dateDelta > 0 && (
-                                <div className="bank-workbench-cell__secondary">
-                                  {dateDelta}d
-                                </div>
+                              {actualTransactionLabel ? (
+                                <>
+                                  <div className="bank-workbench-cell__primary">
+                                    {actualTransactionLabel}
+                                  </div>
+                                  {actualLinkedTransaction?.transaction_date && (
+                                    <div className="bank-workbench-cell__secondary">
+                                      {t('transactions.date', 'Date')}: {formatDate(actualLinkedTransaction.transaction_date, i18n.language)}
+                                    </div>
+                                  )}
+                                  {dateDelta !== null && dateDelta > 0 && (
+                                    <div className="bank-workbench-cell__secondary">
+                                      {dateDelta}d
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <div className="bank-workbench-cell__primary">
+                                    {t('documents.bankWorkbench.noLinkedTransaction', 'No linked transaction')}
+                                  </div>
+                                  <div className="bank-workbench-cell__secondary bank-workbench-cell__secondary--inline">
+                                    <span className="bank-workbench-line__suggestion bank-workbench-line__suggestion--create_new">
+                                      {t('documents.bankWorkbench.suggested.create', 'Suggested create')}
+                                    </span>
+                                  </div>
+                                </>
                               )}
                             </div>
                           )}
@@ -1220,6 +1243,14 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                 const suggestedActionHint = getSuggestedActionHint(line);
                 const dateDelta = getDateDistanceDays(line.line_date, actualLinkedTransaction?.transaction_date);
                 const isPending = line.review_status === 'pending_review';
+                const showSuggestedCreateInLinkedColumn = (
+                  isPending
+                  && !actualTransactionLabel
+                  && line.suggested_action === 'create_new'
+                  && line.resolution_reason !== 'revoked_create'
+                  && line.resolution_reason !== 'revoked_match'
+                  && line.resolution_reason !== 'orphan_repaired'
+                );
 
                 return (
                   <article key={`mobile-${line.id}`} className="bank-workbench-mobile-card">
@@ -1247,6 +1278,18 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                         <span className="bank-workbench-mobile-card__meta-item">
                           {actualTransactionLabel}
                         </span>
+                      )}
+                      {showSuggestedCreateInLinkedColumn && (
+                        <>
+                          <span className="bank-workbench-mobile-card__meta-item">
+                            {t('documents.bankWorkbench.noLinkedTransaction', 'No linked transaction')}
+                          </span>
+                          <span className="bank-workbench-mobile-card__meta-item">
+                            <span className="bank-workbench-line__suggestion bank-workbench-line__suggestion--create_new">
+                              {t('documents.bankWorkbench.suggested.create', 'Suggested create')}
+                            </span>
+                          </span>
+                        </>
                       )}
                       {dateDelta !== null && dateDelta > 0 && (
                         <span className="bank-workbench-mobile-card__meta-item">

@@ -5,6 +5,8 @@ import {
   BarChart3,
   Briefcase,
   Calculator,
+  ChevronDown,
+  ChevronUp,
   ClipboardCheck,
   ClipboardList,
   Landmark,
@@ -15,7 +17,7 @@ import {
   TriangleAlert,
   Wallet,
   type LucideIcon,
-, ChevronDown, ChevronUp } from 'lucide-react';
+} from 'lucide-react';
 import { getLocaleForLanguage } from '../utils/locale';
 import { useAuthStore } from '../stores/authStore';
 import { taxFilingService, TaxFilingSummary } from '../services/taxFilingService';

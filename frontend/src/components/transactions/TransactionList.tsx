@@ -22,11 +22,11 @@ import './TransactionList.css';
 
 type DeductStatus = 'full' | 'partial' | 'none' | 'na';
 
-function getDeductStatus(t: Transaction): DeductStatus {
-  if (!isExpenseTransactionType(t.type)) return 'na';
-  const items = t.line_items;
-  if (!items || items.length === 0) return t.is_deductible ? 'full' : 'none';
-  const deductCount = items.filter((li) => li.is_deductible).length;
+function getDeductStatus(transaction: Transaction): DeductStatus {
+  if (!isExpenseTransactionType(transaction.type)) return 'na';
+  const items = transaction.line_items;
+  if (!items || items.length === 0) return transaction.is_deductible ? 'full' : 'none';
+  const deductCount = items.filter((lineItem) => lineItem.is_deductible).length;
   if (deductCount === items.length) return 'full';
   if (deductCount === 0) return 'none';
   return 'partial';
@@ -90,6 +90,28 @@ const TransactionList = ({
     transaction.recurring_is_active === false
       ? t('recurring.status.paused')
       : t(`recurring.frequency.${transaction.recurring_frequency || 'monthly'}`);
+
+  const renderDeductibleInlineFlag = (transaction: Transaction) => {
+    const deductStatus = getDeductStatus(transaction);
+    if (deductStatus === 'na') return null;
+
+    const title =
+      deductStatus === 'full'
+        ? `${t('transactions.deductible')}: ${t('common.yes', 'Yes')}`
+        : deductStatus === 'partial'
+          ? `${t('transactions.deductible')}: ${t('transactions.partiallyDeductible', 'Partial')}`
+          : `${t('transactions.deductible')}: ${t('common.no', 'No')}`;
+
+    return (
+      <span
+        className={`inline-flag deductible-inline-flag deductible-inline-flag--${deductStatus}`}
+        title={title}
+        aria-label={title}
+      >
+        {deductStatus === 'full' ? '✓' : deductStatus === 'partial' ? '◐' : '✕'}
+      </span>
+    );
+  };
 
   const renderActionButtons = (transaction: Transaction) => {
     const hasIndicators = Boolean(
@@ -228,18 +250,17 @@ const TransactionList = ({
                     type="checkbox"
                     checked={
                       transactions.length > 0 &&
-                      transactions.every((t) => selectedIds?.has(t.id))
+                      transactions.every((transaction) => selectedIds?.has(transaction.id))
                     }
-                    ref={(el) => {
-                      if (el) {
-                        const allSelected =
-                          transactions.length > 0 &&
-                          transactions.every((t) => selectedIds?.has(t.id));
-                        const someSelected = transactions.some((t) =>
-                          selectedIds?.has(t.id)
-                        );
-                        el.indeterminate = someSelected && !allSelected;
-                      }
+                    ref={(element) => {
+                      if (!element) return;
+                      const allSelected =
+                        transactions.length > 0 &&
+                        transactions.every((transaction) => selectedIds?.has(transaction.id));
+                      const someSelected = transactions.some((transaction) =>
+                        selectedIds?.has(transaction.id)
+                      );
+                      element.indeterminate = someSelected && !allSelected;
                     }}
                     onChange={() => onToggleSelectAll?.()}
                     aria-label={t('transactions.selectAll', 'Select all')}
@@ -251,13 +272,14 @@ const TransactionList = ({
               <th>{t('transactions.category')}</th>
               <th>{t('transactions.amount')}</th>
               <th>{t('transactions.type')}</th>
-              <th>{t('transactions.deductible')}</th>
+              <th>{t('transactions.bankReconciled')}</th>
               <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {transactions.map((transaction) => {
               const systemGenerated = isSystemGeneratedTransaction(transaction);
+
               return (
                 <tr
                   key={transaction.id}
@@ -267,7 +289,7 @@ const TransactionList = ({
                   onClick={() => onView(transaction)}
                 >
                   {onToggleSelect && (
-                    <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
+                    <td className="col-checkbox" onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedIds?.has(transaction.id) || false}
@@ -301,15 +323,7 @@ const TransactionList = ({
                         </span>
                       ) : null}
 
-                      {transaction.bank_reconciled ? (
-                        <span
-                          className="inline-flag reconciled-badge"
-                          title={t('transactions.bankReconciled')}
-                          aria-label={t('transactions.bankReconciled')}
-                        >
-                          <Landmark size={13} />
-                        </span>
-                      ) : null}
+                      {renderDeductibleInlineFlag(transaction)}
                     </span>
                   </td>
                   <td>
@@ -330,19 +344,19 @@ const TransactionList = ({
                     </span>
                   </td>
                   <td>
-                    {(() => {
-                      const ds = getDeductStatus(transaction);
-                      if (ds === 'na') return <span className="deductible-na">-</span>;
-                      if (ds === 'full') return <span className="deductible-yes">✓</span>;
-                      if (ds === 'partial') {
-                        return <span className="deductible-partial">◐</span>;
-                      }
-                      return <span className="deductible-no">✕</span>;
-                    })()}
+                    {transaction.bank_reconciled ? (
+                      <span
+                        className="reconciled-status reconciled-status--yes"
+                        title={t('transactions.bankReconciled')}
+                        aria-label={t('transactions.bankReconciled')}
+                      >
+                        <Landmark size={15} />
+                      </span>
+                    ) : (
+                      <span className="reconciled-status reconciled-status--no">-</span>
+                    )}
                   </td>
-                  <td className="transaction-row-actions">
-                    {renderActionButtons(transaction)}
-                  </td>
+                  <td className="transaction-row-actions">{renderActionButtons(transaction)}</td>
                 </tr>
               );
             })}
@@ -353,6 +367,8 @@ const TransactionList = ({
       <div className="transaction-mobile-list">
         {transactions.map((transaction) => {
           const systemGenerated = isSystemGeneratedTransaction(transaction);
+          const deductStatus = getDeductStatus(transaction);
+
           return (
             <article
               key={transaction.id}
@@ -374,23 +390,32 @@ const TransactionList = ({
                     {t(`transactions.categories.${transaction.category}`)}
                   </span>
                 ) : null}
+
                 <span className={`type-badge ${transaction.type}`}>
                   {t(`transactions.types.${transaction.type}`)}
                 </span>
-                {isExpenseTransactionType(transaction.type) ? (
+
+                {transaction.bank_reconciled ? (
+                  <span className="transaction-chip reconciled">
+                    <Landmark size={12} />
+                    <span>{t('transactions.bankReconciled')}</span>
+                  </span>
+                ) : null}
+
+                {deductStatus !== 'na' ? (
                   <span
                     className={`transaction-chip ${
-                      getDeductStatus(transaction) === 'full'
+                      deductStatus === 'full'
                         ? 'positive'
-                        : getDeductStatus(transaction) === 'partial'
+                        : deductStatus === 'partial'
                           ? 'warning'
                           : 'neutral'
                     }`}
                   >
                     {t('transactions.deductible')}:{' '}
-                    {getDeductStatus(transaction) === 'full'
+                    {deductStatus === 'full'
                       ? t('common.yes', 'Yes')
-                      : getDeductStatus(transaction) === 'partial'
+                      : deductStatus === 'partial'
                         ? t('transactions.partiallyDeductible', 'Partial')
                         : t('common.no', 'No')}
                   </span>
@@ -427,18 +452,9 @@ const TransactionList = ({
                     <span>{t('transactions.hasDocument')}</span>
                   </span>
                 ) : null}
-
-                {transaction.bank_reconciled ? (
-                  <span className="transaction-chip reconciled">
-                    <Landmark size={12} />
-                    <span>{t('transactions.bankReconciled')}</span>
-                  </span>
-                ) : null}
               </div>
 
-              <div className="transaction-card-actions">
-                {renderActionButtons(transaction)}
-              </div>
+              <div className="transaction-card-actions">{renderActionButtons(transaction)}</div>
             </article>
           );
         })}

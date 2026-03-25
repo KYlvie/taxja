@@ -127,6 +127,28 @@
   color: #059669 !important;
 }
 
+.deductible-inline-flag {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.deductible-inline-flag--full {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+
+.deductible-inline-flag--partial {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.deductible-inline-flag--none {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--color-text-muted);
+}
+
 .transaction-chip.needs-review {
   background: rgba(245, 158, 11, 0.12);
   color: #d97706;
@@ -216,6 +238,22 @@
 .deductible-no {
   color: var(--color-text-muted);
   font-size: 16px;
+}
+
+.reconciled-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.reconciled-status--yes {
+  color: #059669;
+}
+
+.reconciled-status--no {
+  color: var(--color-text-muted);
 }
 
 .transaction-row-actions {
