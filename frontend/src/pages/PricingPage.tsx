@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useSubscriptionStore } from '../stores/subscriptionStore';
+import { useSubscriptionStore, type Plan } from '../stores/subscriptionStore';
 import { useConfirm } from '../hooks/useConfirm';
 import { useAuthStore } from '../stores/authStore';
 import { formatCurrency, getLocaleForLanguage } from '../utils/locale';
 import SubpageBackLink from '../components/common/SubpageBackLink';
+import api from '../services/api';
 import './PricingPage.css';
 
 interface PlanFeature {
@@ -43,6 +44,22 @@ const PricingPage: React.FC = () => {
   const currentPlanType = currentPlan?.plan_type || 'free';
   const { confirm: showConfirm, alert: showAlert } = useConfirm();
   const isAdmin = user?.is_admin === true;
+
+  // Fetch plans from API to get correct IDs (avoid hardcoding)
+  const [apiPlans, setApiPlans] = useState<Plan[]>([]);
+  const plansFetched = useRef(false);
+  useEffect(() => {
+    if (plansFetched.current) return;
+    plansFetched.current = true;
+    api.get('/subscriptions/plans').then((res) => setApiPlans(res.data)).catch(() => {});
+  }, []);
+
+  const getPlanId = (planType: 'plus' | 'pro'): number => {
+    const found = apiPlans.find((p) => p.plan_type === planType);
+    if (found) return found.id;
+    // Fallback: assume sequential IDs (Free=1, Plus=2, Pro=3)
+    return planType === 'plus' ? 2 : 3;
+  };
 
   const plans: PlanDetails[] = [
     {
@@ -157,21 +174,24 @@ const PricingPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const planId = planType === 'plus' ? 3 : 4;
+      const planId = getPlanId(planType);
 
       if (hasActiveStripeSubscription) {
-        // Existing subscriber switching plan → Stripe Customer Portal
+        // Existing Stripe subscriber switching plan → use Stripe API
         if (tierOrder[planType] > tierOrder[currentPlanType]) {
           await upgradeSubscription(planId, billingCycle);
         } else {
           await downgradeSubscription(planId, billingCycle);
         }
       } else {
-        // New subscription — create Stripe Checkout session
+        // No Stripe subscription yet → always go through Stripe Checkout
         const successUrl = `${window.location.origin}/checkout/success`;
         const cancelUrl = `${window.location.origin}/pricing`;
-        const { url } = await createCheckoutSession(planId, billingCycle, successUrl, cancelUrl);
-        window.location.href = url;
+        const result = await createCheckoutSession(planId, billingCycle, successUrl, cancelUrl);
+        if (result.url) {
+          window.location.href = result.url;
+          return; // prevent setLoading(false) before redirect
+        }
       }
     } catch (error) {
       console.error('Failed to change plan:', error);

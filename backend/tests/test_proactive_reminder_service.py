@@ -19,6 +19,12 @@ def test_property_health_reminder_links_directly_to_asset_detail(db_session):
         postal_code="1040",
         name="macbook",
     )
+    create_test_document(
+        db_session,
+        user=user,
+        document_type=DocumentType.RECEIPT,
+        file_name="seed-receipt.pdf",
+    )
 
     reminders = ProactiveReminderService(db_session).get_reminders(user, 2024)
 

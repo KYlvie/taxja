@@ -90,7 +90,7 @@ def build():
         f.write("-- try to re-run migrations on an already-initialized DB.\n")
         f.write("-- =============================================================\n\n")
         f.write("INSERT INTO public.alembic_version (version_num)\n")
-        f.write("  VALUES ('068_resync_doctypes')\n")
+        f.write("  VALUES ('073_add_document_year_fields')\n")
         f.write("  ON CONFLICT DO NOTHING;\n")
 
     size = OUTPUT_FILE.stat().st_size
