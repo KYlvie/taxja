@@ -323,7 +323,11 @@ class TaxHealthService:
                         key="healthCheck.missingAfaSetup",
                         params={"property_count": len(properties)},
                         potential_savings=potential,
-                        action_url="/properties",
+                        action_data={
+                            "detail_items": [
+                                self._asset_detail_item(prop) for prop in properties
+                            ],
+                        },
                         action_label_key="healthCheck.actions.goToProperties",
                     )
                 )
@@ -378,7 +382,10 @@ class TaxHealthService:
                         key="healthCheck.propertyNoAfaRate",
                         params={"address": address},
                         potential_savings=potential,
-                        action_url="/properties",
+                        action_url=f"/properties/{prop.id}",
+                        action_data={
+                            "detail_items": [self._asset_detail_item(prop)],
+                        },
                         action_label_key="healthCheck.actions.goToProperties",
                     )
                 )
@@ -394,7 +401,10 @@ class TaxHealthService:
                         severity=severity,
                         key="healthCheck.propertyNoRentalIncome",
                         params={"address": address},
-                        action_url="/properties",
+                        action_url=f"/properties/{prop.id}",
+                        action_data={
+                            "detail_items": [self._asset_detail_item(prop)],
+                        },
                         action_label_key="healthCheck.actions.goToProperties",
                     )
                 )
@@ -407,7 +417,10 @@ class TaxHealthService:
                         severity="medium",
                         key="healthCheck.propertyNoKaufvertrag",
                         params={"address": address},
-                        action_url="/properties",
+                        action_url=f"/properties/{prop.id}",
+                        action_data={
+                            "detail_items": [self._asset_detail_item(prop)],
+                        },
                         action_label_key="healthCheck.actions.goToProperties",
                     )
                 )
@@ -499,16 +512,17 @@ class TaxHealthService:
             )
 
         # Low-confidence documents needing review
-        low_conf_count = (
-            self.db.query(func.count(Document.id))
+        low_conf_docs = (
+            self.db.query(Document)
             .filter(
                 Document.user_id == user.id,
                 Document.confidence_score < Decimal("0.6"),
                 Document.confidence_score.isnot(None),
             )
-            .scalar()
-            or 0
+            .order_by(Document.uploaded_at.desc())
+            .all()
         )
+        low_conf_count = len(low_conf_docs)
         if low_conf_count > 0:
             items.append(
                 self._item(
@@ -516,7 +530,16 @@ class TaxHealthService:
                     severity="medium",
                     key="healthCheck.lowConfidenceDocuments",
                     params={"count": low_conf_count},
-                    action_url="/documents",
+                    action_url=(
+                        f"/documents/{low_conf_docs[0].id}"
+                        if low_conf_count == 1
+                        else None
+                    ),
+                    action_data={
+                        "detail_items": [
+                            self._document_detail_item(doc) for doc in low_conf_docs
+                        ],
+                    },
                     action_label_key="healthCheck.actions.reviewDocuments",
                 )
             )
@@ -650,6 +673,7 @@ class TaxHealthService:
         potential_savings: Optional[float] = None,
         action_url: Optional[str] = None,
         action_label_key: Optional[str] = None,
+        action_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return {
             "category": category,
@@ -659,6 +683,26 @@ class TaxHealthService:
             "potential_savings": potential_savings,
             "action_url": action_url,
             "action_label_key": action_label_key,
+            "action_data": action_data or {},
+        }
+
+    @staticmethod
+    def _asset_detail_item(prop: Property) -> Dict[str, Any]:
+        label = prop.name or prop.address or str(prop.id)
+        return {
+            "kind": "asset",
+            "asset_id": str(prop.id),
+            "label": label,
+            "href": f"/properties/{prop.id}",
+        }
+
+    @staticmethod
+    def _document_detail_item(doc: Document) -> Dict[str, Any]:
+        return {
+            "kind": "document",
+            "document_id": doc.id,
+            "label": doc.file_name,
+            "href": f"/documents/{doc.id}",
         }
 
     def _empty_result(self, tax_year: int) -> dict:

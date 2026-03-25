@@ -375,6 +375,11 @@ class ProactiveReminderService:
                         "category": category,
                         "potential_savings": item.get("potential_savings"),
                         "action_label_key": item.get("action_label_key"),
+                        **(
+                            item.get("action_data")
+                            if isinstance(item.get("action_data"), dict)
+                            else {}
+                        ),
                     },
                 }
             )
