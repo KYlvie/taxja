@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import Select from '../common/Select';
@@ -709,11 +710,22 @@ const TaxFormPreview = () => {
       </div>
 
       {/* ─── Controls: Year + Generate ─── */}
-      {hasTaxFormAccess && showTaxPackagePanel && (
-        <div className="tf-tax-package-panel">
-          <div className="tf-tax-package-title">
-            {t('reports.taxForm.exportPackagePanelTitle', 'Export tax package')}
-          </div>
+      {hasTaxFormAccess && showTaxPackagePanel && createPortal(
+        <div className="tf-tax-package-overlay" onClick={() => setShowTaxPackagePanel(false)}>
+          <div className="tf-tax-package-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="tf-tax-package-modal-header">
+              <div className="tf-tax-package-title">
+                {t('reports.taxForm.exportPackagePanelTitle', 'Export tax package')}
+              </div>
+              <button
+                type="button"
+                className="tf-tax-package-modal-close"
+                onClick={() => setShowTaxPackagePanel(false)}
+                aria-label={t('common.close', 'Close')}
+              >
+                ✕
+              </button>
+            </div>
           <p className="tf-tax-package-description">
             {t(
               'reports.taxForm.exportPackagePanelDescription',
@@ -848,7 +860,9 @@ const TaxFormPreview = () => {
               )}
             </div>
           )}
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       <div className="tf-controls">
