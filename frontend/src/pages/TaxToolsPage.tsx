@@ -15,7 +15,7 @@ import {
   TriangleAlert,
   Wallet,
   type LucideIcon,
-} from 'lucide-react';
+, ChevronDown, ChevronUp } from 'lucide-react';
 import { getLocaleForLanguage } from '../utils/locale';
 import { useAuthStore } from '../stores/authStore';
 import { taxFilingService, TaxFilingSummary } from '../services/taxFilingService';
@@ -44,14 +44,23 @@ const TaxToolsSectionHeading = ({
   icon,
   tone,
   title,
+  collapsed,
+  onToggle,
 }: {
   icon: LucideIcon;
   tone: 'emerald' | 'amber' | 'violet' | 'rose';
   title: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }) => (
-  <h3 className="tax-tools-heading">
+  <h3
+    className={`tax-tools-heading ${onToggle ? 'collapsible' : ''}`}
+    onClick={onToggle}
+    style={onToggle ? { cursor: 'pointer', userSelect: 'none' } : undefined}
+  >
     <FuturisticIcon icon={icon} tone={tone} size="sm" />
     <span>{title}</span>
+    {onToggle && (collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />)}
   </h3>
 );
 
@@ -73,6 +82,18 @@ const TaxToolsPage = () => {
   const [filingSummary, setFilingSummary] = useState<TaxFilingSummary | null>(null);
   const [filingLoading, setFilingLoading] = useState(false);
   const [auditYear, setAuditYear] = useState(currentYear);
+
+  const [collapsedTools, setCollapsedTools] = useState<Set<string>>(
+    new Set(['taxPosition', 'aiAdvisor', 'filing', 'audit'])
+  );
+  const toggleTool = (key: string) => {
+    setCollapsedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const hasTransactions = Boolean(
     dashboardData && (dashboardData.yearToDateIncome > 0 || dashboardData.yearToDateExpenses > 0),
@@ -164,15 +185,19 @@ const TaxToolsPage = () => {
           <TaxToolsSectionHeading
             icon={Landmark}
             tone="emerald"
-            title={t('taxTools.page.taxPosition', 'Tax position')}
+            title={t('taxTools.page.taxPosition', 'Tax position')} collapsed={collapsedTools.has('taxPosition')} onToggle={() => toggleTool('taxPosition')}
           />
-          <RefundEstimate
-            estimatedRefund={dashboardData?.estimatedRefund}
-            withheldTax={dashboardData?.withheldTax}
-            calculatedTax={dashboardData?.calculatedTax}
-            hasLohnzettel={dashboardData?.hasLohnzettel}
-          />
-        </section>
+          {!collapsedTools.has('audit') && (<>
+      {!collapsedTools.has('taxPosition') && (
+            <RefundEstimate
+              estimatedRefund={dashboardData?.estimatedRefund}
+              withheldTax={dashboardData?.withheldTax}
+              calculatedTax={dashboardData?.calculatedTax}
+              hasLohnzettel={dashboardData?.hasLohnzettel}
+            />
+          )}
+            </>)}
+    </section>
       )}
       {hasTransactions && <AITaxAdvisor />}
       {!showRefundEstimate && !hasTransactions && (
@@ -193,8 +218,9 @@ const TaxToolsPage = () => {
       <TaxToolsSectionHeading
         icon={BarChart3}
         tone="violet"
-        title={t('taxTools.page.filingSummary', 'Annual Tax Data Summary')}
+        title={t('taxTools.page.filingSummary', 'Annual Tax Data Summary')} collapsed={collapsedTools.has('filing')} onToggle={() => toggleTool('filing')}
       />
+      {!collapsedTools.has('filing') && (<>
       {filingYears.length === 0 ? (
         <p className="text-muted">{t('taxTools.page.noYears', 'No confirmed tax data yet')}</p>
       ) : (
@@ -422,6 +448,7 @@ const TaxToolsPage = () => {
           )}
         </>
       )}
+        </>)}
     </section>
   );
 
@@ -432,7 +459,7 @@ const TaxToolsPage = () => {
       <TaxToolsSectionHeading
         icon={NotebookTabs}
         tone="rose"
-        title={t('taxTools.page.auditChecklist', 'Audit Checklist')}
+        title={t('taxTools.page.auditChecklist', 'Audit Checklist')} collapsed={collapsedTools.has('audit')} onToggle={() => toggleTool('audit')}
       />
       <div className="year-selector">
         <label htmlFor="audit-year">{t('taxTools.page.auditSelectYear', 'Select tax year')}</label>

@@ -255,8 +255,13 @@
   border-bottom: none;
 }
 
+.bank-workbench-table--reconciliation th:nth-child(6),
+.bank-workbench-table--reconciliation td:nth-child(6) {
+  min-width: 112px;
+}
+
 .bank-workbench-table__actions {
-  width: 172px;
+  width: 104px;
 }
 
 .bank-workbench-table__static-action {
@@ -267,7 +272,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -275,10 +280,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--color-surface);
   color: var(--color-text-muted);
   cursor: pointer;
@@ -291,8 +296,8 @@
 }
 
 .bank-workbench-utility-btn .icon-svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .bank-workbench-utility-btn:hover:not(:disabled) {
@@ -366,6 +371,9 @@
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 .bank-workbench-line__status--pending_review {
