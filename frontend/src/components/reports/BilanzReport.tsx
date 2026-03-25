@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Select from '../common/Select';
 import reportService, { BilanzReport as BilanzData } from '../../services/reportService';

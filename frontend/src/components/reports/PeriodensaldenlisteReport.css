@@ -46,9 +46,9 @@
 .periodensaldenliste-report .summary-row { display: flex; align-items: center; padding: 4px 0; font-size: 0.82rem; gap: 8px; }
 .periodensaldenliste-report .summary-row.total { font-weight: 700; font-size: 0.88rem; border-top: 2px solid #1e40af; padding-top: 10px; margin-top: 6px; }
 .periodensaldenliste-report .summary-label { min-width: 120px; flex-shrink: 0; font-weight: 600; }
-.periodensaldenliste-report .summary-months { display: flex; gap: 4px; flex-wrap: nowrap; }
-.periodensaldenliste-report .summary-month-val { min-width: 75px; text-align: right; font-size: 0.78rem; }
-.periodensaldenliste-report .summary-gesamt-val { min-width: 85px; text-align: right; font-weight: 700; font-size: 0.82rem; border-left: 1px solid #d1d5db; padding-left: 6px; }
+.periodensaldenliste-report .summary-months { display: grid; grid-template-columns: repeat(12, 1fr) auto; }
+.periodensaldenliste-report .summary-month-val { text-align: right; font-size: 0.78rem; padding: 0 4px; white-space: nowrap; }
+.periodensaldenliste-report .summary-gesamt-val { text-align: right; font-weight: 700; font-size: 0.82rem; border-left: 1px solid #d1d5db; padding-left: 6px; white-space: nowrap; }
 
 .positive { color: #059669; }
 .negative { color: #dc2626; }

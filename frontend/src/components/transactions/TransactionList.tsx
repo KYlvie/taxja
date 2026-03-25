@@ -84,7 +84,7 @@ const TransactionList = ({
       : t(`recurring.frequency.${transaction.recurring_frequency || 'monthly'}`);
 
   const renderActionButtons = (transaction: Transaction) => {
-    const hasIndicators = Boolean(transaction.document_id || transaction.bank_reconciled || (transaction.needs_review && !transaction.reviewed));
+    const hasIndicators = Boolean(transaction.document_id || (transaction.needs_review && !transaction.reviewed));
 
     return (
       <>
@@ -181,16 +181,6 @@ const TransactionList = ({
               </button>
             ) : null}
 
-            {transaction.bank_reconciled ? (
-              <span
-                className="transaction-action-indicator transaction-action-indicator--reconciled"
-                title={t('transactions.bankReconciled')}
-                aria-label={t('transactions.bankReconciled')}
-              >
-                <Landmark size={16} />
-              </span>
-            ) : null}
-
             {transaction.needs_review && !transaction.reviewed ? (
               <span
                 className="transaction-action-indicator transaction-action-indicator--warning"
@@ -284,6 +274,16 @@ const TransactionList = ({
                         title={t('transactions.systemGenerated')}
                       >
                         <Bot size={13} />
+                      </span>
+                    ) : null}
+
+                    {transaction.bank_reconciled ? (
+                      <span
+                        className="inline-flag reconciled-badge"
+                        title={t('transactions.bankReconciled')}
+                        aria-label={t('transactions.bankReconciled')}
+                      >
+                        <Landmark size={13} />
                       </span>
                     ) : null}
                   </span>
