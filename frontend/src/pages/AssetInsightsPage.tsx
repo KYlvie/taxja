@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Building2, Package, LibraryBig, Scale, type LucideIcon , ChevronDown, ChevronUp } from 'lucide-react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Building2, Package, LibraryBig, Scale, type LucideIcon, ChevronDown, ChevronUp } from 'lucide-react';
 import Select from '../components/common/Select';
 import FuturisticIcon from '../components/common/FuturisticIcon';
 import SubpageBackLink from '../components/common/SubpageBackLink';
@@ -206,7 +205,7 @@ const AssetInsightsPage = () => {
 
       <div className="tax-tools-content">
         {/* ── Section 0: Asset-Liability Summary ── */}
-        <section className="asset-report-section">
+        <section className={`asset-report-section ${collapsedSections.has('summary') ? 'collapsed' : ''}`}>
           <SectionHeading icon={Scale} tone="cyan" title={t('assetOverview.liabilitySummary', 'Asset-Liability Summary')} collapsed={collapsedSections.has('summary')} onToggle={() => toggleSection('summary')} />
           {!collapsedSections.has('summary') && (<>
           <p className="tax-tools-section-subtitle">
@@ -241,7 +240,7 @@ const AssetInsightsPage = () => {
 </section>
 
         {/* ── Section A: Property Portfolio ── */}
-        <section className="asset-report-section">
+        <section className={`asset-report-section ${collapsedSections.has('portfolio') ? 'collapsed' : ''}`}>
           <SectionHeading icon={Building2} tone="cyan" title={t('properties.portfolio.title', 'Property Portfolio')} collapsed={collapsedSections.has('portfolio')} onToggle={() => toggleSection('portfolio')} />
           {!collapsedSections.has('portfolio') && (<>
           <p className="tax-tools-section-subtitle">
@@ -279,7 +278,7 @@ const AssetInsightsPage = () => {
 </section>
 
         {/* ── Section B: Other Assets (Devices, Vehicles, etc.) ── */}
-        <section className="asset-report-section">
+        <section className={`asset-report-section ${collapsedSections.has('otherAssets') ? 'collapsed' : ''}`}>
           <SectionHeading icon={Package} tone="amber" title={t('properties.assetOverview.title', 'Other Assets')} collapsed={collapsedSections.has('otherAssets')} onToggle={() => toggleSection('otherAssets')} />
           {!collapsedSections.has('otherAssets') && (<>
           <p className="tax-tools-section-subtitle">
@@ -363,7 +362,7 @@ const AssetInsightsPage = () => {
 </section>
 
         {/* ── Section C: Individual Asset Report ── */}
-        <section className="asset-report-section">
+        <section className={`asset-report-section ${collapsedSections.has('assetReport') ? 'collapsed' : ''}`}>
           <SectionHeading icon={LibraryBig} tone="violet" title={t('properties.assetReport.title', 'Individual Asset Report')} collapsed={collapsedSections.has('assetReport')} onToggle={() => toggleSection('assetReport')} />
           {!collapsedSections.has('assetReport') && (<>
           {allAssets.length === 0 ? (

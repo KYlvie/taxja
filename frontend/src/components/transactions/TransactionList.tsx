@@ -34,9 +34,9 @@ function getDeductStatus(t: Transaction): DeductStatus {
 
 function isSystemGeneratedTransaction(transaction: Transaction): boolean {
   return Boolean(
-    transaction.is_system_generated
-    || transaction.source_recurring_id
-    || transaction.parent_recurring_id
+    transaction.is_system_generated ||
+      transaction.source_recurring_id ||
+      transaction.parent_recurring_id
   );
 }
 
@@ -92,7 +92,9 @@ const TransactionList = ({
       : t(`recurring.frequency.${transaction.recurring_frequency || 'monthly'}`);
 
   const renderActionButtons = (transaction: Transaction) => {
-    const hasIndicators = Boolean(transaction.document_id || (transaction.needs_review && !transaction.reviewed));
+    const hasIndicators = Boolean(
+      transaction.document_id || (transaction.needs_review && !transaction.reviewed)
+    );
 
     return (
       <>
@@ -134,7 +136,9 @@ const TransactionList = ({
               className="transaction-action-btn"
               onClick={(event) => {
                 event.stopPropagation();
-                onEditRecurring((transaction.source_recurring_id || transaction.parent_recurring_id)!);
+                onEditRecurring(
+                  (transaction.source_recurring_id || transaction.parent_recurring_id)!
+                );
               }}
               title={t('recurring.edit.title')}
               aria-label={t('recurring.edit.title')}
@@ -222,11 +226,18 @@ const TransactionList = ({
                 <th className="col-checkbox">
                   <input
                     type="checkbox"
-                    checked={transactions.length > 0 && transactions.every((t) => selectedIds?.has(t.id))}
+                    checked={
+                      transactions.length > 0 &&
+                      transactions.every((t) => selectedIds?.has(t.id))
+                    }
                     ref={(el) => {
                       if (el) {
-                        const allSelected = transactions.length > 0 && transactions.every((t) => selectedIds?.has(t.id));
-                        const someSelected = transactions.some((t) => selectedIds?.has(t.id));
+                        const allSelected =
+                          transactions.length > 0 &&
+                          transactions.every((t) => selectedIds?.has(t.id));
+                        const someSelected = transactions.some((t) =>
+                          selectedIds?.has(t.id)
+                        );
                         el.indeterminate = someSelected && !allSelected;
                       }
                     }}
@@ -248,85 +259,91 @@ const TransactionList = ({
             {transactions.map((transaction) => {
               const systemGenerated = isSystemGeneratedTransaction(transaction);
               return (
-              <tr
-                key={transaction.id}
-                className={`transaction-row ${transaction.type}${selectedIds?.has(transaction.id) ? ' selected' : ''}`}
-                onClick={() => onView(transaction)}
-              >
-                {onToggleSelect && (
-                  <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds?.has(transaction.id) || false}
-                      onChange={() => onToggleSelect(transaction.id)}
-                      aria-label={t('transactions.selectTransaction', 'Select')}
-                    />
-                  </td>
-                )}
-                <td>{formatDate(transaction.date)}</td>
-                <td className="description">
-                  <span className="description-text">{transaction.description}</span>
-                  <span className="transaction-inline-flags">
-                    {transaction.is_recurring && !systemGenerated ? (
-                      <span
-                        className={`inline-flag recurring-badge ${
-                          transaction.recurring_is_active === false ? 'paused' : ''
-                        }`}
-                        title={recurringLabel(transaction)}
-                      >
-                        <RefreshCw size={13} />
-                      </span>
-                    ) : null}
-
-                    {systemGenerated ? (
-                      <span
-                        className="inline-flag system-generated-badge"
-                        title={t('transactions.systemGenerated')}
-                        aria-label={t('transactions.systemGenerated')}
-                      >
-                        <Bot size={13} />
-                      </span>
-                    ) : null}
-
-                    {transaction.bank_reconciled ? (
-                      <span
-                        className="inline-flag reconciled-badge"
-                        title={t('transactions.bankReconciled')}
-                        aria-label={t('transactions.bankReconciled')}
-                      >
-                        <Landmark size={13} />
-                      </span>
-                    ) : null}
-                  </span>
-                </td>
-                <td>
-                  {transaction.category ? (
-                    <span className="category-badge">
-                      {t(`transactions.categories.${transaction.category}`)}
-                    </span>
-                  ) : (
-                    <span className="category-empty">-</span>
+                <tr
+                  key={transaction.id}
+                  className={`transaction-row ${transaction.type}${
+                    selectedIds?.has(transaction.id) ? ' selected' : ''
+                  }`}
+                  onClick={() => onView(transaction)}
+                >
+                  {onToggleSelect && (
+                    <td className="col-checkbox" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds?.has(transaction.id) || false}
+                        onChange={() => onToggleSelect(transaction.id)}
+                        aria-label={t('transactions.selectTransaction', 'Select')}
+                      />
+                    </td>
                   )}
-                </td>
-                <td className={`amount ${getTransactionAmountTone(transaction.type)}`}>
-                  {formatAmount(transaction.amount, transaction.type)}
-                </td>
-                <td>
-                  <span className={`type-badge ${transaction.type}`}>
-                    {t(`transactions.types.${transaction.type}`)}
-                  </span>
-                </td>
-                <td>
-                  {(() => {
-                    const ds = getDeductStatus(transaction);
-                    if (ds === 'na') return <span className="deductible-na">-</span>;
-                    if (ds === 'full') return <span className="deductible-yes">✓</span>;
-                    if (ds === 'partial') return <span className="deductible-partial">◐</span>;
-                    return <span className="deductible-no">✕</span>;
-                  })()}
-                </td>
-                <td className="transaction-row-actions">{renderActionButtons(transaction)}</td>
-              </tr>
+                  <td>{formatDate(transaction.date)}</td>
+                  <td className="description">
+                    <span className="description-text">{transaction.description}</span>
+                    <span className="transaction-inline-flags">
+                      {transaction.is_recurring && !systemGenerated ? (
+                        <span
+                          className={`inline-flag recurring-badge ${
+                            transaction.recurring_is_active === false ? 'paused' : ''
+                          }`}
+                          title={recurringLabel(transaction)}
+                        >
+                          <RefreshCw size={13} />
+                        </span>
+                      ) : null}
+
+                      {systemGenerated ? (
+                        <span
+                          className="inline-flag system-generated-badge"
+                          title={t('transactions.systemGenerated')}
+                          aria-label={t('transactions.systemGenerated')}
+                        >
+                          <Bot size={13} />
+                        </span>
+                      ) : null}
+
+                      {transaction.bank_reconciled ? (
+                        <span
+                          className="inline-flag reconciled-badge"
+                          title={t('transactions.bankReconciled')}
+                          aria-label={t('transactions.bankReconciled')}
+                        >
+                          <Landmark size={13} />
+                        </span>
+                      ) : null}
+                    </span>
+                  </td>
+                  <td>
+                    {transaction.category ? (
+                      <span className="category-badge">
+                        {t(`transactions.categories.${transaction.category}`)}
+                      </span>
+                    ) : (
+                      <span className="category-empty">-</span>
+                    )}
+                  </td>
+                  <td className={`amount ${getTransactionAmountTone(transaction.type)}`}>
+                    {formatAmount(transaction.amount, transaction.type)}
+                  </td>
+                  <td>
+                    <span className={`type-badge ${transaction.type}`}>
+                      {t(`transactions.types.${transaction.type}`)}
+                    </span>
+                  </td>
+                  <td>
+                    {(() => {
+                      const ds = getDeductStatus(transaction);
+                      if (ds === 'na') return <span className="deductible-na">-</span>;
+                      if (ds === 'full') return <span className="deductible-yes">✓</span>;
+                      if (ds === 'partial') {
+                        return <span className="deductible-partial">◐</span>;
+                      }
+                      return <span className="deductible-no">✕</span>;
+                    })()}
+                  </td>
+                  <td className="transaction-row-actions">
+                    {renderActionButtons(transaction)}
+                  </td>
+                </tr>
               );
             })}
           </tbody>
@@ -337,83 +354,92 @@ const TransactionList = ({
         {transactions.map((transaction) => {
           const systemGenerated = isSystemGeneratedTransaction(transaction);
           return (
-          <article
-            key={transaction.id}
-            className={`transaction-card ${transaction.type}`}
-            onClick={() => onView(transaction)}
-          >
-            <div className="transaction-card-top">
-              <div className="transaction-card-date">{formatDate(transaction.date)}</div>
-              <div className={`amount ${getTransactionAmountTone(transaction.type)}`}>
-                {formatAmount(transaction.amount, transaction.type)}
+            <article
+              key={transaction.id}
+              className={`transaction-card ${transaction.type}`}
+              onClick={() => onView(transaction)}
+            >
+              <div className="transaction-card-top">
+                <div className="transaction-card-date">{formatDate(transaction.date)}</div>
+                <div className={`amount ${getTransactionAmountTone(transaction.type)}`}>
+                  {formatAmount(transaction.amount, transaction.type)}
+                </div>
               </div>
-            </div>
 
-            <div className="transaction-card-description">{transaction.description}</div>
+              <div className="transaction-card-description">{transaction.description}</div>
 
-            <div className="transaction-card-tags">
-              {transaction.category ? (
-                <span className="category-badge">
-                  {t(`transactions.categories.${transaction.category}`)}
+              <div className="transaction-card-tags">
+                {transaction.category ? (
+                  <span className="category-badge">
+                    {t(`transactions.categories.${transaction.category}`)}
+                  </span>
+                ) : null}
+                <span className={`type-badge ${transaction.type}`}>
+                  {t(`transactions.types.${transaction.type}`)}
                 </span>
-              ) : null}
-              <span className={`type-badge ${transaction.type}`}>
-                {t(`transactions.types.${transaction.type}`)}
-              </span>
-              {isExpenseTransactionType(transaction.type) ? (
-                <span
-                  className={`transaction-chip ${getDeductStatus(transaction) === 'full' ? 'positive' : getDeductStatus(transaction) === 'partial' ? 'warning' : 'neutral'}`}
-                >
-                  {t('transactions.deductible')}: {
-                    getDeductStatus(transaction) === 'full' ? t('common.yes', 'Yes')
-                    : getDeductStatus(transaction) === 'partial' ? t('transactions.partiallyDeductible', 'Partial')
-                    : t('common.no', 'No')
-                  }
-                </span>
-              ) : null}
+                {isExpenseTransactionType(transaction.type) ? (
+                  <span
+                    className={`transaction-chip ${
+                      getDeductStatus(transaction) === 'full'
+                        ? 'positive'
+                        : getDeductStatus(transaction) === 'partial'
+                          ? 'warning'
+                          : 'neutral'
+                    }`}
+                  >
+                    {t('transactions.deductible')}:{' '}
+                    {getDeductStatus(transaction) === 'full'
+                      ? t('common.yes', 'Yes')
+                      : getDeductStatus(transaction) === 'partial'
+                        ? t('transactions.partiallyDeductible', 'Partial')
+                        : t('common.no', 'No')}
+                  </span>
+                ) : null}
 
-              {transaction.needs_review && !transaction.reviewed ? (
-                <span className="transaction-chip needs-review">
-                  <AlertTriangle size={12} />
-                  <span>{t('transactions.needsReview')}</span>
-                </span>
-              ) : null}
+                {transaction.needs_review && !transaction.reviewed ? (
+                  <span className="transaction-chip needs-review">
+                    <AlertTriangle size={12} />
+                    <span>{t('transactions.needsReview')}</span>
+                  </span>
+                ) : null}
 
-              {transaction.is_recurring && !systemGenerated ? (
-                <span
-                  className={`transaction-chip recurring ${
-                    transaction.recurring_is_active === false ? 'paused' : ''
-                  }`}
-                >
-                  <RefreshCw size={12} />
-                  <span>{recurringLabel(transaction)}</span>
-                </span>
-              ) : null}
+                {transaction.is_recurring && !systemGenerated ? (
+                  <span
+                    className={`transaction-chip recurring ${
+                      transaction.recurring_is_active === false ? 'paused' : ''
+                    }`}
+                  >
+                    <RefreshCw size={12} />
+                    <span>{recurringLabel(transaction)}</span>
+                  </span>
+                ) : null}
 
-              {systemGenerated ? (
-                <span className="transaction-chip neutral">
-                  <Bot size={12} />
-                  <span>{t('transactions.systemGenerated')}</span>
-                </span>
-              ) : null}
+                {systemGenerated ? (
+                  <span className="transaction-chip neutral">
+                    <Bot size={12} />
+                    <span>{t('transactions.systemGenerated')}</span>
+                  </span>
+                ) : null}
 
-              {transaction.document_id ? (
-                <span className="transaction-chip neutral">
-                  <Paperclip size={12} />
-                  <span>{t('transactions.hasDocument')}</span>
-                </span>
-              ) : null}
+                {transaction.document_id ? (
+                  <span className="transaction-chip neutral">
+                    <Paperclip size={12} />
+                    <span>{t('transactions.hasDocument')}</span>
+                  </span>
+                ) : null}
 
-              {transaction.bank_reconciled ? (
-                <span className="transaction-chip reconciled">
-                  <Landmark size={12} />
-                  <span>{t('transactions.bankReconciled')}</span>
-                </span>
-              ) : null}
-            </div>
+                {transaction.bank_reconciled ? (
+                  <span className="transaction-chip reconciled">
+                    <Landmark size={12} />
+                    <span>{t('transactions.bankReconciled')}</span>
+                  </span>
+                ) : null}
+              </div>
 
-            <div className="transaction-card-actions">{renderActionButtons(transaction)}</div>
-          </article>
+              <div className="transaction-card-actions">
+                {renderActionButtons(transaction)}
+              </div>
+            </article>
           );
         })}
       </div>

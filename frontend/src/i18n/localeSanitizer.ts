@@ -363,6 +363,30 @@ const buildReviewWorkflowHotfix = (config: {
   },
 });
 
+const buildTransactionSemanticsHotfix = (config: {
+  systemGenerated: string;
+  ignored: string;
+  suggestedIgnore: string;
+  ignore: string;
+}): LocaleObject => ({
+  transactions: {
+    systemGenerated: config.systemGenerated,
+  },
+  documents: {
+    bankWorkbench: {
+      status: {
+        ignoredDuplicate: config.ignored,
+      },
+      suggested: {
+        ignore: config.suggestedIgnore,
+      },
+      actions: {
+        ignore: config.ignore,
+      },
+    },
+  },
+});
+
 const mergeLocaleHotfixes = (...parts: LocaleObject[]): LocaleObject => {
   const merged: LocaleObject = {};
 
@@ -403,6 +427,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: '{{count}} Eintraege bestaetigt.',
         pendingReview: 'Zur Pruefung',
         pendingReviewOnly: 'Nur zur Pruefung',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Systemgeneriert',
+        ignored: 'Ignoriert',
+        suggestedIgnore: 'Vorgeschlagenes Ignorieren',
+        ignore: 'Ignorieren',
       }),
       buildBankWorkbenchHotfix({
       title: 'Kontoauszugs-Arbeitsbereich',
@@ -505,6 +535,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: 'Confirmed {{count}} items.',
         pendingReview: 'Pending review',
         pendingReviewOnly: 'Only pending review',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'System-generated',
+        ignored: 'Ignored',
+        suggestedIgnore: 'Suggested ignore',
+        ignore: 'Ignore',
       }),
       buildBankWorkbenchHotfix({
       title: 'Bank statement workbench',
@@ -614,6 +650,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         pendingReview: '\u5f85\u5ba1\u6838',
         pendingReviewOnly: '\u4ec5\u770b\u5f85\u5ba1\u6838',
       }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: '\u7cfb\u7edf\u751f\u6210',
+        ignored: '\u5df2\u5ffd\u7565',
+        suggestedIgnore: '\u5efa\u8bae\u5ffd\u7565',
+        ignore: '\u5ffd\u7565',
+      }),
       buildBankWorkbenchHotfix({
       title: '\u94f6\u884c\u6d41\u6c34\u5de5\u4f5c\u53f0',
       modeImport: '\u5bfc\u5165\u5de5\u4f5c\u53f0',
@@ -720,6 +762,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: '{{count}} elements confirmes.',
         pendingReview: 'A verifier',
         pendingReviewOnly: 'Seulement a verifier',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Genere par le systeme',
+        ignored: 'Ignore',
+        suggestedIgnore: 'Suggestion d ignorer',
+        ignore: 'Ignorer',
       }),
       buildBankWorkbenchHotfix({
       title: 'Espace de traitement du releve bancaire',
@@ -853,6 +901,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         pendingReview: '\u041d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435',
         pendingReviewOnly: '\u0422\u043e\u043b\u044c\u043a\u043e \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435',
       }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: '\u0421\u043e\u0437\u0434\u0430\u043d\u043e \u0441\u0438\u0441\u0442\u0435\u043c\u043e\u0439',
+        ignored: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043e',
+        suggestedIgnore: '\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u0442\u0441\u044f \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c',
+        ignore: '\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c',
+      }),
       buildBankWorkbenchHotfix({
       title: '\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0431\u0430\u043d\u043a\u043e\u0432\u0441\u043a\u043e\u0439 \u0432\u044b\u043f\u0438\u0441\u043a\u0438',
       modeImport: '\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0438\u043c\u043f\u043e\u0440\u0442\u0430',
@@ -979,6 +1033,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: '{{count}} tetel jovahagyva.',
         pendingReview: 'Ellenorzesre var',
         pendingReviewOnly: 'Csak ellenorzesre varo',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Rendszer altal generalt',
+        ignored: 'Figyelmen kivul hagyva',
+        suggestedIgnore: 'Javasolt figyelmen kivul hagyas',
+        ignore: 'Figyelmen kivul hagy',
       }),
       buildBankWorkbenchHotfix({
       title: 'Bankszamlakivonat munkafelulet',
@@ -1112,6 +1172,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: 'Potwierdzono {{count}} pozycji.',
         pendingReview: 'Do sprawdzenia',
         pendingReviewOnly: 'Tylko do sprawdzenia',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Wygenerowane przez system',
+        ignored: 'Pominiete',
+        suggestedIgnore: 'Zalecane pominiecie',
+        ignore: 'Pomin',
       }),
       buildBankWorkbenchHotfix({
       title: 'Panel wyciagu bankowego',
@@ -1251,6 +1317,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         pendingReview: 'Inceleme bekliyor',
         pendingReviewOnly: 'Yalnizca inceleme bekleyenler',
       }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Sistem tarafindan olusturuldu',
+        ignored: 'Yoksayildi',
+        suggestedIgnore: 'Yoksayma onerildi',
+        ignore: 'Yoksay',
+      }),
       buildBankWorkbenchHotfix({
       title: 'Banka hesap ozeti calisma alani',
       modeImport: 'Ice aktarma calisma alani',
@@ -1382,6 +1454,12 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         bulkConfirmSuccess: 'Potvrdjeno {{count}} stavki.',
         pendingReview: 'Ceka pregled',
         pendingReviewOnly: 'Samo stavke koje cekaju pregled',
+      }),
+      buildTransactionSemanticsHotfix({
+        systemGenerated: 'Sistemski generisano',
+        ignored: 'Ignorisano',
+        suggestedIgnore: 'Predlozeno ignorisanje',
+        ignore: 'Ignorisi',
       }),
       buildBankWorkbenchHotfix({
       title: 'Radni prostor bankovnog izvoda',

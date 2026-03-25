@@ -128,10 +128,23 @@
   font-size: 1.1rem;
 }
 
+.asset-report-section h3.collapsible {
+  margin-bottom: 0;
+}
+
+.asset-report-section.collapsed {
+  padding: 14px 24px;
+}
+
 .tax-tools-heading {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.tax-tools-heading.collapsible {
+  padding: 0;
+  margin: 0;
 }
 
 .tax-tools-section-subtitle {

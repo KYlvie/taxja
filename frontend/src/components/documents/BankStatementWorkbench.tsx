@@ -786,7 +786,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
     }
 
     return {
-      label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored duplicate'),
+      label: t('documents.bankWorkbench.status.ignoredDuplicate', 'Ignored'),
       tone: 'ignored_duplicate',
     };
   }, [t]);
@@ -807,7 +807,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
       return t('documents.bankWorkbench.actions.match', 'Match existing');
     }
     if (line.suggested_action === 'ignore') {
-      return t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate');
+      return t('documents.bankWorkbench.actions.ignore', 'Ignore');
     }
     return t('documents.bankWorkbench.actions.create', 'Create transaction');
   }, [t]);
@@ -1148,8 +1148,8 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                                 className="bank-workbench-utility-btn bank-workbench-utility-btn--warning"
                                 onClick={() => void runLineAction(line.id, 'ignore')}
                                 disabled={disabled}
-                                aria-label={t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
-                                title={t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
+                                aria-label={t('documents.bankWorkbench.actions.ignore', 'Ignore')}
+                                title={t('documents.bankWorkbench.actions.ignore', 'Ignore')}
                               >
                                 <IgnoreDuplicateIcon />
                               </button>
@@ -1308,7 +1308,7 @@ const BankStatementWorkbench: React.FC<BankStatementWorkbenchProps> = ({
                           onClick={() => void runLineAction(line.id, 'ignore')}
                           disabled={disabled}
                         >
-                          {t('documents.bankWorkbench.actions.ignore', 'Ignore duplicate')}
+                          {t('documents.bankWorkbench.actions.ignore', 'Ignore')}
                         </button>
                       </div>
                     ) : actualLinkedTransactionId ? (
