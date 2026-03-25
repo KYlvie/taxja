@@ -3765,7 +3765,7 @@
       },
       "list": {
         "title": "Liste des documents",
-        "message": "Parcourez les documents avec recherche et filtres. Cliquez sur un document pour la vue détaillée avec les données OCR et les transactions liées."
+        "message": "Parcourez tous les documents téléchargés avec recherche et filtres. Chaque entrée affiche le nom du document, le type, la date de téléchargement et le statut de traitement. Cliquez sur un document pour ouvrir la vue détaillée avec les données OCR, l'aperçu et les transactions liées."
       }
     },
     "documentDetail": {
@@ -3939,33 +3939,33 @@
       },
       "employer": {
         "title": "Documents employeur",
-        "message": "Téléchargez et vérifiez les fiches de paie (Lohnzettel L16). Extraction du salaire, des retenues et des cotisations sociales."
+        "message": "Téléchargez et vérifiez vos Lohnzettel (L16) et autres certificats fiscaux d'emploi. Taxja extrait automatiquement les informations de l'employeur, le salaire brut, les retenues fiscales et les cotisations sociales. La prise en charge de plusieurs employeurs est incluse."
       },
       "audit": {
         "title": "Liste de contrôle d’audit",
-        "message": "Vérifiez l’exhaustivité de votre dossier avant la déclaration."
+        "message": "Vérifiez l’exhaustivité de votre dossier fiscal avant la déclaration : détection des documents manquants, transactions non vérifiées, catégories incomplètes et conformité avec les exigences fiscales autrichiennes."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Informations personnelles",
-        "message": "Nom, e-mail, préférences d’affichage."
+        "message": "Votre nom, e-mail et préférences d’affichage. Gardez ces informations à jour pour la correspondance fiscale et la récupération de votre compte."
       },
       "taxInfo": {
         "title": "Profil fiscal et professionnel",
-        "message": "Numéro fiscal (Steuernummer), identifiant TVA (USt-ID), statut TVA, type de revenus, informations professionnelles."
+        "message": "Configurez votre numéro fiscal (Steuernummer), identifiant TVA (USt-ID), statut TVA (exonération pour petite entreprise ou assujettissement normal), type de revenus, nom de l'entreprise et secteur d'activité. Indispensable pour des calculs fiscaux corrects."
       },
       "commuting": {
         "title": "Emploi et trajet",
-        "message": "Détails de l’employeur, kilomètres de trajet pour le Pendlerpauschale, jours de télétravail (Telearbeit) pour le Homeoffice-Pauschale, situation familiale."
+        "message": "Configurez les détails de l’employeur, la distance de trajet (km) pour le Pendlerpauschale, la disponibilité des transports en commun, les jours de télétravail (Telearbeit) pour le Homeoffice-Pauschale, et la situation familiale pour les crédits d’impôt."
       },
       "security": {
         "title": "Paramètres de sécurité",
-        "message": "Mot de passe, sessions, authentification à deux facteurs (2FA)."
+        "message": "Modifiez votre mot de passe, consultez les sessions actives et activez l'authentification à deux facteurs (2FA) pour renforcer la sécurité de votre compte."
       },
       "dataExport": {
         "title": "Données et confidentialité",
-        "message": "Exportez vos données, gérez votre abonnement, supprimez votre compte. Conforme au RGPD."
+        "message": "Exportez toutes vos données (documents, transactions, rapports), gérez les paramètres de votre abonnement, ou demandez la suppression de votre compte. Vos données vous appartiennent — entièrement conforme au RGPD."
       }
     },
     "classificationRules": {
@@ -3985,7 +3985,7 @@
     "aiAssistant": {
       "welcome": {
         "title": "Assistant fiscal IA",
-        "message": "Conseiller IA personnel pour le droit fiscal autrichien, disponible en 9 langues."
+        "message": "Votre conseiller fiscal IA personnel pour le droit fiscal autrichien. Posez vos questions dans l'une des 9 langues prises en charge. L'IA accède à votre profil complet, vos transactions, documents et biens immobiliers pour des réponses personnalisées."
       },
       "input": {
         "title": "Saisie du chat",
@@ -3999,21 +3999,21 @@
     "subscription": {
       "plan": {
         "title": "Votre abonnement",
-        "message": "Forfait actuel, cycle de facturation, fonctionnalités. Niveaux Gratuit/Plus/Pro."
+        "message": "Consultez votre forfait actuel (Gratuit, Plus ou Pro), le cycle de facturation, la date du prochain paiement et les fonctionnalités incluses. Gratuit inclut les fonctions de base, Plus ajoute les rapports avancés, Pro débloque l'assistant IA et la génération de formulaires fiscaux."
       },
       "billing": {
         "title": "Facturation et paiements",
-        "message": "Historique des paiements, gestion via Stripe, annulation/réactivation."
+        "message": "Consultez l'historique des paiements, gérez votre moyen de paiement via Stripe, annulez ou réactivez votre abonnement, et vérifiez les jours d'essai restants le cas échéant."
       }
     },
     "creditHistory": {
       "filter": {
         "title": "Filtrer les crédits",
-        "message": "Filtrez par type : déductions, remboursements, réinitialisations, recharges, expirations, dépassements, migrations."
+        "message": "Filtrez l'historique des crédits par type : déductions (utilisation OCR/IA), remboursements, réinitialisations mensuelles, achats de recharges, recharges expirées, règlements de dépassement ou migrations de forfait."
       },
       "list": {
         "title": "Transactions de crédits",
-        "message": "Journal complet de l’activité des crédits avec suivi de l’utilisation."
+        "message": "Journal détaillé de toute l’activité des crédits : quand les crédits ont été utilisés, combien, pour quoi, et votre solde restant. Suivez l’utilisation de l’IA pour le traitement des documents et les interactions de chat."
       }
     }
   },

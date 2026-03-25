@@ -3666,350 +3666,354 @@
   "onboarding": {
     "welcome": {
       "title": "Witaj w Taxja!",
-      "message": "Cześć! Jestem twoim asystentem Taxja. Szybko pokażę ci kluczowe funkcje platformy, abyś mógł bez wysiłku zarządzać swoimi podatkami. Zaczynajmy!"
+      "message": "Cześć! Jestem Twoim asystentem AI w Taxja. Przeprowadzę Cię przez platformę — od automatycznego skanowania dokumentów i importu wyciągów bankowych, przez obliczenia podatkowe w czasie rzeczywistym, porady podatkowe oparte na AI, aż po składanie deklaracji jednym kliknięciem. Taxja obsługuje 9 języków i jest przeznaczona zarówno dla pracowników, freelancerów, wynajmujących, jak i firm. Pozwól, że pokażę Ci wszystko!"
     },
     "documents": {
-      "title": "Przesyłanie dokumentów",
-      "message": "Po prostu prześlij swoje faktury, paragony lub umowy. Automatycznie rozpoznamy treść, sklasyfikujemy ją i utworzymy transakcję. Bez ręcznego wprowadzania danych!"
+      "title": "Inteligentne przetwarzanie dokumentów",
+      "message": "Prześlij faktury, paragony, umowy lub wyciągi bankowe. Nasz silnik OCR i AI automatycznie wyodrębnia dane, klasyfikuje dokumenty i tworzy transakcje — bez ręcznego wprowadzania. Wyciągi bankowe są przetwarzane w dedykowanym panelu uzgodnień, a zaświadczenia pracodawcy (Lohnzettel) mają własny panel weryfikacji. Sprawdź i zatwierdź dane wyodrębnione przez AI, zanim trafią do Twojej dokumentacji podatkowej."
     },
     "dashboard": {
-      "title": "Twój pulpit",
-      "message": "Pulpit daje pełny przegląd: przychody i wydatki na pierwszy rzut oka, wskazówki dotyczące oszczędności podatkowych i przypomnienia o działaniach. Wszystko w jednym miejscu."
+      "title": "Twoje centrum dowodzenia podatkami",
+      "message": "Pulpit zapewnia przegląd w czasie rzeczywistym: przychody vs wydatki, szacowany podatek, zapłacone podatki, pozostałe saldo, dochód netto oraz śledzenie progu VAT. Interaktywne wykresy trendów pokazują miesięczne wzorce i rozkłady kategorii. Użyj selektora roku, aby przełączać lata podatkowe, przeciągnij i upuść dokumenty, a także sprawdź status subskrypcji — wszystko na jednym ekranie."
     },
     "transactions": {
-      "title": "Transakcje",
-      "message": "Przeglądaj, filtruj i zarządzaj wszystkimi zapisami przychodów i wydatków tutaj. Transakcje są tworzone automatycznie z przesłanych dokumentów lub możesz je dodać ręcznie. Każdy wpis jest skategoryzowany dla dokładnego raportowania podatkowego."
+      "title": "Zarządzanie transakcjami",
+      "message": "Przeglądaj, filtruj i zarządzaj wszystkimi zapisami przychodów i wydatków. Transakcje są tworzone automatycznie z dokumentów i importów wyciągów bankowych lub możesz je dodać ręcznie. Używaj filtrów do wyszukiwania konkretnych wpisów, zaznaczaj wiele pozycji do operacji zbiorczych, eksportuj do CSV/PDF i zarządzaj regułami klasyfikacji. Transakcje uzgodnione z bankiem wyświetlają ikonę banku, którą można kliknąć."
     },
     "reports": {
-      "title": "Raporty podatkowe",
-      "message": "Generuj profesjonalne raporty podatkowe obejmujące obliczenie E/A, Saldenliste i podglądy formularzy podatkowych. Eksportuj do PDF lub CSV w dowolnym momencie  wszystko jest gotowe dla Twojego księgowego lub Finanzamt."
+      "title": "Raporty podatkowe i składanie deklaracji",
+      "message": "Generuj profesjonalne raporty: zestawienie przychodów i wydatków (E/A), bilans (Bilanz), zestawienie sald (Saldenliste) i okresowe zestawienie sald. Podgląd i generowanie oficjalnych formularzy podatkowych (E1, E1a, U30) z wstępnie wypełnionymi danymi. Eksportuj kompletny pakiet podatkowy ze wszystkimi dokumentami źródłowymi lub składaj elektronicznie przez FinanzOnline."
     },
     "ai": {
-      "title": "Asystent AI",
-      "message": "Masz pytanie podatkowe? Skorzystaj z czatu AI na dole ekranu w dowolnym momencie. Pomogę z odliczeniami, przepisami podatkowymi i spersonalizowanymi poradami."
+      "title": "Doradca podatkowy AI",
+      "message": "Twój osobisty konsultant podatkowy AI jest zawsze dostępny. Zapytaj o cokolwiek dotyczącego austriackiego prawa podatkowego, odliczeń, VAT lub Twojej sytuacji — zna Twój profil, nieruchomości, transakcje i dokumenty. Każda odpowiedź jest spersonalizowana. Proaktywnie sugeruje optymalizacje i sygnalizuje potencjalne problemy przed złożeniem deklaracji."
     },
     "profile": {
-      "title": "Uzupełnij profil",
-      "message": "Przejdź do ustawień profilu, aby skonfigurować status VAT, typ dochodu i inne dane. To pomoże nam zapewnić dokładniejsze obliczenia podatkowe i rekomendacje."
+      "title": "Twój profil podatkowy",
+      "message": "Skonfiguruj typ dochodu, numer podatkowy, status VAT, dane firmowe, informacje o pracodawcy i dane dojazdowe do obliczenia Pendlerpauschale. Ustaw status rodzinny dla ulg podatkowych i dni pracy zdalnej dla Homeoffice-Pauschale. Im pełniejszy profil, tym dokładniejsze obliczenia. Tutaj możesz też zarządzać bezpieczeństwem, eksportować dane lub usunąć konto."
     },
-    "skip": "Pomiń",
+    "skip": "Pomiń przewodnik",
     "next": "Dalej →",
     "prev": "← Wstecz",
-    "finish": "Zaczynamy!"
+    "finish": "Zaczynajmy!"
   },
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Wybór roku",
-        "message": "Przełączaj lata podatkowe tutaj. Wszystkie dane na pulpicie  przychody, wydatki i szacunki podatkowe  zaktualizują się dla wybranego roku."
+        "title": "Selektor roku podatkowego",
+        "message": "Wybierz rok podatkowy, z którym chcesz pracować. Wszystkie dane na pulpicie — przychody, wydatki, szacunki podatkowe i wykresy — aktualizują się natychmiast po przełączeniu roku."
       },
       "upload": {
-        "title": "Szybkie przesyłanie",
-        "message": "Upuść faktury, paragony lub umowy bezpośrednio tutaj na pulpicie. Nasz silnik OCR skanuje i automatycznie tworzy transakcje  bez opuszczania strony."
+        "title": "Szybkie przesyłanie dokumentów",
+        "message": "Przeciągnij i upuść pliki tutaj lub kliknij, aby przeglądać. Taxja przyjmuje faktury, paragony, umowy, wyciągi bankowe i formularze podatkowe. Przetwarzanie OCR rozpoczyna się automatycznie i tworzy transakcje z wyodrębnionych danych."
       },
       "overview": {
-        "title": "Przegląd finansowy",
-        "message": "Te karty pokazują kluczowe wskaźniki finansowe: łączne przychody, łączne wydatki, szacowany podatek, wynik netto, próg VAT i dokumenty do przeglądu."
+        "title": "Karty przeglądu finansowego",
+        "message": "Kluczowe wskaźniki w jednym widoku: przychody od początku roku, wydatki, szacowany podatek, zapłacony podatek, pozostałe saldo, dochód netto i odległość do progu VAT. Każda karta jest klikalna, aby zobaczyć więcej szczegółów."
       },
       "trends": {
         "title": "Wykresy trendów",
-        "message": "Wizualne wykresy śledzą Twoje przychody i wydatki w czasie. Odkryj sezonowe wzorce i porównuj miesiąc po miesiącu."
+        "message": "Interaktywne wykresy pokazujące miesięczne przychody vs wydatki, rozkład kategorii przychodów (wykres kołowy), rozkład kategorii wydatków i porównania rok do roku. Wykrywaj wzorce i planuj strategię podatkową."
       },
       "plan": {
-        "title": "Subskrypcja i status",
-        "message": "Tutaj widoczny jest Twoj aktualny plan i haslo. Kliknij aby zarzadzac subskrypcja."
+        "title": "Subskrypcja i kredyty",
+        "message": "Sprawdź aktualny plan (Free, Plus lub Pro), pozostałe kredyty AI i status okresu próbnego. Kliknij, aby zarządzać subskrypcją lub dokupić dodatkowe kredyty."
       },
       "language": {
-        "title": "Wybor jezyka",
-        "message": "Taxja obsluguje 9 jezykow. Caly interfejs natychmiast przelacza sie na wybrany jezyk."
+        "title": "Wybór języka",
+        "message": "Przełączaj między 9 obsługiwanymi językami: niemiecki, angielski, chiński, francuski, rosyjski, węgierski, polski, turecki i bośniacki. Cały interfejs aktualizuje się natychmiast."
       },
       "theme": {
-        "title": "Przelacznik motywu",
-        "message": "Przelaczaj miedzy jasnym motywem a ciemnym trybem Cyber dla zmniejszenia zmeczenia oczu."
+        "title": "Przełącznik motywu",
+        "message": "Przełączaj między motywem Classic (jasny) a Cyber (ciemny). Tryb Classic używa czystych, standardowych elementów UI. Tryb Cyber wyróżnia się animowanym asystentem-robotem i ciemnym tłem."
       }
     },
     "transactions": {
+      "classRules": {
+        "title": "Reguły klasyfikacji",
+        "message": "Otwórz menedżer reguł, aby przeglądać i edytować reguły automatycznej kategoryzacji. Taxja uczy się z Twoich ręcznych poprawek i buduje reguły, które automatycznie klasyfikują przyszłe transakcje na podstawie wzorców opisów."
+      },
+      "export": {
+        "title": "Eksport transakcji",
+        "message": "Pobierz transakcje jako CSV lub PDF. Wybierz format i zakres dat do celów archiwalnych, dla doradcy podatkowego lub do złożenia w Finanzamt."
+      },
+      "addNew": {
+        "title": "Dodaj transakcję",
+        "message": "Ręcznie utwórz nowy wpis przychodu lub wydatku. Użyj tej opcji, gdy nie masz dokumentu do przesłania — podaj kwotę, datę, kategorię, stawkę VAT i opcjonalne pozycje szczegółowe."
+      },
       "filters": {
-        "title": "Filtry",
-        "message": "Filtruj transakcje po okresie, typie (przychód/wydatek), kategorii, nieruchomości lub statusie. Łącz wiele filtrów dla precyzyjnych wyników."
+        "title": "Filtry transakcji",
+        "message": "Filtruj według roku, kategorii, typu (przychód/wydatek), statusu wymagającego przeglądu i innych. Łącz filtry, aby znaleźć dokładnie to, czego potrzebujesz. Użyj filtra „Wymaga przeglądu”, aby szybko znaleźć transakcje wymagające potwierdzenia."
       },
       "list": {
         "title": "Lista transakcji",
-        "message": "Wszystkie Twoje transakcje pojawiają się tutaj. Kliknij wiersz, aby zobaczyć szczegóły, edytować kwoty lub zmienić kategorię."
+        "message": "Wszystkie transakcje w sortowalnej, paginowanej tabeli. Każdy wiersz pokazuje datę, opis, kwotę, kategorię i status. Ikona banku oznacza wpisy uzgodnione z bankiem — kliknij ją, aby zobaczyć powiązany wyciąg bankowy. Spinacz prowadzi do załączonych dokumentów. Użyj pól wyboru do operacji zbiorczych."
       },
       "paging": {
         "title": "Paginacja",
-        "message": "Nawiguj między stronami transakcji. Możesz też zmienić liczbę elementów wyświetlanych na stronie."
-      },
-      "classRules": {
-        "title": "Pamiec klasyfikacji",
-        "message": "System uczy sie z Twoich poprawek. Tutaj mozesz przegladac i zarzadzac reguly klasyfikacji."
-      },
-      "export": {
-        "title": "Eksport do CSV",
-        "message": "Eksportuj wszystkie przefiltrowane transakcje jako plik CSV dla ksiegowego lub Excela."
-      },
-      "addNew": {
-        "title": "Dodaj transakcje",
-        "message": "Utworz nowa transakcje recznie. Podaj kwote, kategorie, date i opcjonalne szczegoly."
+        "message": "Nawiguj między stronami transakcji. Dostosuj rozmiar strony, aby wyświetlać więcej lub mniej wpisów na stronie."
       }
     },
     "documents": {
       "upload": {
-        "title": "Strefa przesyłania",
-        "message": "Przeciągnij pliki tutaj lub kliknij, aby przeglądać. Obsługiwane formaty: PDF, JPG i PNG. Nasz silnik OCR automatycznie wyodrębni dane."
+        "title": "Przesyłanie dokumentów",
+        "message": "Przesyłaj faktury, paragony, wyciągi bankowe, formularze podatkowe, dokumenty zatrudnienia, umowy i inne. Przeciągnij i upuść wiele plików naraz. Silnik OCR Taxja automatycznie wyodrębnia kwoty, daty, dostawców i dane podatkowe."
       },
       "tabs": {
-        "title": "Karty kategorii",
-        "message": "Dokumenty są pogrupowane według typu  faktury, paragony, umowy, formularze podatkowe itp. Przełączaj karty, aby szybko znaleźć to, czego szukasz."
+        "title": "Kategorie dokumentów",
+        "message": "Dokumenty są uporządkowane według typu i statusu: Wszystkie, Oczekujące na przegląd (żółta odznaka trójkąta), Faktury, Paragony, Wyciągi bankowe, Formularze podatkowe, Dokumenty zatrudnienia i inne. Karta „Wymaga przeglądu” pokazuje dokumenty, w których ekstrakcja AI wymaga Twojego potwierdzenia."
       },
       "list": {
         "title": "Lista dokumentów",
-        "message": "Przeglądaj wszystkie przesłane dokumenty. Każdy wpis pokazuje rozpoznany typ, wyodrębnioną kwotę, status przetwarzania i powiązaną transakcję."
-      }
-    },
-    "reports": {
-      "tabs": {
-        "title": "Karty raportów",
-        "message": "Wybierz typ raportu: kalkulacja E/A, zestawienie sald, bilans, podgląd formularzy podatkowych (E1, L1, U1) i więcej."
-      },
-      "content": {
-        "title": "Treść raportu",
-        "message": "Wygenerowany raport pojawia się tutaj. Sprawdź dane, a następnie wyeksportuj do PDF lub CSV dla księgowego lub urzędu skarbowego."
-      },
-      "generate": {
-        "title": "Generuj raport",
-        "message": "Kliknij tutaj, aby wygenerowac wybrany raport na wybrany rok podatkowy."
-      },
-      "print": {
-        "title": "Drukuj",
-        "message": "Wydrukuj wygenerowany raport bezposrednio lub zapisz jako PDF przez okno drukowania przegladarki."
-      },
-      "finanzOnline": {
-        "title": "Otworz FinanzOnline",
-        "message": "Otwiera austriacki portal podatkowy FinanzOnline w nowej karcie do zlozenia deklaracji."
-      },
-      "downloadForm": {
-        "title": "Pobierz oficjalny formularz",
-        "message": "Pobierz oficjalny formularz podatkowy BMF (PDF) i wypelnij go wartosciami z podgladu powyzej."
-      }
-    },
-    "properties": {
-      "cards": {
-        "title": "Wszystkie aktywa",
-        "message": "Twoje nieruchomości, urządzenia, pojazdy i inne aktywa w jednej zunifikowanej liście. Kliknij kartę, aby zobaczyć szczegóły, edytować lub zarządzać amortyzacją."
-      },
-      "overview": {
-        "title": "Przegląd aktywów",
-        "message": "Otwórz panel portfela, aby porównać wszystkie nieruchomości i aktywa obok siebie."
-      },
-      "add": {
-        "title": "Dodaj srodek trwaly",
-        "message": "Recznie dodaj nowa nieruchomosc, pojazd lub inny srodek trwaly. Amortyzacja jest obliczana automatycznie."
-      },
-      "edit": {
-        "title": "Edytuj srodek",
-        "message": "Kliknij ikone olowka, aby edytowac szczegoly srodka trwalego."
-      },
-      "archive": {
-        "title": "Archiwizuj i filtruj",
-        "message": "Archiwizuj srodki, ktorymi juz aktywnie nie zarzadzasz. Zaznacz to pole, aby wyswietlic lub ukryc zarchiwizowane elementy."
-      }
-    },
-    "recurring": {
-      "create": {
-        "title": "Utwórz cykliczną",
-        "message": "Ustaw nową transakcję cykliczną  czynsz, raty kredytu, ubezpieczenie lub dowolny regularny wydatek. Wybierz częstotliwość i datę rozpoczęcia."
-      },
-      "filters": {
-        "title": "Filtry",
-        "message": "Filtruj transakcje cykliczne po typie, częstotliwości, nieruchomości lub statusie (aktywne/wstrzymane)."
-      },
-      "list": {
-        "title": "Lista cyklicznych",
-        "message": "Wszystkie transakcje cykliczne są tutaj wymienione. Zobacz datę następnego wykonania, wstrzymaj lub wznów wpisy, lub edytuj szczegóły."
-      }
-    },
-    "advanced": {
-      "assets": {
-        "title": "Zarządzanie aktywami i zobowiązaniami",
-        "message": "Zarządzaj nieruchomościami, sprzętem i zobowiązaniami. Śledź amortyzację, przeglądaj portfolio i zarządzaj pożyczkami."
-      },
-      "automation": {
-        "title": "Reguły i automatyzacja",
-        "message": "Skonfiguruj transakcje cykliczne i zarządzaj pamięcią klasyfikacji. System uczy się z Twoich poprawek, aby automatycznie kategoryzować przyszłe transakcje."
-      },
-      "taxtools": {
-        "title": "Przestrzeń podatkowa",
-        "message": "Twoje uniwersalne centrum podatkowe: przygotuj deklaracje, sprawdź gotowość dokumentów, uzyskaj wskazówki AI i generuj raporty  wszystko w jednym miejscu."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Pasek akcji",
-        "message": "Wszystkie akcje dla tego srodka sa tutaj."
-      },
-      "info": {
-        "title": "Szczegoly srodka",
-        "message": "Wszystkie szczegoly srodka w jednym miejscu."
-      },
-      "contracts": {
-        "title": "Umowy najmu",
-        "message": "Wszystkie umowy najmu powiazane z ta nieruchomoscia."
-      },
-      "transactions": {
-        "title": "Powiazane transakcje",
-        "message": "Wszystkie przychody i wydatki pogrupowane wg roku."
+        "message": "Przeglądaj wszystkie przesłane dokumenty z wyszukiwaniem i filtrami. Każdy wpis pokazuje nazwę dokumentu, typ, datę przesłania i status przetwarzania. Kliknij dowolny dokument, aby otworzyć widok szczegółowy z danymi OCR, podglądem i powiązanymi transakcjami."
       }
     },
     "documentDetail": {
       "header": {
-        "title": "Akcje naglowka",
-        "message": "Powrot do listy dokumentow, pobranie oryginalnego pliku lub ponowne przetworzenie dokumentu przez OCR, jesli poczatkowa ekstrakcja byla niekompletna."
+        "title": "Nagłówek dokumentu",
+        "message": "Pokazuje nazwę dokumentu, typ, datę przesłania i status przetwarzania. Przyciski akcji umożliwiają ponowne przetworzenie OCR, pobranie oryginalnego pliku lub usunięcie dokumentu."
       },
       "preview": {
-        "title": "Podglad dokumentu",
-        "message": "Oryginalny dokument jest wyswietlany tutaj  pliki PDF sa osadzone, obrazy renderowane bezposrednio. Uzyj tego do weryfikacji wyodrebnionych danych ze zrodlem."
+        "title": "Podgląd dokumentu",
+        "message": "Wyświetl oryginalny przesłany dokument (PDF, obraz itp.). Powiększ, aby zweryfikować szczegóły w porównaniu z danymi wyodrębnionymi przez AI w prawym panelu."
       },
       "ocrData": {
-        "title": "Wyodrebnione dane",
-        "message": "Wszystkie pola wyodrebnione przez OCR i AI pojawiaja sie tutaj: kwoty, daty, nazwy dostawcow, stawki podatkowe i inne. Wskaznik pewnosci pokazuje wiarygodnosc ekstrakcji."
+        "title": "Dane wyodrębnione przez AI",
+        "message": "Wszystkie pola wyodrębnione przez OCR i AI: kwota, data, dostawca, kategoria, stawka VAT, pozycje szczegółowe i inne. Pola o niskim poziomie pewności są podświetlone. Sprawdź każdą wartość i popraw błędy przed zatwierdzeniem."
       },
       "linked": {
-        "title": "Powiazana transakcja",
-        "message": "Gdy dokument jest dopasowany do transakcji lub srodka, polaczenie pojawia sie tutaj. Kliknij, aby przejsc bezposrednio do powiazanego rekordu."
+        "title": "Powiązane rekordy",
+        "message": "Sprawdź, która transakcja, aktywo lub wiersz wyciągu bankowego jest powiązany z tym dokumentem. Twórz nowe powiązania lub przechodz bezpośrednio do powiązanego rekordu."
       },
       "editMode": {
-        "title": "Edycja w miejscu",
-        "message": "Kliknij dowolne wyodrebnione pole, aby je poprawic. Twoje poprawki trenuja system i poprawiaja przyszle ekstrakcje. Zmiany sa zapisywane natychmiast."
+        "title": "Edycja i zatwierdzanie",
+        "message": "Przełącz do trybu edycji, aby poprawić wartości wyodrębnione przez AI. Po zatwierdzeniu dane są zablokowane, a żółta odznaka przeglądu zostaje usunięta. Twoje poprawki poprawiają również przyszłą dokładność AI."
+      }
+    },
+    "reports": {
+      "tabs": {
+        "title": "Typy raportów",
+        "message": "Przełączaj między typami raportów: zestawienie przychodów i wydatków E/A (samozatrudnieni), bilans (Bilanz), zestawienie sald (Saldenliste), okresowe zestawienie sald (Periodensaldenliste) i podgląd formularzy podatkowych (E1/E1a/U30)."
+      },
+      "generate": {
+        "title": "Generuj raport",
+        "message": "Oblicz raport dla wybranego roku podatkowego. System pobiera najnowsze dane transakcji i generuje szczegółowy rozkład odpowiadający oficjalnym polom austriackich formularzy podatkowych."
+      },
+      "print": {
+        "title": "Drukuj raport",
+        "message": "Wydrukuj raport bezpośrednio z przeglądarki. Układ wydruku jest zoptymalizowany pod format A4 z odpowiednimi nagłówkami i podziałami stron."
+      },
+      "content": {
+        "title": "Treść raportu",
+        "message": "Szczegółowe obliczenie podatkowe z każdą pozycją przypisaną do oficjalnych pól formularza. Rozwijane sekcje pokazują transakcje źródłowe dla każdej pozycji."
+      },
+      "finanzOnline": {
+        "title": "Integracja z FinanzOnline",
+        "message": "Złóż deklarację podatkową elektronicznie do austriackiego urzędu skarbowego (Finanzamt) przez FinanzOnline. Dane formularza są wstępnie wypełnione z Twoich transakcji i dokumentów."
+      },
+      "downloadForm": {
+        "title": "Pobieranie i eksport",
+        "message": "Pobierz wstępnie wypełniony oficjalny formularz podatkowy jako PDF lub wyeksportuj kompletny pakiet podatkowy zawierający deklarację, wszystkie dokumenty źródłowe i raport podsumowujący w jednym archiwum."
+      }
+    },
+    "properties": {
+      "overview": {
+        "title": "Przegląd portfela",
+        "message": "Przejdź do pulpitu portfela aktywów, aby zobaczyć zagregowane dane: łączne wartości aktywów, harmonogramy amortyzacji i analizy porównawcze wszystkich nieruchomości i aktywów."
+      },
+      "add": {
+        "title": "Dodaj aktywo",
+        "message": "Zarejestruj nowe aktywo: nieruchomość, pojazd, sprzęt, maszynę lub narzędzie. Taxja oblicza amortyzację (AfA) zgodnie z austriackim prawem podatkowym i śledzi wartości księgowe w czasie."
+      },
+      "cards": {
+        "title": "Karty aktywów",
+        "message": "Każda karta pokazuje aktywo z kluczowymi danymi: nazwa, typ, data zakupu, koszt pierwotny, bieżąca wartość księgowa i status amortyzacji. Kliknij, aby otworzyć pełny widok szczegółowy."
+      },
+      "edit": {
+        "title": "Edytuj aktywo",
+        "message": "Aktualizuj szczegóły aktywa: cenę zakupu, metodę amortyzacji (liniowa/degresywna), okres użytkowania lub informacje o zbyciu. Zmiany automatycznie przeliczają harmonogramy amortyzacji."
+      },
+      "archive": {
+        "title": "Przełącznik archiwum",
+        "message": "Pokaż lub ukryj zarchiwizowane/zbyte aktywa. Zarchiwizowane pozycje są przechowywane przez 7-letni okres obowiązkowego przechowywania (BAO §132), ale ukryte w widoku głównym."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Podsumowanie aktywów i zobowiązań",
-        "message": "Przeglądaj łączne aktywa, zobowiązania, wartość netto i miesięczną obsługę długu w jednym widoku."
+        "title": "Podsumowanie aktywów",
+        "message": "Kluczowe wskaźniki wszystkich aktywów: łączny koszt nabycia, bieżąca wartość księgowa, roczny koszt amortyzacji i dochód netto z wynajmu nieruchomości."
       },
       "portfolio": {
-        "title": "Portfel nieruchomości",
-        "message": "Porównaj dochody z najmu, wydatki i rentowność netto wszystkich nieruchomości."
+        "title": "Porównanie portfela",
+        "message": "Porównaj nieruchomości obok siebie według kluczowych wskaźników: rentowność, obłożenie, koszty utrzymania i zwrot z inwestycji."
       },
       "otherAssets": {
         "title": "Inne aktywa",
-        "message": "Przeglądaj urządzenia, pojazdy i sprzęt z wartościami zakupu i szczegółami amortyzacji."
+        "message": "Aktywa podlegające amortyzacji inne niż nieruchomości: pojazdy, sprzęt biurowy, maszyny i wartości niematerialne. Każde ze swoim harmonogramem amortyzacji."
       },
       "reports": {
-        "title": "Raporty indywidualne",
-        "message": "Generuj zestawienia przychodów i harmonogramy amortyzacji dla dowolnego konkretnego aktywa."
+        "title": "Raporty aktywów",
+        "message": "Generuj szczegółowe raporty amortyzacji i inwentaryzacje aktywów. Wybierz typ raportu i rok dla kompleksowej dokumentacji aktywów."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Akcje nieruchomości",
+        "message": "Edytuj szczegóły nieruchomości, wyświetl harmonogram amortyzacji, zbądź/sprzedaj aktywo lub zarchiwizuj je. Wszystkie narzędzia zarządzania dostępne z tego menu akcji."
+      },
+      "info": {
+        "title": "Informacje o nieruchomości",
+        "message": "Podstawowe dane: adres, data zakupu, koszt nabycia, powierzchnia (m²), metoda amortyzacji, okres użytkowania i bieżąca wartość księgowa."
+      },
+      "contracts": {
+        "title": "Umowy najmu",
+        "message": "Zarządzaj umowami najmu: dodawaj najemców, ustalaj kwoty i okresy czynszu, śledź kaucje i monitoruj warunki najmu. Niezbędne do raportowania Vermietung & Verpachtung."
+      },
+      "transactions": {
+        "title": "Transakcje nieruchomości",
+        "message": "Wszystkie przychody i wydatki powiązane z tą nieruchomością: dochód z wynajmu, koszty utrzymania, ubezpieczenie, odsetki. Wykorzystywane bezpośrednio do raportowania podatkowego."
       }
     },
     "liabilities": {
       "overview": {
-        "title": "Przegląd aktywów i zobowiązań",
-        "message": "Przewiń w dół, aby zobaczyć połączone podsumowanie aktywów i zobowiązań z kluczowymi wskaźnikami."
+        "title": "Pulpit zobowiązań",
+        "message": "Zagregowany widok wszystkich zobowiązań: łączne saldo do spłaty, miesięczne zobowiązania płatnicze, łączne zapłacone odsetki i wskaźnik zadłużenia do aktywów."
       },
       "add": {
         "title": "Dodaj zobowiązanie",
-        "message": "Zarejestruj nowy kredyt, pożyczkę lub inne zobowiązanie. Ustal plan spłaty i powiąż z nieruchomością."
+        "message": "Zarejestruj nowy kredyt, hipotekę lub linię kredytową. Podaj kwotę główną, oprocentowanie i harmonogram spłat. Powiąż z nieruchomością, jeśli dotyczy — odsetki mogą być odliczane od podatku."
       },
       "list": {
         "title": "Lista zobowiązań",
-        "message": "Przeglądaj wszystkie aktywne zobowiązania. Każda karta pokazuje pozostałe saldo i postęp spłaty."
+        "message": "Wszystkie kredyty i zobowiązania w jednym miejscu. Sprawdź bieżące saldo, oprocentowanie i termin następnej płatności. Kliknij dowolną pozycję, aby zobaczyć pełny harmonogram amortyzacji."
       },
       "detail": {
-        "title": "Szczegóły zobowiązania",
-        "message": "Przeglądaj harmonogram spłaty, wykres trendu odsetek i powiązane transakcje wybranego zobowiązania."
+        "title": "Harmonogram amortyzacji",
+        "message": "Szczegółowy harmonogram spłat pokazujący podział na kapitał i odsetki dla każdej raty. Śledź pozostałe saldo, łączne zapłacone odsetki i powiązaną nieruchomość lub aktywo."
+      }
+    },
+    "recurring": {
+      "create": {
+        "title": "Utwórz wzorzec cykliczny",
+        "message": "Skonfiguruj transakcję cykliczną, która powtarza się automatycznie: dziennie, tygodniowo, miesięcznie, kwartalnie lub rocznie. Idealne dla regularnych wydatków, takich jak czynsz, subskrypcje czy składki ubezpieczeniowe."
+      },
+      "filters": {
+        "title": "Filtruj wzorce",
+        "message": "Filtruj wpisy cykliczne według częstotliwości, kategorii, statusu aktywne/wstrzymane lub zakresu kwot."
+      },
+      "list": {
+        "title": "Wzorce cykliczne",
+        "message": "Przeglądaj i zarządzaj wszystkimi wzorcami transakcji cyklicznych. Taxja automatycznie wykrywa wzorce cykliczne z wyciągów bankowych. Wstrzymuj, edytuj lub usuwaj harmonogramy w razie potrzeby."
+      }
+    },
+    "advanced": {
+      "assets": {
+        "title": "Aktywa i zobowiązania",
+        "message": "Zarządzaj nieruchomościami, pojazdami, sprzętem i innymi aktywami podlegającymi amortyzacji z automatycznym obliczaniem AfA. Śledź także kredyty, hipoteki i inne zobowiązania z harmonogramami amortyzacji."
+      },
+      "automation": {
+        "title": "Reguły i automatyzacja",
+        "message": "Skonfiguruj transakcje cykliczne dla regularnych płatności i zarządzaj regułami klasyfikacji, które automatycznie kategoryzują transakcje. Taxja uczy się z Twoich poprawek z biegiem czasu."
+      },
+      "taxtools": {
+        "title": "Przestrzeń podatkowa",
+        "message": "Zaawansowane narzędzia podatkowe: kalkulator zwrotu podatku, symulator co-jeśli, porównanie z ryczałtem, roczne podsumowanie danych podatkowych, panel dokumentów pracodawcy i lista kontrolna audytu."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Pozycja podatkowa i zwrot",
-        "message": "Szacowany zwrot podatku lub zobowiązanie podatkowe w jednym widoku. Na podstawie dochodów, pobranego podatku i odliczeń system oblicza, czy mogą Państwo oczekiwać zwrotu środków."
+        "title": "Szacunkowy zwrot podatku",
+        "message": "Oszacuj oczekiwany zwrot podatku lub zobowiązanie podatkowe na podstawie bieżących dochodów, odliczeń i pobranego podatku. Pokazuje szczegółowy rozkład dochodu do opodatkowania i obowiązujących stawek."
       },
       "whatIf": {
-        "title": "Symulator Co jeśli",
-        "message": "Modeluj hipotetyczne scenariusze: dodaj dodatkowy dochód, odliczenia lub zmień status rozliczenia, aby zobaczyć wpływ na szacowany podatek. Idealny do planowania podatkowego."
+        "title": "Symulator co-jeśli",
+        "message": "Modeluj hipotetyczne scenariusze: dodaj dodatkowy dochód, dostosuj odliczenia lub zmień wydatki firmowe, aby zobaczyć wpływ na Twoją sytuację podatkową. Porównuj różne scenariusze obok siebie."
       },
       "flatRate": {
         "title": "Porównanie z ryczałtem",
-        "message": "Porównaj rzeczywiste wydatki z austriackim odliczeniem ryczałtowym (Pauschalierung). Sprawdź, która metoda pozwala zaoszczędzić więcej podatku jako osoba samozatrudniona."
+        "message": "Porównaj rzeczywiste udokumentowane wydatki z Betriebsausgabenpauschale (ryczałtowe koszty prowadzenia działalności). Sprawdź, która opcja daje lepszy wynik podatkowy — dostępne dla osób samozatrudnionych."
       },
       "filing": {
-        "title": "Roczne podsumowanie danych podatkowych",
-        "message": "Sprawdź potwierdzone dochody, odliczenia i dane VAT według roku podatkowego. Wybierz rok, aby zobaczyć sumy, wykryć konflikty i zweryfikować dokumenty źródłowe przed złożeniem zeznania."
+        "title": "Roczne podsumowanie podatkowe",
+        "message": "Pełny przegląd roku podatkowego: dochód do opodatkowania, szacowany podatek, pobrany podatek, szacowany zwrot, rozkłady dochodów i odliczeń, podsumowanie VAT oraz wykrywanie konfliktów z ostrzeżeniami."
       },
-      "assetReport": {
-        "title": "Raport aktywów",
-        "message": "Wybierz dowolną śledzoną nieruchomość lub aktywo, aby wygenerować szczegółowe zestawienia dochodów i harmonogramy amortyzacji."
+      "employer": {
+        "title": "Dokumenty pracodawcy",
+        "message": "Prześlij i sprawdź Lohnzettel (L16) oraz inne zaświadczenia podatkowe od pracodawcy. Taxja wyodrębnia dane pracodawcy, wynagrodzenie brutto, pobrane podatki i składki ubezpieczenia społecznego. Obsługuje wielu pracodawców."
+      },
+      "audit": {
+        "title": "Lista kontrolna audytu",
+        "message": "Sprawdź, czy Twoja dokumentacja podatkowa jest kompletna przed złożeniem deklaracji: weryfikacja brakujących dokumentów, nieprzejrzanych transakcji, niekompletnych kategorii i zgodności z austriackimi wymogami podatkowymi."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Dane osobowe",
-        "message": "Imię i nazwisko, e-mail, role podatkowe (pracownik, wynajmujący, samozatrudniony) oraz dane firmowe. Określają one, które funkcje podatkowe i odliczenia są dostępne."
+        "message": "Twoje imię i nazwisko, e-mail i preferencje wyświetlania. Aktualizuj te dane na bieżąco dla korespondencji podatkowej i odzyskiwania konta."
       },
       "taxInfo": {
-        "title": "Profil podatkowy",
-        "message": "Numer podatkowy, status VAT i metoda ustalania zysku. Uzupełnienie tych pól aktywuje pełną automatyzację tworzenia aktywów i ekstrakcji OCR."
+        "title": "Profil podatkowy i firmowy",
+        "message": "Skonfiguruj numer podatkowy (Steuernummer), identyfikator VAT (USt-ID), status VAT (zwolnienie dla małych przedsiębiorców, regularny), typ dochodu, nazwę firmy i branżę. Niezbędne dla prawidłowych obliczeń podatkowych."
       },
       "commuting": {
-        "title": "Dojazd i praca zdalna",
-        "message": "Ustaw odległość dojazdu i dostępność transportu publicznego do obliczenia Pendlerpauschale. Dni pracy zdalnej są uwzględniane w odliczeniu Telearbeit (do 100 dni po 3 EUR/dzień)."
+        "title": "Zatrudnienie i dojazdy",
+        "message": "Skonfiguruj dane pracodawcy, odległość dojazdu (km) do obliczenia Pendlerpauschale, dostępność transportu publicznego, dni pracy zdalnej (Telearbeit) do obliczenia Homeoffice-Pauschale oraz status rodzinny dla ulg podatkowych."
       },
       "security": {
         "title": "Ustawienia bezpieczeństwa",
-        "message": "Włącz uwierzytelnianie dwuskładnikowe (2FA) dla dodatkowej ochrony konta. Zarządzaj hasłem i przeglądaj aktywne sesje."
+        "message": "Zmień hasło, sprawdź aktywne sesje i włącz uwierzytelnianie dwuskładnikowe (2FA) dla zwiększonego bezpieczeństwa konta."
       },
       "dataExport": {
-        "title": "Eksport danych i konto",
-        "message": "Wyeksportuj wszystkie dane jako archiwum ZIP w celu utworzenia kopii zapasowej lub migracji. Stąd można również zarządzać ustawieniami konta i subskrypcją."
+        "title": "Dane i prywatność",
+        "message": "Eksportuj wszystkie swoje dane (dokumenty, transakcje, raporty), zarządzaj ustawieniami subskrypcji lub poproś o usunięcie konta. Twoje dane należą do Ciebie — pełna zgodność z RODO."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Pamięć klasyfikacji",
-        "message": "Gdy poprawisz kategorię transakcji, system tworzy regułę, aby przyszłe transakcje o podobnych opisach były automatycznie kategoryzowane w ten sam sposób."
+        "title": "Inteligentna klasyfikacja",
+        "message": "Reguły klasyfikacji automatycznie przypisują kategorie podatkowe do transakcji na podstawie wzorców opisów. Taxja tworzy reguły z Twoich ręcznych poprawek, budując spersonalizowany silnik klasyfikacji, który doskonali się z czasem."
       },
       "list": {
         "title": "Lista reguł",
-        "message": "Tutaj wyświetlane są wszystkie nauczone reguły klasyfikacji. Każda reguła pokazuje rozpoznawany wzorzec, przypisaną kategorię i liczbę zastosowań."
+        "message": "Przeglądaj, edytuj lub usuwaj reguły klasyfikacji. Każda reguła dopasowuje wzorzec tekstowy (z opisów transakcji) do konkretnej kategorii podatkowej i statusu odliczalności."
       },
       "autoLearn": {
-        "title": "Automatyczne uczenie",
-        "message": "Reguły tworzone są automatycznie na podstawie Państwa poprawek. Można również zamrozić reguły, aby zapobiec ich nadpisaniu, lub usunąć niepotrzebne reguły."
+        "title": "Reguły nauczone przez AI",
+        "message": "Reguły automatycznie utworzone przez AI na podstawie Twoich wcześniejszych decyzji. Licznik pokazuje, ile transakcji każda reguła sklasyfikowała. Przeglądaj i dostosowuj w razie potrzeby."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "Doradca podatkowy AI",
-        "message": "Zadawaj pytania dotyczące austriackiego prawa podatkowego, możliwości odliczenia wydatków, terminów składania zeznań lub strategii optymalizacji. Asystent wykorzystuje profil i dane transakcji do spersonalizowanych odpowiedzi."
+        "title": "Asystent podatkowy AI",
+        "message": "Twój osobisty doradca podatkowy AI w zakresie austriackiego prawa podatkowego. Zadawaj pytania w dowolnym z 9 obsługiwanych języków. AI ma dostęp do Twojego pełnego profilu, transakcji, dokumentów i nieruchomości dla spersonalizowanych odpowiedzi."
       },
       "input": {
         "title": "Pole czatu",
-        "message": "Wpisz pytanie podatkowe tutaj. Można również załączyć dokumenty do analizy przez AI. Każda wiadomość zużywa kredyty z planu."
+        "message": "Wpisz pytanie podatkowe lub użyj sugerowanych podpowiedzi. Pytaj o odliczenia, zasady VAT, terminy składania deklaracji, amortyzację nieruchomości lub dowolny temat związany z austriackim prawem podatkowym."
       },
       "proactive": {
         "title": "Proaktywne sugestie",
-        "message": "AI może proaktywnie sugerować potwierdzenie transakcji cyklicznych, przesłanie brakujących dokumentów lub przetworzenie plików Lohnzettel na podstawie wzorców danych."
+        "message": "AI proaktywnie analizuje Twoje dane i sugeruje optymalizacje podatkowe, sygnalizuje brakujące dokumenty, ostrzega przed zbliżającymi się terminami i identyfikuje potencjalne błędy przed złożeniem deklaracji."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Aktualny plan",
-        "message": "Sprawdź aktywny plan subskrypcji, cykl rozliczeniowy i następną datę płatności. Stąd można zmienić plan na wyższy, niższy lub anulować subskrypcję."
+        "title": "Twoja subskrypcja",
+        "message": "Sprawdź aktualny plan (Free, Plus lub Pro), cykl rozliczeniowy, datę następnej płatności i zawarte funkcje. Free obejmuje podstawowe funkcje, Plus dodaje zaawansowane raporty, Pro odblokowuje asystenta AI i generowanie formularzy podatkowych."
       },
       "billing": {
-        "title": "Historia płatności",
-        "message": "Przeglądaj wcześniejsze faktury i zapisy płatności. Metody płatności są bezpiecznie zarządzane przez Stripe."
+        "title": "Rozliczenia i płatności",
+        "message": "Przeglądaj historię płatności, zarządzaj metodą płatności przez Stripe, anuluj lub reaktywuj subskrypcję i sprawdź pozostałe dni okresu próbnego, jeśli dotyczy."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "Filtruj operacje",
-        "message": "Filtruj historię kredytów według typu operacji: potrącenia, zwroty, miesięczne resety, doładowania lub rozliczenia nadwyżek."
+        "title": "Filtruj kredyty",
+        "message": "Filtruj historię kredytów według typu: potrącenia (użycie OCR/AI), zwroty, miesięczne resety, doładowania, wygasłe doładowania, rozliczenia nadwyżek lub migracje planów."
       },
       "list": {
-        "title": "Rejestr kredytów",
-        "message": "Każda transakcja kredytowa jest rejestrowana tutaj z typem operacji, powodem, znacznikiem czasu i kwotą. Kwoty dodatnie to kredyty dodane, kwoty ujemne to kredyty zużyte."
+        "title": "Transakcje kredytowe",
+        "message": "Szczegółowy rejestr całej aktywności kredytowej: kiedy kredyty zostały zużyte, ile, na co i jakie jest pozostałe saldo. Śledź użycie AI w przetwarzaniu dokumentów i interakcjach czatu."
       }
     }
   },

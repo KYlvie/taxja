@@ -3665,351 +3665,355 @@
   },
   "onboarding": {
     "welcome": {
-      "title": "Taxja'ya hoş geldiniz!",
-      "message": "Merhaba! Ben Taxja asistanınızım. Vergilerinizi zahmetsizce yönetebilmeniz için platformun temel özelliklerini hızlıca göstereceğim. Haydi başlayalım!"
+      "title": "Taxja’ya hoş geldiniz!",
+      "message": "Merhaba! Ben Taxja yapay zekâ asistanınızım. Sizi platformda gezdireceğim — otomatik belge taramadan banka ekstresi içe aktarımına, gerçek zamanlı vergi hesaplamalarından yapay zekâ destekli vergi danışmanlığına ve tek tıkla vergi beyannamesine kadar. Taxja 9 dili destekler ve çalışanlar, serbest meslek sahipleri, ev sahipleri ve işletmeler için eşit şekilde çalışır. Haydi size göstereyim!"
     },
     "documents": {
-      "title": "Belge yükleme",
-      "message": "Faturalarınızı, makbuzlarınızı veya sözleşmelerinizi yükleyin. İçeriği otomatik olarak tanıyacak, sınıflandıracak ve sizin için bir işlem oluşturacağız. Manuel veri girişi gerekmez!"
+      "title": "Akıllı Belge İşleme",
+      "message": "Faturalarınızı, makbuzlarınızı, sözleşmelerinizi veya banka ekstrelerinizi buraya yükleyin. OCR ve yapay zekâ motorumuz verileri otomatik olarak çıkarır, belgeleri sınıflandırır ve işlemleri oluşturur — manuel veri girişi gerekmez. Banka ekstreleri özel bir mutabakat çalışma tezgâhında işlenir ve işveren vergi belgeleri (Lohnzettel) kendi inceleme paneline sahiptir. Yapay zekâ tarafından çıkarılan verileri vergi kaydınıza girmeden önce inceleyin ve onaylayın."
     },
     "dashboard": {
-      "title": "Kontrol Paneliniz",
-      "message": "Kontrol paneli size tam bir genel bakış sunar: gelir ve giderler bir bakışta, vergi tasarruf ipuçları ve eylem hatırlatıcıları. İhtiyacınız olan her şey tek bir yerde."
+      "title": "Vergi Komuta Merkeziniz",
+      "message": "Kontrol paneli size gerçek zamanlı bir genel bakış sunar: gelir-gider karşılaştırması, tahmini vergi, ödenen vergiler, kalan bakiye, net gelir ve KDV eşiği takibi. Etkileşimli trend grafikleri aylık kalıpları ve kategori dağılımlarını gösterir. Vergi yıllarını değiştirmek için yıl seçiciyi kullanın, belge yüklemek için sürükle-bırak yapın ve abonelik durumunuzu kontrol edin — hepsi tek bir ekranda."
     },
     "transactions": {
-      "title": "İşlemler",
-      "message": "Tüm gelir ve gider kayıtlarınızı burada görüntüleyin, filtreleyin ve yönetin. İşlemler yüklenen belgelerden otomatik olarak oluşturulur veya bunları manuel olarak ekleyebilirsiniz. Her giriş, doğru vergi raporlaması için kategorize edilmiştir."
+      "title": "İşlem Yönetimi",
+      "message": "Tüm gelir ve gider kayıtlarınızı görüntüleyin, filtreleyin ve yönetin. İşlemler belgelerden ve banka ekstresi içe aktarımlarından otomatik olarak oluşturulur veya manuel olarak ekleyebilirsiniz. Belirli kayıtları bulmak için filtreleri kullanın, toplu işlemler için çoklu seçim yapın, CSV/PDF olarak dışa aktarın ve sınıflandırma kurallarını yönetin. Banka mutabakatı yapılmış işlemlerde tıklanabilir bir banka simgesi görünür."
     },
     "reports": {
-      "title": "Vergi Raporları",
-      "message": "E/A hesaplaması, Saldenliste ve vergi formu önizlemeleri dahil profesyonel vergi raporları oluşturun. İstediğiniz zaman PDF veya CSV olarak dışa aktarın  her şey muhasebeciniz veya Finanzamt için hazırdır."
+      "title": "Vergi Raporları ve Beyanname",
+      "message": "Profesyonel raporlar oluşturun: E/A gelir tablosu, bilanço (Bilanz), mizan (Saldenliste) ve dönem mizanı (Periodensaldenliste). Önceden doldurulmuş verilerle resmi vergi formlarını (E1, E1a, U30) önizleyin ve oluşturun. Tüm destekleyici belgelerle birlikte eksiksiz vergi paketini dışa aktarın veya FinanzOnline üzerinden elektronik olarak gönderin."
     },
     "ai": {
-      "title": "AI Asistan",
-      "message": "Vergi sorunuz mu var? Ekranın altındaki AI sohbetini istediğiniz zaman kullanın. Kesintiler, vergi kuralları ve kişiselleştirilmiş öneriler konusunda yardımcı olabilirim."
+      "title": "Yapay Zekâ Vergi Danışmanı",
+      "message": "Kişisel yapay zekâ vergi danışmanınız her zaman hazır. Avusturya vergi hukuku, gider indirimleri, KDV veya durumunuz hakkında her şeyi sorun — profilinizi, mülklerinizi, işlemlerinizi ve belgelerinizi bilir. Her yanıt kişiselleştirilmiştir. Ayrıca proaktif olarak optimizasyonlar önerir ve beyanname vermeden önce olası sorunları işaret eder."
     },
     "profile": {
-      "title": "Profilinizi tamamlayın",
-      "message": "Profil ayarlarınıza giderek KDV durumunuzu, gelir türünüzü ve diğer bilgilerinizi yapılandırın. Bu, size daha doğru vergi hesaplamaları ve öneriler sunmamıza yardımcı olur."
+      "title": "Vergi Profiliniz",
+      "message": "Gelir türünüzü, vergi numaranızı (Steuernummer), KDV durumunuzu (USt-ID), işletme bilgilerinizi, işveren bilgilerinizi ve Pendlerpauschale için işe gidiş-geliş verilerinizi yapılandırın. Vergi kredileri için aile durumunuzu ve Homeoffice-Pauschale için ev ofisi günlerinizi belirleyin. Profiliniz ne kadar eksiksiz olursa, hesaplamalarınız o kadar doğru olur. Ayrıca güvenlik ayarlarınızı yönetin, verilerinizi dışa aktarın veya hesabınızı buradan silin."
     },
-    "skip": "Atla",
+    "skip": "Rehberi atla",
     "next": "İleri →",
     "prev": "← Geri",
-    "finish": "Başlayalım!"
+    "finish": "Haydi başlayalım!"
   },
   "tour": {
     "dashboard": {
       "year": {
-        "title": "Yıl Seçici",
-        "message": "Buradan vergi yıllarını değiştirin. Paneldeki tüm veriler  gelir, gider ve vergi tahminleri  seçilen yıl için güncellenecektir."
+        "title": "Vergi Yılı Seçici",
+        "message": "Çalışmak istediğiniz vergi yılını seçin. Tüm kontrol paneli verileri — gelir, giderler, vergi tahminleri ve grafikler — yıl değiştirdiğinizde anında güncellenir."
       },
       "upload": {
-        "title": "Hızlı Yükleme",
-        "message": "Faturaları, makbuzları veya sözleşmeleri doğrudan panele bırakın. OCR motorumuz otomatik olarak tarar ve işlemler oluşturur  sayfadan ayrılmanıza gerek yok."
+        "title": "Hızlı Belge Yükleme",
+        "message": "Dosyalarınızı buraya sürükleyip bırakın veya göz atmak için tıklayın. Taxja faturaları, makbuzları, sözleşmeleri, banka ekstrelerini ve vergi formlarını kabul eder. OCR işleme otomatik olarak başlar ve çıkarılan verilerden işlemler oluşturur."
       },
       "overview": {
-        "title": "Finansal Genel Bakış",
-        "message": "Bu kartlar temel finansal göstergelerinizi gösterir: toplam gelir, toplam gider, tahmini vergi yükü, net sonuç, KDV eşiği ve bekleyen belge incelemeleri."
+        "title": "Finansal Genel Bakış Kartları",
+        "message": "Temel göstergeler bir bakışta: yılbaşından bugüne gelir, giderler, tahmini vergi, ödenen vergi, kalan bakiye, net gelir ve KDV eşiğine olan mesafe. Her kart daha fazla ayrıntı için tıklanabilir."
       },
       "trends": {
         "title": "Trend Grafikleri",
-        "message": "Görsel grafikler gelir ve giderlerinizi zaman içinde takip eder. Mevsimsel kalıpları keşfedin ve aylık karşılaştırma yapın."
+        "message": "Etkileşimli grafikler: aylık gelir-gider karşılaştırması, gelir kategorisi dağılımı (pasta grafik), gider kategorisi dağılımı ve yıllar arası karşılaştırmalar. Kalıpları keşfedin ve vergi stratejinizi planlayın."
       },
       "plan": {
-        "title": "Abonelik ve durum",
-        "message": "Mevcut planinizi ve sloganinizi burada goruntuleyiniz. Aboneligi yonetmek icin tiklayin."
+        "title": "Abonelik ve Krediler",
+        "message": "Mevcut planınızı (Ücretsiz, Plus veya Pro), kalan yapay zekâ kredilerinizi ve deneme durumunuzu görüntüleyin. Aboneliğinizi yönetmek veya ek kredi satın almak için tıklayın."
       },
       "language": {
-        "title": "Dil degistirici",
-        "message": "Taxja 9 dili destekler. Tum arayuz aninda sectiginiz dile gecer."
+        "title": "Dil Seçici",
+        "message": "Desteklenen 9 dil arasında geçiş yapın: Almanca, İngilizce, Çince, Fransızca, Rusça, Macarca, Lehçe, Türkçe ve Boşnakça. Tüm arayüz anında güncellenir."
       },
       "theme": {
-        "title": "Tema degistirici",
-        "message": "Varsayilan acik tema ile karanlik Cyber modu arasinda gecis yapin."
+        "title": "Tema Değiştirici",
+        "message": "Klasik (açık) ve Siber (koyu) temalar arasında geçiş yapın. Klasik mod temiz, standart arayüz öğeleri kullanır. Siber mod animasyonlu robot asistanı ve koyu arka planları içerir."
       }
     },
     "transactions": {
+      "classRules": {
+        "title": "Sınıflandırma Kuralları",
+        "message": "Otomatik kategorilendirme kurallarını görüntülemek ve düzenlemek için kural yöneticisini açın. Taxja manuel düzeltmelerinizden öğrenir ve açıklama kalıplarına göre gelecekteki işlemleri otomatik sınıflandıran kurallar oluşturur."
+      },
+      "export": {
+        "title": "İşlemleri Dışa Aktar",
+        "message": "İşlemlerinizi CSV veya PDF olarak indirin. Kayıtlarınız, vergi danışmanınız veya Finanzamt başvurunuz için biçim ve tarih aralığını seçin."
+      },
+      "addNew": {
+        "title": "İşlem Ekle",
+        "message": "Manuel olarak yeni bir gelir veya gider kaydı oluşturun. Yüklenecek bir belgeniz olmadığında bunu kullanın — tutar, tarih, kategori, KDV oranı ve isteğe bağlı satır öğelerini girin."
+      },
       "filters": {
-        "title": "Filtreler",
-        "message": "İşlemleri tarih aralığı, tür (gelir/gider), kategori, mülk veya duruma göre filtreleyin. Kesin sonuçlar için birden fazla filtreyi birleştirin."
+        "title": "İşlem Filtreleri",
+        "message": "Yıl, kategori, tür (gelir/gider), inceleme durumu ve daha fazlasına göre filtreleyin. Tam olarak ihtiyacınız olanı bulmak için filtreleri birleştirin. Onay bekleyen işlemleri hızlca bulmak için “İnceleme Gerekli” filtresini kullanın."
       },
       "list": {
         "title": "İşlem Listesi",
-        "message": "Tüm işlemleriniz burada görünür. Ayrıntıları görmek, tutarları düzenlemek veya kategoriyi değiştirmek için herhangi bir satıra tıklayın."
+        "message": "Tüm işlemler sıralanabilir, sayfalanabilir bir tabloda. Her satır tarih, açıklama, tutar, kategori ve durumu gösterir. Banka simgesi banka mutabakatı yapılmış kayıtları belirtir — bağlı banka ekstresini görüntülemek için tıklayın. Ataç simgesi ekli belgelere bağlantı sağlar. Toplu işlemler için onay kutularını kullanın."
       },
       "paging": {
         "title": "Sayfalama",
-        "message": "İşlem sayfaları arasında gezinin. Sayfa başına gösterilen öğe sayısını da değiştirebilirsiniz."
-      },
-      "classRules": {
-        "title": "Siniflandirma bellegi",
-        "message": "Sistem duzeltmelerinizden ogrenir. Ogrenilen siniflandirma kurallarini burada goruntuleyebilirsiniz."
-      },
-      "export": {
-        "title": "CSV olarak disari aktar",
-        "message": "Filtrelenmis tum islemleri muhasebeciniz veya Excel icin CSV dosyasi olarak disari aktarin."
-      },
-      "addNew": {
-        "title": "Islem ekle",
-        "message": "Manuel olarak yeni bir islem olusturun. Tutari, kategoriyi, tarihi ve istege bagli ayrintilari girin."
+        "message": "İşlem sayfaları arasında gezinin. Sayfa başına daha fazla veya daha az kayıt göstermek için sayfa boyutunu ayarlayın."
       }
     },
     "documents": {
       "upload": {
-        "title": "Yükleme Alanı",
-        "message": "Dosyaları buraya sürükleyin veya göz atmak için tıklayın. Desteklenen formatlar: PDF, JPG ve PNG. OCR motorumuz verileri otomatik olarak çıkaracaktır."
+        "title": "Belge Yükleme",
+        "message": "Faturaları, makbuzları, banka ekstrelerini, vergi formlarını, işveren belgelerini, sözleşmeleri ve daha fazlasını yükleyin. Aynı anda birden fazla dosyayı sürükleyip bırakın. Taxja’nın OCR motoru tutarları, tarihleri, satıcıları ve vergi ayrıntılarını otomatik olarak çıkarır."
       },
       "tabs": {
-        "title": "Kategori Sekmeleri",
-        "message": "Belgeler türe göre gruplandırılmıştır  faturalar, makbuzlar, sözleşmeler, vergi formları vb. Hızlı bulmak için sekmeleri değiştirin."
+        "title": "Belge Kategorileri",
+        "message": "Belgeler türe ve duruma göre düzenlenir: Tümü, İnceleme Bekleyen (sarı üçgen rozeti), Faturalar, Makbuzlar, Banka Ekstreleri, Vergi Formları, İşveren Belgeleri ve daha fazlası. “İnceleme Gerekli” sekmesi, yapay zekâ çıkarımının onayınızı gerektirdiği belgeleri gösterir."
       },
       "list": {
         "title": "Belge Listesi",
-        "message": "Tüm yüklenen belgeleri inceleyin. Her giriş tanınan türü, çıkarılan tutarı, işleme durumunu ve bağlı işlemi gösterir."
-      }
-    },
-    "reports": {
-      "tabs": {
-        "title": "Rapor Sekmeleri",
-        "message": "Rapor türünü seçin: E/A hesaplaması, mizan, bilanço, vergi formu önizlemesi (E1, L1, U1) ve daha fazlası."
-      },
-      "content": {
-        "title": "Rapor İçeriği",
-        "message": "Oluşturulan rapor burada görünür. Verileri kontrol edin, ardından muhasebeciniz veya vergi dairesi için PDF veya CSV olarak dışa aktarın."
-      },
-      "generate": {
-        "title": "Rapor olustur",
-        "message": "Secilen vergi yili icin raporu olusturmak icin buraya tiklayin."
-      },
-      "print": {
-        "title": "Yazdir",
-        "message": "Olusturulan raporu dogrudan yazdiriniz veya tarayicinizin yazdirma penceresi ile PDF olarak kaydediniz."
-      },
-      "finanzOnline": {
-        "title": "FinanzOnline ac",
-        "message": "Avusturya vergi portali FinanzOnline yi yeni sekmede acar."
-      },
-      "downloadForm": {
-        "title": "Resmi formu indir",
-        "message": "Resmi BMF vergi formunu (PDF) indirin ve yukaridaki onizlemedeki degerlerle doldurun."
-      }
-    },
-    "properties": {
-      "cards": {
-        "title": "Tüm Varlıklar",
-        "message": "Mülkleriniz, cihazlarınız, araçlarınız ve diğer varlıklarınız birleşik bir listede. Ayrıntılar, düzenleme veya amortisman yönetimi için herhangi bir karta tıklayın."
-      },
-      "overview": {
-        "title": "Varlık Genel Bakışı",
-        "message": "Tüm mülklerinizi ve varlıklarınızı yan yana karşılaştırmak için portföy panosunu açın."
-      },
-      "add": {
-        "title": "Varlik ekle",
-        "message": "Manuel olarak yeni bir mulk, arac veya diger varlik ekleyin. Amortisman otomatik olarak hesaplanir."
-      },
-      "edit": {
-        "title": "Varligi duzenle",
-        "message": "Bir varligin ayrintillarini duzenlemek icin kalem simgesine tiklayin."
-      },
-      "archive": {
-        "title": "Arsivle ve filtrele",
-        "message": "Artik aktif olarak yonetmediginiz varliklari arsivleyin. Arsivlenmis ogeleri gostermek veya gizlemek icin bu onay kutusunu degistirin."
-      }
-    },
-    "recurring": {
-      "create": {
-        "title": "Tekrarlayan Oluştur",
-        "message": "Yeni bir tekrarlayan işlem ayarlayın  kira geliri, kredi ödemesi, sigorta veya herhangi bir düzenli gider. Sıklığı ve başlangıç tarihini seçin."
-      },
-      "filters": {
-        "title": "Filtreler",
-        "message": "Tekrarlayan işlemleri tür, sıklık, mülk veya durum (aktif/duraklatılmış) bazında filtreleyin."
-      },
-      "list": {
-        "title": "Tekrarlayan Liste",
-        "message": "Tüm tekrarlayan işlemleriniz burada listelenir. Bir sonraki yürütme tarihini görün, girişleri duraklatın veya devam ettirin, ya da detayları düzenleyin."
-      }
-    },
-    "advanced": {
-      "assets": {
-        "title": "Varlık ve Yükümlülük Yönetimi",
-        "message": "Mülklerinizi, ekipmanlarınızı ve yükümlülüklerinizi yönetin. Amortismanı takip edin, portföyünüzü inceleyin ve kredilerinizi yönetin."
-      },
-      "automation": {
-        "title": "Kurallar ve Otomasyon",
-        "message": "Tekrarlayan işlemleri ayarlayın ve sınıflandırma belleğini yönetin. Sistem düzeltmelerinizden öğrenerek gelecekteki işlemleri otomatik olarak kategorize eder."
-      },
-      "taxtools": {
-        "title": "Vergi Çalışma Alanı",
-        "message": "Hepsi bir arada vergi merkeziniz: beyanname hazırlığı, belge kontrolü, AI rehberliği ve rapor oluşturma  her şey tek bir yerde."
-      }
-    },
-    "propertyDetail": {
-      "actions": {
-        "title": "Islem cubugu",
-        "message": "Bu varlikla ilgili tum islemler burada."
-      },
-      "info": {
-        "title": "Varlik ayrintilari",
-        "message": "Tum varlik ayrintilari bir bakista."
-      },
-      "contracts": {
-        "title": "Kira sozlesmeleri",
-        "message": "Bu mulke bagli tum kira sozlesmeleri."
-      },
-      "transactions": {
-        "title": "Bagli islemler",
-        "message": "Tum gelir ve giderler yillara gore gruplanmis."
+        "message": "Arama ve filtrelerle tüm yüklenen belgelere göz atın. Her kayıt belge adını, türünü, yükleme tarihini ve işleme durumunu gösterir. OCR verileri, önizleme ve bağlı işlemlerle ayrıntı görünümünü açmak için herhangi bir belgeye tıklayın."
       }
     },
     "documentDetail": {
       "header": {
-        "title": "Baslik Islemleri",
-        "message": "Belge listesine geri donun, orijinal dosyayi indirin veya ilk cikarma eksikse belgeyi OCR hattindan yeniden isleyin."
+        "title": "Belge Başlığı",
+        "message": "Belge adını, türünü, yükleme tarihini ve işleme durumunu gösterir. Eylem düğmeleri OCR’yi yeniden işlemenize, orijinal dosyayı indirmenize veya belgeyi silmenize olanak tanır."
       },
       "preview": {
-        "title": "Belge Onizleme",
-        "message": "Orijinal belge burada goruntulenir  PDF dosyalari gomulu, resimler dogrudan islenir. Cikarilan verileri kaynakla dogrulamak icin kullanin."
+        "title": "Belge Önizleme",
+        "message": "Yüklenen orijinal belgeyi (PDF, resim vb.) görüntüleyin. Sağ paneldeki yapay zekâ tarafından çıkarılan verilerle doğrulamak için yakınlaştırın."
       },
       "ocrData": {
-        "title": "Cikarilan Veriler",
-        "message": "OCR ve yapay zeka tarafindan cikarilan tum alanlar burada gorunur: tutarlar, tarihler, tedarikci adlari, vergi oranlari ve dahasi. Guven puani, cikarmanin guvenilirligini gosterir."
+        "title": "Yapay Zekâ Tarafından Çıkarılan Veriler",
+        "message": "OCR ve yapay zekâ tarafından çıkarılan tüm alanlar: tutar, tarih, satıcı, kategori, KDV oranı, satır öğeleri ve daha fazlası. Düşük güvenilirlikli alanlar vurgulanır. Onaylamadan önce her değeri inceleyin ve hataları düzeltin."
       },
       "linked": {
-        "title": "Bagli Islem",
-        "message": "Bir belge bir islem veya varlikla eslestirildiginde, baglanti burada gorunur. Dogrudan bagli kayda atlamak icin tiklayin."
+        "title": "Bağlı Kayıtlar",
+        "message": "Bu belgeye hangi işlemin, varlığın veya banka ekstresi satırının bağlı olduğunu görün. Yeni bağlantılar oluşturun veya bağlı kayda doğrudan buradan gidin."
       },
       "editMode": {
-        "title": "Satir Ici Duzenleme",
-        "message": "Duzeltmek icin cikarilan herhangi bir alana tiklayin. Duzeltmeleriniz sistemi egitir ve gelecekteki cikarmalari iyilestirir. Degisiklikler aninda kaydedilir."
+        "title": "Düzenle ve Onayla",
+        "message": "Yapay zekâ tarafından çıkarılan değerleri düzeltmek için düzenleme moduna geçin. Onayladığınızda veriler kilitlenir ve sarı inceleme rozeti kaldırılır. Düzeltmeleriniz gelecekteki yapay zekâ doğruluğunu da artırır."
+      }
+    },
+    "reports": {
+      "tabs": {
+        "title": "Rapor Türleri",
+        "message": "Rapor türleri arasında geçiş yapın: E/A Gelir Tablosu (serbest meslek), Bilanço (Bilanz), Mizan (Saldenliste), Dönem Mizanı (Periodensaldenliste) ve Vergi Formu Önizlemesi (E1/E1a/U30)."
+      },
+      "generate": {
+        "title": "Rapor Oluştur",
+        "message": "Seçilen vergi yılı için raporu hesaplayın. Sistem en güncel işlem verilerinizi çeker ve resmi Avusturya vergi formu alanlarıyla eşleşen ayrıntılı bir döküm oluşturur."
+      },
+      "print": {
+        "title": "Raporu Yazdır",
+        "message": "Raporu doğrudan tarayıcıdan yazdırın. Yazdırma düzeni uygun başlıklar ve sayfa sonlarıyla A4 kâğıt için optimize edilmiştir."
+      },
+      "content": {
+        "title": "Rapor İçeriği",
+        "message": "Her satırı resmi form alanlarına eşlenmiş ayrıntılı vergi hesaplaması. Genişletilebilir bölümler her satır öğesi için temel işlemleri gösterir."
+      },
+      "finanzOnline": {
+        "title": "FinanzOnline Entegrasyonu",
+        "message": "Vergi beyannamenizi FinanzOnline üzerinden Avusturya vergi dairesine (Finanzamt) elektronik olarak gönderin. Form verileri işlemlerinizden ve belgelerinizden önceden doldurulur."
+      },
+      "downloadForm": {
+        "title": "İndir ve Dışa Aktar",
+        "message": "Önceden doldurulmuş resmi vergi formunu PDF olarak indirin veya vergi beyannamenizi, tüm destekleyici belgeleri ve özet raporu içeren eksiksiz vergi paketini tek bir arşiv olarak dışa aktarın."
+      }
+    },
+    "properties": {
+      "overview": {
+        "title": "Portföy Genel Bakışı",
+        "message": "Toplu bilgiler için varlık portföy panosuna gidin: toplam varlık değerleri, amortisman takvimleri ve tüm mülkleriniz ile varlıklarınız arasında karşılaştırmalı analizler."
+      },
+      "add": {
+        "title": "Varlık Ekle",
+        "message": "Yeni bir varlık kaydedin: gayrimenkul, araç, ekipman, makine veya alet. Taxja, Avusturya vergi hukukuna göre amortismanı (AfA) hesaplar ve defter değerlerini zaman içinde takip eder."
+      },
+      "cards": {
+        "title": "Varlık Kartları",
+        "message": "Her kart bir varlığı temel ayrıntılarıyla gösterir: ad, tür, satın alma tarihi, orijinal maliyet, mevcut defter değeri ve amortisman durumu. Tam ayrıntı görünümünü açmak için tıklayın."
+      },
+      "edit": {
+        "title": "Varlığı Düzenle",
+        "message": "Varlık ayrıntılarını güncelleyin: satın alma fiyatı, amortisman yöntemi (doğrusal/azalan), faydalı ömür veya elden çıkarma bilgileri. Değişiklikler amortisman takvimlerini otomatik olarak yeniden hesaplar."
+      },
+      "archive": {
+        "title": "Arşiv Görünümü",
+        "message": "Arşivlenmiş/elden çıkarılmış varlıkları gösterin veya gizleyin. Arşivlenen öğeler 7 yıllık yasal saklama süresi (BAO §132) boyunca tutulur ancak ana görünümden gizlenir."
       }
     },
     "assetInsights": {
       "summary": {
-        "title": "Varlık-Yükümlülük Özeti",
-        "message": "Toplam varlıklarınızı, yükümlülüklerinizi, net değerinizi ve aylık borç servisini bir bakışta görün."
+        "title": "Varlık Özeti",
+        "message": "Tüm varlıklardaki temel rakamlar: toplam edinme maliyeti, mevcut defter değeri, yıllık amortisman gideri ve mülklerden net kira geliri."
       },
       "portfolio": {
-        "title": "Mülk Portföyü",
-        "message": "Tüm mülklerinizin kira gelirini, giderlerini ve net getirisini karşılaştırın."
+        "title": "Portföy Karşılaştırması",
+        "message": "Mülkleri temel göstergelerde yan yana karşılaştırın: getiri, doluluk oranı, bakım maliyetleri ve yatırım getirisi."
       },
       "otherAssets": {
         "title": "Diğer Varlıklar",
-        "message": "Cihazları, araçları ve ekipmanları satın alma değerleri ve amortisman ayrıntılarıyla görüntüleyin."
+        "message": "Mülk dışı amortismana tabi varlıklar: araçlar, ofis ekipmanları, makineler ve maddi olmayan varlıklar. Her biri kendi amortisman takvimi ile takip edilir."
       },
       "reports": {
-        "title": "Bireysel Raporlar",
-        "message": "Herhangi bir belirli varlık için gelir tabloları ve amortisman planları oluşturun."
+        "title": "Varlık Raporları",
+        "message": "Ayrıntılı amortisman raporları ve varlık envanterleri oluşturun. Kapsamlı varlık belgelendirmesi için rapor türünü ve yılı seçin."
+      }
+    },
+    "propertyDetail": {
+      "actions": {
+        "title": "Mülk İşlemleri",
+        "message": "Mülk ayrıntılarını düzenleyin, amortisman takvimini görüntüleyin, varlığı elden çıkarın/satın veya arşivleyin. Bu eylem menüsünden tüm yönetim araçlarına erişin."
+      },
+      "info": {
+        "title": "Mülk Bilgileri",
+        "message": "Temel ayrıntılar: adres, satın alma tarihi, edinme maliyeti, alan (m²), amortisman yöntemi, faydalı ömür ve mevcut defter değeri."
+      },
+      "contracts": {
+        "title": "Kira Sözleşmeleri",
+        "message": "Kira sözleşmelerini yönetin: kiracı ekleyin, kira tutarlarını ve dönemlerini belirleyin, depozitoları takip edin ve kira koşullarını izleyin. Kira ve kiralama (Vermietung & Verpachtung) raporlaması için gereklidir."
+      },
+      "transactions": {
+        "title": "Mülk İşlemleri",
+        "message": "Bu mülke bağlı tüm gelir ve giderler: kira geliri, bakım maliyetleri, sigorta, faiz ödemeleri. Doğrudan vergi raporlaması için kullanılır."
       }
     },
     "liabilities": {
       "overview": {
-        "title": "Varlık-Yükümlülük Genel Bakışı",
-        "message": "Birleşik varlık ve yükümlülük özetini temel göstergelerle görmek için aşağı kaydırın."
+        "title": "Yükümlülükler Panosu",
+        "message": "Tüm borçların toplu görünümü: toplam ödenmemiş bakiye, aylık ödeme yükümlülükleri, toplam ödenen faiz ve borç-varlık oranı."
       },
       "add": {
         "title": "Yükümlülük Ekle",
-        "message": "Yeni bir kredi, borçlanma veya diğer yükümlülüğü kaydedin. Geri ödeme planları belirleyin ve mülklere bağlayın."
+        "message": "Yeni bir kredi, ipotek veya kredi olanağı kaydedin. Anapara tutarını, faiz oranını ve geri ödeme planını girin. Varsa bir mülke bağlayın — faiz vergiden düşülebilir olabilir."
       },
       "list": {
         "title": "Yükümlülük Listesi",
-        "message": "Tüm aktif yükümlülüklerinizi göz atın. Her kart kalan bakiyeyi ve geri ödeme ilerlemesini gösterir."
+        "message": "Tüm kredi ve yükümlülükleriniz tek bir yerde. Mevcut bakiyeyi, faiz oranını ve sonraki ödeme tarihini görün. Tam amortisman takvimini görüntülemek için herhangi bir öğeye tıklayın."
       },
       "detail": {
-        "title": "Yükümlülük Detayı",
-        "message": "Seçilen yükümlülüğün geri ödeme planını, faiz trend grafiğini ve bağlı işlemlerini görüntüleyin."
+        "title": "Amortisman Takvimi",
+        "message": "Her ödeme için anapara ve faiz ayrımını gösteren ayrıntılı geri ödeme takvimi. Kalan bakiyeyi, toplam ödenen faizi ve bağlı mülk veya varlığı takip edin."
+      }
+    },
+    "recurring": {
+      "create": {
+        "title": "Tekrarlayan Kalıp Oluştur",
+        "message": "Otomatik olarak tekrarlanan bir işlem ayarlayın: günlük, haftalık, aylık, üç aylık veya yıllık. Kira, abonelikler veya sigorta primleri gibi düzenli giderler için idealdir."
+      },
+      "filters": {
+        "title": "Kalıpları Filtrele",
+        "message": "Tekrarlayan kayıtları sıklık, kategori, aktif/durakl\u0001atılmış durumu veya tutar aralığına göre filtreleyin."
+      },
+      "list": {
+        "title": "Tekrarlayan Kalıplar",
+        "message": "Tüm tekrarlayan işlem kalıplarını görüntüleyin ve yönetin. Taxja ayrıca banka ekstrelerinizden tekrarlayan kalıpları otomatik olarak algılar. Zamanlamaları gerektiğinde durakl\u0001atın, düzenleyin veya silin."
+      }
+    },
+    "advanced": {
+      "assets": {
+        "title": "Varlıklar ve Yükümlülükler",
+        "message": "Gayrimenkul, araç, ekipman ve diğer amortismana tabi varlıkları otomatik amortisman (AfA) hesaplamasıyla yönetin. Ayrıca kredi, ipotek ve diğer yükümlülükleri amortisman takvimleriyle takip edin."
+      },
+      "automation": {
+        "title": "Kurallar ve Otomasyon",
+        "message": "Düzenli ödemeler için tekrarlayan işlemler ayarlayın ve işlemleri otomatik kategorize eden sınıflandırma kurallarını yönetin. Taxja zaman içinde düzeltmelerinizden öğrenir."
+      },
+      "taxtools": {
+        "title": "Vergi Çalışma Alanı",
+        "message": "Gelişmiş vergi araçları: iade tahmini, ya-olsaydı simülatörü, götürü gider karşılaştırması (Betriebsausgabenpauschale), yıllık vergi veri özeti, işveren belgeleri çalışma tezgâhı ve denetim kontrol listesi."
       }
     },
     "taxTools": {
       "refund": {
-        "title": "Vergi Durumu ve İade",
-        "message": "Tahmini vergi iadeniz veya vergi borcunuz bir bakışta. Gelirinize, kesilen vergiye ve indirimlerinize göre sistem, geri ödeme bekleyip bekleyemeyeceğinizi hesaplar."
+        "title": "Vergi İade Tahmini",
+        "message": "Mevcut gelirinize, gider indirimlerinize ve kesilen vergiye göre beklenen vergi iadenizi veya borcunuzu tahmin edin. Vergilendirilebilir gelir ve uygulanan oranların ayrıntılı dökümünü gösterir."
       },
       "whatIf": {
-        "title": "\"Ya Olsaydı\" Simülatörü",
-        "message": "Varsayımsal senaryolar modelleyin: ek gelir, indirimler ekleyin veya beyanname durumunuzu değiştirerek tahmini verginize etkisini görün. Vergi planlaması için idealdir."
+        "title": "Ya-Olsaydı Simülatörü",
+        "message": "Varsayımsal senaryoları modelleyin: ek gelir ekleyin, indirimleri ayarlayın veya işletme giderlerini değiştirerek vergi durumunuza etkisini görün. Farklı senaryoları yan yana karşılaştırın."
       },
       "flatRate": {
-        "title": "Götürü Karşılaştırma",
-        "message": "Gerçek giderlerinizi Avusturya götürü indirimi (Pauschalierung) ile karşılaştırın. Serbest meslek sahibi olarak hangi yöntemin daha fazla vergi tasarrufu sağladığını görün."
+        "title": "Götürü Gider Karşılaştırması",
+        "message": "Gerçek belgelenmiş giderlerinizi Betriebsausgabenpauschale (götürü işletme giderleri) ile karşılaştırın. Hangi seçeneğin daha iyi vergi sonucu verdiğini görün — serbest meslek sahipleri için kullanılabilir."
       },
       "filing": {
-        "title": "Yıllık Vergi Veri Özeti",
-        "message": "Onaylanmış gelir, indirim ve KDV verilerini vergi yılına göre inceleyin. Toplamları görmek, çelişkileri tespit etmek ve beyanname öncesi kaynak belgeleri doğrulamak için bir yıl seçin."
+        "title": "Yıllık Vergi Özeti",
+        "message": "Vergi yılınızın eksiksiz özeti: vergilendirilebilir gelir, tahmini vergi, kesilen vergi, tahmini iade, gelir ve gider dökümleri, KDV özeti ve uyarılarla çelişki tespiti."
       },
-      "assetReport": {
-        "title": "Varlık Raporu",
-        "message": "Ayrıntılı gelir tabloları ve amortisman çizelgeleri oluşturmak için takip edilen herhangi bir mülk veya varlığı seçin."
+      "employer": {
+        "title": "İşveren Belgeleri",
+        "message": "Lohnzettel (L16) ve diğer işveren vergi belgelerinizi yükleyin ve inceleyin. Taxja, işveren bilgilerini, brüt maaşı, vergi kesintilerini ve sosyal sigorta primlerini otomatik olarak çıkarır. Birden fazla işveren desteklenir."
+      },
+      "audit": {
+        "title": "Denetim Kontrol Listesi",
+        "message": "Beyanname vermeden önce vergi kayıtlarınızın eksiksiz olduğunu doğrulayın: eksik belgeler, incelenmemiş işlemler, tamamlanmamış kategoriler ve Avusturya vergi gereksinimlerine uyumluluk kontrolü."
       }
     },
     "profile": {
       "basicInfo": {
         "title": "Kişisel Bilgiler",
-        "message": "Adınız, e-posta adresiniz, vergi rolleriniz (çalışan, ev sahibi, serbest meslek) ve işletme bilgileriniz. Bunlar, sizin için hangi vergi özelliklerinin ve indirimlerin kullanılabilir olduğunu belirler."
+        "message": "Adınız, e-posta adresiniz ve görüntüleme tercihleriniz. Vergi yazışmaları ve hesap kurtarma için bunları güncel tutun."
       },
       "taxInfo": {
-        "title": "Vergi Profili",
-        "message": "Vergi numarası, KDV durumu ve kâr belirleme yöntemi. Bu alanların doldurulması, varlık oluşturma ve OCR çıkarma için tam otomasyonu etkinleştirir."
+        "title": "Vergi ve İşletme Profili",
+        "message": "Vergi numaranızı (Steuernummer), KDV kimlik numaranızı (USt-ID), KDV durumunuzu (küçük işletme muafiyeti, normal), gelir türünüzü, işletme adınızı ve sektörünüzü yapılandırın. Doğru vergi hesaplamaları için gereklidir."
       },
       "commuting": {
-        "title": "İşe Gidiş-Geliş ve Ev Ofisi",
-        "message": "Pendlerpauschale hesaplaması için işe gidiş-geliş mesafenizi ve toplu taşıma erişilebilirliğinizi ayarlayın. Ev ofisi günleri Telearbeit indirimi için kullanılır (günde 3 EUR, en fazla 100 gün)."
+        "title": "İstihdam ve İşe Gidiş-Geliş",
+        "message": "İşveren bilgilerinizi, Pendlerpauschale için işe gidiş-geliş mesafenizi (km), toplu taşıma erişilebilirliğini, Homeoffice-Pauschale için ev ofisi (Telearbeit) günlerinizi ve vergi kredileri için aile durumunuzu ayarlayın."
       },
       "security": {
         "title": "Güvenlik Ayarları",
-        "message": "Hesabınızın ek korunması için iki faktörlü kimlik doğrulamayı (2FA) etkinleştirin. Şifrenizi yönetin ve aktif oturumlarınızı inceleyin."
+        "message": "Şifrenizi değiştirin, aktif oturumları inceleyin ve gelişmiş hesap güvenliği için iki faktörlü kimlik doğrulamasını (2FA) etkinleştirin."
       },
       "dataExport": {
-        "title": "Veri Dışa Aktarma ve Hesap",
-        "message": "Yedekleme veya taşıma için tüm verilerinizi ZIP arşivi olarak dışa aktarın. Buradan hesap ayarlarınızı ve aboneliğinizi de yönetebilirsiniz."
+        "title": "Veri ve Gizlilik",
+        "message": "Tüm verilerinizi (belgeler, işlemler, raporlar) dışa aktarın, abonelik ayarlarını yönetin veya hesap silme talebinde bulunun. Verileriniz size aittir — tamamen GDPR uyumludur."
       }
     },
     "classificationRules": {
       "intro": {
-        "title": "Sınıflandırma Belleği",
-        "message": "Bir işlem kategorisini düzelttiğinizde, sistem bir kural oluşturur ve benzer açıklamalara sahip gelecekteki işlemler otomatik olarak aynı şekilde kategorize edilir."
+        "title": "Akıllı Sınıflandırma",
+        "message": "Sınıflandırma kuralları, açıklama kalıplarına göre işlemlere otomatik olarak vergi kategorileri atar. Taxja, manuel düzeltmelerinizden kurallar oluşturarak zaman içinde gelişen kişiselleştirilmiş bir sınıflandırma motoru oluşturur."
       },
       "list": {
         "title": "Kural Listesi",
-        "message": "Tüm öğrenilmiş sınıflandırma kurallarınız burada görünür. Her kural, eşleşen kalıbı, atanan kategoriyi ve kaç kez uygulandığını gösterir."
+        "message": "Sınıflandırma kurallarını görüntüleyin, düzenleyin veya silin. Her kural bir metin kalıbını (işlem açıklamalarından) belirli bir vergi kategorisi ve indirilebilirlik durumuna eşler."
       },
       "autoLearn": {
-        "title": "Otomatik Öğrenme",
-        "message": "Kurallar düzeltmelerinizden otomatik olarak oluşturulur. Kuralları üzerine yazılmasını önlemek için dondurabilir veya artık ihtiyaç duymadığınız kuralları silebilirsiniz."
+        "title": "Yapay Zekâ ile Öğrenilmiş Kurallar",
+        "message": "Geçmiş kararlarınızdan yapay zekâ tarafından otomatik oluşturulan kurallar. Sayaç, her kuralın kaç işlemi sınıflandırdığını gösterir. Gerektiğinde inceleyin ve ince ayar yapın."
       }
     },
     "aiAssistant": {
       "welcome": {
-        "title": "AI Vergi Danışmanı",
-        "message": "Avusturya vergi hukuku, giderlerin indirilebilirliği, beyanname son tarihleri veya optimizasyon stratejileri hakkında sorular sorun. Asistan, kişiselleştirilmiş yanıtlar için profilinizi ve işlem verilerinizi kullanır."
+        "title": "Yapay Zekâ Vergi Asistanı",
+        "message": "Avusturya vergi hukuku için kişisel yapay zekâ vergi danışmanınız. Desteklenen 9 dilden herhangi birinde soru sorun. Yapay zekâ, kişiselleştirilmiş yanıtlar için tüm profilinize, işlemlerinize, belgelerinize ve mülklerinize erişir."
       },
       "input": {
         "title": "Sohbet Girişi",
-        "message": "Vergi sorunuzu buraya yazın. AI'nin analiz etmesi için belgeler de ekleyebilirsiniz. Her mesaj planınızdaki kredileri kullanır."
+        "message": "Vergi sorunuzu yazın veya önerilen komutları kullanın. Gider indirimleri, KDV kuralları, beyanname son tarihleri, mülk amortismanı veya herhangi bir Avusturya vergi konusu hakkında sorun."
       },
       "proactive": {
         "title": "Proaktif Öneriler",
-        "message": "AI, veri kalıplarınıza göre onaylanacak yinelenen işlemler, yüklenmesi gereken eksik belgeler veya işlenecek Lohnzettel dosyaları proaktif olarak önerebilir."
+        "message": "Yapay zekâ verilerinizi proaktif olarak analiz eder ve vergi optimizasyonları önerir, eksik belgeleri işaret eder, yaklaşan son tarihler hakkında uyarır ve beyanname vermeden önce olası hataları tespit eder."
       }
     },
     "subscription": {
       "plan": {
-        "title": "Mevcut Plan",
-        "message": "Aktif abonelik planınızı, faturalandırma döngünüzü ve bir sonraki faturalandırma tarihini görüntüleyin. Buradan yükseltme, düşürme veya iptal işlemi yapabilirsiniz."
+        "title": "Aboneliğiniz",
+        "message": "Mevcut planınızı (Ücretsiz, Plus veya Pro), faturalandırma döngünüzü, sonraki ödeme tarihinizi ve dahil edilen özellikleri görüntüleyin. Ücretsiz plan temel özellikleri içerir, Plus gelişmiş raporlar ekler, Pro yapay zekâ asistanını ve vergi formu oluşturmayı açar."
       },
       "billing": {
-        "title": "Faturalandırma Geçmişi",
-        "message": "Geçmiş faturaları ve ödeme kayıtlarını inceleyin. Ödeme yöntemleri Stripe aracılığıyla güvenli bir şekilde yönetilmektedir."
+        "title": "Faturalandırma ve Ödemeler",
+        "message": "Ödeme geçmişini inceleyin, Stripe üzerinden ödeme yönteminizi yönetin, aboneliğinizi iptal edin veya yeniden etkinleştirin ve varsa kalan deneme günlerinizi görüntüleyin."
       }
     },
     "creditHistory": {
       "filter": {
-        "title": "İşlemleri Filtrele",
-        "message": "Kredi geçmişinizi işlem türüne göre filtreleyin: kesintiler, iadeler, aylık sıfırlamalar, yüklemeler veya aşım ödemeleri."
+        "title": "Kredileri Filtrele",
+        "message": "Kredi geçmişini türe göre filtreleyin: kesintiler (OCR/yapay zekâ kullanımı), iadeler, aylık sıfırlamalar, ek kredi satın alımları, süresi dolmuş ek krediler, aşım ödemeleri veya plan geçişleri."
       },
       "list": {
-        "title": "Kredi Defteri",
-        "message": "Her kredi işlemi burada işlem türü, nedeni, zaman damgası ve tutarı ile birlikte kaydedilir. Pozitif tutarlar eklenen kredileri, negatif tutarlar tüketilen kredileri gösterir."
+        "title": "Kredi İşlemleri",
+        "message": "Tüm kredi hareketlerinin ayrıntılı kaydı: krediler ne zaman kullanıldı, kaç adet, ne için ve kalan bakiyeniz. Belge işleme ve sohbet etkileşimleri arasında yapay zekâ kullanımını takip edin."
       }
     }
   },
