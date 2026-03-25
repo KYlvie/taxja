@@ -354,6 +354,7 @@ class ProactiveReminderService:
                     "params": item.get("i18n_params"),
                     "tax_year": tax_year,
                     "action_url": item.get("action_url"),
+                    "action_data": item.get("action_data"),
                 }
             )
             reminders.append(
