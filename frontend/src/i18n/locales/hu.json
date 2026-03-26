@@ -2799,7 +2799,13 @@
         "deductible": "Mely tételek levonhatók?",
         "explainDocument": "Mit tartalmaz ez a dokumentum?",
         "taxFormFields": "Mit jelentenek a KZ mezők?",
-        "confirmData": "Hogyan erősítem meg a kinyert adatokat?"
+        "confirmData": "Hogyan erősítem meg a kinyert adatokat?",
+        "howToSearch": "Hogyan keresek és szűrök dokumentumokat?",
+        "bulkConfirm": "Mit csinál az 'Összes megerősítése'?",
+        "reviewStatus": "Mit jelentenek az ellenőrzési állapot jelzések?",
+        "yearFilter": "Hogyan szűrök év vagy dokumentumtípus szerint?",
+        "exportZip": "Hogyan exportálom a dokumentumokat ZIP-ként?",
+        "uploadTips": "Milyen fájlformátumokat tölthetek fel?"
       },
       "reports": {
         "generate": "Hogyan készítek adójelentést?",

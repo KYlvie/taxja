@@ -21,25 +21,26 @@ _DATE_FORMATS = (
 _NAMED_MONTHS = {
     "jan": 1,
     "january": 1,
-    "jänner": 1,
+    "janner": 1,
     "jaenner": 1,
+    "janner.": 1,
     "feb": 2,
     "february": 2,
-    "mär": 3,
-    "maerz": 3,
-    "märz": 3,
     "mar": 3,
     "march": 3,
+    "marz": 3,
+    "maerz": 3,
+    "marz.": 3,
     "apr": 4,
     "april": 4,
     "mai": 5,
     "may": 5,
     "jun": 6,
-    "juni": 6,
     "june": 6,
+    "juni": 6,
     "jul": 7,
-    "juli": 7,
     "july": 7,
+    "juli": 7,
     "aug": 8,
     "august": 8,
     "sep": 9,
@@ -59,9 +60,82 @@ _NAMED_MONTHS = {
 
 _NUMBER_TOKEN_RE = re.compile(r"[-+()]?\s*[0-9][0-9.,\s]*")
 _NAMED_DATE_RE = re.compile(
-    r"(?P<day>\d{1,2})\.?\s+(?P<month>[A-Za-zÄÖÜäöüß\.]+)\s+(?P<year>\d{4})",
+    r"(?P<day>\d{1,2})\.?\s+(?P<month>[A-Za-z.\-]+)\s+(?P<year>\d{4})",
     re.IGNORECASE,
 )
+
+_CURRENCY_MAP = {
+    "EUR": "EUR",
+    "EURO": "EUR",
+    "€": "EUR",
+    "USD": "USD",
+    "$": "USD",
+    "GBP": "GBP",
+    "£": "GBP",
+    "CHF": "CHF",
+    "FR": "CHF",
+    "SFR": "CHF",
+}
+
+_BOOLEAN_TRUE = {
+    "1",
+    "true",
+    "yes",
+    "y",
+    "ja",
+    "j",
+    "oui",
+    "si",
+    "x",
+    "checked",
+    "bezahlt",
+    "paid",
+    "deductible",
+    "abzugsfaehig",
+    "abzugsfahig",
+}
+
+_BOOLEAN_FALSE = {
+    "0",
+    "false",
+    "no",
+    "n",
+    "nein",
+    "non",
+    "",
+    "unchecked",
+    "offen",
+    "open",
+    "not deductible",
+    "nicht abzugsfaehig",
+    "nicht abzugsfahig",
+}
+
+_SEMANTIC_FLAG_PATTERNS = (
+    ("reverse_charge", re.compile(r"\breverse charge\b|steuerschuldnerschaft des leistungsempf", re.IGNORECASE)),
+    ("credit_note", re.compile(r"\bcredit note\b|\bgutschrift\b", re.IGNORECASE)),
+    ("refund", re.compile(r"\brefund\b|\berstattung\b|\brueckerstattung\b|\bruckerstattung\b", re.IGNORECASE)),
+    ("proforma", re.compile(r"\bproforma\b|\bpro forma\b", re.IGNORECASE)),
+    ("delivery_note", re.compile(r"\bdelivery note\b|\blieferschein\b", re.IGNORECASE)),
+    ("cancelled", re.compile(r"\bstorniert\b|\bcancelled\b|\bvoid\b", re.IGNORECASE)),
+    ("paid", re.compile(r"\bbezahlt\b|\bpaid\b", re.IGNORECASE)),
+    ("open", re.compile(r"\boffen\b|\bopen\b|\bunpaid\b", re.IGNORECASE)),
+    ("vat_exempt", re.compile(r"\bsteuerfrei\b|\bvat exempt\b|\btax exempt\b", re.IGNORECASE)),
+    ("intra_community", re.compile(r"\bintra-community\b|\binnergemeinschaft", re.IGNORECASE)),
+)
+
+
+def _strip_accents(text: str) -> str:
+    """Collapse a few common OCR month accents into ASCII."""
+    return (
+        text.replace("ä", "a")
+        .replace("ö", "o")
+        .replace("ü", "u")
+        .replace("Ä", "A")
+        .replace("Ö", "O")
+        .replace("Ü", "U")
+        .replace("ß", "ss")
+    )
 
 
 def normalize_amount(value: Any) -> Decimal | None:
@@ -83,12 +157,12 @@ def normalize_amount(value: Any) -> Decimal | None:
 
     text = (
         raw.replace("\u00a0", " ")
-        .replace("€", "")
         .replace("−", "-")
         .replace("–", "-")
         .replace("—", "-")
         .strip()
     )
+    text = text.replace("€", "").replace("£", "").replace("$", "")
     text = re.sub(r"(?i)\b(?:eur|usd|gbp|chf)\b", "", text).strip()
 
     match = _NUMBER_TOKEN_RE.search(text)
@@ -131,6 +205,98 @@ def normalize_amount(value: Any) -> Decimal | None:
         return None
 
     return -amount if negative else amount
+
+
+def normalize_quantity(value: Any) -> int | None:
+    """Normalize OCR/AI quantity values to positive integers when safe."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, Decimal):
+        if value <= 0 or value != value.to_integral_value():
+            return None
+        return int(value)
+    if isinstance(value, float):
+        if value <= 0 or int(value) != value:
+            return None
+        return int(value)
+    if not isinstance(value, str):
+        return None
+
+    raw = value.strip()
+    if not raw:
+        return None
+
+    match = re.search(r"(?<!\d)(\d+(?:[.,]\d+)?)", raw)
+    if not match:
+        return None
+
+    normalized = normalize_amount(match.group(1))
+    if normalized is None or normalized <= 0:
+        return None
+    if normalized != normalized.to_integral_value():
+        return None
+    return int(normalized)
+
+
+def normalize_currency(value: Any) -> str | None:
+    """Normalize OCR/AI currency markers to ISO-style codes."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+
+    raw = value.strip().upper()
+    if not raw:
+        return None
+
+    compact = raw.replace(".", "").replace(" ", "")
+    for token, normalized in _CURRENCY_MAP.items():
+        if token in raw or token in compact:
+            return normalized
+    return None
+
+
+def normalize_boolean_flag(value: Any) -> bool | None:
+    """Normalize OCR/AI boolean-like values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, Decimal)):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        return None
+    if not isinstance(value, str):
+        return None
+
+    raw = _strip_accents(value.strip().lower())
+    if raw in _BOOLEAN_TRUE:
+        return True
+    if raw in _BOOLEAN_FALSE:
+        return False
+    return None
+
+
+def normalize_semantic_flags(*values: Any) -> list[str]:
+    """Extract canonical semantic flags from OCR/AI text fragments."""
+    collected: set[str] = set()
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            collected.update(normalize_semantic_flags(*list(value)))
+            continue
+        text = _strip_accents(str(value))
+        for flag, pattern in _SEMANTIC_FLAG_PATTERNS:
+            if pattern.search(text):
+                collected.add(flag)
+    return sorted(collected)
 
 
 def normalize_vat_rate(value: Any) -> Decimal | None:
@@ -181,7 +347,7 @@ def normalize_date(value: Any) -> date | None:
         except ValueError:
             continue
 
-    named_match = _NAMED_DATE_RE.search(raw)
+    named_match = _NAMED_DATE_RE.search(_strip_accents(raw))
     if named_match:
         month_key = named_match.group("month").strip(".").lower()
         month = _NAMED_MONTHS.get(month_key)
@@ -193,4 +359,3 @@ def normalize_date(value: Any) -> date | None:
             )
 
     return None
-

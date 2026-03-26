@@ -118,6 +118,28 @@ const TAX_FIELD_SKIP = new Set([
   'year_confidence',
 ]);
 
+const TAX_CURRENCY_FIELDS = new Set([
+  'einkommen',
+  'einkuenfte_nichtselbstaendig',
+  'einkuenfte_vermietung',
+  'festgesetzte_einkommensteuer',
+  'abgabengutschrift',
+  'abgabennachforderung',
+  'werbungskosten_pauschale',
+  'telearbeitspauschale',
+  'umsatz_20',
+  'umsatz_10',
+  'vorsteuer',
+  'zahllast',
+  'gewinn_verlust',
+]);
+
+const TAX_DATE_FIELDS = new Set([
+  'bescheid_datum',
+  'faellig_am',
+  'document_date',
+]);
+
 const TAX_SUGGESTION_FIELD_ALIASES: Record<string, string> = {
   datum: 'date',
   betrag: 'amount',
@@ -238,6 +260,50 @@ const formatCurrencyValue = (value: number, language: string) =>
     currency: 'EUR',
   });
 
+const formatTaxFieldDisplayValue = (
+  fieldName: string,
+  value: unknown,
+  language: string,
+): string | null => {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (TAX_DATE_FIELDS.has(fieldName) && typeof value === 'string') {
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString(getLocaleForLanguage(language));
+      }
+    }
+  }
+
+  const numericValue =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))
+        ? Number(value)
+        : null;
+
+  if (numericValue == null || !Number.isFinite(numericValue)) {
+    return null;
+  }
+
+  if (fieldName === 'tax_year' || fieldName === 'year') {
+    return String(Math.trunc(numericValue));
+  }
+
+  if (TAX_CURRENCY_FIELDS.has(fieldName) || /^kz_\d+$/i.test(fieldName)) {
+    return formatCurrencyValue(numericValue, language);
+  }
+
+  return numericValue.toLocaleString(getLocaleForLanguage(language), {
+    maximumFractionDigits: 2,
+  });
+};
+
 const resolveInitialTransactionType = (
   documentType: string | undefined,
   extractedData: ExtractedData,
@@ -309,6 +375,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   hasNextDocument,
 }) => {
   const { t, i18n } = useTranslation();
+  const activeLanguage = i18n?.language || 'en';
   const navigate = useNavigate();
   const [reviewData, setReviewData] = useState<OCRReviewData | null>(null);
   const [editedData, setEditedData] = useState<ExtractedData>({});
@@ -1146,6 +1213,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                   const currentValue =
                     editedData[fieldName] ?? extracted_data[fieldName] ?? '';
                   const fieldConfidence = extracted_data.confidence?.[fieldName];
+                  const formattedDisplayValue = formatTaxFieldDisplayValue(
+                    fieldName,
+                    currentValue,
+                    activeLanguage,
+                  );
                   const looksNumeric =
                     typeof currentValue === 'number' ||
                     /^kz_\d+$/i.test(fieldName) ||
@@ -1190,6 +1262,10 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                           {(fieldConfidence * 100).toFixed(0)}%
                         </span>
                       )}
+                      {formattedDisplayValue &&
+                        String(currentValue).trim() !== formattedDisplayValue && (
+                          <div className="field-display-hint">{formattedDisplayValue}</div>
+                        )}
                     </div>
                   );
                 })
@@ -1209,7 +1285,10 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                           <span>{detail.address}</span>
                           <span>
                             {detail.amount != null
-                              ? Number(detail.amount).toLocaleString(getLocaleForLanguage(i18n.language), { style: 'currency', currency: 'EUR' })
+                              ? Number(detail.amount).toLocaleString(getLocaleForLanguage(activeLanguage), {
+                                  style: 'currency',
+                                  currency: 'EUR',
+                                })
                               : '-'}
                           </span>
                         </div>
@@ -1279,7 +1358,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                       value={editedData.date || ''}
                       onChange={(val) => handleFieldChange('date', val)}
                       className={getFieldConfidenceClass(extracted_data.confidence?.date)}
-                      locale={getLocaleForLanguage(i18n.language)}
+                      locale={getLocaleForLanguage(activeLanguage)}
                       todayLabel={String(t('common.today', 'Today'))}
                     />
                     {extracted_data.confidence?.date && (
@@ -1405,11 +1484,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.startDate')}</label>
-                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.endDate')}</label>
-                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.tenantName')}</label>
@@ -1467,15 +1546,15 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.loanStartDate')}</label>
-                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.loanEndDate')}</label>
-                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.firstRateDate')}</label>
-                <DateInput value={editedData.first_rate_date ? String(editedData.first_rate_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('first_rate_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.first_rate_date ? String(editedData.first_rate_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('first_rate_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.termYears')}</label>
@@ -1533,11 +1612,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.startDate')}</label>
-                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.start_date ? String(editedData.start_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('start_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.endDate')}</label>
-                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.end_date ? String(editedData.end_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('end_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
             </>
           )}
@@ -1555,7 +1634,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.purchaseDate')}</label>
-                <DateInput value={editedData.purchase_date ? String(editedData.purchase_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('purchase_date', val)} locale={getLocaleForLanguage(i18n.language)} todayLabel={String(t('common.today', 'Today'))} />
+                <DateInput value={editedData.purchase_date ? String(editedData.purchase_date).substring(0, 10) : ''} onChange={(val) => handleFieldChange('purchase_date', val)} locale={getLocaleForLanguage(activeLanguage)} todayLabel={String(t('common.today', 'Today'))} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.buyerName')}</label>
@@ -1624,7 +1703,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                 <DateInput
                   value={editedData.purchase_date ? String(editedData.purchase_date).substring(0, 10) : ''}
                   onChange={(val) => handleFieldChange('purchase_date', val)}
-                  locale={getLocaleForLanguage(i18n.language)}
+                  locale={getLocaleForLanguage(activeLanguage)}
                   todayLabel={String(t('common.today', 'Today'))}
                 />
               </div>
@@ -1641,7 +1720,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                 <DateInput
                   value={editedData.first_registration_date ? String(editedData.first_registration_date).substring(0, 10) : ''}
                   onChange={(val) => handleFieldChange('first_registration_date', val)}
-                  locale={getLocaleForLanguage(i18n.language)}
+                  locale={getLocaleForLanguage(activeLanguage)}
                   todayLabel={String(t('common.today', 'Today'))}
                 />
               </div>

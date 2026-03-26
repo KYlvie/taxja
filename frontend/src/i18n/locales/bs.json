@@ -2799,7 +2799,13 @@
         "deductible": "Koje stavke su odbitne?",
         "explainDocument": "Sta sadrzi ovaj dokument?",
         "taxFormFields": "Sta znace KZ polja?",
-        "confirmData": "Kako da potvrdim izdvojene podatke?"
+        "confirmData": "Kako da potvrdim izdvojene podatke?",
+        "howToSearch": "Kako pretraživati i filtrirati dokumente?",
+        "bulkConfirm": "Šta radi 'Potvrdi sve'?",
+        "reviewStatus": "Šta znače oznake statusa pregleda?",
+        "yearFilter": "Kako filtrirati po godini ili vrsti dokumenta?",
+        "exportZip": "Kako izvesti dokumente kao ZIP?",
+        "uploadTips": "Koje formate datoteka mogu učitati?"
       },
       "reports": {
         "generate": "Kako da generisem poreski izvjestaj?",

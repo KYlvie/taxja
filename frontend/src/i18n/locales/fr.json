@@ -2793,7 +2793,13 @@
         "deductible": "Quels articles sont déductibles ?",
         "explainDocument": "Que contient ce document ?",
         "taxFormFields": "Que signifient les champs KZ ?",
-        "confirmData": "Comment confirmer les données extraites ?"
+        "confirmData": "Comment confirmer les données extraites ?",
+        "howToSearch": "Comment rechercher et filtrer les documents ?",
+        "bulkConfirm": "Que fait « Confirmer tout » ?",
+        "reviewStatus": "Que signifient les badges de statut de révision ?",
+        "yearFilter": "Comment filtrer par année ou type de document ?",
+        "exportZip": "Comment exporter les documents en ZIP ?",
+        "uploadTips": "Quels formats de fichiers puis-je télécharger ?"
       },
       "reports": {
         "generate": "Comment générer un rapport fiscal ?",

@@ -899,7 +899,10 @@ class OCREngine:
             "If MULTIPLE receipts are visible, you MUST return a JSON array with one "
             "object per receipt. If only one receipt, return a single JSON object.\n"
             "Fields (null if missing): raw_text (first 200 chars), document_type (invoice/receipt/"
-            "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount (total), merchant, "
+            "mietvertrag/kaufvertrag/unknown), date (YYYY-MM-DD), amount (total), "
+            "issuer (company/person who CREATED this invoice and will RECEIVE payment), "
+            "recipient (company/person who RECEIVES this invoice and must PAY), "
+            "merchant (same as issuer — the seller/service provider name), "
             "description (brief summary of purchased items), vat_amount, vat_rate, "
             "invoice_number, payment_method, tax_id, "
             "line_items [{name,quantity,unit_price,total_price,vat_rate,vat_indicator}], "
@@ -907,6 +910,11 @@ class OCREngine:
             "property_address, monthly_rent, purchase_price.\n"
             "CRITICAL: Read ALL line items from the receipt. For each item include at minimum "
             "the name and total_price. If the receipt has many items, still list them all.\n"
+            "CRITICAL: For invoices, correctly identify issuer vs recipient. "
+            "issuer = the company/person who CREATED this invoice and will RECEIVE payment. "
+            "recipient = the company/person who RECEIVES this invoice and must PAY. "
+            "merchant = same as issuer (the seller/service provider). "
+            "Do NOT confuse them — the issuer's name usually appears in the letterhead/header area.\n"
             "JSON only, no markdown."
         )
 

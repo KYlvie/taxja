@@ -2524,6 +2524,21 @@ Antworte NUR mit JSON:
                         merchant = recipient or merchant
                         break
 
+            # If issuer didn't match but recipient matches user → AI swapped them → income
+            if not direction_confirmed and recipient and self._user_identity_tokens:
+                recipient_lower = recipient.lower()
+                for token in self._user_identity_tokens:
+                    if token and len(token) > 2 and token in recipient_lower:
+                        # AI put user in recipient instead of issuer — swap and mark as income
+                        detected_direction = "income"
+                        direction_confirmed = True
+                        merchant = issuer or merchant  # issuer is actually the customer
+                        logger.info(
+                            "Direction swap: user found in recipient '%s', treating as income for doc %d",
+                            recipient[:50], document.id,
+                        )
+                        break
+
             date_val = receipt_data.get("date")
             date_str = None
             if date_val:

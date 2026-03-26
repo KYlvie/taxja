@@ -14,6 +14,14 @@ from app.models.transaction_line_item import (
     LineItemAllocationSource,
     LineItemPostingType,
 )
+from app.services.field_normalization import (
+    normalize_amount,
+    normalize_boolean_flag,
+    normalize_currency,
+    normalize_quantity,
+    normalize_semantic_flags,
+    normalize_vat_rate,
+)
 
 
 MONEY = Decimal("0.01")
@@ -52,8 +60,52 @@ def quantize_money(value: Decimal | int | float | str | None) -> Decimal:
     if isinstance(value, Decimal):
         raw = value
     else:
-        raw = Decimal(str(value))
+        normalized = normalize_amount(value)
+        raw = normalized if normalized is not None else Decimal(str(value))
     return raw.quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _normalize_line_quantity(value: Any) -> int:
+    quantity = normalize_quantity(value)
+    return quantity if quantity is not None else 1
+
+
+def _normalize_line_vat_rate(value: Any, fallback: Any = None) -> Decimal | None:
+    raw = value if value is not None else fallback
+    normalized = normalize_vat_rate(raw)
+    if normalized is None:
+        return None
+    return normalized / Decimal("100") if normalized > 1 else normalized
+
+
+def _resolve_line_amount(raw: Mapping[str, Any], quantity: int) -> Decimal:
+    unit_candidates = (
+        raw.get("unit_price"),
+        raw.get("price"),
+        raw.get("unit_amount"),
+        raw.get("amount"),
+    )
+    for candidate in unit_candidates:
+        normalized = normalize_amount(candidate)
+        if normalized is not None:
+            return quantize_money(normalized)
+
+    total_candidates = (
+        raw.get("total_price"),
+        raw.get("total"),
+        raw.get("line_total"),
+        raw.get("gross_total"),
+        raw.get("net_total"),
+    )
+    for candidate in total_candidates:
+        normalized_total = normalize_amount(candidate)
+        if normalized_total is None:
+            continue
+        if quantity > 1:
+            return quantize_money(normalized_total / Decimal(quantity))
+        return quantize_money(normalized_total)
+
+    return Decimal("0.00")
 
 
 def default_posting_type_for_transaction_type(
@@ -168,7 +220,7 @@ def build_mirror_line_item_payload(
         "category": category,
         "is_deductible": bool(is_deductible) if posting_type == LineItemPostingType.EXPENSE else False,
         "deduction_reason": deduction_reason if posting_type == LineItemPostingType.EXPENSE else None,
-        "vat_rate": vat_rate,
+        "vat_rate": _normalize_line_vat_rate(vat_rate),
         "vat_amount": quantize_money(vat_amount) if vat_amount is not None else None,
         "vat_recoverable_amount": Decimal("0.00"),
         "rule_bucket": rule_bucket,
@@ -222,6 +274,7 @@ def normalize_line_item_payloads(
 
     normalized: List[Dict[str, Any]] = []
     for idx, raw in enumerate(line_items):
+        quantity = _normalize_line_quantity(raw.get("quantity", 1))
         posting_type = coerce_posting_type(
             raw.get("posting_type"),
             fallback=fallback_posting_type,
@@ -234,15 +287,16 @@ def normalize_line_item_payloads(
         }:
             category = fallback_category
 
-        deductible = bool(raw.get("is_deductible", is_deductible))
+        deductible_flag = normalize_boolean_flag(raw.get("is_deductible"))
+        deductible = deductible_flag if deductible_flag is not None else bool(raw.get("is_deductible", is_deductible))
         if posting_type != LineItemPostingType.EXPENSE:
             deductible = False
 
         normalized.append(
             {
                 "description": (raw.get("description") or description or f"Line item {idx + 1}").strip(),
-                "amount": quantize_money(raw.get("amount")),
-                "quantity": int(raw.get("quantity", 1) or 1),
+                "amount": _resolve_line_amount(raw, quantity),
+                "quantity": quantity,
                 "posting_type": posting_type,
                 "allocation_source": coerce_allocation_source(
                     raw.get("allocation_source"),
@@ -255,7 +309,7 @@ def normalize_line_item_payloads(
                     if posting_type == LineItemPostingType.EXPENSE
                     else None
                 ),
-                "vat_rate": raw.get("vat_rate", vat_rate),
+                "vat_rate": _normalize_line_vat_rate(raw.get("vat_rate"), vat_rate),
                 "vat_amount": (
                     quantize_money(raw.get("vat_amount"))
                     if raw.get("vat_amount") is not None
@@ -263,6 +317,18 @@ def normalize_line_item_payloads(
                 ),
                 "vat_recoverable_amount": quantize_money(raw.get("vat_recoverable_amount")),
                 "rule_bucket": raw.get("rule_bucket"),
+                "currency": (
+                    normalize_currency(raw.get("currency"))
+                    or normalize_currency(raw.get("amount"))
+                    or normalize_currency(raw.get("total_price"))
+                    or normalize_currency(raw.get("total"))
+                ),
+                "semantic_flags": normalize_semantic_flags(
+                    raw.get("semantic_flags"),
+                    raw.get("description"),
+                    raw.get("status"),
+                    raw.get("note"),
+                ),
                 "sort_order": int(raw.get("sort_order", idx) or idx),
             }
         )
@@ -280,7 +346,7 @@ def validate_reconciliation(
     reconstructed = Decimal("0.00")
     for line in line_items:
         reconstructed += (
-            quantize_money(line.get("amount")) * int(line.get("quantity", 1) or 1)
+            quantize_money(line.get("amount")) * _normalize_line_quantity(line.get("quantity", 1))
         ) + quantize_money(line.get("vat_recoverable_amount"))
     if abs(parent_amount - reconstructed) > RECONCILIATION_TOLERANCE:
         raise ValueError(

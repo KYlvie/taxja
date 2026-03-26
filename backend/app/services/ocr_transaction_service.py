@@ -33,7 +33,11 @@ from app.services.contract_role_service import (
 from app.services.duplicate_detector import DuplicateDetector
 from app.services.field_normalization import (
     normalize_amount,
+    normalize_boolean_flag,
+    normalize_currency,
     normalize_date,
+    normalize_quantity,
+    normalize_semantic_flags,
     normalize_vat_rate,
 )
 from app.services.transaction_classifier import TransactionClassifier
@@ -894,13 +898,33 @@ class OCRTransactionService:
             )
             for idx, li in enumerate(doc_line_items):
                 desc = li.get("description") or li.get("name") or f"Item {idx + 1}"
-                amt = (
-                    li.get("amount") or li.get("total_price")
-                    or li.get("total") or li.get("price")
-                )
-                if not amt:
-                    continue
-                normalized_amount = normalize_amount(amt)
+                quantity = normalize_quantity(li.get("quantity", 1)) or 1
+                normalized_amount = None
+                for unit_candidate in (
+                    li.get("unit_price"),
+                    li.get("price"),
+                    li.get("unit_amount"),
+                    li.get("amount"),
+                ):
+                    normalized_amount = normalize_amount(unit_candidate)
+                    if normalized_amount is not None:
+                        break
+                if normalized_amount is None:
+                    for total_candidate in (
+                        li.get("total_price"),
+                        li.get("total"),
+                        li.get("line_total"),
+                        li.get("gross_total"),
+                        li.get("net_total"),
+                    ):
+                        normalized_total = normalize_amount(total_candidate)
+                        if normalized_total is None:
+                            continue
+                        if quantity > 1:
+                            normalized_amount = normalized_total / Decimal(quantity)
+                        else:
+                            normalized_amount = normalized_total
+                        break
                 if normalized_amount is None:
                     continue
                 vat_rate_raw = li.get("vat_rate")
@@ -911,16 +935,27 @@ class OCRTransactionService:
                         vat_rate = vr / 100 if vr > 1 else vr
                 vat_amount_raw = li.get("vat_amount")
                 normalized_vat_amount = normalize_amount(vat_amount_raw) if vat_amount_raw else None
+                deductible_flag = normalize_boolean_flag(li.get("is_deductible"))
+                semantic_flags = normalize_semantic_flags(
+                    li.get("semantic_flags"),
+                    desc,
+                    li.get("status"),
+                    li.get("note"),
+                )
                 item = TransactionLineItem(
                     transaction_id=transaction.id,
                     description=desc,
                     amount=normalized_amount,
-                    quantity=li.get("quantity", 1),
+                    quantity=quantity,
                     posting_type=posting_type,
                     allocation_source=LineItemAllocationSource.OCR_SPLIT,
                     category=li.get("category") or fallback_category,
                     is_deductible=(
-                        li.get("is_deductible", transaction.is_deductible)
+                        (
+                            deductible_flag
+                            if deductible_flag is not None
+                            else li.get("is_deductible", transaction.is_deductible)
+                        )
                         if posting_type.value == "expense"
                         else False
                     ),
@@ -931,6 +966,14 @@ class OCRTransactionService:
                     classification_method=transaction.classification_method,
                     sort_order=idx,
                 )
+                # Keep normalized hints available in-memory for debugging during the transaction lifecycle.
+                li["currency"] = (
+                    normalize_currency(li.get("currency"))
+                    or normalize_currency(li.get("amount"))
+                    or normalize_currency(li.get("total_price"))
+                    or normalize_currency(li.get("total"))
+                )
+                li["semantic_flags"] = semantic_flags
                 self.db.add(item)
             self.db.commit()
             self.db.refresh(transaction)

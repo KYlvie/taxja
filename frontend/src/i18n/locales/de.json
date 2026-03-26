@@ -2803,7 +2803,13 @@
         "deductible": "Welche Positionen sind abzugsfähig?",
         "explainDocument": "Was enthält dieses Dokument?",
         "taxFormFields": "Was bedeuten die KZ-Felder?",
-        "confirmData": "Wie bestätige ich die erkannten Daten?"
+        "confirmData": "Wie bestätige ich die erkannten Daten?",
+        "howToSearch": "Wie suche und filtere ich Dokumente?",
+        "bulkConfirm": "Was macht 'Alle bestätigen'?",
+        "reviewStatus": "Was bedeuten die Prüfstatus-Symbole?",
+        "yearFilter": "Wie filtere ich nach Jahr oder Dokumenttyp?",
+        "exportZip": "Wie exportiere ich Dokumente als ZIP?",
+        "uploadTips": "Welche Dateiformate kann ich hochladen?"
       },
       "reports": {
         "generate": "Wie erstelle ich einen Steuerbericht?",

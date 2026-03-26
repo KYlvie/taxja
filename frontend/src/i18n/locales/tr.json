@@ -2793,7 +2793,13 @@
         "deductible": "Hangi kalemler indirilebilir?",
         "explainDocument": "Bu belge ne iceriyor?",
         "taxFormFields": "KZ alanlari ne anlama geliyor?",
-        "confirmData": "Cikarilan verileri nasil onaylarim?"
+        "confirmData": "Cikarilan verileri nasil onaylarim?",
+        "howToSearch": "Belgeleri nasıl arar ve filtrelerim?",
+        "bulkConfirm": "Toplu onay ne yapar?",
+        "reviewStatus": "İnceleme durumu rozetleri ne anlama geliyor?",
+        "yearFilter": "Yıla veya belge türüne göre nasıl filtrelerim?",
+        "exportZip": "Belgeleri ZIP olarak nasıl dışa aktarırım?",
+        "uploadTips": "Hangi dosya formatlarını yükleyebilirim?"
       },
       "reports": {
         "generate": "Vergi raporu nasil olusturulur?",

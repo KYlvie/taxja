@@ -2793,7 +2793,13 @@
         "deductible": "Które pozycje podlegają odliczeniu?",
         "explainDocument": "Co zawiera ten dokument?",
         "taxFormFields": "Co oznaczają pola KZ?",
-        "confirmData": "Jak potwierdzić wyodrębnione dane?"
+        "confirmData": "Jak potwierdzić wyodrębnione dane?",
+        "howToSearch": "Jak wyszukiwać i filtrować dokumenty?",
+        "bulkConfirm": "Co robi funkcja Potwierdź wszystko?",
+        "reviewStatus": "Co oznaczają znaczniki statusu weryfikacji?",
+        "yearFilter": "Jak filtrować według roku lub typu dokumentu?",
+        "exportZip": "Jak wyeksportować dokumenty jako ZIP?",
+        "uploadTips": "Jakie formaty plików mogę przesłać?"
       },
       "reports": {
         "generate": "Jak wygenerować raport podatkowy?",

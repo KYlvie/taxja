@@ -2813,7 +2813,13 @@
         "deductible": "Which items are deductible?",
         "explainDocument": "What does this document contain?",
         "taxFormFields": "What do the KZ fields mean?",
-        "confirmData": "How do I confirm the extracted data?"
+        "confirmData": "How do I confirm the extracted data?",
+        "howToSearch": "How do I search and filter documents?",
+        "bulkConfirm": "How does batch review work?",
+        "reviewStatus": "What do the review status badges mean?",
+        "yearFilter": "How do I filter by year or document type?",
+        "exportZip": "How do I export documents as ZIP?",
+        "uploadTips": "What file types can I upload?"
       },
       "reports": {
         "generate": "How do I generate a tax report?",
