@@ -85,6 +85,7 @@ vi.mock('../mobile/files', () => ({
 describe('DocumentList review status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     useDocumentStore.setState({
       documents: [],
       currentDocument: null,
@@ -114,6 +115,7 @@ describe('DocumentList review status', () => {
           ocr_result: { confirmed: true },
           ocr_status: 'completed',
           created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
           updated_at: '2026-03-18T02:09:54.000Z',
           processed_at: '2026-03-18T02:09:54.000Z',
         },
@@ -128,15 +130,75 @@ describe('DocumentList review status', () => {
     );
 
     await waitFor(() => {
-      expect(onSummaryChange).toHaveBeenCalledWith({
+      expect(onSummaryChange).toHaveBeenLastCalledWith({
         totalCount: 1,
-        reviewCount: 1,
+        reviewCount: 0,
         confirmableIds: [],
       });
     });
 
     expect(screen.getAllByText('All documents').length).toBeGreaterThan(0);
     expect(screen.queryByText('ZIP')).not.toBeInTheDocument();
+  });
+
+  it('does not count finalized business outcomes as pending review when OCR confirmed is false', async () => {
+    const onSummaryChange = vi.fn();
+
+    getDocuments.mockResolvedValue({
+      documents: [
+        {
+          id: 211,
+          user_id: 7,
+          document_type: DocumentType.INVOICE,
+          file_path: 'users/7/documents/invoice.pdf',
+          file_name: 'invoice.pdf',
+          file_size: 2048,
+          mime_type: 'application/pdf',
+          confidence_score: 0.95,
+          needs_review: false,
+          transaction_id: 998,
+          ocr_result: { confirmed: false },
+          ocr_status: 'completed',
+          created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
+          updated_at: '2026-03-18T02:09:54.000Z',
+          processed_at: '2026-03-18T02:09:54.000Z',
+        },
+        {
+          id: 212,
+          user_id: 7,
+          document_type: DocumentType.PURCHASE_CONTRACT,
+          file_path: 'users/7/documents/contract.pdf',
+          file_name: 'contract.pdf',
+          file_size: 4096,
+          mime_type: 'application/pdf',
+          confidence_score: 0.95,
+          needs_review: false,
+          transaction_id: null,
+          ocr_result: { confirmed: false, import_suggestion: { status: 'confirmed' } },
+          ocr_status: 'completed',
+          created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
+          updated_at: '2026-03-18T02:09:54.000Z',
+          processed_at: '2026-03-18T02:09:54.000Z',
+        },
+      ],
+      total: 2,
+    });
+
+    render(
+      <MemoryRouter>
+        <DocumentList onSummaryChange={onSummaryChange} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(onSummaryChange).toHaveBeenLastCalledWith({
+        totalCount: 2,
+        reviewCount: 0,
+        confirmableIds: [],
+      });
+    });
   });
 
   it('confirms a pending-review document directly from the list action', async () => {
@@ -154,6 +216,7 @@ describe('DocumentList review status', () => {
       ocr_result: { confirmed: false },
       ocr_status: 'completed',
       created_at: '2026-03-24T10:00:00.000Z',
+      uploaded_at: '2026-03-24T10:00:00.000Z',
       updated_at: '2026-03-24T10:00:00.000Z',
       processed_at: '2026-03-24T10:00:00.000Z',
     };
@@ -168,7 +231,7 @@ describe('DocumentList review status', () => {
         total: 1,
       });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <DocumentList />
       </MemoryRouter>,
@@ -178,8 +241,14 @@ describe('DocumentList review status', () => {
       expect(getDocuments).toHaveBeenCalled();
     });
 
-    const yearToggle = screen.getByRole('button', { expanded: false });
-    fireEvent.click(yearToggle);
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
 
     confirmOCR.mockResolvedValue(undefined);
 
@@ -210,6 +279,7 @@ describe('DocumentList review status', () => {
       ocr_result: { confirmed: false },
       ocr_status: 'completed',
       created_at: '2026-03-24T10:00:00.000Z',
+      uploaded_at: '2026-03-24T10:00:00.000Z',
       updated_at: '2026-03-24T10:00:00.000Z',
       processed_at: '2026-03-24T10:00:00.000Z',
     };
@@ -225,7 +295,7 @@ describe('DocumentList review status', () => {
       });
     confirmOCR.mockResolvedValue(undefined);
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <DocumentList onDocumentSelect={onDocumentSelect} />
       </MemoryRouter>,
@@ -235,8 +305,14 @@ describe('DocumentList review status', () => {
       expect(getDocuments).toHaveBeenCalled();
     });
 
-    const yearToggle = screen.getByRole('button', { expanded: false });
-    fireEvent.click(yearToggle);
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
 
     const reviewButton = await screen.findByRole('button', { name: 'Click to complete confirmation' });
     fireEvent.click(reviewButton);

@@ -31,8 +31,17 @@ from app.services.contract_role_service import (
     load_sensitive_user_context,
 )
 from app.services.duplicate_detector import DuplicateDetector
+from app.services.field_normalization import (
+    normalize_amount,
+    normalize_date,
+    normalize_vat_rate,
+)
 from app.services.transaction_classifier import TransactionClassifier
 from app.services.deductibility_checker import DeductibilityChecker
+from app.services.transaction_rule_resolver import (
+    TransactionRuleResolver,
+    build_ocr_parent_description,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +64,7 @@ class OCRTransactionService:
         self.classifier = TransactionClassifier(db=db)
         self.deductibility_checker = DeductibilityChecker(db=db)
         self.duplicate_detector = DuplicateDetector(db)
+        self.rule_resolver = TransactionRuleResolver(db=db)
 
     @staticmethod
     def _direction_metadata_payload(
@@ -270,6 +280,10 @@ class OCRTransactionService:
             "confidence": float(classification["confidence"]) if hasattr(classification["confidence"], '__float__') else classification["confidence"],
             "needs_review": (float(classification["confidence"]) < 0.7 if classification["confidence"] else True) or classification.get("requires_review", False),
             "classification_method": classification.get("classification_method"),
+            "classification_rule_id": classification.get("classification_rule_id"),
+            "deductibility_rule_id": classification.get("deductibility_rule_id"),
+            "applied_rule_sources": classification.get("applied_rule_sources", []),
+            "canonical_description": classification.get("canonical_description"),
             "extracted_fields": {k: (float(v) if isinstance(v, Decimal) else v.isoformat() if isinstance(v, (datetime,)) else v) for k, v in ocr_data.items()} if ocr_data else {},
         }
         return self._annotate_suggestion_with_direction(suggestion, direction_resolution)
@@ -365,8 +379,18 @@ class OCRTransactionService:
             else str(base_date) if base_date else None
         )
         total = transaction_data["amount"]
-        deduct_amt = Decimal(str(split["deductible_amount"]))
-        non_deduct_amt = Decimal(str(split["non_deductible_amount"]))
+        deduct_amt = normalize_amount(split.get("deductible_amount"))
+        non_deduct_amt = normalize_amount(split.get("non_deductible_amount"))
+        if deduct_amt is None or non_deduct_amt is None:
+            return [
+                self._build_single_suggestion(
+                    document,
+                    transaction_data,
+                    classification,
+                    ocr_data,
+                    direction_resolution=direction_resolution,
+                )
+            ]
         split_total = deduct_amt + non_deduct_amt
         diff = abs(split_total - total)
 
@@ -459,6 +483,11 @@ class OCRTransactionService:
                 "confidence": 0.85,
                 "needs_review": False,
                 "line_items": line_items,
+                "classification_method": classification.get("classification_method"),
+                "classification_rule_id": classification.get("classification_rule_id"),
+                "deductibility_rule_id": classification.get("deductibility_rule_id"),
+                "applied_rule_sources": classification.get("applied_rule_sources", []),
+                "canonical_description": classification.get("canonical_description"),
                 "extracted_fields": {},
             }
             return [
@@ -473,8 +502,18 @@ class OCRTransactionService:
         base_date = transaction_data["date"]
         date_str = base_date.isoformat() if base_date and hasattr(base_date, 'isoformat') else str(base_date) if base_date else None
 
-        deduct_amt = Decimal(str(split["deductible_amount"]))
-        non_deduct_amt = Decimal(str(split["non_deductible_amount"]))
+        deduct_amt = normalize_amount(split.get("deductible_amount"))
+        non_deduct_amt = normalize_amount(split.get("non_deductible_amount"))
+        if deduct_amt is None or non_deduct_amt is None:
+            return [
+                self._build_single_suggestion(
+                    document,
+                    transaction_data,
+                    classification,
+                    ocr_data,
+                    direction_resolution=direction_resolution,
+                )
+            ]
 
         # Sanity check: amounts should roughly add up to total
         total = transaction_data["amount"]
@@ -527,6 +566,11 @@ class OCRTransactionService:
                 "deduction_reason": reason[:500],
                 "confidence": 0.85,
                 "needs_review": False,
+                "classification_method": classification.get("classification_method"),
+                "classification_rule_id": classification.get("classification_rule_id"),
+                "deductibility_rule_id": classification.get("deductibility_rule_id"),
+                "applied_rule_sources": classification.get("applied_rule_sources", []),
+                "canonical_description": classification.get("canonical_description"),
                 "extracted_fields": {},
             })
 
@@ -546,6 +590,11 @@ class OCRTransactionService:
                 "deduction_reason": non_deduct_reason[:500],
                 "confidence": 0.85,
                 "needs_review": False,
+                "classification_method": classification.get("classification_method"),
+                "classification_rule_id": classification.get("classification_rule_id"),
+                "deductibility_rule_id": classification.get("deductibility_rule_id"),
+                "applied_rule_sources": classification.get("applied_rule_sources", []),
+                "canonical_description": classification.get("canonical_description"),
                 "extracted_fields": {},
             })
 
@@ -596,7 +645,9 @@ class OCRTransactionService:
             direction_resolution,
         )
         transaction_type, category, txn_date = self._parse_transaction_fields(suggestion)
-        amount = Decimal(suggestion["amount"])
+        amount = normalize_amount(suggestion.get("amount"))
+        if amount is None:
+            raise ValueError(f"Invalid amount value: {suggestion.get('amount')}")
         description = suggestion["description"]
 
         duplicate_detector = getattr(self, "duplicate_detector", None)
@@ -663,8 +714,9 @@ class OCRTransactionService:
 
         raw_date = suggestion.get("date")
         if raw_date:
-            if isinstance(raw_date, str):
-                txn_date = datetime.fromisoformat(raw_date).date()
+            normalized_date = normalize_date(raw_date)
+            if normalized_date is not None:
+                txn_date = normalized_date
             elif isinstance(raw_date, datetime):
                 txn_date = raw_date.date()
             elif hasattr(raw_date, 'date'):
@@ -848,15 +900,21 @@ class OCRTransactionService:
                 )
                 if not amt:
                     continue
+                normalized_amount = normalize_amount(amt)
+                if normalized_amount is None:
+                    continue
                 vat_rate_raw = li.get("vat_rate")
                 vat_rate = None
                 if vat_rate_raw is not None:
-                    vr = Decimal(str(vat_rate_raw))
-                    vat_rate = vr / 100 if vr > 1 else vr
+                    vr = normalize_vat_rate(vat_rate_raw)
+                    if vr is not None:
+                        vat_rate = vr / 100 if vr > 1 else vr
+                vat_amount_raw = li.get("vat_amount")
+                normalized_vat_amount = normalize_amount(vat_amount_raw) if vat_amount_raw else None
                 item = TransactionLineItem(
                     transaction_id=transaction.id,
                     description=desc,
-                    amount=Decimal(str(amt)),
+                    amount=normalized_amount,
                     quantity=li.get("quantity", 1),
                     posting_type=posting_type,
                     allocation_source=LineItemAllocationSource.OCR_SPLIT,
@@ -868,7 +926,7 @@ class OCRTransactionService:
                     ),
                     deduction_reason=li.get("deduction_reason"),
                     vat_rate=vat_rate,
-                    vat_amount=Decimal(str(li["vat_amount"])) if li.get("vat_amount") else None,
+                    vat_amount=normalized_vat_amount,
                     vat_recoverable_amount=Decimal("0.00"),
                     classification_method=transaction.classification_method,
                     sort_order=idx,
@@ -934,9 +992,14 @@ class OCRTransactionService:
         else:
             description = f"Purchase at {merchant}"
 
+        normalized_amount = normalize_amount(amount)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(amount)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": description,
         }
 
@@ -963,9 +1026,14 @@ class OCRTransactionService:
         if invoice_number:
             description += f" (#{invoice_number})"
 
+        normalized_amount = normalize_amount(amount)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(amount)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": description,
         }
 
@@ -979,9 +1047,14 @@ class OCRTransactionService:
         if not amount:
             return None
         
+        normalized_amount = normalize_amount(amount)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(amount)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": f"Salary from {employer}",
         }
 
@@ -994,9 +1067,14 @@ class OCRTransactionService:
         if not gross_income:
             return None
 
+        normalized_amount = normalize_amount(gross_income)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(gross_income)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": f"Salary from {employer}",
         }
 
@@ -1009,9 +1087,14 @@ class OCRTransactionService:
         if not amount:
             return None
         
+        normalized_amount = normalize_amount(amount)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(amount)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": "SVS social insurance contribution",
         }
 
@@ -1031,8 +1114,12 @@ class OCRTransactionService:
         if taxpayer:
             description += f" - {taxpayer}"
 
+        normalized_amount = normalize_amount(einkommen)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(einkommen)),
+            "amount": normalized_amount,
             "date": ref_date,
             "description": description,
         }
@@ -1059,9 +1146,14 @@ class OCRTransactionService:
         else:
             description = "Transaction from document"
 
+        normalized_amount = normalize_amount(amount)
+        normalized_date = normalize_date(date)
+        if normalized_amount is None:
+            return None
+
         return {
-            "amount": Decimal(str(amount)),
-            "date": date,
+            "amount": normalized_amount,
+            "date": normalized_date or date,
             "description": description,
         }
 
@@ -1123,26 +1215,63 @@ class OCRTransactionService:
             user = load_sensitive_user_context(self.db, user_id)
             method = "unknown"
             deduct_requires_review = True
+            ocr_data = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+            canonical_description = build_ocr_parent_description(
+                merchant=ocr_data.get("merchant") or ocr_data.get("supplier"),
+                ocr_description=ocr_data.get("description") or ocr_data.get("product_summary"),
+                fallback_description=transaction_data.get("description"),
+            )
+            line_items = ocr_data.get("line_items") or ocr_data.get("items") or []
+            rule_resolver = getattr(self, "rule_resolver", None)
+            if rule_resolver is None and self.db is not None:
+                rule_resolver = TransactionRuleResolver(self.db)
+                self.rule_resolver = rule_resolver
 
             if user:
-                # Build a rich description for classification by combining
-                # the transaction description with the raw text from the document
-                raw_text = document.raw_text or ""
                 description = transaction_data.get("description", "")
-                # Combine description + first 500 chars of raw text for better matching
-                combined_text = f"{description} {raw_text[:500]}"
-                
+                resolved_rules = (
+                    rule_resolver.resolve(
+                        user_id=user_id,
+                        context="ocr_receipt",
+                        txn_type=transaction_type.value,
+                        canonical_description=canonical_description,
+                        line_items=line_items,
+                        ocr_category=None,
+                    )
+                    if rule_resolver is not None
+                    else None
+                )
+
                 temp_transaction = Transaction(
                     user_id=user_id,
                     type=transaction_type,
                     amount=transaction_data["amount"],
                     transaction_date=transaction_data["date"] or datetime.utcnow().date(),
-                    description=combined_text,
+                    description=canonical_description or description,
                 )
-                
-                classification = self.classifier.classify_transaction(temp_transaction, user)
-                category = classification.category if classification.category else None
-                method = classification.method if hasattr(classification, 'method') else 'unknown'
+
+                classification = self.classifier.classify_transaction(
+                    temp_transaction,
+                    user,
+                    allow_user_override=False,
+                )
+                category = (
+                    resolved_rules.resolved_category
+                    if resolved_rules and resolved_rules.resolved_category
+                    else classification.category if classification.category else None
+                )
+                # Override transaction_type if rule says different direction
+                if resolved_rules and resolved_rules.resolved_txn_type:
+                    rule_txn_type = resolved_rules.resolved_txn_type
+                    if rule_txn_type == "income":
+                        transaction_type = TransactionType.INCOME
+                    elif rule_txn_type == "expense":
+                        transaction_type = TransactionType.EXPENSE
+                method = (
+                    resolved_rules.classification_method
+                    if resolved_rules and resolved_rules.classification_method
+                    else classification.method if hasattr(classification, 'method') else 'unknown'
+                )
                 semantics = direction_resolution.semantics if direction_resolution else "unknown"
 
                 if transaction_type == TransactionType.INCOME:
@@ -1158,22 +1287,31 @@ class OCRTransactionService:
                         deduction_reason = "Delivery note requires manual confirmation"
                         deduct_requires_review = True
                 elif category:
+                    if (
+                        resolved_rules is not None
+                        and resolved_rules.resolved_is_deductible is not None
+                    ):
+                        is_deductible = resolved_rules.resolved_is_deductible
+                        deduction_reason = (
+                            resolved_rules.resolved_deduction_reason
+                            or "Learned from your previous correction"
+                        )
+                        deduct_requires_review = False
                     # If LLM already provided deductibility, use it directly
-                    if method == 'llm' and hasattr(classification, 'is_deductible') and classification.is_deductible is not None:
+                    elif method == 'llm' and hasattr(classification, 'is_deductible') and classification.is_deductible is not None:
                         is_deductible = classification.is_deductible
                         deduction_reason = getattr(classification, 'deduction_reason', '') or ''
                         deduct_requires_review = False
                     else:
                         user_type_val = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type or "employee")
-                        # Pass OCR data + description so AI can analyze ambiguous cases
-                        ocr_data = document.ocr_result if document.ocr_result else {}
                         deduct_result = self.deductibility_checker.check(
                             category, user_type_val,
                             ocr_data=ocr_data,
-                            description=description,
+                            description=canonical_description or description,
                             business_type=getattr(user, 'business_type', None),
                             business_industry=getattr(user, 'business_industry', None),
                             user_id=user_id,
+                            allow_user_override=False,
                         )
                         is_deductible = deduct_result.is_deductible
                         deduction_reason = deduct_result.reason
@@ -1192,7 +1330,11 @@ class OCRTransactionService:
                     is_deductible = False
                     deduction_reason = "Unable to determine deductibility"
                     deduct_requires_review = True
-                confidence = classification.confidence
+                confidence = (
+                    resolved_rules.classification_confidence
+                    if resolved_rules and resolved_rules.classification_confidence is not None
+                    else classification.confidence
+                )
             else:
                 category = None
                 is_deductible = False
@@ -1200,6 +1342,7 @@ class OCRTransactionService:
                 confidence = 0.5
                 method = "unknown"
                 deduct_requires_review = True
+                resolved_rules = None
                 
             return {
                 "transaction_type": transaction_type.value,
@@ -1209,6 +1352,22 @@ class OCRTransactionService:
                 "confidence": confidence,
                 "classification_method": method,
                 "requires_review": deduct_requires_review,
+                "classification_rule_id": (
+                    resolved_rules.classification_rule_id
+                    if resolved_rules is not None
+                    else None
+                ),
+                "deductibility_rule_id": (
+                    resolved_rules.deductibility_rule_id
+                    if resolved_rules is not None
+                    else None
+                ),
+                "applied_rule_sources": (
+                    list(resolved_rules.applied_sources)
+                    if resolved_rules is not None
+                    else []
+                ),
+                "canonical_description": canonical_description,
             }
         else:
             return {

@@ -10,6 +10,7 @@ import { OCRReviewData, ExtractedData, DocumentType } from '../../types/document
 import { aiToast } from '../../stores/aiToastStore';
 import {
   formatDocumentFieldLabel,
+  normalizeDocumentFieldKey,
   translateDocumentSuggestionText,
 } from '../../utils/documentFieldLabel';
 import { resolveDocumentPresentation } from '../../documents/presentation/resolveDocumentPresentation';
@@ -58,6 +59,8 @@ const OCR_PROCESSING_STATES = new Set([
 const TAX_FIELD_PRIORITY = [
   'tax_year',
   'year',
+  'bescheid_datum',
+  'faellig_am',
   'taxpayer_name',
   'steuernummer',
   'finanzamt',
@@ -89,7 +92,84 @@ const TAX_FIELD_SKIP = new Set([
   'raw_text',
   'vermietung_details',
   'all_kz_values',
+  'date',
+  'amount',
+  'description',
+  'merchant',
+  'issuer',
+  'recipient',
+  'tax_id',
+  'supplier',
+  'vendor_name',
+  'customer_name',
+  'invoice_number',
+  'invoice_date',
+  'payment_method',
+  'currency',
+  'iban',
+  'bic',
+  'total_amount',
+  'net_amount',
+  'vat_amount',
+  'vat_rate',
+  'document_date',
+  'document_year',
+  'year_basis',
+  'year_confidence',
 ]);
+
+const TAX_SUGGESTION_FIELD_ALIASES: Record<string, string> = {
+  datum: 'date',
+  betrag: 'amount',
+  beschreibung: 'description',
+  haendler: 'merchant',
+  handler: 'merchant',
+  händler: 'merchant',
+  merchant: 'merchant',
+  issuer: 'issuer',
+  recipient: 'recipient',
+  supplier: 'supplier',
+  vendor_name: 'vendor_name',
+  customer_name: 'customer_name',
+  tax_id: 'tax_id',
+  steuernummer: 'tax_id',
+  document_date: 'document_date',
+  document_year: 'document_year',
+  year_basis: 'year_basis',
+  year_confidence: 'year_confidence',
+};
+
+const SUGGESTION_FIELD_PATTERN =
+  /["'\[]([A-Za-z][A-Za-z0-9_ ]{1,80})["'\]]|\bMissing:\s*([A-Za-z][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_]*)*)/gi;
+
+const shouldDisplayTaxSuggestion = (suggestion: string) => {
+  const extractedFields = new Set<string>();
+
+  suggestion.replace(SUGGESTION_FIELD_PATTERN, (_match, quotedField, missingFields) => {
+    const rawValue = String(quotedField || missingFields || '');
+    rawValue
+      .split(',')
+      .map((part) => {
+        const normalized = normalizeDocumentFieldKey(part);
+        return TAX_SUGGESTION_FIELD_ALIASES[normalized] || normalized;
+      })
+      .filter(Boolean)
+      .forEach((field) => extractedFields.add(field));
+    return _match;
+  });
+
+  if (extractedFields.size === 0) {
+    return true;
+  }
+
+  for (const field of extractedFields) {
+    if (!TAX_FIELD_SKIP.has(field)) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const isTaxReviewDocumentType = (documentType?: string) =>
   !!documentType && TAX_REVIEW_DOCUMENT_TYPES.has(documentType);
@@ -471,10 +551,14 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   }
 
   const { document, extracted_data, suggestions } = reviewData;
+  const activeDocType = selectedDocType || document.document_type || '';
   const isConfirmed =
     Boolean(extracted_data?.confirmed ?? document.ocr_result?.confirmed)
     || Boolean(document.transaction_id);
-  const translatedSuggestions = (suggestions ?? []).map((suggestion) =>
+  const normalizedSuggestions = isTaxReviewDocumentType(activeDocType)
+    ? (suggestions ?? []).filter(shouldDisplayTaxSuggestion)
+    : (suggestions ?? []);
+  const translatedSuggestions = normalizedSuggestions.map((suggestion) =>
     translateDocumentSuggestionText(
       suggestion.replace(
         /['"â€œâ€â€˜â€™\[]([A-Za-z][A-Za-z0-9_ ]{1,80})['"â€œâ€â€˜â€™\]]/g,
@@ -498,23 +582,23 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       || ''
   ).toLowerCase();
   const isPurchaseContract =
-    selectedDocType === 'purchase_contract' || selectedDocType === 'kaufvertrag';
+    activeDocType === 'purchase_contract' || activeDocType === 'kaufvertrag';
   const isRentalContract =
-    selectedDocType === 'rental_contract' || selectedDocType === 'mietvertrag';
+    activeDocType === 'rental_contract' || activeDocType === 'mietvertrag';
   const isLoanContract =
-    selectedDocType === 'loan_contract' || selectedDocType === 'kreditvertrag';
+    activeDocType === 'loan_contract' || activeDocType === 'kreditvertrag';
   const isInsuranceDocument =
-    selectedDocType === 'versicherungsbestaetigung';
-  const isInvoiceDocument = selectedDocType === 'invoice';
-  const isReceiptDocument = selectedDocType === 'receipt';
-  const isBankStatement = selectedDocType === 'bank_statement';
+    activeDocType === 'versicherungsbestaetigung';
+  const isInvoiceDocument = activeDocType === 'invoice';
+  const isReceiptDocument = activeDocType === 'receipt';
+  const isBankStatement = activeDocType === 'bank_statement';
   const isAssetPurchaseContract = isPurchaseContract && purchaseContractKind === 'asset';
   const isPropertyPurchaseContract = isPurchaseContract && !isAssetPurchaseContract;
   const isContractRoleSensitive =
     isRentalContract || isPurchaseContract || isLoanContract || isInsuranceDocument;
   const isDirectionSensitive =
     isInvoiceDocument || isReceiptDocument || isBankStatement;
-  const isTaxDataReview = isTaxReviewDocumentType(selectedDocType);
+  const isTaxDataReview = isTaxReviewDocumentType(activeDocType);
   const taxFieldKeys = isTaxDataReview ? getTaxFieldKeys(editedData, extracted_data) : [];
   const contractRoleResolution = isContractRoleSensitive
     ? (document.ocr_result?.contract_role_resolution as Record<string, any> | undefined)
@@ -788,16 +872,9 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         </div>
       )}
 
-      {!isConfirmed && document.needs_review && (
+      {!isConfirmed && document.needs_review && document.confidence_score !== undefined && document.confidence_score < 0.7 && (
         <div className="review-warning">
           {t('documents.review.needsReview')}
-        </div>
-      )}
-
-
-      {templateWillSwitchAfterSave && (
-        <div className="review-warning">
-          {t('documents.review.templateSwitchAfterSave')}
         </div>
       )}
 

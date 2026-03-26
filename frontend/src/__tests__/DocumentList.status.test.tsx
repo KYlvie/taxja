@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DocumentList from '../components/documents/DocumentList';
@@ -17,35 +17,35 @@ vi.mock('react-i18next', () => ({
       (typeof options === 'string' ? options : options?.defaultValue) ??
       (
         {
-          'documents.status.transactionCreated': '已生成交易',
-          'documents.status.recognized': '已识别',
-          'documents.groups.all': '全部文档',
-          'documents.groups.expense': '票据发票',
-          'documents.groups.employment': '工资与雇佣',
-          'documents.groups.self_employed': '自营/企业',
-          'documents.groups.property': '房产与租赁',
-          'documents.groups.social_insurance': '社保与保险',
-          'documents.groups.tax_filing': '税务申报与通知',
-          'documents.groups.deductions': '抵扣与减免',
-          'documents.groups.banking': '银行资料',
-          'documents.groups.other': '其他',
-          'documents.list.name': '文件',
-          'documents.list.type': '分类',
-          'documents.list.uploadDate': '日期',
-          'documents.list.size': '大小',
-          'documents.list.confidence': '识别可信度',
-          'documents.list.status': '状态',
-          'documents.search.placeholder': '搜索',
-          'documents.viewGrid': '网格视图',
-          'documents.viewList': '列表视图',
-          'documents.filters.clear': '清空筛选',
-          'documents.emptyGroup': '空',
-          'documents.types.receipt': '收据',
-          'documents.download': '下载',
-          'common.delete': '删除',
+          'documents.status.transactionCreated': 'Transaction created',
+          'documents.status.recognized': 'Recognized',
+          'documents.groups.all': 'All documents',
+          'documents.groups.expense': 'Expenses',
+          'documents.groups.employment': 'Employment',
+          'documents.groups.self_employed': 'Self employed',
+          'documents.groups.property': 'Property',
+          'documents.groups.social_insurance': 'Social insurance',
+          'documents.groups.tax_filing': 'Tax filing',
+          'documents.groups.deductions': 'Deductions',
+          'documents.groups.banking': 'Banking',
+          'documents.groups.other': 'Other',
+          'documents.list.name': 'File',
+          'documents.list.type': 'Type',
+          'documents.list.uploadDate': 'Upload date',
+          'documents.list.size': 'Size',
+          'documents.list.confidence': 'Confidence',
+          'documents.list.status': 'Status',
+          'documents.search.placeholder': 'Search',
+          'documents.viewGrid': 'Grid view',
+          'documents.viewList': 'List view',
+          'documents.filters.clear': 'Clear filters',
+          'documents.emptyGroup': 'Empty',
+          'documents.types.receipt': 'Receipt',
+          'documents.download': 'Download',
+          'common.delete': 'Delete',
         } as Record<string, string>
       )[key] ?? key,
-    i18n: { language: 'zh', resolvedLanguage: 'zh' },
+    i18n: { language: 'en', resolvedLanguage: 'en' },
   }),
 }));
 
@@ -70,6 +70,7 @@ vi.mock('../mobile/files', () => ({
 describe('DocumentList status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     useDocumentStore.setState({
       documents: [],
       currentDocument: null,
@@ -97,6 +98,7 @@ describe('DocumentList status', () => {
           ocr_result: { confirmed: true },
           ocr_status: 'completed',
           created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
           updated_at: '2026-03-18T02:09:54.000Z',
           processed_at: '2026-03-18T02:09:54.000Z',
         },
@@ -104,16 +106,72 @@ describe('DocumentList status', () => {
       total: 1,
     });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <DocumentList />
       </MemoryRouter>,
     );
+
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
 
     await waitFor(() => {
       expect(screen.getByText('Transaction created')).toBeInTheDocument();
     });
 
     expect(screen.queryByText('Recognized')).not.toBeInTheDocument();
+  });
+
+  it('does not show pending review for a high-confidence linked document even if OCR is not confirmed', async () => {
+    getDocuments.mockResolvedValue({
+      documents: [
+        {
+          id: 119,
+          user_id: 5,
+          document_type: DocumentType.INVOICE,
+          file_path: 'users/5/documents/invoice.pdf',
+          file_name: 'invoice.pdf',
+          file_size: 1024,
+          mime_type: 'application/pdf',
+          confidence_score: 0.95,
+          needs_review: false,
+          transaction_id: 1152,
+          ocr_result: { confirmed: false },
+          ocr_status: 'completed',
+          created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
+          updated_at: '2026-03-18T02:09:54.000Z',
+          processed_at: '2026-03-18T02:09:54.000Z',
+        },
+      ],
+      total: 1,
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <DocumentList />
+      </MemoryRouter>,
+    );
+
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Transaction created')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Pending review')).not.toBeInTheDocument();
   });
 });

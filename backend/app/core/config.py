@@ -159,6 +159,7 @@ class Settings(BaseSettings):
     # LLM / OpenAI
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_VISION_MODEL: str = ""
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-opus-4-1-20250805"
     ANTHROPIC_VISION_MODEL: str = "claude-opus-4-1-20250805"

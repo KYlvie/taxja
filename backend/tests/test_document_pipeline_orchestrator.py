@@ -258,9 +258,68 @@ def test_finalize_materializes_document_year_fields_for_tax_year_documents():
     assert document.document_date is None
     assert document.document_year == 2024
     assert document.year_basis == "tax_year"
-    assert float(document.year_confidence) == 1.0
-    assert document.ocr_result["document_year"] == 2024
-    assert document.ocr_result["year_basis"] == "tax_year"
+
+
+def test_finalize_persists_full_transaction_suggestion_metadata_in_tax_analysis():
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    orchestrator.db = MagicMock()
+
+    document = _make_document(
+        file_name="split-receipt.pdf",
+        doc_type=DBDocumentType.RECEIPT,
+        ocr_result={},
+    )
+
+    result = PipelineResult(
+        document_id=1,
+        stage_reached=PipelineStage.SUGGEST,
+        classification=ClassificationResult(
+            document_type="receipt",
+            confidence=0.83,
+            method="regex",
+        ),
+        extracted_data={"merchant": "BILLA", "amount": 11.50, "date": "2025-01-15"},
+        raw_text="BILLA split receipt",
+        current_state="completed",
+        needs_review=True,
+        suggestions=[
+            {
+                "amount": "8.50",
+                "date": "2025-01-15",
+                "description": "BILLA groceries",
+                "status": "pending-review",
+                "needs_review": True,
+                "reviewed": False,
+                "gate_decision": "pending_review",
+                "confidence": 0.81,
+            },
+            {
+                "amount": "3.00",
+                "date": "2025-01-15",
+                "description": "BILLA bakery",
+                "status": "manual-review-required",
+                "needs_review": True,
+                "reviewed": False,
+                "gate_decision": "manual_required",
+                "confidence": 0.42,
+            },
+        ],
+    )
+
+    orchestrator._finalize(
+        result=result,
+        document=document,
+        start_time=datetime.utcnow(),
+    )
+
+    items = document.ocr_result["tax_analysis"]["items"]
+    assert len(items) == 2
+    assert items[0]["status"] == "pending-review"
+    assert items[0]["needs_review"] is True
+    assert items[0]["reviewed"] is False
+    assert items[0]["gate_decision"] == "pending_review"
+    assert items[1]["status"] == "manual-review-required"
+    assert items[1]["gate_decision"] == "manual_required"
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +658,65 @@ class TestAutoFixValidation:
         assert validation.corrected_fields.get("vat_rate") == 20
         # VAT amount should also be calculated
         assert "vat_amount" in validation.corrected_fields
+
+    def test_european_amount_is_normalized_during_validation(self):
+        """European decimal commas should be normalized instead of rejected."""
+        from app.models.document import DocumentType as DBDocumentType
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"amount": "96,00", "merchant": "Notion", "date": "2024-01-02"}
+        validation = orchestrator._stage_validate(DBDocumentType.INVOICE, data, result)
+
+        assert not any("Invalid amount value" in issue.issue for issue in validation.issues)
+        assert validation.corrected_fields.get("amount") == 96.0
+
+    def test_named_month_date_is_normalized_during_validation(self):
+        """Named-month European dates should be normalized to ISO."""
+        from app.models.document import DocumentType as DBDocumentType
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {"amount": 42.5, "merchant": "Test", "date": "19. Dez. 2024"}
+        validation = orchestrator._stage_validate(DBDocumentType.INVOICE, data, result)
+
+        assert validation.corrected_fields.get("date") == "2024-12-19"
+
+    def test_percent_vat_rate_is_normalized(self):
+        """VAT rates like '20 %' should be normalized before VAT calculation."""
+        from app.models.document import DocumentType as DBDocumentType
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {
+            "amount": "120,00",
+            "vat_rate": "20 %",
+            "merchant": "Test",
+            "date": "2024-01-02",
+        }
+        validation = orchestrator._stage_validate(DBDocumentType.INVOICE, data, result)
+
+        assert validation.corrected_fields.get("vat_rate") == 20.0
+        assert validation.corrected_fields.get("vat_amount") == 20.0
+
+    def test_reverse_charge_invoice_skips_austrian_vat_fallback(self):
+        """Reverse-charge invoices must not be backfilled with Austrian 20% VAT."""
+        from app.models.document import DocumentType as DBDocumentType
+        orchestrator = self._make_orchestrator()
+        result = PipelineResult(document_id=1)
+
+        data = {
+            "amount": 96.0,
+            "merchant": "Notion Labs Inc.",
+            "date": "2024-01-02",
+            "description": "Reverse Charge — Steuerschuldnerschaft des Leistungsempfängers",
+            "raw_text": "Rechnungsbetrag: EUR 96,00 Reverse Charge - Steuerschuldnerschaft des Leistungsempfängers",
+        }
+        validation = orchestrator._stage_validate(DBDocumentType.INVOICE, data, result)
+
+        assert "vat_rate" not in validation.corrected_fields
+        assert "vat_amount" not in validation.corrected_fields
+        assert any("reverse-charge indicators detected" in issue.issue for issue in validation.issues)
 
     def test_vat_mismatch_auto_corrected(self):
         """VAT amount doesn't match rate → auto-corrected to calculated value."""

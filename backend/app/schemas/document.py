@@ -11,6 +11,9 @@ _PROCESSING_PIPELINE_STATES = {
     "finalizing",
 }
 _STALE_PROCESSING_TIMEOUT = timedelta(minutes=5)
+_FINAL_IMPORT_STATUSES = {"confirmed", "auto_created"}
+_FINAL_TRANSACTION_SUGGESTION_STATUSES = {"confirmed", "dismissed"}
+_CONFIDENT_TRANSACTION_THRESHOLD = 0.90
 
 
 def _parse_pipeline_timestamp(value: Any) -> Optional[datetime]:
@@ -85,6 +88,65 @@ def derive_document_ocr_status(obj: Any) -> str:
     return "processing"
 
 
+def _has_final_transaction_suggestion_outcome(ocr_result: Any) -> bool:
+    if not isinstance(ocr_result, dict):
+        return False
+
+    suggestions: list[dict[str, Any]] = []
+    stored = ocr_result.get("transaction_suggestion")
+    if isinstance(stored, dict):
+        suggestions.append(stored)
+
+    tax_analysis = ocr_result.get("tax_analysis")
+    items = tax_analysis.get("items") if isinstance(tax_analysis, dict) else None
+    if isinstance(items, list):
+        suggestions.extend(item for item in items if isinstance(item, dict))
+
+    for suggestion in suggestions:
+        if suggestion.get("_stale"):
+            continue
+
+        status = suggestion.get("status")
+        if status in _FINAL_TRANSACTION_SUGGESTION_STATUSES:
+            return True
+
+        if suggestion.get("reviewed") is True or suggestion.get("needs_review") is False:
+            return True
+
+    return False
+
+
+def _has_final_document_outcome(
+    *,
+    ocr_result: Any,
+    confidence_score: Any,
+    transaction_id: Any,
+    linked_transaction_count: Any,
+) -> bool:
+    if isinstance(ocr_result, dict) and ocr_result.get("confirmed") is True:
+        return True
+
+    if isinstance(ocr_result, dict):
+        import_suggestion = ocr_result.get("import_suggestion")
+        if isinstance(import_suggestion, dict) and import_suggestion.get("status") in _FINAL_IMPORT_STATUSES:
+            return True
+
+        asset_outcome = ocr_result.get("asset_outcome")
+        if isinstance(asset_outcome, dict) and asset_outcome.get("status") in _FINAL_IMPORT_STATUSES:
+            return True
+
+        if _has_final_transaction_suggestion_outcome(ocr_result):
+            return True
+
+    try:
+        confidence = float(confidence_score or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    has_linked_transaction = bool(transaction_id) or bool(linked_transaction_count)
+    return has_linked_transaction and confidence >= _CONFIDENT_TRANSACTION_THRESHOLD
+
+
 class DocumentBase(BaseModel):
     """Base document schema"""
     document_type: Optional[DocumentType] = None
@@ -137,12 +199,17 @@ class DocumentDetail(BaseModel):
         """Override to compute needs_review from confidence_score and OCR confirmation"""
         instance = super().from_orm(obj)
         instance.ocr_status = derive_document_ocr_status(obj)
-        # needs_review: low confidence OR OCR result not yet confirmed
         is_processed = getattr(obj, 'processed_at', None) is not None
-        low_confidence = (instance.confidence_score or 0) < 0.6
         ocr_result = getattr(obj, 'ocr_result', None) or {}
+        low_confidence = (instance.confidence_score or 0) < 0.6
         ocr_not_confirmed = bool(ocr_result and not ocr_result.get('confirmed'))
-        instance.needs_review = is_processed and (low_confidence or ocr_not_confirmed)
+        has_final_outcome = _has_final_document_outcome(
+            ocr_result=ocr_result,
+            confidence_score=instance.confidence_score,
+            transaction_id=getattr(obj, 'transaction_id', None),
+            linked_transaction_count=getattr(obj, 'linked_transaction_count', 0),
+        )
+        instance.needs_review = is_processed and not has_final_outcome and (low_confidence or ocr_not_confirmed)
         return instance
 
 

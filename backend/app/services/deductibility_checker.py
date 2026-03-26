@@ -327,6 +327,8 @@ class DeductibilityChecker:
         business_type: Optional[str] = None,
         business_industry: Optional[str] = None,
         user_id: Optional[int] = None,
+        *,
+        allow_user_override: bool = True,
     ) -> DeductibilityResult:
         """
         Check deductibility. For ambiguous cases, if ocr_data is provided,
@@ -354,13 +356,14 @@ class DeductibilityChecker:
                 False, f"Unknown category: {expense_category}", requires_review=True
             )
 
-        user_override = self._try_user_override(
-            user_id=user_id,
-            description=description,
-            expense_category=cat.value,
-        )
-        if user_override is not None:
-            return user_override
+        if allow_user_override:
+            user_override = self._try_user_override(
+                user_id=user_id,
+                description=description,
+                expense_category=cat.value,
+            )
+            if user_override is not None:
+                return user_override
 
         # Check business-type-specific overrides first (self-employed / mixed)
         if (business_type or business_industry) and ut in (UserType.SELF_EMPLOYED, UserType.MIXED):

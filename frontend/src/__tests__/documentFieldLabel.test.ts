@@ -20,6 +20,12 @@ const dictionary: Record<string, string> = {
   'documents.review.taxFieldLabels.commercial_document_semantics':
     'Commercial document semantics (Translated)',
   'documents.review.taxFieldLabels.is_reversal': 'Is reversal (Translated)',
+  'documents.review.taxFieldLabels.issuer': 'Issuer (Translated)',
+  'documents.review.taxFieldLabels.recipient': 'Recipient (Translated)',
+  'documents.review.taxFieldLabels.document_date': 'Document date (Translated)',
+  'documents.review.taxFieldLabels.document_year': 'Document year (Translated)',
+  'documents.review.taxFieldLabels.year_basis': 'Year basis (Translated)',
+  'documents.review.taxFieldLabels.year_confidence': 'Year confidence (Translated)',
 };
 
 const t = ((key: string, fallbackOrOptions?: unknown) => {
@@ -63,5 +69,18 @@ describe('document field label helpers', () => {
     expect(translated).toContain('Document transaction direction (Translated)');
     expect(translated).toContain('Commercial document semantics (Translated)');
     expect(translated).toContain('Is reversal (Translated)');
+  });
+
+  it('translates issuer and document year attribution fields', () => {
+    const translated = translateDocumentSuggestionText(
+      'Please verify "issuer", "recipient", "document_date", "document_year", "year_basis", and "year_confidence".',
+      t,
+    );
+    expect(translated).toContain('Issuer (Translated)');
+    expect(translated).toContain('Recipient (Translated)');
+    expect(translated).toContain('Document date (Translated)');
+    expect(translated).toContain('Document year (Translated)');
+    expect(translated).toContain('Year basis (Translated)');
+    expect(translated).toContain('Year confidence (Translated)');
   });
 });

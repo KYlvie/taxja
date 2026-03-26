@@ -38,7 +38,7 @@ const Sidebar = ({ isOpen, onClose, collapsed }: SidebarProps) => {
 
   // External admin tools (open in new tab)
   const adminExternalLinks = user?.is_admin ? [
-    { href: 'http://localhost:9001', label: t('nav.minioConsole', 'MinIO Console'), icon: '\u2601' },
+    { href: '/minio-console/', label: t('nav.minioConsole', 'MinIO Console'), icon: '\u2601' },
   ] : [];
 
   const isActive = (path: string) => {

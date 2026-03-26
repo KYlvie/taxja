@@ -2696,7 +2696,9 @@ const DocumentsPage = () => {
                                           className="receipt-review-edit-btn receipt-review-edit-btn--header"
                                           onClick={() => handleOpenTransactionInline(linkedReceiptTransaction.transaction_id)}
                                         >
-                                          {t('documents.linkedTransaction.open', 'Open transaction')}
+                                          {receiptShouldShowExpenseControls
+                                            ? t('transactions.transactionDetails', 'Transaction details')
+                                            : t('documents.receiptReview.incomeStatus', 'Income details')}
                                         </button>
                                       )}
                                       <button
@@ -3147,10 +3149,25 @@ const DocumentsPage = () => {
                                                 const linkedTxns = (viewingDocument as any)?.linked_transactions;
                                                 if (!linkedTxns || linkedTxns.length === 0) return null;
                                                 const matchedTxn = findMatchingTransaction(item, linkedTxns, itemIndex);
-                                                return matchedTxn ? (
+                                                if (!matchedTxn) {
+                                                  return (
+                                                    <span
+                                                      className="line-item-txn-status not-created"
+                                                      title={t('documents.lineItems.noTransaction', 'No transaction created')}
+                                                    >
+                                                      Pending
+                                                    </span>
+                                                  );
+                                                }
+
+                                                return (
                                                   <span
                                                     className="line-item-txn-status created"
-                                                    title={t('documents.lineItems.viewTransaction', 'View transaction')}
+                                                    title={
+                                                      receiptShouldShowExpenseControls
+                                                        ? t('documents.lineItems.viewTransaction', 'View transaction')
+                                                        : t('documents.receiptReview.incomeStatus', 'Income details')
+                                                    }
                                                     onClick={() => { void handleOpenTransactionInline(matchedTxn.transaction_id); }}
                                                     role="button"
                                                     tabIndex={0}
@@ -3161,14 +3178,9 @@ const DocumentsPage = () => {
                                                       }
                                                     }}
                                                   >
-                                                    Linked
-                                                  </span>
-                                                ) : (
-                                                  <span
-                                                    className="line-item-txn-status not-created"
-                                                    title={t('documents.lineItems.noTransaction', 'No transaction created')}
-                                                  >
-                                                    Pending
+                                                    {receiptShouldShowExpenseControls
+                                                      ? t('transactions.transactionDetails', 'Transaction details')
+                                                      : t('documents.receiptReview.incomeStatus', 'Income details')}
                                                   </span>
                                                 );
                                               })()}
@@ -3209,7 +3221,7 @@ const DocumentsPage = () => {
                                                     ? t('documents.review.nonPostable', 'Non-postable')
                                                     : isReceiptEditing
                                                       ? t('documents.receiptReview.incomeEditing', 'Editing income details')
-                                                      : t('documents.receiptReview.incomeStatus', 'Income details')}
+                                                      : t('documents.receiptReview.extractedDetails', 'Extracted details')}
                                                 </span>
                                                 <p className="receipt-review-reason-text">
                                                   {liveReceiptDecision.helpers[0]

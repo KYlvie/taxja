@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Upload
 from fastapi.responses import StreamingResponse
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from sqlalchemy import and_, or_, func, case
 
@@ -95,6 +96,10 @@ from app.api.deps import require_feature
 from app.services.feature_gate_service import Feature
 
 from app.services.document_tax_review_service import backfill_document_tax_review
+from app.services.document_transaction_suggestion_store import (
+    iter_transaction_suggestion_refs,
+    mark_transaction_suggestions_stale,
+)
 
 from app.services.credit_service import CreditService, InsufficientCreditsError
 
@@ -156,6 +161,60 @@ def _apply_document_date_filters(query, start_date: Optional[datetime], end_date
 def _apply_document_attribution_year_filter(query, target_year: int):
     year_expr = _document_attribution_year_expr()
     return query.filter(year_expr == target_year)
+
+
+def _get_actionable_transaction_suggestion_refs(
+    ocr_result: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return [
+        ref for ref in iter_transaction_suggestion_refs(ocr_result, include_stale=False)
+        if not ref.get("transaction_id")
+    ]
+
+
+def _create_transactions_from_stored_suggestions(
+    *,
+    document: Document,
+    user_id: int,
+    db: Session,
+    ocr_service,
+) -> tuple[list[int], list[int]]:
+    ocr_result = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+    refs = _get_actionable_transaction_suggestion_refs(ocr_result)
+    if not refs:
+        return [], []
+
+    created_ids: list[int] = []
+    reused_ids: list[int] = []
+
+    for ref in refs:
+        suggestion = dict(ref)
+        suggestion["document_id"] = document.id
+        suggestion["needs_review"] = False
+        suggestion["reviewed"] = True
+        creation_result = ocr_service.create_transaction_from_suggestion_with_result(
+            suggestion,
+            user_id,
+        )
+        tx_id = creation_result.transaction.id
+        if creation_result.created:
+            created_ids.append(tx_id)
+        else:
+            reused_ids.append(tx_id)
+            ref["is_duplicate"] = True
+            ref["duplicate_of_id"] = creation_result.duplicate_of_id
+            ref["duplicate_confidence"] = creation_result.duplicate_confidence
+
+        ref["status"] = "confirmed"
+        ref["transaction_id"] = tx_id
+        ref["needs_review"] = False
+        ref["reviewed"] = True
+        ref.pop("_stale", None)
+
+    document.ocr_result = ocr_result
+    flag_modified(document, "ocr_result")
+    db.commit()
+    return created_ids, reused_ids
 
 
 router = APIRouter()
@@ -983,9 +1042,9 @@ def _run_ocr_pipeline_with_fallback(document_id: int) -> None:
 
             logger.error(f"Legacy OCR also failed for document {document_id}: {legacy_err}")
 
-def _is_celery_worker_available() -> bool:
+def _is_celery_worker_available(required_queue: str = "default") -> bool:
 
-    """Check if at least one Celery worker is online."""
+    """Check if at least one Celery worker is online for the required queue."""
 
     try:
 
@@ -993,13 +1052,32 @@ def _is_celery_worker_available() -> bool:
 
         inspector = celery_app.control.inspect(timeout=1.0)
 
-        active = inspector.active_queues()
+        active = inspector.active_queues() or {}
 
-        return bool(active)
+        for worker_queues in active.values():
+
+            for queue_info in worker_queues or []:
+
+                if queue_info.get("name") == required_queue:
+
+                    return True
+
+        return False
 
     except Exception:
 
         return False
+
+
+def _enqueue_ocr_task(document_id: int):
+
+    """Queue OCR processing explicitly onto the default Celery queue."""
+
+    return process_document_ocr.apply_async(
+        args=(document_id,),
+        queue="default",
+        routing_key="default",
+    )
 
 def _schedule_ocr_processing(background_tasks: BackgroundTasks, document_id: int) -> None:
 
@@ -1017,11 +1095,11 @@ def _schedule_ocr_processing(background_tasks: BackgroundTasks, document_id: int
 
     """
 
-    if _is_celery_worker_available():
+    if _is_celery_worker_available(required_queue="default"):
 
         try:
 
-            task = process_document_ocr.delay(document_id)
+            task = _enqueue_ocr_task(document_id)
 
             logger.info(f"Queued OCR task {task.id} for document {document_id}")
 
@@ -3305,12 +3383,44 @@ def create_transaction_from_document(
     
 
     # Generate suggestion if not provided
-
     if not suggestion:
+        stored_refs = _get_actionable_transaction_suggestion_refs(document.ocr_result or {})
+        if stored_refs:
+            try:
+                created_ids, reused_ids = _create_transactions_from_stored_suggestions(
+                    document=document,
+                    user_id=current_user.id,
+                    db=db,
+                    ocr_service=ocr_service,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
+
+            transaction_ids = created_ids + reused_ids
+            if not transaction_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=get_error_message("could_not_create_transaction_suggestion", _get_lang(request, current_user)),
+                )
+
+            message = get_error_message("transaction_created_successfully", _get_lang(request, current_user))
+            if len(transaction_ids) > 1:
+                message += f" ({len(created_ids)} created, {len(reused_ids)} reused)"
+            elif reused_ids:
+                message = get_error_message("duplicate_transaction_reused", _get_lang(request, current_user))
+
+            return {
+                "message": message,
+                "transaction_id": transaction_ids[0],
+                "transaction_ids": transaction_ids,
+                "document_id": document_id,
+                "deduplicated": bool(reused_ids),
+            }
 
         suggestion = ocr_service.create_transaction_suggestion(document_id, current_user.id)
-
-        
 
         if not suggestion:
 
@@ -3322,7 +3432,9 @@ def create_transaction_from_document(
 
             )
 
-    
+    # Explicit user action — mark as reviewed
+    suggestion["needs_review"] = False
+    suggestion["reviewed"] = True
 
     try:
 
@@ -3442,6 +3554,8 @@ def review_ocr_results(
 
     
 
+    tax_review_document_types = set(TAX_DATA_DOCUMENT_TYPE_TO_SUGGESTION.keys())
+
     # Extract field confidences from OCR result
 
     # The ocr_result may be flat (field: value, field_confidence: score)
@@ -3452,7 +3566,11 @@ def review_ocr_results(
 
     ocr_data = document.ocr_result
 
-    if "extracted_data" in ocr_data:
+    if document.document_type in tax_review_document_types:
+
+        ocr_data = _extract_tax_import_data(document)
+
+    elif "extracted_data" in ocr_data:
 
         ocr_data = ocr_data["extracted_data"]
 
@@ -3470,11 +3588,35 @@ def review_ocr_results(
 
     skip_keys = {"confidence", "field_confidence", "raw_text", "product_summary",
 
-                 "line_items", "vat_summary", "tax_analysis", "import_suggestion", "asset_outcome"}
+                 "line_items", "vat_summary", "tax_analysis", "import_suggestion", "asset_outcome",
+
+                 "document_transaction_direction", "document_transaction_direction_source",
+
+                 "document_transaction_direction_confidence", "transaction_direction_resolution",
+
+                 "commercial_document_semantics", "is_reversal",
+
+                 "document_date", "document_year", "year_basis", "year_confidence",
+
+                 "confirmed", "confirmed_at", "confirmed_by", "confirmation_notes",
+
+                 "correction_history", "learning_data", "needs_review",
+
+                 "_transaction_type", "_receipt_count", "_additional_receipts",
+
+                 "_unsupported_type", "multiple_receipts",
+
+                 "transaction_suggestion", "vermietung_details", "all_kz_values"}
 
     for field_name, value in ocr_data.items():
 
         if field_name in skip_keys or field_name.endswith("_confidence"):
+
+            continue
+
+        # Skip internal/private fields
+
+        if field_name.startswith("_"):
 
             continue
 
@@ -3500,7 +3642,11 @@ def review_ocr_results(
 
         else:
 
-            field_confidence = 0.5
+            field_confidence = (
+                float(document.confidence_score or 0.0)
+                if document.document_type in tax_review_document_types
+                else 0.5
+            )
 
         needs_review = field_confidence < 0.6
 
@@ -3718,8 +3864,10 @@ def confirm_ocr_results(
     transaction_id = None
 
     transaction_created = False
+    created_ids: list[int] = []
+    reused_ids: list[int] = []
 
-    if confirm_request.confirmed and not document.transaction_id:
+    if confirm_request.confirmed:
 
         try:
 
@@ -3727,7 +3875,25 @@ def confirm_ocr_results(
 
             ocr_service = OCRTransactionService(db)
 
-            suggestion = ocr_service.create_transaction_suggestion(document_id, current_user.id)
+            # Prefer consuming the already-stored suggestion from OCR pipeline
+            # (avoids redundant re-classification and keeps gate metadata intact).
+            # However, if the user corrected OCR data after pipeline ran, the
+            # stored suggestion is stale and must be regenerated.
+            stored_refs = _get_actionable_transaction_suggestion_refs(document.ocr_result or {})
+            suggestion = None
+            if stored_refs:
+                created_ids, reused_ids = _create_transactions_from_stored_suggestions(
+                    document=document,
+                    user_id=current_user.id,
+                    db=db,
+                    ocr_service=ocr_service,
+                )
+                if created_ids or reused_ids:
+                    transaction_id = (created_ids + reused_ids)[0]
+                    transaction_created = bool(created_ids)
+            elif not document.transaction_id:
+                # Fallback for legacy documents that predate stored suggestions.
+                suggestion = ocr_service.create_transaction_suggestion(document_id, current_user.id)
 
             if suggestion:
 
@@ -3745,21 +3911,35 @@ def confirm_ocr_results(
 
                 transaction_created = creation_result.created
 
+                if creation_result.created:
+                    created_ids.append(transaction_id)
+                else:
+                    reused_ids.append(transaction_id)
+
         except Exception as e:
 
             logger.warning(f"Auto-create transaction failed for doc {document_id}: {e}")
 
     msg = "Results confirmed successfully"
 
-    if transaction_id:
+    if created_ids or reused_ids:
 
-        if transaction_created:
+        total_finalized = len(created_ids) + len(reused_ids)
 
-            msg += f" and transaction #{transaction_id} created"
+        if total_finalized == 1 and transaction_id:
+
+            if transaction_created:
+
+                msg += f" and transaction #{transaction_id} created"
+
+            else:
+
+                msg += f" and duplicate was prevented by reusing transaction #{transaction_id}"
 
         else:
 
-            msg += f" and duplicate was prevented by reusing transaction #{transaction_id}"
+            msg += f" and {total_finalized} transactions were finalized"
+            msg += f" ({len(created_ids)} created, {len(reused_ids)} reused)"
 
     return OCRConfirmResponse(
 
@@ -3943,7 +4123,10 @@ def correct_ocr_results(
 
     })
 
-    
+    # Invalidate any stored transaction suggestions so confirm/create flows
+    # do not consume stale pre-correction payloads.
+    if updated_fields:
+        mark_transaction_suggestions_stale(ocr_result)
 
     # Increase confidence after user correction
 
@@ -4529,17 +4712,21 @@ def correct_ocr_results(
 
                     )
 
-                for item_rule in classification_item_rules:
+                # Only queue individual item rules when there are multiple items.
+                # For single-item receipts, the parent rule is sufficient.
+                if len(classification_item_rules) > 1:
 
-                    queue_classification_rule(
+                    for item_rule in classification_item_rules:
 
-                        description=item_rule["description"],
+                        queue_classification_rule(
 
-                        txn_type=item_rule["txn_type"],
+                            description=item_rule["description"],
 
-                        category=item_rule["category"],
+                            txn_type=item_rule["txn_type"],
 
-                    )
+                            category=item_rule["category"],
+
+                        )
 
                 if receipt_txn_type == "income" or not line_items:
 
@@ -4610,8 +4797,6 @@ def correct_ocr_results(
                     current_user.id,
 
                     rule["description"],
-
-                    exclude_txn_type=rule["txn_type"],
 
                 )
 
@@ -5038,7 +5223,11 @@ async def retry_ocr_processing(
 
     try:
 
-        process_document_ocr.delay(document.id)
+        if not _is_celery_worker_available(required_queue="default"):
+
+            raise RuntimeError("No Celery worker listening on default queue")
+
+        _enqueue_ocr_task(document.id)
 
     except Exception as e:
 
@@ -5269,7 +5458,11 @@ def reprocess_all_documents(
 
         try:
 
-            process_document_ocr.delay(doc.id)
+            if not _is_celery_worker_available(required_queue="default"):
+
+                raise RuntimeError("No Celery worker listening on default queue")
+
+            _enqueue_ocr_task(doc.id)
 
             queued += 1
 
@@ -6333,11 +6526,99 @@ TAX_DATA_DOCUMENT_TYPE_TO_SUGGESTION = {
 
 }
 
+TAX_IMPORT_GENERIC_ONLY_KEYS = {
+    "tax_year",
+    "year",
+    "date",
+    "amount",
+    "description",
+    "merchant",
+    "issuer",
+    "recipient",
+    "tax_id",
+    "supplier",
+    "vendor_name",
+    "customer_name",
+    "invoice_number",
+    "invoice_date",
+    "payment_method",
+    "currency",
+    "iban",
+    "bic",
+    "total_amount",
+    "net_amount",
+    "vat_amount",
+    "vat_rate",
+    "document_date",
+    "document_year",
+    "year_basis",
+    "year_confidence",
+    "commercial_document_semantics",
+    "document_transaction_direction",
+    "document_transaction_direction_source",
+    "is_reversal",
+}
+
+
+def _extract_specialized_tax_import_data(document: Document) -> Dict[str, Any]:
+
+    """Recover tax-form data from raw_text when OCR only left generic transaction fields."""
+
+    raw_text = (document.raw_text or "").strip()
+    if not raw_text:
+        return {}
+
+    try:
+        if document.document_type == DocumentType.EINKOMMENSTEUERBESCHEID:
+            from app.services.bescheid_extractor import BescheidExtractor
+
+            extractor = BescheidExtractor()
+            return extractor.to_dict(extractor.extract(raw_text))
+
+        if document.document_type == DocumentType.E1_FORM:
+            from app.services.e1_form_extractor import E1FormExtractor
+
+            extractor = E1FormExtractor()
+            return extractor.to_dict(extractor.extract(raw_text))
+    except Exception:
+        logger.exception(
+            "Failed specialized tax import recovery for document %s", document.id
+        )
+
+    return {}
+
+
+def _has_meaningful_tax_import_fields(data: Dict[str, Any]) -> bool:
+
+    """Return True when tax-specific fields exist beyond generic transaction metadata."""
+
+    for key, value in (data or {}).items():
+        if (
+            key in TAX_IMPORT_GENERIC_ONLY_KEYS
+            or key == "confidence"
+            or key.startswith("_")
+            or key.endswith("_confidence")
+            or isinstance(value, (dict, list))
+            or value in (None, "")
+        ):
+            continue
+        return True
+    return False
+
 def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
 
     """Build confirm-tax-data payload from the current OCR result."""
 
     ocr_result = document.ocr_result or {}
+    suggestion = ocr_result.get("import_suggestion")
+    if isinstance(suggestion, dict) and isinstance(suggestion.get("data"), dict):
+        suggestion_data = {
+            key: value
+            for key, value in suggestion["data"].items()
+            if not isinstance(value, (dict, list))
+        }
+        if _has_meaningful_tax_import_fields(suggestion_data):
+            return suggestion_data
 
     source = ocr_result.get("extracted_data")
 
@@ -6392,6 +6673,16 @@ def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
     if tax_year is not None:
 
         data["tax_year"] = tax_year
+
+    if not _has_meaningful_tax_import_fields(data):
+        recovered = _extract_specialized_tax_import_data(document)
+        if recovered:
+            recovered_tax_year = _resolve_tax_import_year(
+                document=document, data=recovered, source=recovered
+            )
+            if recovered_tax_year is not None:
+                recovered["tax_year"] = recovered_tax_year
+            return recovered
 
     return data
 

@@ -60,7 +60,12 @@ class TransactionClassifier:
             self._user_svc = None
 
     def classify_transaction(
-        self, transaction, user_context=None, *, _store_side_effects: bool = True
+        self,
+        transaction,
+        user_context=None,
+        *,
+        _store_side_effects: bool = True,
+        allow_user_override: bool = True,
     ) -> ClassificationResult:
         """Classify a transaction using the hybrid pipeline.
 
@@ -76,9 +81,10 @@ class TransactionClassifier:
                 method="none",
             )
 
-        user_override = self._try_user_override(transaction)
-        if user_override is not None:
-            return user_override
+        if allow_user_override:
+            user_override = self._try_user_override(transaction)
+            if user_override is not None:
+                return user_override
 
         rule_result = self.rule_classifier.classify(transaction)
         if rule_result.confidence >= self.HIGH_CONFIDENCE_THRESHOLD:

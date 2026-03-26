@@ -654,6 +654,80 @@ describe('DocumentsPage receipt review flow', () => {
     expect(transactionPayload.line_items[0].is_deductible).toBe(false);
   });
 
+  it('labels linked income line items as income details', async () => {
+    const linkedTransaction = {
+      id: 333,
+      type: 'income',
+      amount: 3500,
+      date: '2024-10-03',
+      description: 'Consulting income',
+      category: 'business',
+      is_deductible: false,
+      line_items: [
+        {
+          description: 'Consulting income',
+          amount: 3500,
+          quantity: 1,
+          category: 'business',
+          is_deductible: false,
+          sort_order: 0,
+        },
+      ],
+    };
+
+    const documentDetail = {
+      id: 101,
+      user_id: 1,
+      transaction_id: 333,
+      linked_transactions: [
+        {
+          transaction_id: 333,
+          description: 'Consulting income',
+          amount: 3500,
+          date: '2024-10-03',
+          has_line_items: true,
+        },
+      ],
+      document_type: 'invoice',
+      file_path: '/tmp/income-invoice.pdf',
+      file_name: 'income-invoice.pdf',
+      file_size: 100,
+      mime_type: 'application/pdf',
+      confidence_score: 0.92,
+      needs_review: false,
+      created_at: '2026-03-17T00:00:00Z',
+      updated_at: '2026-03-17T00:00:00Z',
+      ocr_result: {
+        merchant: 'ACME Studio',
+        amount: 3500,
+        _transaction_type: 'income',
+        line_items: [
+          {
+            description: 'Consulting income',
+            amount: 3500,
+            quantity: 1,
+            category: 'business',
+            is_deductible: false,
+          },
+        ],
+      },
+    };
+
+    getDocument.mockReset();
+    getDocument.mockResolvedValue(documentDetail);
+    getById.mockResolvedValue(linkedTransaction);
+
+    renderDocumentsPage();
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalledWith(101));
+    await waitFor(() => expect(getById).toHaveBeenCalledWith(333));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand details' }));
+
+    expect(screen.getAllByText('Income details').length).toBeGreaterThan(1);
+    expect(screen.queryByText('Linked')).not.toBeInTheDocument();
+  });
+
   it('preserves unit amounts when switching a multi-quantity linked invoice from income to expense', async () => {
     const linkedTransaction = {
       id: 1333,

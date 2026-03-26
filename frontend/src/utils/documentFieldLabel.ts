@@ -10,6 +10,14 @@ const DOCUMENT_FIELD_LABEL_ALIASES: Record<string, string[]> = {
   transaction_type: ['documents.review.transactionType'],
   document_type: ['documents.documentType'],
   user_contract_role: ['documents.review.fields.myRole'],
+  issuer: ['documents.review.taxFieldLabels.issuer'],
+  recipient: ['documents.review.taxFieldLabels.recipient'],
+  document_date: ['documents.review.taxFieldLabels.document_date'],
+  document_year: ['documents.review.taxFieldLabels.document_year'],
+  year_basis: ['documents.review.taxFieldLabels.year_basis'],
+  year_confidence: ['documents.review.taxFieldLabels.year_confidence'],
+  bescheid_datum: ['documents.review.taxFieldLabels.bescheid_datum'],
+  faellig_am: ['documents.review.taxFieldLabels.faellig_am'],
 };
 
 export const normalizeDocumentFieldKey = (fieldName: string): string => {

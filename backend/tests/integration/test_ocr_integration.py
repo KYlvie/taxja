@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 import io
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image, ImageDraw
@@ -269,6 +269,65 @@ class TestOCRReviewAndCorrectionCurrentContracts:
         field_names = {field["field_name"] for field in data["extracted_fields"]}
         assert {"date", "amount", "merchant"} <= field_names
 
+    def test_review_ocr_results_recovers_tax_fields_for_bescheid_documents(
+        self,
+        ocr_authenticated_client,
+        ocr_enabled_user,
+        db,
+    ):
+        raw_text = """
+        REPUBLIK OESTERREICH
+        DI Maria Steiner
+        FA: Finanzamt Oesterreich
+        St.Nr. 09-123/4567
+        Steuerberechnung fuer 2023
+        EINKOMMENSTEUERBESCHEID 2023
+        Einkuenfte aus selbstaendiger Arbeit (KZ 320) EUR 42.850,00
+        Einkommen EUR 42.200,00
+        Festgesetzte Einkommensteuer EUR 8.957,50
+        Abgabennachforderung EUR 957,50
+        """.strip()
+
+        document = Document(
+            user_id=ocr_enabled_user.id,
+            document_type=DocumentType.EINKOMMENSTEUERBESCHEID,
+            file_name="A23_Einkommensteuerbescheid_2023_4S.pdf",
+            file_path="documents/A23_Einkommensteuerbescheid_2023_4S.pdf",
+            file_size=2048,
+            mime_type="application/pdf",
+            confidence_score=0.95,
+            processed_at=datetime.utcnow(),
+            raw_text=raw_text,
+            ocr_result={
+                "date": "2024-09-15",
+                "amount": 957.5,
+                "merchant": "Finanzamt Österreich",
+                "description": "Einkommensteuerbescheid für das Jahr 2023",
+                "tax_id": "09-123/4567",
+                "commercial_document_semantics": "invoice",
+                "document_transaction_direction": "expense",
+                "document_transaction_direction_source": "issuer",
+                "is_reversal": False,
+            },
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+
+        response = ocr_authenticated_client.get(
+            f"/api/v1/documents/{document.id}/review"
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        field_names = {field["field_name"] for field in data["extracted_fields"]}
+        assert "tax_year" in field_names
+        assert "taxpayer_name" in field_names
+        assert "festgesetzte_einkommensteuer" in field_names
+        assert "abgabennachforderung" in field_names
+        assert "merchant" not in field_names
+        assert "amount" not in field_names
+
     def test_confirm_ocr_results_marks_document_confirmed(
         self,
         ocr_authenticated_client,
@@ -325,3 +384,140 @@ class TestOCRReviewAndCorrectionCurrentContracts:
         assert extracted["merchant"] == "BILLA Plus"
         assert extracted["amount"] == 9.10
         assert processed_receipt_document.confidence_score == Decimal("1.00")
+
+    def test_confirm_ocr_results_consumes_multi_stored_transaction_suggestions(
+        self,
+        ocr_authenticated_client,
+        processed_receipt_document,
+        db,
+    ):
+        processed_receipt_document.ocr_result = {
+            **processed_receipt_document.ocr_result,
+            "tax_analysis": {
+                "items": [
+                    {
+                        "amount": "5.50",
+                        "date": "2026-01-15",
+                        "description": "BILLA groceries",
+                        "category": "other",
+                        "needs_review": True,
+                        "reviewed": False,
+                        "status": "pending-review",
+                    },
+                    {
+                        "amount": "3.00",
+                        "date": "2026-01-15",
+                        "description": "BILLA bakery",
+                        "category": "other",
+                        "needs_review": True,
+                        "reviewed": False,
+                        "status": "manual-review-required",
+                    },
+                ]
+            },
+        }
+        db.add(processed_receipt_document)
+        db.commit()
+        db.refresh(processed_receipt_document)
+
+        creation_results = [
+            MagicMock(
+                transaction=MagicMock(id=501),
+                created=True,
+                duplicate_of_id=None,
+                duplicate_confidence=None,
+            ),
+            MagicMock(
+                transaction=MagicMock(id=502),
+                created=False,
+                duplicate_of_id=502,
+                duplicate_confidence=0.91,
+            ),
+        ]
+
+        with patch(
+            "app.services.ocr_transaction_service.OCRTransactionService.create_transaction_from_suggestion_with_result",
+            side_effect=creation_results,
+        ) as mock_create, patch(
+            "app.services.ocr_transaction_service.OCRTransactionService.create_transaction_suggestion",
+            side_effect=AssertionError("legacy suggestion regeneration should not run"),
+        ):
+            response = ocr_authenticated_client.post(
+                f"/api/v1/documents/{processed_receipt_document.id}/confirm",
+                json={"confirmed": True},
+            )
+
+        assert response.status_code == 200
+        assert mock_create.call_count == 2
+        data = response.json()
+        assert "2 transactions were finalized" in data["message"]
+        assert data["can_create_transaction"] is False
+
+        db.refresh(processed_receipt_document)
+        items = processed_receipt_document.ocr_result["tax_analysis"]["items"]
+        assert items[0]["transaction_id"] == 501
+        assert items[0]["status"] == "confirmed"
+        assert items[0]["needs_review"] is False
+        assert items[0]["reviewed"] is True
+        assert items[1]["transaction_id"] == 502
+        assert items[1]["status"] == "confirmed"
+        assert items[1]["is_duplicate"] is True
+        assert items[1]["duplicate_of_id"] == 502
+        assert items[1]["needs_review"] is False
+        assert items[1]["reviewed"] is True
+
+    def test_correct_ocr_results_marks_multi_transaction_suggestions_stale(
+        self,
+        ocr_authenticated_client,
+        processed_receipt_document,
+        db,
+    ):
+        processed_receipt_document.ocr_result = {
+            **processed_receipt_document.ocr_result,
+            "transaction_suggestion": {
+                "amount": "8.50",
+                "date": "2026-01-15",
+                "description": "BILLA groceries",
+                "status": "pending-review",
+            },
+            "tax_analysis": {
+                "items": [
+                    {
+                        "amount": "5.50",
+                        "date": "2026-01-15",
+                        "description": "BILLA groceries",
+                        "status": "pending-review",
+                    },
+                    {
+                        "amount": "3.00",
+                        "date": "2026-01-15",
+                        "description": "BILLA bakery",
+                        "status": "manual-review-required",
+                    },
+                ]
+            },
+        }
+        db.add(processed_receipt_document)
+        db.commit()
+        db.refresh(processed_receipt_document)
+
+        with patch(
+            "app.tasks.ocr_tasks.refresh_contract_role_sensitive_suggestions",
+            return_value=None,
+        ):
+            response = ocr_authenticated_client.post(
+                f"/api/v1/documents/{processed_receipt_document.id}/correct",
+                json={
+                    "corrected_data": {
+                        "merchant": "BILLA Plus",
+                    },
+                    "notes": "refresh stale transaction suggestions",
+                },
+            )
+
+        assert response.status_code == 200
+
+        db.refresh(processed_receipt_document)
+        items = processed_receipt_document.ocr_result["tax_analysis"]["items"]
+        assert items[0]["_stale"] is True
+        assert items[1]["_stale"] is True

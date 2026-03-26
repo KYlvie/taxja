@@ -533,6 +533,32 @@ const buildDocumentExportZipHotfix = (config: {
   },
 });
 
+const buildTaxFieldLabelHotfix = (config: {
+  issuer: string;
+  recipient: string;
+  documentDate: string;
+  documentYear: string;
+  yearBasis: string;
+  yearConfidence: string;
+  bescheidDate: string;
+  dueDate: string;
+}): LocaleObject => ({
+  documents: {
+    review: {
+      taxFieldLabels: {
+        issuer: config.issuer,
+        recipient: config.recipient,
+        document_date: config.documentDate,
+        document_year: config.documentYear,
+        year_basis: config.yearBasis,
+        year_confidence: config.yearConfidence,
+        bescheid_datum: config.bescheidDate,
+        faellig_am: config.dueDate,
+      },
+    },
+  },
+});
+
 const mergeLocaleHotfixes = (...parts: LocaleObject[]): LocaleObject => {
   const merged: LocaleObject = {};
 
@@ -2235,6 +2261,174 @@ const DOCUMENT_EXPORT_ZIP_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
   }),
 };
 
+const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
+  de: buildTaxFieldLabelHotfix({
+    issuer: 'Aussteller',
+    recipient: 'Empfaenger',
+    documentDate: 'Belegdatum',
+    documentYear: 'Dokumentenjahr',
+    yearBasis: 'Jahresgrundlage',
+    yearConfidence: 'Jahres-Konfidenz',
+  }),
+  en: buildTaxFieldLabelHotfix({
+    issuer: 'Issuer',
+    recipient: 'Recipient',
+    documentDate: 'Document date',
+    documentYear: 'Document year',
+    yearBasis: 'Year basis',
+    yearConfidence: 'Year confidence',
+  }),
+  zh: buildTaxFieldLabelHotfix({
+    issuer: '开票方',
+    recipient: '收票方',
+    documentDate: '文件日期',
+    documentYear: '归属年份',
+    yearBasis: '年份依据',
+    yearConfidence: '年份置信度',
+  }),
+  fr: buildTaxFieldLabelHotfix({
+    issuer: 'Emetteur',
+    recipient: 'Destinataire',
+    documentDate: 'Date du document',
+    documentYear: 'Annee du document',
+    yearBasis: "Base de l'annee",
+    yearConfidence: "Confiance de l'annee",
+  }),
+  ru: buildTaxFieldLabelHotfix({
+    issuer: 'Отправитель',
+    recipient: 'Получатель',
+    documentDate: 'Дата документа',
+    documentYear: 'Год документа',
+    yearBasis: 'Основание года',
+    yearConfidence: 'Уверенность года',
+  }),
+  hu: buildTaxFieldLabelHotfix({
+    issuer: 'Kibocsato',
+    recipient: 'Cimzett',
+    documentDate: 'Dokumentum datuma',
+    documentYear: 'Dokumentum eve',
+    yearBasis: 'Ev alapja',
+    yearConfidence: 'Ev megbizhatosaga',
+  }),
+  pl: buildTaxFieldLabelHotfix({
+    issuer: 'Wystawca',
+    recipient: 'Odbiorca',
+    documentDate: 'Data dokumentu',
+    documentYear: 'Rok dokumentu',
+    yearBasis: 'Podstawa roku',
+    yearConfidence: 'Pewnosc roku',
+  }),
+  tr: buildTaxFieldLabelHotfix({
+    issuer: 'Duzenleyen',
+    recipient: 'Alici',
+    documentDate: 'Belge tarihi',
+    documentYear: 'Belge yili',
+    yearBasis: 'Yil temeli',
+    yearConfidence: 'Yil guveni',
+  }),
+  bs: buildTaxFieldLabelHotfix({
+    issuer: 'Izdavalac',
+    recipient: 'Primalac',
+    documentDate: 'Datum dokumenta',
+    documentYear: 'Godina dokumenta',
+    yearBasis: 'Osnova godine',
+    yearConfidence: 'Pouzdanost godine',
+  }),
+};
+
+const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
+  de: buildTaxFieldLabelHotfix({
+    issuer: 'Aussteller',
+    recipient: 'Empfaenger',
+    documentDate: 'Belegdatum',
+    documentYear: 'Dokumentenjahr',
+    yearBasis: 'Jahresgrundlage',
+    yearConfidence: 'Jahres-Konfidenz',
+    bescheidDate: 'Bescheiddatum',
+    dueDate: 'Faellig am',
+  }),
+  en: buildTaxFieldLabelHotfix({
+    issuer: 'Issuer',
+    recipient: 'Recipient',
+    documentDate: 'Document date',
+    documentYear: 'Document year',
+    yearBasis: 'Year basis',
+    yearConfidence: 'Year confidence',
+    bescheidDate: 'Assessment date',
+    dueDate: 'Due date',
+  }),
+  zh: buildTaxFieldLabelHotfix({
+    issuer: '开票方',
+    recipient: '收票方',
+    documentDate: '文件日期',
+    documentYear: '归属年份',
+    yearBasis: '年份依据',
+    yearConfidence: '年份置信度',
+    bescheidDate: '税单日期',
+    dueDate: '到期日',
+  }),
+  fr: buildTaxFieldLabelHotfix({
+    issuer: 'Emetteur',
+    recipient: 'Destinataire',
+    documentDate: 'Date du document',
+    documentYear: 'Annee du document',
+    yearBasis: "Base de l'annee",
+    yearConfidence: "Confiance de l'annee",
+    bescheidDate: "Date d'avis",
+    dueDate: "Date d'echeance",
+  }),
+  ru: buildTaxFieldLabelHotfix({
+    issuer: 'Отправитель',
+    recipient: 'Получатель',
+    documentDate: 'Дата документа',
+    documentYear: 'Год документа',
+    yearBasis: 'Основание года',
+    yearConfidence: 'Уверенность года',
+    bescheidDate: 'Дата решения',
+    dueDate: 'Срок оплаты',
+  }),
+  hu: buildTaxFieldLabelHotfix({
+    issuer: 'Kibocsato',
+    recipient: 'Cimzett',
+    documentDate: 'Dokumentum datuma',
+    documentYear: 'Dokumentum eve',
+    yearBasis: 'Ev alapja',
+    yearConfidence: 'Ev megbizhatosaga',
+    bescheidDate: 'Hatarozat datuma',
+    dueDate: 'Esedekesseg',
+  }),
+  pl: buildTaxFieldLabelHotfix({
+    issuer: 'Wystawca',
+    recipient: 'Odbiorca',
+    documentDate: 'Data dokumentu',
+    documentYear: 'Rok dokumentu',
+    yearBasis: 'Podstawa roku',
+    yearConfidence: 'Pewnosc roku',
+    bescheidDate: 'Data decyzji',
+    dueDate: 'Termin platnosci',
+  }),
+  tr: buildTaxFieldLabelHotfix({
+    issuer: 'Duzenleyen',
+    recipient: 'Alici',
+    documentDate: 'Belge tarihi',
+    documentYear: 'Belge yili',
+    yearBasis: 'Yil temeli',
+    yearConfidence: 'Yil guveni',
+    bescheidDate: 'Vergi karari tarihi',
+    dueDate: 'Vade tarihi',
+  }),
+  bs: buildTaxFieldLabelHotfix({
+    issuer: 'Izdavalac',
+    recipient: 'Primalac',
+    documentDate: 'Datum dokumenta',
+    documentYear: 'Godina dokumenta',
+    yearBasis: 'Osnova godine',
+    yearConfidence: 'Pouzdanost godine',
+    bescheidDate: 'Datum rjesenja',
+    dueDate: 'Rok dospijeca',
+  }),
+};
+
 const CLASSIFICATION_MEMORY_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
   de: buildClassificationMemoryHotfix({
     pageTitle: 'Regeln und Erinnerungen',
@@ -2525,10 +2719,16 @@ export const sanitizeLocaleResource = (
     deepMerge(
       deepMerge(
         deepMerge(
-          deepMerge(resource as LocaleObject, LOCALE_HOTFIXES[language]),
-          TAX_PACKAGE_HOTFIXES[language]
+          deepMerge(
+            deepMerge(resource as LocaleObject, LOCALE_HOTFIXES[language]),
+            TAX_PACKAGE_HOTFIXES[language]
+          ),
+          TAX_FIELD_LABEL_HOTFIXES[language]
         ),
-        CLASSIFICATION_MEMORY_HOTFIXES[language]
+        deepMerge(
+          TAX_FIELD_DATE_HOTFIXES[language],
+          CLASSIFICATION_MEMORY_HOTFIXES[language]
+        )
       ),
       DOCUMENT_EXPORT_ZIP_HOTFIXES[language]
     )

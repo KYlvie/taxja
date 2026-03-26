@@ -81,3 +81,44 @@ def test_document_detail_marks_processed_document_as_completed():
     detail = DocumentDetail.from_orm(document)
 
     assert detail.ocr_status == "completed"
+
+
+def test_document_detail_does_not_mark_confirmed_import_outcome_as_needing_review():
+    document = _make_document_stub(
+        processed_at=datetime.utcnow(),
+        confidence_score=0.95,
+        ocr_result={
+            "confirmed": False,
+            "import_suggestion": {"status": "confirmed"},
+        },
+    )
+
+    detail = DocumentDetail.from_orm(document)
+
+    assert detail.needs_review is False
+
+
+def test_document_detail_keeps_medium_confidence_transaction_pending_review():
+    document = _make_document_stub(
+        processed_at=datetime.utcnow(),
+        confidence_score=0.8,
+        transaction_id=123,
+        ocr_result={"confirmed": False},
+    )
+
+    detail = DocumentDetail.from_orm(document)
+
+    assert detail.needs_review is True
+
+
+def test_document_detail_treats_high_confidence_linked_transaction_as_final_outcome():
+    document = _make_document_stub(
+        processed_at=datetime.utcnow(),
+        confidence_score=0.95,
+        transaction_id=456,
+        ocr_result={"confirmed": False},
+    )
+
+    detail = DocumentDetail.from_orm(document)
+
+    assert detail.needs_review is False

@@ -25,6 +25,8 @@ class BescheidData:
     taxpayer_name: Optional[str] = None
     finanzamt: Optional[str] = None
     steuernummer: Optional[str] = None
+    bescheid_datum: Optional[str] = None
+    faellig_am: Optional[str] = None
 
     # Family info from header
     anzahl_kinder: Optional[int] = None
@@ -88,6 +90,8 @@ class BescheidExtractor:
         data.taxpayer_name = self._extract_taxpayer_name(text)
         data.finanzamt = self._extract_finanzamt(text)
         data.steuernummer = self._extract_steuernummer(text)
+        data.bescheid_datum = self._extract_bescheid_datum(text)
+        data.faellig_am = self._extract_faellig_am(text)
 
         self._extract_header_flags(text, data)
         self._extract_festgesetzte_steuer(text, data)
@@ -97,6 +101,7 @@ class BescheidExtractor:
         self._extract_vermietung(text, data)
         self._extract_deductions(text, data)
         self._extract_tax_calculation(text, data)
+        self._extract_modern_bescheid_layout(text, data)
 
         data.confidence = self._calculate_confidence(data)
         return data
@@ -158,6 +163,26 @@ class BescheidExtractor:
         m = re.search(r"St\.?\s*Nr\.?[:\s]*(\d[\d\s/]+\d)", text)
         if m:
             return m.group(1).strip()
+        return None
+
+    def _extract_bescheid_datum(self, text: str) -> Optional[str]:
+        m = re.search(
+            r"bescheiddatum[:\s]+(\d{1,2}\.\d{1,2}\.\d{4})",
+            text,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(1)
+        return None
+
+    def _extract_faellig_am(self, text: str) -> Optional[str]:
+        m = re.search(
+            r"f.{1,2}llig\s+am[:\s]+(\d{1,2}\.\d{1,2}\.\d{4})",
+            text,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(1)
         return None
 
     def _extract_header_flags(self, text: str, data: BescheidData) -> None:
@@ -388,6 +413,72 @@ class BescheidExtractor:
         )
         if m:
             data.negativsteuer = self._parse_amount(m.group(1))
+
+    def _extract_modern_bescheid_layout(self, text: str, data: BescheidData) -> None:
+        """Recover fields from the newer Einkommensteuerbescheid layout used by FinanzOnline."""
+        if not data.tax_year:
+            m = re.search(
+                r"einkommensteuerbescheid\s*(?:\n|\s)+f.{1,3}r\s+das\s+jahr\s+(\d{4})",
+                text,
+                re.IGNORECASE,
+            )
+            if m:
+                data.tax_year = int(m.group(1))
+
+        if not data.finanzamt:
+            m = re.search(r"^(Finanzamt[^\n]+)$", text, re.IGNORECASE | re.MULTILINE)
+            if m:
+                data.finanzamt = m.group(1).strip()
+
+        if not data.taxpayer_name:
+            lines = text.splitlines()
+            title_idx = next(
+                (idx for idx, line in enumerate(lines) if re.search(r"einkommensteuerbescheid", line, re.IGNORECASE)),
+                None,
+            )
+            if title_idx is not None:
+                for i in range(max(0, title_idx - 6), title_idx):
+                    stripped = lines[i].strip()
+                    if not stripped:
+                        continue
+                    if re.search(
+                        r"^(republik|bundesministerium|finanzamt|dienststelle|marxergasse|\d{4}\b)",
+                        stripped,
+                        re.IGNORECASE,
+                    ):
+                        continue
+                    next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+                    next_next_line = lines[i + 2].strip() if i + 2 < len(lines) else ""
+                    if re.search(r"\d", next_line) and re.search(r"^\d{4}\b", next_next_line):
+                        data.taxpayer_name = stripped
+                        break
+
+        if not data.steuernummer:
+            m = re.search(r"steuernummer\s+(\d[\d/\-]+\d)", text, re.IGNORECASE)
+            if m:
+                data.steuernummer = m.group(1).strip()
+
+        if data.abgabennachforderung is None:
+            m = re.search(
+                r"nachzahlung[:\s]+(?:EUR\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})",
+                text,
+                re.IGNORECASE,
+            )
+            if m:
+                data.abgabennachforderung = self._parse_amount(m.group(1))
+
+        if data.abgabengutschrift is None:
+            m = re.search(
+                r"gutschrift[:\s]+(?:EUR\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})",
+                text,
+                re.IGNORECASE,
+            )
+            if m:
+                data.abgabengutschrift = self._parse_amount(m.group(1))
+        if data.faellig_am is None:
+            data.faellig_am = self._extract_faellig_am(text)
+        if data.bescheid_datum is None:
+            data.bescheid_datum = self._extract_bescheid_datum(text)
 
     # --- Helpers ---
 

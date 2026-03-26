@@ -1620,6 +1620,7 @@
       "selectCategory": "选择类别",
       "incomeEditing": "编辑收入详情",
       "incomeStatus": "收入详情",
+      "extractedDetails": "已提取明细",
       "incomeEditingHint": "您可以修改项目名称、数量、金额和增值税详情，然后直接保存。",
       "incomeStatusHint": "提取的项目、数量、金额和增值税详情在此显示，不含费用专用的可扣除性控制。",
       "incomeFooterEditing": "保存将更新此收入文件的 OCR 详情，并在存在关联交易时同步更新。",

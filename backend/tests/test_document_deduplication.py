@@ -398,6 +398,39 @@ def test_create_transaction_from_suggestion_creates_new_transaction(db):
     assert result.transaction.id is not None
     assert result.transaction.document_id == document.id
     assert document.transaction_id == result.transaction.id
+
+
+def test_create_transaction_from_suggestion_normalizes_european_amount_and_date(db):
+    user = _make_user(db, email="normalized@example.com")
+    document = _make_document(db, user.id, file_name="notion.pdf")
+    document.document_type = DocumentType.INVOICE
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    service = OCRTransactionService(db)
+
+    result = service.create_transaction_from_suggestion_with_result(
+        {
+            "document_id": document.id,
+            "transaction_type": TransactionType.EXPENSE.value,
+            "amount": "96,00",
+            "date": "02.01.2024",
+            "description": "Invoice from Notion",
+            "category": ExpenseCategory.SOFTWARE.value,
+            "is_deductible": True,
+            "deduction_reason": "Business software",
+            "confidence": 0.95,
+            "needs_review": False,
+        },
+        user.id,
+    )
+
+    db.refresh(document)
+    assert result.created is True
+    assert result.transaction.amount == Decimal("96.00")
+    assert result.transaction.transaction_date.isoformat() == "2024-01-02"
+    assert document.transaction_id == result.transaction.id
     assert db.query(Transaction).count() == 1
 
 

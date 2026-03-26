@@ -31,7 +31,16 @@ from app.services.document_metering_service import (
     DocumentMeteringService,
     PhaseCheckpointType,
 )
+from app.services.document_transaction_suggestion_store import (
+    copy_transaction_suggestions,
+    store_transaction_suggestions,
+)
 from app.services.document_classifier import DocumentClassifier, DocumentType as OCRDocumentType
+from app.services.field_normalization import (
+    normalize_amount,
+    normalize_date,
+    normalize_vat_rate,
+)
 from app.services.ocr_engine import OCREngine, OCRResult
 from app.services.processing_decision_service import (
     ProcessingAction,
@@ -65,6 +74,19 @@ _DEDUP_MATCH_FIELDS = (
     "employer",
     "employer_name",
     "gross_income",
+)
+
+_REVERSE_CHARGE_VAT_HINTS = (
+    "reverse charge",
+    "steuerschuldnerschaft des leistungsempfängers",
+    "steuerschuldnerschaft des leistungsempfaengers",
+    "tax to be accounted for by the recipient",
+    "vat to be accounted for by the recipient",
+    "recipient owes the vat",
+    "recipient is liable for vat",
+    "intra-community",
+    "innergemeinschaft",
+    "eu b2b",
 )
 
 
@@ -138,6 +160,7 @@ class PipelineResult:
     current_state: str = "processing_phase_1"
     processing_decision: Optional[Dict[str, Any]] = None
     provider_used: Optional[str] = None
+    ocr_confidence_score: Optional[float] = None
     reprocess_mode: Optional[str] = None
     reprocess_requested_at: Optional[str] = None
     ocr_provider_override: Optional[str] = None
@@ -642,6 +665,7 @@ class DocumentPipelineOrchestrator:
             document_type_hint=document.document_type,
         )
         result.provider_used = ocr_result.provider_used
+        result.ocr_confidence_score = ocr_result.confidence_score
         result.reprocess_mode = reprocess_mode
         result.reprocess_requested_at = pipeline_state.get("reprocess_requested_at")
         result.ocr_provider_override = vision_provider_preference
@@ -980,25 +1004,30 @@ class DocumentPipelineOrchestrator:
             value = data.get(field_name)
             if value is None:
                 continue
-            try:
-                amount = float(value)
-                if amount < 0:
-                    # Auto-fix: take absolute value
-                    fixed = abs(amount)
-                    validation.corrected_fields[field_name] = fixed
-                    validation.issues.append(ValidationIssue(
-                        field=field_name,
-                        issue=f"Auto-corrected negative amount {amount} → {fixed}",
-                        severity="info",
-                    ))
-                # Zero is OK — might be a free item or zero-cost document
-            except (ValueError, TypeError):
+            amount = normalize_amount(value)
+            if amount is None:
                 # Can't parse at all — this IS an error, can't auto-fix
                 validation.issues.append(ValidationIssue(
                     field=field_name,
                     issue=f"Invalid amount value: {value}",
                     severity="error",
                 ))
+                continue
+
+            normalized = float(amount)
+            if str(value) != str(normalized):
+                validation.corrected_fields[field_name] = normalized
+
+            if normalized < 0:
+                # Auto-fix: take absolute value
+                fixed = abs(normalized)
+                validation.corrected_fields[field_name] = fixed
+                validation.issues.append(ValidationIssue(
+                    field=field_name,
+                    issue=f"Auto-corrected negative amount {normalized} → {fixed}",
+                    severity="info",
+                ))
+            # Zero is OK — might be a free item or zero-cost document
 
     def _autofix_date(self, data: Dict[str, Any], validation: ValidationResult):
         """Auto-fix date fields: unparseable→today, future→today."""
@@ -1007,16 +1036,11 @@ class DocumentPipelineOrchestrator:
             if value is None:
                 continue
 
-            parsed_date = None
-            if isinstance(value, (date, datetime)):
-                parsed_date = value if isinstance(value, date) else value.date()
-            elif isinstance(value, str):
-                for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y-%m-%dT%H:%M:%S"):
-                    try:
-                        parsed_date = datetime.strptime(value, fmt).date()
-                        break
-                    except ValueError:
-                        continue
+            parsed_date = normalize_date(value)
+            if parsed_date and isinstance(value, str):
+                normalized = parsed_date.isoformat()
+                if value != normalized:
+                    validation.corrected_fields[field_name] = normalized
 
             if parsed_date is None:
                 # Auto-fix: use today
@@ -1103,56 +1127,107 @@ class DocumentPipelineOrchestrator:
         amount = data.get("amount")
         vat_amount = data.get("vat_amount")
         vat_rate = data.get("vat_rate")
+        reverse_charge_detected = self._invoice_looks_reverse_charge(data)
+        normalized_amount = normalize_amount(amount)
+        normalized_vat_amount = normalize_amount(vat_amount)
+        normalized_vat_rate = normalize_vat_rate(vat_rate)
+
+        if normalized_amount is not None and amount is not None:
+            normalized_float = float(normalized_amount)
+            if str(amount) != str(normalized_float):
+                validation.corrected_fields["amount"] = normalized_float
+
+        if normalized_vat_amount is not None and vat_amount is not None:
+            normalized_float = float(normalized_vat_amount)
+            if str(vat_amount) != str(normalized_float):
+                validation.corrected_fields["vat_amount"] = normalized_float
+
+        if normalized_vat_rate is not None and vat_rate is not None:
+            normalized_float = float(normalized_vat_rate)
+            if str(vat_rate) != str(normalized_float):
+                validation.corrected_fields["vat_rate"] = normalized_float
 
         # If VAT rate is known but VAT amount is missing, calculate it
-        if amount and vat_rate and not vat_amount:
-            try:
-                amt = float(amount)
-                rate = float(vat_rate) / 100.0
-                calculated_vat = round(amt * rate / (1 + rate), 2)
-                validation.corrected_fields["vat_amount"] = calculated_vat
+        if normalized_amount is not None and normalized_vat_rate is not None and normalized_vat_amount is None:
+            amt = float(normalized_amount)
+            rate = float(normalized_vat_rate) / 100.0
+            calculated_vat = round(amt * rate / (1 + rate), 2)
+            validation.corrected_fields["vat_amount"] = calculated_vat
+            validation.issues.append(ValidationIssue(
+                field="vat_amount",
+                issue=f"Auto-calculated VAT: €{calculated_vat:.2f} ({float(normalized_vat_rate):g}%)",
+                severity="info",
+            ))
+        elif normalized_amount is not None and normalized_vat_amount is not None and normalized_vat_rate is not None:
+            # Check consistency
+            amt = float(normalized_amount)
+            vat = float(normalized_vat_amount)
+            rate = float(normalized_vat_rate) / 100.0
+            expected_vat = amt * rate / (1 + rate)
+            diff = abs(vat - expected_vat)
+            if diff > 1.0:
+                # Auto-fix: recalculate VAT from amount and rate
+                fixed_vat = round(expected_vat, 2)
+                validation.corrected_fields["vat_amount"] = fixed_vat
                 validation.issues.append(ValidationIssue(
                     field="vat_amount",
-                    issue=f"Auto-calculated VAT: €{calculated_vat:.2f} ({vat_rate}%)",
+                    issue=f"VAT mismatch, auto-corrected {vat:.2f} → {fixed_vat:.2f}",
                     severity="info",
                 ))
-            except (ValueError, TypeError):
-                pass
-        elif amount and vat_amount and vat_rate:
-            # Check consistency
-            try:
-                amt = float(amount)
-                vat = float(vat_amount)
-                rate = float(vat_rate) / 100.0
-                expected_vat = amt * rate / (1 + rate)
-                diff = abs(vat - expected_vat)
-                if diff > 1.0:
-                    # Auto-fix: recalculate VAT from amount and rate
-                    fixed_vat = round(expected_vat, 2)
-                    validation.corrected_fields["vat_amount"] = fixed_vat
-                    validation.issues.append(ValidationIssue(
-                        field="vat_amount",
-                        issue=f"VAT mismatch, auto-corrected {vat:.2f} → {fixed_vat:.2f}",
-                        severity="info",
-                    ))
-            except (ValueError, TypeError):
-                pass
 
-        # If no VAT rate, default to Austrian standard 20%
-        if amount and not vat_rate:
+        # If no VAT rate, only default to Austrian standard 20% for plain domestic invoices.
+        if normalized_amount is not None and normalized_vat_rate is None and reverse_charge_detected:
+            validation.issues.append(ValidationIssue(
+                field="vat_rate",
+                issue="No VAT rate found; reverse-charge indicators detected, skipped Austrian 20% fallback",
+                severity="info",
+            ))
+        elif normalized_amount is not None and normalized_vat_rate is None:
             validation.corrected_fields["vat_rate"] = 20
-            try:
-                amt = float(amount)
-                calculated_vat = round(amt * 0.2 / 1.2, 2)
-                if not vat_amount:
-                    validation.corrected_fields["vat_amount"] = calculated_vat
-                validation.issues.append(ValidationIssue(
-                    field="vat_rate",
-                    issue="No VAT rate found, auto-set to 20% (Austrian standard)",
-                    severity="info",
-                ))
-            except (ValueError, TypeError):
-                pass
+            amt = float(normalized_amount)
+            calculated_vat = round(amt * 0.2 / 1.2, 2)
+            if normalized_vat_amount is None:
+                validation.corrected_fields["vat_amount"] = calculated_vat
+            validation.issues.append(ValidationIssue(
+                field="vat_rate",
+                issue="No VAT rate found, auto-set to 20% (Austrian standard)",
+                severity="info",
+            ))
+
+    def _invoice_looks_reverse_charge(self, data: Dict[str, Any]) -> bool:
+        """Return True when invoice text strongly suggests reverse-charge VAT treatment."""
+        text_fragments: list[str] = []
+
+        for key in (
+            "raw_text",
+            "description",
+            "merchant",
+            "supplier",
+            "tax_note",
+            "notes",
+            "invoice_text",
+        ):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                text_fragments.append(value)
+
+        for list_key in ("line_items", "items"):
+            raw_items = data.get(list_key)
+            if not isinstance(raw_items, list):
+                continue
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    continue
+                for item_key in ("name", "description", "vat_indicator", "notes"):
+                    value = item.get(item_key)
+                    if isinstance(value, str) and value.strip():
+                        text_fragments.append(value)
+
+        if not text_fragments:
+            return False
+
+        haystack = " ".join(text_fragments).lower()
+        return any(hint in haystack for hint in _REVERSE_CHARGE_VAT_HINTS)
 
     def _validate_receipt(self, data: Dict[str, Any], validation: ValidationResult):
         """Validate receipt-specific fields."""
@@ -1160,21 +1235,20 @@ class DocumentPipelineOrchestrator:
             # Try to compute from line items
             line_items = data.get("line_items", [])
             if line_items:
-                try:
-                    items_total = sum(
-                        float(item.get("amount") or item.get("price") or 0)
-                        for item in line_items
-                    )
-                    if items_total > 0:
-                        validation.corrected_fields["amount"] = round(items_total, 2)
-                        validation.issues.append(ValidationIssue(
-                            field="amount",
-                            issue=f"No total found, auto-calculated from line items: €{items_total:.2f}",
-                            severity="info",
-                        ))
-                        return
-                except (ValueError, TypeError):
-                    pass
+                normalized_items = [
+                    normalize_amount(item.get("amount") or item.get("price"))
+                    for item in line_items
+                ]
+                numeric_items = [item for item in normalized_items if item is not None]
+                items_total = float(sum(numeric_items, Decimal("0"))) if numeric_items else 0.0
+                if items_total > 0:
+                    validation.corrected_fields["amount"] = round(items_total, 2)
+                    validation.issues.append(ValidationIssue(
+                        field="amount",
+                        issue=f"No total found, auto-calculated from line items: €{items_total:.2f}",
+                        severity="info",
+                    ))
+                    return
 
             # No amount and no line items → genuine error
             validation.issues.append(ValidationIssue(
@@ -1187,12 +1261,15 @@ class DocumentPipelineOrchestrator:
         # Line items sum check (informational only)
         line_items = data.get("line_items", [])
         if line_items and data.get("amount"):
-            try:
-                items_total = sum(
-                    float(item.get("amount") or item.get("price") or 0)
-                    for item in line_items
-                )
-                total = float(data["amount"])
+            normalized_items = [
+                normalize_amount(item.get("amount") or item.get("price"))
+                for item in line_items
+            ]
+            numeric_items = [item for item in normalized_items if item is not None]
+            total_amount = normalize_amount(data["amount"])
+            if numeric_items and total_amount is not None:
+                items_total = float(sum(numeric_items, Decimal("0")))
+                total = float(total_amount)
                 diff = abs(items_total - total)
                 if items_total > 0 and diff > 2.0:
                     validation.issues.append(ValidationIssue(
@@ -1201,8 +1278,6 @@ class DocumentPipelineOrchestrator:
                               f"total ({total:.2f}) by {diff:.2f}",
                         severity="info",
                     ))
-            except (ValueError, TypeError):
-                pass
 
     def _validate_kaufvertrag(self, data: Dict[str, Any], validation: ValidationResult):
         """Validate Kaufvertrag-specific fields. Auto-fill where possible."""
@@ -2128,20 +2203,93 @@ Antworte NUR mit JSON:
             "is_reversal": bool(resolution.is_reversal),
         }
 
+    def _recover_missing_invoice_transaction_fields(
+        self,
+        *,
+        db_type: DBDocumentType,
+        raw_text: str | None,
+        suggestion_ocr_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Recover missing amount/date for a single receipt or invoice suggestion.
+
+        This intentionally reuses the existing extractor once and only consumes
+        the two critical fields needed by the transaction gate.
+        """
+        if db_type not in (DBDocumentType.RECEIPT, DBDocumentType.INVOICE):
+            return {}
+        if not raw_text or not raw_text.strip():
+            return {}
+
+        missing_amount = suggestion_ocr_data.get("amount") in (None, "")
+        missing_date = not suggestion_ocr_data.get("date")
+        if not (missing_amount or missing_date):
+            return {}
+
+        try:
+            from app.services.llm_extractor import get_llm_extractor
+
+            extractor = get_llm_extractor()
+            recovered = extractor.extract(raw_text, db_type)
+            if not isinstance(recovered, dict):
+                return {}
+
+            updates: dict[str, Any] = {}
+            if missing_amount:
+                recovered_amount = recovered.get("amount")
+                if recovered_amount not in (None, ""):
+                    updates["amount"] = recovered_amount
+
+            if missing_date:
+                recovered_date = recovered.get("date")
+                if recovered_date:
+                    if hasattr(recovered_date, "isoformat"):
+                        updates["date"] = recovered_date.isoformat()
+                    else:
+                        updates["date"] = str(recovered_date)
+
+            if updates:
+                logger.info(
+                    "Recovered missing OCR transaction fields for %s via narrow AI pass: %s",
+                    db_type.value,
+                    ", ".join(sorted(updates.keys())),
+                )
+            return updates
+        except Exception as exc:
+            logger.warning(
+                "Narrow AI field recovery failed for %s: %s",
+                db_type.value,
+                exc,
+            )
+            return {}
+
     def _build_transaction_suggestions(
         self, document: Document, db_type: DBDocumentType, result: PipelineResult,
     ) -> List[Dict[str, Any]]:
         """
-        Build AND auto-create transactions for receipts/invoices.
+        Build transaction suggestions for receipts/invoices, with confidence-
+        gated creation.
 
         Supports multi-receipt PDFs: if _additional_receipts is present in
-        extracted data, creates a transaction for each receipt.
+        extracted data, creates a suggestion for each receipt.
 
-        Creates immediately. User sees result in dashboard, can edit/delete.
+        Each suggestion is individually evaluated by the transaction gate:
+        - HIGH confidence  -> auto-create transaction (needs_review=False, reviewed=True)
+        - MEDIUM confidence -> auto-create transaction (needs_review=True)
+        - LOW confidence   -> store suggestion only, no transaction created
         """
         try:
             from app.services.ocr_transaction_service import OCRTransactionService
+            from app.services.transaction_gate_service import evaluate_transaction_gate
+
             service = OCRTransactionService(self.db)
+
+            # Guard: if no extracted data at all, nothing to suggest
+            if not result.extracted_data:
+                logger.warning(
+                    f"No extracted data for doc {document.id}, skipping transaction suggestions"
+                )
+                return []
 
             # Check for multi-receipt data
             primary_receipt = result.extracted_data
@@ -2159,7 +2307,7 @@ Antworte NUR mit JSON:
 
             if receipt_count > 1 and additional_receipts:
                 logger.info(
-                    f"Multi-receipt document {document.id}: creating {receipt_count} transactions"
+                    f"Multi-receipt document {document.id}: creating {receipt_count} transaction suggestions"
                 )
                 suggestions = self._create_multi_receipt_transactions(
                     document, service, primary_receipt, additional_receipts
@@ -2169,26 +2317,155 @@ Antworte NUR mit JSON:
                     document.id, document.user_id
                 )
 
-            # Auto-create all suggestions as transactions
+            # OCR-level confidence must come from the current OCR pass, not the
+            # persisted document row (which may still hold a stale earlier run
+            # or later be overwritten with classification confidence).
+            ocr_confidence = float(
+                result.ocr_confidence_score
+                if result.ocr_confidence_score is not None
+                else (document.confidence_score or 0.5)
+            )
+
+            # Classification confidence comes from each suggestion individually
+            # (set by the classifier in _build_single_suggestion)
+
+            doc_type_value = (
+                db_type.value if hasattr(db_type, "value") else str(db_type)
+            )
+
+            # Gate each suggestion individually
             for s in suggestions:
-                s["needs_review"] = True  # Mark for user review
-                try:
-                    s["document_id"] = document.id
-                    creation_result = service.create_transaction_from_suggestion_with_result(
-                        s, document.user_id
+                s["document_id"] = document.id
+
+                # Extract direction resolution from the suggestion itself
+                # (set by _annotate_suggestion_with_direction in the service)
+                direction_resolution = None
+                dir_payload = s.get("transaction_direction_resolution")
+                if dir_payload:
+                    from app.services.contract_role_service import TransactionDirectionResolution
+                    try:
+                        direction_resolution = TransactionDirectionResolution(
+                            candidate=dir_payload.get("candidate", "unknown"),
+                            confidence=dir_payload.get("confidence", 0.3),
+                            source=dir_payload.get("source", "unknown"),
+                            evidence=dir_payload.get("evidence", []),
+                            semantics=dir_payload.get("semantics", "unknown"),
+                            is_reversal=dir_payload.get("is_reversal", False),
+                            mode=dir_payload.get("mode", "shadow"),
+                            gate_enabled=dir_payload.get("gate_enabled", True),
+                            normalized_from=dir_payload.get("normalized_from"),
+                        )
+                    except Exception:
+                        direction_resolution = None
+
+                classification_confidence = float(s.get("confidence") or 0.5)
+
+                # Determine the classifier's explicit review flag.
+                # The suggestion's needs_review can be True due to either:
+                #   (a) classifier confidence < 0.7, or
+                #   (b) classifier's explicit requires_review flag.
+                # We pass requires_review=True only when the classifier
+                # explicitly flagged it (i.e. needs_review is True AND
+                # confidence is high enough that it wasn't auto-set).
+                classifier_requires_review = (
+                    s.get("needs_review", False) and classification_confidence >= 0.7
+                )
+
+                # Build per-suggestion OCR data for the gate.
+                # For multi-receipt documents, each suggestion has its own
+                # amount/date from the individual receipt, NOT the top-level
+                # extracted_data which belongs to the primary receipt only.
+                suggestion_ocr_data: dict[str, Any] = {}
+                if s.get("amount") is not None:
+                    try:
+                        suggestion_ocr_data["amount"] = float(s["amount"])
+                    except (ValueError, TypeError):
+                        suggestion_ocr_data["amount"] = s["amount"]
+                if s.get("date"):
+                    suggestion_ocr_data["date"] = s["date"]
+
+                # Fall back to top-level extracted_data only if the
+                # suggestion itself has no amount/date fields.
+                if "amount" not in suggestion_ocr_data and "date" not in suggestion_ocr_data:
+                    suggestion_ocr_data = result.extracted_data or {}
+
+                if (
+                    len(suggestions) == 1
+                    and (
+                        suggestion_ocr_data.get("amount") in (None, "")
+                        or not suggestion_ocr_data.get("date")
                     )
-                    s["transaction_id"] = creation_result.transaction.id
-                    if creation_result.created:
-                        s["status"] = "auto-created"
-                    else:
-                        s["status"] = "duplicate-skipped"
-                        s["is_duplicate"] = True
-                        s["duplicate_of_id"] = creation_result.duplicate_of_id
-                        s["duplicate_confidence"] = creation_result.duplicate_confidence
-                except Exception as e:
-                    logger.warning(f"Auto-create transaction failed for doc {document.id}: {e}")
-                    self.db.rollback()
-                    s["status"] = "pending"
+                ):
+                    recovered_fields = self._recover_missing_invoice_transaction_fields(
+                        db_type=db_type,
+                        raw_text=result.raw_text,
+                        suggestion_ocr_data=suggestion_ocr_data,
+                    )
+                    if recovered_fields:
+                        suggestion_ocr_data = {
+                            **suggestion_ocr_data,
+                            **recovered_fields,
+                        }
+                        for field_name in ("amount", "date"):
+                            if s.get(field_name) in (None, "") and field_name in recovered_fields:
+                                s[field_name] = recovered_fields[field_name]
+                        s["field_recovery"] = {
+                            "applied": True,
+                            "fields": sorted(recovered_fields.keys()),
+                        }
+
+                gate_result = evaluate_transaction_gate(
+                    document_type=doc_type_value,
+                    ocr_confidence=ocr_confidence,
+                    classification_confidence=classification_confidence,
+                    direction_resolution=direction_resolution,
+                    ocr_data=suggestion_ocr_data,
+                    requires_review=classifier_requires_review,
+                )
+
+                # Persist gate metadata on the suggestion
+                s["gate_decision"] = gate_result.decision.value
+                s["gate_composite_confidence"] = gate_result.composite_confidence
+                s["gate_reasons"] = gate_result.reasons
+
+                if gate_result.should_create_transaction:
+                    # HIGH or MEDIUM confidence: create real transaction
+                    s["needs_review"] = gate_result.needs_review
+                    s["reviewed"] = gate_result.reviewed
+                    try:
+                        creation_result = service.create_transaction_from_suggestion_with_result(
+                            s, document.user_id
+                        )
+                        s["transaction_id"] = creation_result.transaction.id
+                        if creation_result.created:
+                            s["status"] = "auto-created"
+                        else:
+                            s["status"] = "duplicate-skipped"
+                            s["is_duplicate"] = True
+                            s["duplicate_of_id"] = creation_result.duplicate_of_id
+                            s["duplicate_confidence"] = creation_result.duplicate_confidence
+                            # Sync metadata with the reused transaction's actual state
+                            reused_tx = creation_result.transaction
+                            s["needs_review"] = getattr(reused_tx, "needs_review", True)
+                            s["reviewed"] = getattr(reused_tx, "reviewed", False)
+                    except Exception as e:
+                        logger.warning(
+                            f"Auto-create transaction failed for doc {document.id}: {e}"
+                        )
+                        self.db.rollback()
+                        s["status"] = "pending"
+                        s["needs_review"] = True
+                        s["reviewed"] = False
+                else:
+                    # LOW confidence: store suggestion only, no transaction
+                    s["status"] = "manual-review-required"
+                    s["needs_review"] = True
+                    s["reviewed"] = False
+                    logger.info(
+                        f"Transaction gate blocked auto-create for doc {document.id}: "
+                        f"composite={gate_result.composite_confidence:.4f} "
+                        f"reasons={gate_result.reasons}"
+                    )
 
             return suggestions
 
@@ -2214,7 +2491,39 @@ Antworte NUR mit JSON:
             if amount is None:
                 continue
 
-            merchant = receipt_data.get("merchant") or receipt_data.get("supplier") or "Unknown"
+            # Direction detection: match issuer/recipient against user identity
+            issuer = str(receipt_data.get("issuer") or "").strip()
+            recipient = str(receipt_data.get("recipient") or "").strip()
+            merchant = receipt_data.get("merchant") or receipt_data.get("supplier") or issuer or recipient or "Unknown"
+            detected_direction = "expense"  # default
+            direction_confirmed = False
+
+            # Load user identity tokens for matching
+            if not hasattr(self, '_user_identity_tokens'):
+                self._user_identity_tokens = set()
+                try:
+                    from app.models.user import User as _User
+                    _user = self.db.query(_User).filter(_User.id == document.user_id).first()
+                    if _user:
+                        for field in [_user.name, getattr(_user, "business_name", None)]:
+                            if field:
+                                self._user_identity_tokens.add(str(field).strip().lower())
+                                parts = str(field).strip().lower().split()
+                                if len(parts) > 1:
+                                    self._user_identity_tokens.add(" ".join(parts[-2:]))
+                except Exception:
+                    pass
+
+            # If issuer matches user → user issued this invoice → income
+            if issuer and self._user_identity_tokens:
+                issuer_lower = issuer.lower()
+                for token in self._user_identity_tokens:
+                    if token and len(token) > 2 and token in issuer_lower:
+                        detected_direction = "income"
+                        direction_confirmed = True
+                        merchant = recipient or merchant
+                        break
+
             date_val = receipt_data.get("date")
             date_str = None
             if date_val:
@@ -2231,18 +2540,71 @@ Antworte NUR mit JSON:
             suggestion = {
                 "document_id": document.id,
                 "document_type": str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type),
-                "transaction_type": "expense",
+                "transaction_type": detected_direction,
                 "amount": str(amount),
                 "date": date_str,
                 "description": description,
-                "category": "other",
-                "is_deductible": False,
+                "category": "other" if detected_direction == "expense" else "self_employment",
+                "is_deductible": False if detected_direction == "income" else False,
                 "deduction_reason": None,
                 "confidence": float(receipt_data.get("amount_confidence", 0.8)),
                 "needs_review": False,
-                "extracted_fields": {},
+                "extracted_fields": {
+                    "issuer": issuer or None,
+                    "recipient": recipient or None,
+                    "direction_source": "issuer_match" if detected_direction == "income" else "default",
+                    "direction_confirmed": direction_confirmed,
+                },
                 "_receipt_index": i + 1,
             }
+
+            # Apply user classification rules: override direction and category
+            try:
+                from app.services.user_classification_service import (
+                    UserClassificationService,
+                    normalize_description,
+                )
+                cls_svc = UserClassificationService(self.db)
+                # Try multiple description formats to match rules
+                lookup_descriptions = [description]
+                product_desc = receipt_data.get("description") or receipt_data.get("product_summary") or ""
+                if product_desc and merchant:
+                    lookup_descriptions.append(f"{merchant}: {product_desc}")
+                # Also try merchant alone
+                if merchant and merchant != description:
+                    lookup_descriptions.append(merchant)
+
+                rule_matched = False
+                for lookup_desc in lookup_descriptions:
+                    if rule_matched:
+                        break
+                    norm_desc = normalize_description(lookup_desc)
+                    if not norm_desc:
+                        continue
+                    for try_type in ["income", "expense"]:
+                        rule = cls_svc.lookup(
+                            user_id=document.user_id,
+                            description=lookup_desc,
+                            txn_type=try_type,
+                        )
+                        if rule and rule.category:
+                            suggestion["transaction_type"] = rule.txn_type
+                            suggestion["category"] = rule.category
+                            if rule.txn_type == "income":
+                                suggestion["is_deductible"] = False
+                            suggestion["extracted_fields"]["direction_source"] = "user_rule"
+                            suggestion["extracted_fields"]["direction_confirmed"] = True
+                            suggestion["extracted_fields"]["rule_id"] = rule.id
+                            cls_svc.record_hit(rule)
+                            logger.info(
+                                "User rule override for doc %d: '%s' -> %s/%s (rule %d)",
+                                document.id, lookup_desc[:50], rule.txn_type, rule.category, rule.id,
+                            )
+                            rule_matched = True
+                            break
+            except Exception as e:
+                logger.warning("User rule lookup failed for doc %d: %s", document.id, e)
+
             all_suggestions.append(suggestion)
 
         logger.info(
@@ -2737,42 +3099,17 @@ Antworte NUR mit JSON:
 
                     if s.get("type") in import_suggestion_types:
                         ocr_result["import_suggestion"] = s
-                    else:
-                        # Transaction suggestions
-                        ocr_result["transaction_suggestion"] = s
 
                 # Store tax_analysis for transaction suggestions
                 tx_suggestions = [
                     s for s in result.suggestions
                     if s and s.get("type") not in (import_suggestion_types | {"create_asset"})
                 ]
-                if tx_suggestions:
-                    ocr_result["tax_analysis"] = {
-                        "items": [
-                            {
-                                "description": s.get("description", ""),
-                                "amount": s.get("amount"),
-                                "category": s.get("category"),
-                                "is_deductible": s.get("is_deductible", False),
-                                "deduction_reason": s.get("deduction_reason", ""),
-                                "confidence": s.get("confidence", 0),
-                                "transaction_type": s.get("transaction_type", "expense"),
-                            }
-                            for s in tx_suggestions
-                        ],
-                        "is_split": len(tx_suggestions) > 1,
-                        "total_deductible": sum(
-                            float(s.get("amount", 0))
-                            for s in tx_suggestions if s.get("is_deductible")
-                        ),
-                        "total_non_deductible": sum(
-                            float(s.get("amount", 0))
-                            for s in tx_suggestions if not s.get("is_deductible")
-                        ),
-                    }
-                else:
-                    ocr_result.pop("transaction_suggestion", None)
-                    ocr_result.pop("tax_analysis", None)
+                store_transaction_suggestions(
+                    ocr_result,
+                    tx_suggestions,
+                    json_safe=self._make_json_safe,
+                )
 
             from app.services.document_year_attribution import (
                 materialize_document_temporal_metadata,
@@ -2820,13 +3157,10 @@ Antworte NUR mit JSON:
             return []
 
         ocr_result = document.ocr_result
-        suggestions = []
-
-        # Collect transaction suggestions
-        if ocr_result.get("transaction_suggestion"):
-            suggestions.append(ocr_result["transaction_suggestion"])
-        if ocr_result.get("tax_analysis", {}).get("items"):
-            suggestions = ocr_result["tax_analysis"]["items"]
+        suggestions = [
+            s for s in copy_transaction_suggestions(ocr_result)
+            if not s.get("transaction_id")
+        ]
 
         if not suggestions:
             return []

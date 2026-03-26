@@ -36,6 +36,7 @@ const TransactionDetail = ({
   const navigate = useNavigate();
   const amountTone = getTransactionAmountTone(transaction.type);
   const isExpenseType = isExpenseTransactionType(transaction.type);
+  const showDeductibility = isExpenseType;
   const hasLineItems = Boolean(transaction.line_items && transaction.line_items.length > 0);
   const deductibleLineItemCount = transaction.line_items?.filter((item) => item.is_deductible).length ?? 0;
   const totalLineItemCount = transaction.line_items?.length ?? 0;
@@ -284,16 +285,16 @@ const TransactionDetail = ({
                           {formatTransactionCategoryLabel(item.category, t)}
                         </span>
                       )}
-                      {item.is_deductible ? (
+                      {showDeductibility && (item.is_deductible ? (
                         <span className="badge badge-success">✓ {t('transactions.deductibleYes')}</span>
                       ) : (
                         <span className="badge badge-secondary">✗ {t('transactions.notDeductible')}</span>
-                      )}
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
-              {(transaction.deductible_amount != null || transaction.non_deductible_amount != null) && (
+              {showDeductibility && (transaction.deductible_amount != null || transaction.non_deductible_amount != null) && (
                 <div className="line-items-summary">
                   {transaction.deductible_amount != null && transaction.deductible_amount > 0 && (
                     <div className="summary-row">

@@ -15,7 +15,7 @@ bank-import confirmations.
 import logging
 import re
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 
@@ -49,6 +49,8 @@ def normalize_description(description: str) -> str:
         "BILLA Filiale 1234 WIEN"                 -> "billa wien"
     """
     text = description.lower().strip()
+    # Normalize Unicode dashes (em dash, en dash, etc.) to plain hyphen
+    text = text.replace("\u2013", "-").replace("\u2014", "-").replace("\u2012", "-").replace("\u2015", "-")
     for pat in _COMPILED:
         text = pat.sub(" ", text)
     return " ".join(text.split())
@@ -65,21 +67,27 @@ class UserClassificationService:
         user_id: int,
         description: str,
         txn_type: str,
+        *,
+        allowed_rule_types: Optional[Sequence[str]] = None,
+        include_frozen: bool = True,
     ) -> Optional[UserClassificationRule]:
         """Look up a per-user rule for the given transaction description."""
         norm = normalize_description(description)
         if not norm:
             return None
-
-        return (
-            self.db.query(UserClassificationRule)
-            .filter(
-                UserClassificationRule.user_id == user_id,
-                UserClassificationRule.normalized_description == norm,
-                UserClassificationRule.txn_type == txn_type,
-            )
-            .first()
+        query = self.db.query(UserClassificationRule).filter(
+            UserClassificationRule.user_id == user_id,
+            UserClassificationRule.normalized_description == norm,
+            UserClassificationRule.txn_type == txn_type,
         )
+        if allowed_rule_types:
+            query = query.filter(
+                UserClassificationRule.rule_type.in_(tuple(allowed_rule_types))
+            )
+        if not include_frozen:
+            query = query.filter(UserClassificationRule.frozen == False)
+
+        return query.first()
 
     def upsert_rule(
         self,

@@ -46,6 +46,9 @@ type DocumentGroupId =
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
 const EXPANDED_YEARS_STORAGE_PREFIX = 'taxja.documents.expandedYears';
+const FINAL_IMPORT_STATUSES = new Set(['confirmed', 'auto_created']);
+const FINAL_TRANSACTION_SUGGESTION_STATUSES = new Set(['confirmed', 'dismissed']);
+const CONFIDENT_TRANSACTION_THRESHOLD = 0.9;
 
 const getExpandedYearsStorageKey = (mode: SortMode) =>
   `${EXPANDED_YEARS_STORAGE_PREFIX}.${mode}`;
@@ -89,6 +92,51 @@ const persistExpandedYears = (mode: SortMode, years: Set<number>) => {
   } catch {
     // Ignore storage failures and keep UI responsive.
   }
+};
+
+const hasFinalTransactionSuggestionOutcome = (ocr: Record<string, any>): boolean => {
+  const suggestions: Array<Record<string, any>> = [];
+  if (ocr.transaction_suggestion && typeof ocr.transaction_suggestion === 'object') {
+    suggestions.push(ocr.transaction_suggestion);
+  }
+
+  const items = Array.isArray(ocr.tax_analysis?.items) ? ocr.tax_analysis.items : [];
+  suggestions.push(...items.filter((item: unknown) => item && typeof item === 'object'));
+
+  return suggestions.some((suggestion) => {
+    if (!suggestion || suggestion._stale) {
+      return false;
+    }
+
+    if (FINAL_TRANSACTION_SUGGESTION_STATUSES.has(String(suggestion.status || ''))) {
+      return true;
+    }
+
+    return suggestion.reviewed === true || suggestion.needs_review === false;
+  });
+};
+
+const hasFinalDocumentOutcome = (doc: Document): boolean => {
+  const ocr = (doc.ocr_result || {}) as Record<string, any>;
+  if (ocr.confirmed === true) {
+    return true;
+  }
+
+  if (FINAL_IMPORT_STATUSES.has(String(ocr.import_suggestion?.status || ''))) {
+    return true;
+  }
+
+  if (FINAL_IMPORT_STATUSES.has(String(ocr.asset_outcome?.status || ''))) {
+    return true;
+  }
+
+  if (hasFinalTransactionSuggestionOutcome(ocr)) {
+    return true;
+  }
+
+  const confidence = Number(doc.confidence_score || 0);
+  const hasLinkedTransaction = Boolean(doc.transaction_id) || Number(doc.linked_transaction_count || 0) > 0;
+  return hasLinkedTransaction && confidence >= CONFIDENT_TRANSACTION_THRESHOLD;
 };
 
 const SearchIcon = () => (
@@ -501,6 +549,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const isPendingReview = (doc: Document): boolean => {
     const ocr = (doc.ocr_result || {}) as Record<string, any>;
     if (doc.ocr_status === 'failed' || doc.ocr_status === 'processing' || !doc.processed_at) {
+      return false;
+    }
+
+    if (hasFinalDocumentOutcome(doc)) {
       return false;
     }
 
