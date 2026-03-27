@@ -3517,6 +3517,17 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         f"praemie=€{praemie_decimal}, frequency={frequency}, type={insurance_type}"
     )
 
+    # Write key insurance fields to top-level ocr_result so frontend can display them
+    updated_ocr["insurer_name"] = insurer_name
+    updated_ocr["insurance_type"] = insurance_type
+    updated_ocr["insurance_subtype"] = insurance_subtype
+    updated_ocr["praemie"] = float(praemie_decimal)
+    updated_ocr["zahlungsfrequenz"] = frequency
+    updated_ocr["is_deductible"] = is_deductible
+    updated_ocr["deduction_reason"] = deduction_reason
+    if data.get("polizze") or data.get("versicherungsnummer"):
+        updated_ocr["polizze"] = data.get("polizze") or data.get("versicherungsnummer") or ""
+
     # Save suggestion into document's ocr_result
     updated_ocr["import_suggestion"] = suggestion
     document.ocr_result = updated_ocr
