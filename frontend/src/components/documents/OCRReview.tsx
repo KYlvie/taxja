@@ -372,7 +372,7 @@ const translateEvidence = (evidence: string, t: (key: string, fallback: string) 
 
 const OCRReview: React.FC<OCRReviewProps> = ({
   documentId,
-  presentationTemplate,
+  presentationTemplate: _presentationTemplate,
   documentTypeDraft,
   allowDocumentTypeEdit = false,
   onDocumentTypeDraftChange,
@@ -743,7 +743,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           ?? (isReceiptDocument ? 'receipt' : isInvoiceDocument ? 'standard_invoice' : 'unknown')
       )
     : 'unknown';
-  const currentPresentationDecision = resolveDocumentPresentation(document, {
+  const _currentPresentationDecision = resolveDocumentPresentation(document, {
     documentType: selectedDocType,
     transactionType: selectedTxnType,
     documentTransactionDirection: selectedTransactionDirection,

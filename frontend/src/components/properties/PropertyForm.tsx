@@ -44,6 +44,7 @@ const realEstateSchema = z.object({
   supplier: z.string().optional(),
   business_use_percentage: z.string().optional(),
   useful_life_years: z.string().optional(),
+  put_into_use_date: z.string().optional(),
 });
 
 // Zod schema for non-real-estate assets

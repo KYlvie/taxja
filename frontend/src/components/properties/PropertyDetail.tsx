@@ -489,7 +489,7 @@ const PropertyDetail = ({
   });
 
   const purchaseDocumentUploadLink = `/documents?property_id=${property.id}&type=purchase_contract`;
-  const documentsHubLink = `/documents?property_id=${property.id}`;
+  const _documentsHubLink = `/documents?property_id=${property.id}`;
   const linkedPurchaseDocumentLabel = isRealEstate
     ? t('properties.documents.viewPurchaseContract', '\u67e5\u770b\u8d2d\u623f\u5408\u540c')
     : t('properties.documents.viewSourceDocument', '\u67e5\u770b\u8d2d\u7f6e\u6587\u4ef6');

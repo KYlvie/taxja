@@ -928,6 +928,7 @@ const DocumentsPage = () => {
     totalCount: 0,
     reviewCount: 0,
     confirmableIds: [],
+    visibleDocIds: [],
   });
   const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
   const [showExportDialog, setShowExportDialog] = useState(false);
