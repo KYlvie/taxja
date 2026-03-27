@@ -71,6 +71,14 @@
   background: var(--color-primary-50, #eef2ff);
 }
 
+.transaction-row.needs-review {
+  background: var(--color-warning-50, #fffbeb);
+}
+
+.transaction-row.needs-review:hover {
+  background: var(--color-warning-100, #fef3c7);
+}
+
 .col-checkbox {
   width: 40px;
   text-align: center;

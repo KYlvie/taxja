@@ -333,7 +333,7 @@ const TransactionList = ({
                   key={transaction.id}
                   className={`transaction-row ${transaction.type}${
                     selectedIds?.has(transaction.id) ? ' selected' : ''
-                  }`}
+                  }${transaction.needs_review && !transaction.reviewed ? ' needs-review' : ''}`}
                   onClick={() => onView(transaction)}
                 >
                   {onToggleSelect && (
