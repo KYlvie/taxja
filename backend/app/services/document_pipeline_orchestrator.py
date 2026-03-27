@@ -1993,6 +1993,78 @@ class DocumentPipelineOrchestrator:
             self._log_audit(result, "suggest", f"Tax form fallback suggestion: import_{type_name} (needs_review)")
             return
 
+        # SVS notice with non-transaction subtype — show specific guidance
+        if db_type == DBDocumentType.SVS_NOTICE:
+            ed = result.extracted_data or {}
+            svs_sub = ed.get("_svs_subtype") or ed.get("svs_subtype", "")
+            _SVS_SUBTYPE_MESSAGES = {
+                "kontoauszug": (
+                    "SVS Beitragskontoauszug erkannt. "
+                    "Bitte prüfen Sie die Soll/Haben-Summe gegen Ihre SVS-Transaktionen. "
+                    "Ein Kontostand ≠ 0 zum 31.12. deutet auf offene Beiträge oder Überzahlungen hin."
+                ),
+                "herabsetzung": (
+                    "SVS Herabsetzungsbescheid erkannt. "
+                    "Ihre SVS-Beitragsgrundlage wurde geändert. "
+                    "Bitte überprüfen Sie Ihre wiederkehrenden SVS-Zahlungen und passen Sie den Betrag an."
+                ),
+                "versicherungspflicht": (
+                    "SVS Versicherungspflicht-Mitteilung erkannt. "
+                    "Diese bestätigt Ihren Versicherungsbeginn und die Beitragsgruppe. "
+                    "Bitte überprüfen Sie Ihr Steuerprofil."
+                ),
+                "mindestbeitrag": (
+                    "SVS Mindestbeitragsgrundlage-Bescheid (Neugründer) erkannt. "
+                    "Dies ist ein Referenzdokument für die ersten Geschäftsjahre."
+                ),
+                "zahlungserinnerung": (
+                    "SVS Zahlungserinnerung erkannt. "
+                    "Wenn Sie bereits bezahlt haben, ist keine weitere Aktion nötig. "
+                    "Andernfalls bitte umgehend zahlen, um Säumniszuschläge zu vermeiden."
+                ),
+                "befreiung": (
+                    "SVS Befreiungsbescheid erkannt. "
+                    "Ihre KV/PV-Beiträge entfallen für den angegebenen Zeitraum. "
+                    "Ihre SVS-Zahlungen reduzieren sich auf UV + Selbständigenvorsorge. "
+                    "Hinweis: Die Befreiung muss jährlich neu beantragt werden."
+                ),
+                "kontobestaetigung": (
+                    "SVS Kontobestätigung erkannt. "
+                    "Dies ist eine Bestätigung Ihrer Beitragszahlungen — es wird keine Transaktion erstellt."
+                ),
+                "ratenzahlung": (
+                    "SVS Ratenzahlungsvereinbarung erkannt. "
+                    "Eine monatliche wiederkehrende Zahlung wurde erstellt."
+                ),
+            }
+            msg = _SVS_SUBTYPE_MESSAGES.get(svs_sub)
+            if msg:
+                result.suggestions.append({
+                    "type": "svs_info",
+                    "status": "needs_review" if svs_sub in ("kontoauszug", "herabsetzung", "befreiung") else "dismissed",
+                    "data": result.extracted_data or {},
+                    "review_reason": msg,
+                    "confidence": classification.confidence if classification else 0,
+                    "document_id": document.id,
+                    "user_id": document.user_id,
+                })
+                self._log_audit(result, "suggest", f"SVS subtype guidance: {svs_sub}")
+                return
+
+            # SVS without recognized subtype → manual review
+            if not svs_sub or svs_sub not in ("vorschreibung", "nachforderung", "gutschrift", "saeumniszuschlag"):
+                result.suggestions.append({
+                    "type": "manual_review",
+                    "status": "needs_review",
+                    "data": result.extracted_data or {},
+                    "review_reason": "SVS-Dokument erkannt, aber der genaue Typ konnte nicht bestimmt werden. Bitte manuell prüfen.",
+                    "confidence": classification.confidence if classification else 0,
+                    "document_id": document.id,
+                    "user_id": document.user_id,
+                })
+                self._log_audit(result, "suggest", "SVS unknown subtype fallback")
+                return
+
         # Invoice/Receipt with no transaction created
         if db_type in (DBDocumentType.INVOICE, DBDocumentType.RECEIPT):
             result.suggestions.append({

@@ -1147,93 +1147,250 @@ class OCRTransactionService:
         }
 
 
+    # SVS subtypes that should create transactions
+    _SVS_TRANSACTION_SUBTYPES = {"vorschreibung", "nachforderung", "gutschrift", "saeumniszuschlag"}
+    # SVS subtypes that should NOT create transactions (just store metadata)
+    _SVS_NO_TRANSACTION_SUBTYPES = {
+        "kontoauszug", "herabsetzung", "versicherungspflicht",
+        "mindestbeitrag", "zahlungserinnerung", "kontobestaetigung", "befreiung",
+    }
+
     def _extract_from_svs_notice(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Extract transaction data from SVS contribution notice.
+        """Extract transaction data from SVS document based on VLM svs_subtype.
 
-        Four cases:
-        - Kontobestätigung (annual confirmation): → NO transaction (return None)
-        - Beitragsvorschreibung: amount/beitrag_gesamt → expense
-        - Nachbemessung nachzahlung: nachzahlung → expense
-        - Nachbemessung gutschrift: gutschrift → income
+        Uses VLM-classified svs_subtype to dispatch:
+        - vorschreibung → expense (with dedup check)
+        - nachforderung → expense (stores beitragsjahr)
+        - gutschrift → income (insurance refund)
+        - saeumniszuschlag → expense (NOT deductible)
+        - ratenzahlung → creates monthly recurring (returns None for transaction)
+        - all others → None (no transaction)
+
+        If svs_subtype is missing → returns None (manual review fallback)
         """
-        # Kontobestätigung = annual confirmation listing all quarters.
-        # It's a proof document, not a payment demand — skip transaction creation.
-        # Check description, raw_text, and file_name for detection.
-        desc_lower = str(ocr_data.get("description") or "").lower()
-        raw_lower = str(ocr_data.get("raw_text") or "")[:2000].lower()
-        file_name_lower = str(ocr_data.get("_file_name") or "").lower()
-        all_text = desc_lower + " " + raw_lower + " " + file_name_lower
-        kontobestaetigung_markers = (
-            "kontobestätigung", "kontobestaetigung", "kontobestatigung",
-            "beitragsbestätigung", "beitragsbestaetigung",
-            "jahresbestätigung", "jahresbestaetigung",
-        )
-        if any(marker in all_text for marker in kontobestaetigung_markers):
-            logger.info("SVS Kontobestätigung detected — skipping transaction creation")
-            return None
-
+        svs_subtype = str(ocr_data.get("svs_subtype") or "").strip().lower()
         date = ocr_data.get("date")
         normalized_date = normalize_date(date)
-
-        # Detect Nachbemessung documents by description, keywords, or field patterns
-        desc_lower = str(ocr_data.get("description") or "").lower()
-        all_text = desc_lower + " " + str(ocr_data.get("raw_text") or "")[:500].lower()
-        is_nachbemessung = (
-            "nachbemessung" in all_text
-            or "nachforderung" in all_text
-            or "endabrechnung" in all_text
-            # If nachzahlung or gutschrift field exists, it's a Nachbemessung
-            or bool(ocr_data.get("nachzahlung"))
-            or bool(ocr_data.get("gutschrift"))
-        )
-
-        # Case 1: Gutschrift (refund from final assessment) → income
-        gutschrift = ocr_data.get("gutschrift")
-        if gutschrift:
-            amt = normalize_amount(gutschrift)
-            if amt and amt > 0:
-                # For Nachbemessung documents, the gutschrift IS the transaction
-                # even if beitrag_gesamt is also present (it may be the base amount)
-                beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
-                if not beitrag or is_nachbemessung or (beitrag and beitrag < 0):
-                    return {
-                        "amount": amt,
-                        "date": normalized_date or date,
-                        "description": "SVS Nachbemessung Gutschrift",
-                        "_svs_is_gutschrift": True,
-                    }
-
-        # Case 2: Nachzahlung (back-payment from final assessment) → expense
-        nachzahlung = ocr_data.get("nachzahlung")
-        if nachzahlung:
-            amt = normalize_amount(nachzahlung)
-            if amt and amt > 0:
-                beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
-                if not beitrag or is_nachbemessung:
-                    return {
-                        "amount": amt,
-                        "date": normalized_date or date,
-                        "description": "SVS Nachbemessung Nachzahlung",
-                    }
-
-        # Case 3: Regular Beitragsvorschreibung → expense
-        amount = ocr_data.get("amount") or ocr_data.get("beitrag_gesamt") or ocr_data.get("contribution_amount")
-        if not amount:
-            return None
-
-        normalized_amount = normalize_amount(amount)
-        if normalized_amount is None:
-            return None
-
-        quarter = ocr_data.get("quarter", "")
         tax_year = ocr_data.get("tax_year", "")
-        desc = f"SVS Beitragsvorschreibung Q{quarter}/{tax_year}" if quarter and tax_year else "SVS Beitragsvorschreibung"
+        quarter = ocr_data.get("quarter", "")
+        beitragsjahr = ocr_data.get("beitragsjahr") or tax_year
 
-        return {
-            "amount": normalized_amount,
-            "date": normalized_date or date,
-            "description": desc,
-        }
+        # -- Fallback: no svs_subtype from VLM → try to infer from legacy signals --
+        if not svs_subtype:
+            svs_subtype = self._infer_svs_subtype_legacy(ocr_data)
+
+        # -- No subtype at all → manual review --
+        if not svs_subtype:
+            logger.info("SVS subtype unknown — returning None for manual review")
+            return None
+
+        # Store subtype in ocr_data for downstream use
+        ocr_data["_svs_subtype"] = svs_subtype
+
+        # -- Subtypes that don't create transactions --
+        if svs_subtype in self._SVS_NO_TRANSACTION_SUBTYPES:
+            logger.info("SVS subtype '%s' — no transaction creation", svs_subtype)
+            return None
+
+        # -- Ratenzahlung: create recurring instead of transaction --
+        if svs_subtype == "ratenzahlung":
+            self._create_svs_ratenzahlung_recurring(ocr_data)
+            return None
+
+        # -- Vorschreibung: regular quarterly contribution --
+        if svs_subtype == "vorschreibung":
+            amount = ocr_data.get("amount") or ocr_data.get("beitrag_gesamt")
+            if not amount:
+                return None
+            normalized_amount = normalize_amount(amount)
+            if normalized_amount is None:
+                return None
+
+            # Dedup check: same user + quarter + year + amount
+            if self._svs_vorschreibung_exists(ocr_data, normalized_amount):
+                logger.info(
+                    "SVS Vorschreibung Q%s/%s already exists — skipping",
+                    quarter, tax_year,
+                )
+                return None
+
+            desc = f"SVS Beitragsvorschreibung Q{quarter}/{tax_year}" if quarter and tax_year else "SVS Beitragsvorschreibung"
+            return {
+                "amount": normalized_amount,
+                "date": normalized_date or date,
+                "description": desc,
+                "_svs_subtype": "vorschreibung",
+            }
+
+        # -- Nachforderung: back-payment from Nachbemessung --
+        if svs_subtype == "nachforderung":
+            amount = (
+                ocr_data.get("nachzahlung")
+                or ocr_data.get("amount")
+                or ocr_data.get("beitrag_gesamt")
+            )
+            if not amount:
+                return None
+            normalized_amount = normalize_amount(amount)
+            if normalized_amount is None or normalized_amount <= 0:
+                return None
+            desc = f"SVS Nachbemessung Nachforderung"
+            if beitragsjahr:
+                desc += f" (Beitragsjahr {beitragsjahr})"
+            return {
+                "amount": normalized_amount,
+                "date": normalized_date or date,
+                "description": desc,
+                "_svs_subtype": "nachforderung",
+                "_beitragsjahr": beitragsjahr,
+            }
+
+        # -- Gutschrift: refund from Nachbemessung --
+        if svs_subtype == "gutschrift":
+            amount = (
+                ocr_data.get("gutschrift")
+                or ocr_data.get("amount")
+                or ocr_data.get("beitrag_gesamt")
+            )
+            if not amount:
+                return None
+            normalized_amount = normalize_amount(amount)
+            if normalized_amount is None or normalized_amount <= 0:
+                return None
+            desc = f"SVS Nachbemessung Gutschrift"
+            if beitragsjahr:
+                desc += f" (Beitragsjahr {beitragsjahr})"
+            return {
+                "amount": normalized_amount,
+                "date": normalized_date or date,
+                "description": desc,
+                "_svs_subtype": "gutschrift",
+                "_svs_is_gutschrift": True,
+                "_beitragsjahr": beitragsjahr,
+            }
+
+        # -- Säumniszuschlag: late penalty (NOT deductible) --
+        if svs_subtype == "saeumniszuschlag":
+            amount = ocr_data.get("amount") or ocr_data.get("beitrag_gesamt")
+            if not amount:
+                return None
+            normalized_amount = normalize_amount(amount)
+            if normalized_amount is None or normalized_amount <= 0:
+                return None
+            return {
+                "amount": normalized_amount,
+                "date": normalized_date or date,
+                "description": "SVS Säumniszuschlag",
+                "_svs_subtype": "saeumniszuschlag",
+            }
+
+        # Unknown subtype → manual review
+        logger.warning("Unknown SVS subtype '%s' — returning None", svs_subtype)
+        return None
+
+    def _infer_svs_subtype_legacy(self, ocr_data: Dict[str, Any]) -> str:
+        """Fallback: infer SVS subtype from legacy field signals when VLM doesn't return svs_subtype."""
+        file_name = str(ocr_data.get("_file_name") or "").lower()
+        desc = str(ocr_data.get("description") or "").lower()
+        raw = str(ocr_data.get("raw_text") or "")[:2000].lower()
+        all_text = file_name + " " + desc + " " + raw
+
+        if any(m in all_text for m in ("kontobestätigung", "kontobestaetigung", "kontobestatigung")):
+            return "kontobestaetigung"
+        if any(m in all_text for m in ("kontoauszug", "beitragskontoauszug")):
+            return "kontoauszug"
+        if "säumniszuschlag" in all_text or "saeumniszuschlag" in all_text:
+            return "saeumniszuschlag"
+        if "herabsetzung" in all_text:
+            return "herabsetzung"
+        if "befreiung" in all_text or "befreit" in all_text:
+            return "befreiung"
+        if "ratenzahlung" in all_text or "ratenvereinbarung" in all_text:
+            return "ratenzahlung"
+        if "zahlungserinnerung" in all_text or "mahnung" in all_text:
+            return "zahlungserinnerung"
+        if "versicherungspflicht" in all_text:
+            return "versicherungspflicht"
+        if "mindestbeitragsgrundlage" in all_text:
+            return "mindestbeitrag"
+
+        # Field-based inference
+        if ocr_data.get("gutschrift") and not ocr_data.get("beitrag_gesamt"):
+            return "gutschrift"
+        if ocr_data.get("nachzahlung") and not ocr_data.get("beitrag_gesamt"):
+            return "nachforderung"
+        if ocr_data.get("gutschrift") or ocr_data.get("nachzahlung"):
+            # Has both gutschrift/nachzahlung AND beitrag_gesamt — likely Nachbemessung
+            if ocr_data.get("nachzahlung"):
+                return "nachforderung"
+            return "gutschrift"
+
+        # Default: if has beitrag_gesamt and quarter → vorschreibung
+        if ocr_data.get("beitrag_gesamt") and ocr_data.get("quarter"):
+            return "vorschreibung"
+
+        return ""  # Unknown
+
+    def _svs_vorschreibung_exists(self, ocr_data: Dict[str, Any], amount: float) -> bool:
+        """Check if an SVS Vorschreibung for the same quarter already exists."""
+        quarter = ocr_data.get("quarter")
+        tax_year = ocr_data.get("tax_year")
+        if not quarter or not tax_year:
+            return False
+
+        try:
+            from app.models.transaction import Transaction, TransactionType
+            existing = self.db.query(Transaction).filter(
+                Transaction.user_id == self._current_user_id if hasattr(self, '_current_user_id') else True,
+                Transaction.type == TransactionType.EXPENSE,
+                Transaction.description.ilike(f"%SVS%Q{quarter}%{tax_year}%"),
+            ).first()
+            return existing is not None
+        except Exception:
+            return False
+
+    def _create_svs_ratenzahlung_recurring(self, ocr_data: Dict[str, Any]) -> None:
+        """Create a monthly recurring transaction for SVS Ratenzahlung (installment plan)."""
+        try:
+            ratenanzahl = int(ocr_data.get("ratenanzahl") or 0)
+            ratenbetrag = normalize_amount(ocr_data.get("ratenbetrag") or ocr_data.get("amount"))
+            if not ratenbetrag or ratenbetrag <= 0 or ratenanzahl <= 0:
+                logger.warning("SVS Ratenzahlung: missing ratenanzahl or ratenbetrag")
+                return
+
+            start_date = normalize_date(ocr_data.get("date"))
+            if not start_date:
+                start_date = date.today()
+
+            from app.models.recurring_transaction import (
+                RecurringTransaction,
+                RecurringTransactionType,
+                RecurrenceFrequency,
+            )
+            from dateutil.relativedelta import relativedelta
+
+            end_date = start_date + relativedelta(months=ratenanzahl)
+
+            recurring = RecurringTransaction(
+                user_id=self._current_user_id if hasattr(self, '_current_user_id') else None,
+                recurring_type=RecurringTransactionType.OTHER_EXPENSE,
+                description=f"SVS Ratenzahlung ({ratenanzahl}x €{ratenbetrag:.2f})",
+                amount=ratenbetrag,
+                frequency=RecurrenceFrequency.MONTHLY,
+                start_date=start_date,
+                end_date=end_date,
+                template="svs_ratenzahlung",
+                is_active=True,
+            )
+            if recurring.user_id:
+                self.db.add(recurring)
+                self.db.flush()
+                logger.info(
+                    "Created SVS Ratenzahlung recurring: %dx €%.2f, %s to %s",
+                    ratenanzahl, ratenbetrag, start_date, end_date,
+                )
+        except Exception as e:
+            logger.warning("Failed to create SVS Ratenzahlung recurring: %s", e)
 
     def _extract_from_kirchenbeitrag(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract transaction from Kirchenbeitrag (church tax) confirmation.
@@ -1399,21 +1556,49 @@ class OCRTransactionService:
             }
             
         elif doc_type == DocumentType.SVS_NOTICE.value:
-            # Gutschrift (refund) → income; otherwise → expense
-            is_gutschrift = transaction_data.get("_svs_is_gutschrift", False)
-            if is_gutschrift:
+            # SVS sub-type aware classification
+            svs_sub = transaction_data.get("_svs_subtype", "vorschreibung")
+            beitragsjahr = transaction_data.get("_beitragsjahr", "")
+
+            if svs_sub == "gutschrift":
+                reason = "SVS Gutschrift — Betriebseinnahme im Zufluss-Jahr (Zufluss-Abfluss-Prinzip)"
+                if beitragsjahr:
+                    reason += f" | Beitragsjahr: {beitragsjahr}"
                 return {
                     "transaction_type": TransactionType.INCOME.value,
-                    "category": IncomeCategory.OTHER_INCOME.value,
+                    "category": ExpenseCategory.INSURANCE.value,  # Offsets SVS expense line
                     "is_deductible": False,
-                    "deduction_reason": "SVS Gutschrift (Nachbemessung refund)",
-                    "confidence": 0.90,
+                    "deduction_reason": reason,
+                    "confidence": 0.95,
                 }
+
+            if svs_sub == "saeumniszuschlag":
+                return {
+                    "transaction_type": TransactionType.EXPENSE.value,
+                    "category": ExpenseCategory.OTHER.value,
+                    "is_deductible": False,
+                    "deduction_reason": "SVS Säumniszuschlag — NICHT als Betriebsausgabe absetzbar",
+                    "confidence": 0.95,
+                }
+
+            if svs_sub == "nachforderung":
+                reason = "SVS Nachbemessung Nachforderung — Betriebsausgabe im Zahlungsjahr (Zufluss-Abfluss-Prinzip, E1a KZ 9225)"
+                if beitragsjahr:
+                    reason += f" | Beitragsjahr: {beitragsjahr}"
+                return {
+                    "transaction_type": TransactionType.EXPENSE.value,
+                    "category": ExpenseCategory.INSURANCE.value,
+                    "is_deductible": True,
+                    "deduction_reason": reason,
+                    "confidence": 0.95,
+                }
+
+            # Default: vorschreibung (regular quarterly)
             return {
                 "transaction_type": TransactionType.EXPENSE.value,
                 "category": ExpenseCategory.INSURANCE.value,
                 "is_deductible": True,
-                "deduction_reason": "SVS contributions are deductible as Sonderausgaben",
+                "deduction_reason": "SVS Pflichtbeiträge — Betriebsausgabe (E1a KZ 9225)",
                 "confidence": 0.95,
             }
 
