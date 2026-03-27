@@ -2222,6 +2222,70 @@ class DocumentPipelineOrchestrator:
                         self._log_audit(result, "suggest", f"SVS {svs_sub}: reference document, dismissed")
                     return
 
+                # Ratenzahlung: build import_suggestion so user can confirm → create recurring
+                if svs_sub == "ratenzahlung":
+                    ed = result.extracted_data or {}
+                    nachzahlung = ed.get("nachzahlung") or ed.get("amount")
+                    ratenanzahl = ed.get("ratenanzahl") or 0
+                    ratenbetrag = ed.get("ratenbetrag") or 0
+
+                    # Try to extract from raw_text if VLM didn't provide
+                    import re as _re
+                    raw = str(ed.get("raw_text") or "")
+                    if not ratenanzahl:
+                        m = _re.search(r'(\d+)\s*(?:Monats)?rate[n]?', raw, _re.IGNORECASE)
+                        if m:
+                            ratenanzahl = int(m.group(1))
+                    if not ratenbetrag:
+                        m = _re.search(r'(?:EUR|€)\s*(\d[\d.,]*)\s*(?:pro\s*Monat|monatlich)', raw, _re.IGNORECASE)
+                        if m:
+                            ratenbetrag = float(m.group(1).replace('.', '').replace(',', '.'))
+                    if not ratenanzahl:
+                        ratenanzahl = 6  # Common default
+                    if not ratenbetrag and nachzahlung:
+                        try:
+                            ratenbetrag = round(float(nachzahlung) / int(ratenanzahl), 2)
+                        except (ValueError, TypeError, ZeroDivisionError):
+                            pass
+
+                    import_sugg = {
+                        "type": "create_recurring_expense",
+                        "status": "pending",
+                        "data": {
+                            "amount": ratenbetrag,
+                            "description": f"SVS Ratenzahlung ({ratenanzahl}x €{ratenbetrag:.2f})" if ratenbetrag else "SVS Ratenzahlung",
+                            "category": "insurance",
+                            "transaction_type": "expense",
+                            "frequency": "monthly",
+                            "start_date": ed.get("date"),
+                            "ratenanzahl": ratenanzahl,
+                            "is_deductible": True,
+                            "deduction_reason": "SVS Nachbemessung Ratenzahlung — Betriebsausgabe im Zahlungsjahr",
+                        },
+                    }
+                    # Store in ocr_result for the confirm-recurring-expense endpoint
+                    ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+                    ocr_json["import_suggestion"] = import_sugg
+                    document.ocr_result = ocr_json
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(document, "ocr_result")
+                    self.db.flush()
+
+                    result.suggestions.append({
+                        "type": "svs_ratenzahlung",
+                        "status": "needs_review",
+                        "data": import_sugg["data"],
+                        "review_reason": (
+                            f"SVS Ratenzahlungsvereinbarung: {ratenanzahl} Monatsraten à €{ratenbetrag:.2f}. "
+                            "Bitte bestätigen Sie die Daten, um die wiederkehrende Zahlung zu erstellen."
+                        ) if ratenbetrag else "SVS Ratenzahlungsvereinbarung erkannt. Bitte Ratendetails prüfen.",
+                        "confidence": 0.95,
+                        "document_id": document.id,
+                        "user_id": document.user_id,
+                    })
+                    self._log_audit(result, "suggest", f"SVS Ratenzahlung: {ratenanzahl}x €{ratenbetrag}")
+                    return
+
             suggestion = self._build_tax_form_suggestion(document, db_type, result)
             if suggestion:
                 result.suggestions.append(suggestion)

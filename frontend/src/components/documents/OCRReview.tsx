@@ -424,7 +424,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   allowDocumentTypeEdit = false,
   onDocumentTypeDraftChange,
   onOpenTransaction,
-  onConfirm,
+  onConfirm: _onConfirm,
   onCancel,
   onPrevDocument,
   onNextDocument,
@@ -622,7 +622,16 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               await documentService.confirmAsset(documentId);
               aiToast(t('documents.suggestion.assetCreated', 'Asset created'), 'success');
             } catch {
-              // Asset creation may fail, OCR confirm still succeeded
+              aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+            }
+          } else if (
+            importSuggestion?.type === 'create_recurring_expense'
+            && importSuggestion?.status === 'pending'
+          ) {
+            try {
+              await documentService.confirmRecurringExpense(documentId);
+              aiToast(t('documents.suggestion.recurringCreated', 'Recurring payment created'), 'success');
+            } catch {
               aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
             }
           } else {
@@ -635,7 +644,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       } else {
         aiToast(t('documents.review.changesSaved', 'Changes saved'), 'success');
       }
-      onConfirm?.();
+      // Stay on the preview page — reload data to reflect confirmed state
+      await loadReviewData(false);
     } catch (err: any) {
       aiToast(t('common.saveFailed', 'Save failed'), 'error');
       setError(err.response?.data?.detail || t('documents.review.saveError'));
