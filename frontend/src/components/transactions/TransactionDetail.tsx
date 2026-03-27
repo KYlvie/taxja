@@ -17,12 +17,11 @@ import './TransactionDetail.css';
 interface TransactionDetailProps {
   transaction: Transaction;
   onEdit: () => void;
-  onDelete?: () => void;
+  onDelete: () => void;
   onClose: () => void;
   onMarkReviewed?: (id: number) => void;
   hideLinkedDocumentSection?: boolean;
   hideEditAction?: boolean;
-  readOnly?: boolean;
 }
 
 const TransactionDetail = ({
@@ -33,7 +32,6 @@ const TransactionDetail = ({
   onMarkReviewed,
   hideLinkedDocumentSection = false,
   hideEditAction = false,
-  readOnly = false,
 }: TransactionDetailProps) => {
   const { t, i18n } = useTranslation();
   const { confirm: showConfirm } = useConfirm();
@@ -388,28 +386,24 @@ const TransactionDetail = ({
           <button className="btn btn-secondary" onClick={onClose}>
             {t('common.close')}
           </button>
-          {!readOnly && (
-            <div className="action-buttons">
-              {!hideEditAction && (
-                <button className="btn btn-primary" onClick={onEdit}>
-                  {t('common.edit')}
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  className="btn btn-danger"
-                  onClick={async () => {
-                    const ok = await showConfirm(t('transactions.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });
-                    if (ok) {
-                      onDelete();
-                    }
-                  }}
-                >
-                  {t('common.delete')}
-                </button>
-              )}
-            </div>
-          )}
+          <div className="action-buttons">
+            {!hideEditAction && (
+              <button className="btn btn-primary" onClick={onEdit}>
+                {t('common.edit')}
+              </button>
+            )}
+            <button
+              className="btn btn-danger"
+              onClick={async () => {
+                const ok = await showConfirm(t('transactions.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });
+                if (ok) {
+                  onDelete();
+                }
+              }}
+            >
+              {t('common.delete')}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
