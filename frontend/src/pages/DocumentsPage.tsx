@@ -2325,7 +2325,7 @@ const isReceiptOrInvoice = (doc: Document) =>
           <TransactionDetail
             transaction={inlineTransaction}
             hideLinkedDocumentSection
-            hideEditAction
+            readOnly
             onEdit={() => {}}
             onClose={handleCloseInlineTransaction}
           />
