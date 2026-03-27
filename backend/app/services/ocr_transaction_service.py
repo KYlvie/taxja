@@ -1017,6 +1017,7 @@ class OCRTransactionService:
             return self._extract_from_lohnzettel(ocr_data)
         elif doc_type == DocumentType.SVS_NOTICE.value:
             ocr_data["_file_name"] = document.file_name or ""
+            ocr_data["_user_id"] = document.user_id
             return self._extract_from_svs_notice(ocr_data)
         elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:
             return self._extract_from_bescheid(ocr_data)
@@ -1184,6 +1185,8 @@ class OCRTransactionService:
             logger.info("SVS subtype unknown — returning None for manual review")
             return None
 
+        logger.info("SVS subtype determined: %s", svs_subtype)
+
         # Store subtype in ocr_data for downstream use
         ocr_data["_svs_subtype"] = svs_subtype
 
@@ -1271,18 +1274,39 @@ class OCRTransactionService:
 
         # -- Säumniszuschlag: late penalty (NOT deductible) --
         if svs_subtype == "saeumniszuschlag":
-            amount = ocr_data.get("amount") or ocr_data.get("beitrag_gesamt")
+            # Try dedicated penalty amount field first, then extract from text
+            amount = (
+                ocr_data.get("saeumniszuschlag_betrag")
+                or ocr_data.get("zuschlag")
+                or ocr_data.get("penalty_amount")
+            )
+            # Try extracting from raw_text: "Säumniszuschlag ... EUR XX,XX"
             if not amount:
+                import re
+                raw = str(ocr_data.get("raw_text") or "")
+                m = re.search(
+                    r'(?:s[aä]umniszuschlag|zuschlag)[^€\d]*(?:EUR\s*)?(\d[\d.,]*)',
+                    raw, re.IGNORECASE,
+                )
+                if m:
+                    amount = m.group(1)
+            # Cannot determine penalty amount → return None for manual review
+            # (amount/beitrag_gesamt is the base contribution, NOT the penalty)
+            if not amount:
+                logger.info("SVS Säumniszuschlag: penalty amount not extractable — needs manual review")
                 return None
             normalized_amount = normalize_amount(amount)
             if normalized_amount is None or normalized_amount <= 0:
                 return None
-            return {
+            result = {
                 "amount": normalized_amount,
                 "date": normalized_date or date,
                 "description": "SVS Säumniszuschlag",
                 "_svs_subtype": "saeumniszuschlag",
             }
+            if needs_review:
+                result["_needs_amount_review"] = True
+            return result
 
         # Unknown subtype → manual review
         logger.warning("Unknown SVS subtype '%s' — returning None", svs_subtype)
@@ -1352,15 +1376,39 @@ class OCRTransactionService:
     def _create_svs_ratenzahlung_recurring(self, ocr_data: Dict[str, Any]) -> None:
         """Create a monthly recurring transaction for SVS Ratenzahlung (installment plan)."""
         try:
+            import re
             ratenanzahl = int(ocr_data.get("ratenanzahl") or 0)
             ratenbetrag = normalize_amount(ocr_data.get("ratenbetrag") or ocr_data.get("amount"))
+
+            # Try extracting from raw_text if VLM didn't provide the fields
+            if (not ratenanzahl or not ratenbetrag) and ocr_data.get("raw_text"):
+                raw = str(ocr_data["raw_text"])
+                # Pattern: "6 Monatsraten" or "6 Raten" or "Ratenanzahl: 6"
+                m_count = re.search(r'(\d+)\s*(?:monats)?rate[n]?', raw, re.IGNORECASE)
+                if m_count and not ratenanzahl:
+                    ratenanzahl = int(m_count.group(1))
+                # Pattern: "EUR 442,84" near "Rate" or "monatlich"
+                m_amount = re.search(
+                    r'(?:rate|monatlich)[^€\d]*(?:EUR\s*)?(\d[\d.,]*)',
+                    raw, re.IGNORECASE,
+                )
+                if m_amount and not ratenbetrag:
+                    ratenbetrag = normalize_amount(m_amount.group(1))
+
             if not ratenbetrag or ratenbetrag <= 0 or ratenanzahl <= 0:
-                logger.warning("SVS Ratenzahlung: missing ratenanzahl or ratenbetrag")
+                logger.warning("SVS Ratenzahlung: missing ratenanzahl=%s or ratenbetrag=%s", ratenanzahl, ratenbetrag)
                 return
 
             start_date = normalize_date(ocr_data.get("date"))
             if not start_date:
-                start_date = date.today()
+                from datetime import date as date_cls
+                start_date = date_cls.today()
+
+            # Get user_id from document
+            user_id = ocr_data.get("_user_id")
+            if not user_id:
+                logger.warning("SVS Ratenzahlung: no user_id available")
+                return
 
             from app.models.recurring_transaction import (
                 RecurringTransaction,
@@ -1372,7 +1420,7 @@ class OCRTransactionService:
             end_date = start_date + relativedelta(months=ratenanzahl)
 
             recurring = RecurringTransaction(
-                user_id=self._current_user_id if hasattr(self, '_current_user_id') else None,
+                user_id=user_id,
                 recurring_type=RecurringTransactionType.OTHER_EXPENSE,
                 description=f"SVS Ratenzahlung ({ratenanzahl}x €{ratenbetrag:.2f})",
                 amount=ratenbetrag,
@@ -1382,13 +1430,12 @@ class OCRTransactionService:
                 template="svs_ratenzahlung",
                 is_active=True,
             )
-            if recurring.user_id:
-                self.db.add(recurring)
-                self.db.flush()
-                logger.info(
-                    "Created SVS Ratenzahlung recurring: %dx €%.2f, %s to %s",
-                    ratenanzahl, ratenbetrag, start_date, end_date,
-                )
+            self.db.add(recurring)
+            self.db.flush()
+            logger.info(
+                "Created SVS Ratenzahlung recurring: %dx €%.2f, %s to %s",
+                ratenanzahl, ratenbetrag, start_date, end_date,
+            )
         except Exception as e:
             logger.warning("Failed to create SVS Ratenzahlung recurring: %s", e)
 

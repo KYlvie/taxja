@@ -1995,8 +1995,11 @@ class DocumentPipelineOrchestrator:
 
         # SVS notice with non-transaction subtype — show specific guidance
         if db_type == DBDocumentType.SVS_NOTICE:
+            # Read subtype from document.ocr_result (set by _extract_from_svs_notice)
+            # or from result.extracted_data (set by VLM)
+            doc_ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
             ed = result.extracted_data or {}
-            svs_sub = ed.get("_svs_subtype") or ed.get("svs_subtype", "")
+            svs_sub = doc_ocr.get("_svs_subtype") or ed.get("_svs_subtype") or ed.get("svs_subtype", "")
             _SVS_SUBTYPE_MESSAGES = {
                 "kontoauszug": (
                     "SVS Beitragskontoauszug erkannt. "
@@ -2034,14 +2037,22 @@ class DocumentPipelineOrchestrator:
                 ),
                 "ratenzahlung": (
                     "SVS Ratenzahlungsvereinbarung erkannt. "
-                    "Eine monatliche wiederkehrende Zahlung wurde erstellt."
+                    "Bitte überprüfen Sie die Ratenanzahl und den monatlichen Betrag. "
+                    "Falls die automatische Erstellung nicht möglich war, erstellen Sie bitte "
+                    "die wiederkehrende Zahlung manuell unter 'Wiederkehrende Transaktionen'."
+                ),
+                "saeumniszuschlag": (
+                    "SVS Säumniszuschlag-Bescheid erkannt. "
+                    "Der genaue Zuschlagsbetrag konnte nicht automatisch extrahiert werden. "
+                    "Bitte geben Sie den Säumniszuschlag manuell ein. "
+                    "Wichtig: Säumniszuschläge sind NICHT als Betriebsausgabe absetzbar."
                 ),
             }
             msg = _SVS_SUBTYPE_MESSAGES.get(svs_sub)
             if msg:
                 result.suggestions.append({
                     "type": "svs_info",
-                    "status": "needs_review" if svs_sub in ("kontoauszug", "herabsetzung", "befreiung") else "dismissed",
+                    "status": "needs_review" if svs_sub in ("kontoauszug", "herabsetzung", "befreiung", "saeumniszuschlag", "ratenzahlung") else "dismissed",
                     "data": result.extracted_data or {},
                     "review_reason": msg,
                     "confidence": classification.confidence if classification else 0,
