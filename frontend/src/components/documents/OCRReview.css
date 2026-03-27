@@ -500,6 +500,24 @@
   transition: all var(--transition-fast);
 }
 
+.review-actions .btn-primary {
+  background: var(--color-text);
+  color: #fff;
+}
+
+.review-actions .btn-confirm {
+  background: #16a34a;
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+.review-actions .btn-confirm:hover:not(:disabled) {
+  background: #15803d;
+}
+
 
 .txn-type-toggle {
   display: flex;

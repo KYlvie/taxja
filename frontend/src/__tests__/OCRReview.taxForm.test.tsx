@@ -197,6 +197,7 @@ describe('OCRReview tax-form mode', () => {
       extracted_data: {
         tax_year: 2023,
         bescheid_datum: '2024-09-15',
+        aktenzahl: 'FV-625207/2024',
         faellig_am: '2024-10-15',
         festgesetzte_einkommensteuer: 8957.5,
         abgabennachforderung: 957.5,
@@ -234,6 +235,7 @@ describe('OCRReview tax-form mode', () => {
 
     expect(screen.getByText('Tax Year')).toBeInTheDocument();
     expect(screen.getByText('Bescheid Datum')).toBeInTheDocument();
+    expect(screen.getByText('Aktenzahl')).toBeInTheDocument();
     expect(screen.getByText('Faellig Am')).toBeInTheDocument();
     expect(screen.getByText('Festgesetzte Einkommensteuer')).toBeInTheDocument();
     expect(screen.getByText('Abgabennachforderung')).toBeInTheDocument();

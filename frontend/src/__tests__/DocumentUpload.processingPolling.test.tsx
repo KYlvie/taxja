@@ -172,4 +172,167 @@ describe('DocumentUpload terminal polling', () => {
       }),
     );
   }, 15000);
+
+  it('keeps per-file progress state stable even after removing another completed upload', async () => {
+    uploadDocument
+      .mockResolvedValueOnce({
+        id: 401,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/401.pdf',
+        file_name: 'one.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-23T23:38:23.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+      })
+      .mockResolvedValueOnce({
+        id: 402,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/402.pdf',
+        file_name: 'two.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-23T23:38:23.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+      })
+      .mockResolvedValueOnce({
+        id: 403,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/403.pdf',
+        file_name: 'three.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-23T23:38:23.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+      });
+
+    getDocument
+      .mockResolvedValueOnce({
+        id: 401,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/401.pdf',
+        file_name: 'one.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0.95,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-24T00:14:20.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+        processed_at: '2026-03-24T00:14:20.000Z',
+        ocr_status: 'completed',
+        ocr_result: { merchant: 'ONE', amount: 1, _pipeline: { current_state: 'completed' } },
+      })
+      .mockResolvedValueOnce({
+        id: 402,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/402.pdf',
+        file_name: 'two.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0.8,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-24T00:12:04.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+        ocr_status: 'processing',
+        ocr_result: { merchant: 'TWO', amount: 2, _pipeline: { current_state: 'first_result_available' } },
+      })
+      .mockResolvedValueOnce({
+        id: 403,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/403.pdf',
+        file_name: 'three.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0.8,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-24T00:12:04.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+        ocr_status: 'processing',
+        ocr_result: { merchant: 'THREE', amount: 3, _pipeline: { current_state: 'first_result_available' } },
+      })
+      .mockResolvedValueOnce({
+        id: 402,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/402.pdf',
+        file_name: 'two.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0.95,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-24T00:15:20.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+        processed_at: '2026-03-24T00:15:20.000Z',
+        ocr_status: 'completed',
+        ocr_result: { merchant: 'TWO', amount: 2, _pipeline: { current_state: 'completed' } },
+      })
+      .mockResolvedValueOnce({
+        id: 403,
+        user_id: 1,
+        document_type: 'receipt',
+        file_path: '/docs/403.pdf',
+        file_name: 'three.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+        confidence_score: 0.95,
+        needs_review: false,
+        created_at: '2026-03-23T23:38:23.000Z',
+        updated_at: '2026-03-24T00:16:20.000Z',
+        uploaded_at: '2026-03-23T23:38:23.000Z',
+        processed_at: '2026-03-24T00:16:20.000Z',
+        ocr_status: 'completed',
+        ocr_result: { merchant: 'THREE', amount: 3, _pipeline: { current_state: 'completed' } },
+      });
+
+    const { container } = render(<DocumentUpload />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(['one'], 'one.pdf', { type: 'application/pdf' }),
+          new File(['two'], 'two.pdf', { type: 'application/pdf' }),
+          new File(['three'], 'three.pdf', { type: 'application/pdf' }),
+        ],
+      },
+    });
+
+    await waitFor(() => expect(uploadDocument).toHaveBeenCalledTimes(3), { timeout: 5000 });
+    await waitFor(() => {
+      expect(screen.getByText('one.pdf')).toBeInTheDocument();
+      expect(screen.getByText('two.pdf')).toBeInTheDocument();
+      expect(screen.getByText('three.pdf')).toBeInTheDocument();
+    }, { timeout: 3000 });
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'View document' }).length).toBeGreaterThanOrEqual(2), { timeout: 5000 });
+
+    const removeButtons = screen.getAllByLabelText('Remove');
+    fireEvent.click(removeButtons[0]);
+
+    await waitFor(() => expect(screen.queryByText('two.pdf')).not.toBeInTheDocument(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByText('one.pdf')).toBeInTheDocument(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByText('three.pdf')).toBeInTheDocument(), { timeout: 3000 });
+    await waitFor(() => {
+      const viewButtons = screen.getAllByRole('button', { name: 'View document' });
+      expect(viewButtons.length).toBeGreaterThanOrEqual(2);
+    }, { timeout: 10000 });
+  }, 20000);
 });

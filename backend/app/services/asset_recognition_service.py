@@ -1,6 +1,7 @@
 """Recognition-stage decisioning for Austrian asset tax handling."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
@@ -23,6 +24,8 @@ from app.schemas.asset_recognition import (
 )
 from app.services.asset_tax_policy_service import AssetTaxPolicyService
 from app.services.document_classifier import DocumentClassifier
+
+logger = logging.getLogger(__name__)
 
 
 class AssetRecognitionService:
@@ -58,7 +61,16 @@ class AssetRecognitionService:
 
         candidate = self._build_candidate(data, normalized_text)
         if not candidate.asset_subtype:
-            return self._expense_result(data, AssetReasonCode.EXPENSE_DEFAULT_LOW_RISK)
+            # Regex didn't detect asset type — try LLM for high-value items
+            if data.extracted_amount and data.extracted_amount >= Decimal("400"):
+                llm_subtype = self._llm_detect_asset_subtype(data, normalized_text)
+                if llm_subtype:
+                    candidate = candidate.model_copy(update={
+                        "asset_type": self._map_asset_type(llm_subtype),
+                        "asset_subtype": llm_subtype,
+                    })
+            if not candidate.asset_subtype:
+                return self._expense_result(data, AssetReasonCode.EXPENSE_DEFAULT_LOW_RISK)
 
         reason_codes: list[AssetReasonCode] = [
             AssetReasonCode.DURABLE_EQUIPMENT_DETECTED,
@@ -252,6 +264,70 @@ class AssetRecognitionService:
             "other_equipment": "other_equipment",
         }
         return mapping.get(subtype, "other_equipment")
+
+    _LLM_ASSET_VALID_SUBTYPES = {
+        "pkw", "electric_pkw", "truck_van", "fiscal_truck", "motorcycle",
+        "special_vehicle", "computer", "phone", "office_furniture",
+        "machinery", "tools", "perpetual_license", "printer_scanner",
+        "monitor_av", "server_network", "other_equipment",
+    }
+
+    def _llm_detect_asset_subtype(
+        self, data: AssetRecognitionInput, normalized_text: str
+    ) -> str | None:
+        """Use LLM to classify asset type when regex keywords fail."""
+        try:
+            from app.services.llm_service import get_llm_service
+
+            llm = get_llm_service()
+            if not llm.is_available:
+                return None
+
+            # Build description from all available sources
+            parts = []
+            if data.extracted_vendor:
+                parts.append(f"Vendor: {data.extracted_vendor}")
+            for item in data.extracted_line_items or []:
+                if isinstance(item, dict):
+                    name = item.get("description") or item.get("name") or ""
+                    if name:
+                        parts.append(f"Item: {name}")
+            if normalized_text:
+                parts.append(normalized_text[:400])
+            description = " ".join(parts).strip()
+            if not description:
+                return None
+
+            response = llm.generate(
+                system_prompt=(
+                    "You classify business purchases for Austrian tax depreciation. "
+                    "Given a purchase description, return ONLY the asset subtype as a single word. "
+                    "Valid subtypes: pkw, electric_pkw, truck_van, computer, phone, "
+                    "office_furniture, machinery, tools, perpetual_license, printer_scanner, "
+                    "monitor_av, server_network, other_equipment. "
+                    "If this is NOT a depreciable asset (e.g. consumables, services, rent, "
+                    "subscriptions, food, office supplies under €400), return: none"
+                ),
+                user_prompt=f"Amount: EUR {data.extracted_amount}. Description: {description.strip()}",
+                temperature=0.0,
+                max_tokens=20,
+            )
+
+            result = response.strip().lower().replace('"', '').replace("'", "")
+            if result in self._LLM_ASSET_VALID_SUBTYPES:
+                logger.info("LLM asset subtype detection: %s", result)
+                return result
+            if result == "none" or not result:
+                return None
+            # Fuzzy match
+            for valid in self._LLM_ASSET_VALID_SUBTYPES:
+                if valid in result or result in valid:
+                    logger.info("LLM asset subtype fuzzy match: %s → %s", result, valid)
+                    return valid
+            return None
+        except Exception as e:
+            logger.warning("LLM asset subtype detection failed: %s", e)
+            return None
 
     def _suggest_asset_name(self, data: AssetRecognitionInput) -> str | None:
         for item in data.extracted_line_items or []:

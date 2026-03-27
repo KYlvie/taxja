@@ -1090,6 +1090,7 @@
         "standardInvoice": "Szabványos számla",
         "invoice": "Szabványos számla",
         "creditNote": "Jóváírás / sztornó",
+        "settlementCredit": "Elszámolási jóváírás (éves elszámolás)",
         "proforma": "Proforma számla",
         "deliveryNote": "Szállítólevél",
         "unknown": "Még nem meghatározott"

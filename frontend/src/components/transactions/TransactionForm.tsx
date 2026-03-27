@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import { FileText } from 'lucide-react';
+import { translateDeductionReason } from '../../utils/translateDeductionReason';
 import Select from '../common/Select';
 import {
   isExpenseTransactionType,
@@ -544,11 +545,11 @@ const TransactionForm = ({
                   ? transaction.deduction_reason.split(' | ').map((part, i) => (
                       <span key={i}>
                         {i === 1 && <span>💡 </span>}
-                        {part}
+                        {translateDeductionReason(part, i18n.language)}
                         {i === 0 && <br />}
                       </span>
                     ))
-                  : transaction.deduction_reason}
+                  : translateDeductionReason(transaction.deduction_reason, i18n.language)}
               </span>
             </div>
           )}

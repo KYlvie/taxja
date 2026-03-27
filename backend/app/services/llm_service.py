@@ -110,8 +110,8 @@ SYSTEM_PROMPT_TEMPLATE = {
 
 class LLMService:
     """Service for LLM-based response generation.
-    Text priority: Groq > OpenAI > GPT-OSS > Ollama.
-    Vision priority: OpenAI > Anthropic > GPT-OSS > Groq > Ollama.
+    Text priority: Groq > OpenAI > Anthropic > GPT-OSS > Ollama.
+    Vision priority: Groq > OpenAI > Anthropic > GPT-OSS > Ollama.
     """
 
     def __init__(self):
@@ -126,6 +126,14 @@ class LLMService:
             getattr(settings, "ANTHROPIC_API_KEY", "")
             or os.getenv("ANTHROPIC_API_KEY", "")
         )
+        # Fallback: if env var is empty but .env file has the key, read it directly
+        if not self.anthropic_api_key:
+            try:
+                from dotenv import dotenv_values
+                _dot = dotenv_values(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+                self.anthropic_api_key = _dot.get("ANTHROPIC_API_KEY", "")
+            except Exception:
+                pass
         self.anthropic_model = (
             getattr(settings, "ANTHROPIC_MODEL", "")
             or os.getenv("ANTHROPIC_MODEL", "claude-opus-4-1-20250805")
@@ -273,10 +281,11 @@ class LLMService:
     def _get_active_client_and_model(self, prefer_vision: bool = False) -> tuple[OpenAI, str]:
         """Return the highest-priority available client and model name.
 
-        Priority: OpenAI (GPT-4o) > Groq > GPT-OSS
-        Changed from Groq-first to OpenAI-first for better classification accuracy.
+        Priority: Groq > OpenAI > Anthropic (vision-only helper) > GPT-OSS
         """
         if prefer_vision:
+            if self.groq_client:
+                return self.groq_client, self.groq_vision_model
             if self.client:
                 return self.client, self.model
             if self.anthropic_client:
@@ -284,15 +293,13 @@ class LLMService:
                     "Anthropic vision is available via generate_vision(), "
                     "not via the OpenAI-compatible client selector"
                 )
-            if self.groq_client:
-                return self.groq_client, self.groq_vision_model
             if self.gpt_oss_client:
                 return self.gpt_oss_client, self.gpt_oss_model
         else:
-            if self.client:
-                return self.client, self.model
             if self.groq_client:
                 return self.groq_client, self.groq_model
+            if self.client:
+                return self.client, self.model
             if self.gpt_oss_client:
                 return self.gpt_oss_client, self.gpt_oss_model
         raise RuntimeError("No LLM service configured")
@@ -300,11 +307,20 @@ class LLMService:
     def _build_vision_provider_chain(self, prefer_provider: Optional[str] = None) -> list[dict]:
         """Build ordered vision provider chain.
 
-        Default order prioritizes OCR accuracy: OpenAI → Anthropic → GPT-OSS → Groq.
+        Default order prioritizes available low-latency providers: Groq → OpenAI
+        → Anthropic → GPT-OSS.
         `prefer_provider` can move one configured provider to the front for
         manual high-accuracy reruns without changing the rest of the fallback order.
         """
         chain: list[dict] = []
+        if self.groq_client:
+            chain.append(
+                {
+                    "name": "groq",
+                    "client": self.groq_client,
+                    "model": self.groq_vision_model,
+                }
+            )
         if self.client:
             chain.append({"name": "openai", "client": self.client, "model": self.model})
         if self.anthropic_client:
@@ -321,14 +337,6 @@ class LLMService:
                     "name": "gpt-oss",
                     "client": self.gpt_oss_client,
                     "model": self.gpt_oss_model,
-                }
-            )
-        if self.groq_client:
-            chain.append(
-                {
-                    "name": "groq",
-                    "client": self.groq_client,
-                    "model": self.groq_vision_model,
                 }
             )
 
@@ -683,18 +691,18 @@ class LLMService:
     def _build_text_provider_chain(self, prefer_provider: Optional[str] = None) -> list:
         """Build ordered provider chain for text tasks.
 
-        Default order: OpenAI → Anthropic → Groq → GPT-OSS.
-        OpenAI (GPT-4o) is primary for accuracy; Anthropic (Claude) is fallback;
-        Groq and GPT-OSS are last-resort options.
+        Default order: Groq → OpenAI → Anthropic → GPT-OSS.
+        Groq is primary in local/dev environments for speed and reliability;
+        OpenAI and Anthropic remain fallbacks, followed by GPT-OSS.
         `prefer_provider` can move one configured provider to the front.
         """
         providers = []
+        if self.groq_client:
+            providers.append(("Groq", self.groq_client, self.groq_model))
         if self.client:
             providers.append(("OpenAI", self.client, self.model))
         if self.anthropic_client:
             providers.append(("Anthropic", self.anthropic_client, self.anthropic_model))
-        if self.groq_client:
-            providers.append(("Groq", self.groq_client, self.groq_model))
         if self.gpt_oss_client:
             providers.append(("GPT-OSS", self.gpt_oss_client, self.gpt_oss_model))
 

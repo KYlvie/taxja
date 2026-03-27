@@ -35,6 +35,9 @@ from app.services.document_transaction_suggestion_store import (
     copy_transaction_suggestions,
     store_transaction_suggestions,
 )
+from app.services.final_transaction_type_service import (
+    materialize_final_transaction_type,
+)
 from app.services.document_classifier import DocumentClassifier, DocumentType as OCRDocumentType
 from app.services.field_normalization import (
     normalize_amount,
@@ -657,12 +660,23 @@ class DocumentPipelineOrchestrator:
             pipeline_state = document.ocr_result.get("_pipeline") or {}
         vision_provider_preference = pipeline_state.get("ocr_provider_override")
         reprocess_mode = pipeline_state.get("reprocess_mode")
+        # When reprocessing or when the document has no meaningful type yet,
+        # do NOT lock the classification with the old document_type.
+        # The previous type may be wrong (e.g. SVS misclassified as INVOICE
+        # because only page-1 text was available during initial classification).
+        # Also skip hint for OTHER (upload default) — let the classifier decide.
+        _skip_hint = (
+            reprocess_mode
+            or document.document_type is None
+            or document.document_type == DBDocumentType.OTHER
+        )
+        doc_type_hint = None if _skip_hint else document.document_type
         ocr_result = self.ocr_engine.process_document(
             image_bytes,
             mime_type=document.mime_type,
             vision_provider_preference=vision_provider_preference,
             reprocess_mode=reprocess_mode,
-            document_type_hint=document.document_type,
+            document_type_hint=doc_type_hint,
         )
         result.provider_used = ocr_result.provider_used
         result.ocr_confidence_score = ocr_result.confidence_score
@@ -707,9 +721,10 @@ class DocumentPipelineOrchestrator:
             except KeyError:
                 db_type = DBDocumentType.OTHER
 
+        filename_type = self._classify_by_filename(document.file_name)
+
         # Signal 2: Filename boost when OCR classification is weak
         if db_type == DBDocumentType.OTHER or ocr_confidence < 0.5:
-            filename_type = self._classify_by_filename(document.file_name)
             if filename_type and filename_type != DBDocumentType.OTHER:
                 self._log_audit(
                     result, "classify",
@@ -1086,11 +1101,31 @@ class DocumentPipelineOrchestrator:
             date_field = "date"
 
         if not data.get(date_field) and date_field not in validation.corrected_fields:
-            today = date.today().isoformat()
-            validation.corrected_fields[date_field] = today
-            validation.issues.append(ValidationIssue(
-                field=date_field, issue=f"No date found, auto-set to {today}", severity="info",
-            ))
+            # Sync from the generic 'date' field — VLM returns 'date' for all doc types,
+            # but contracts use purchase_date/start_date internally.
+            generic_date = data.get("date") if date_field != "date" else None
+            if generic_date:
+                parsed = normalize_date(generic_date)
+                if parsed:
+                    data[date_field] = parsed.isoformat()
+                    validation.issues.append(ValidationIssue(
+                        field=date_field,
+                        issue=f"Synced from document date: {parsed}",
+                        severity="info",
+                    ))
+                    # done — no need to default to today
+                else:
+                    today = date.today().isoformat()
+                    validation.corrected_fields[date_field] = today
+                    validation.issues.append(ValidationIssue(
+                        field=date_field, issue=f"No date found, auto-set to {today}", severity="info",
+                    ))
+            else:
+                today = date.today().isoformat()
+                validation.corrected_fields[date_field] = today
+                validation.issues.append(ValidationIssue(
+                    field=date_field, issue=f"No date found, auto-set to {today}", severity="info",
+                ))
 
         # Missing merchant → "Unbekannt"
         if db_type in (DBDocumentType.RECEIPT, DBDocumentType.INVOICE):
@@ -1477,7 +1512,16 @@ class DocumentPipelineOrchestrator:
         ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
         matched = ocr_json.get("matched_existing")
         has_transaction_action = self._decision_has_transaction_suggestions(decision)
-        if matched and matched.get("type") != "none" and has_transaction_action:
+        allow_link_to_existing = db_type in {
+            DBDocumentType.BANK_STATEMENT,
+            DBDocumentType.KONTOAUSZUG,
+        }
+        if (
+            allow_link_to_existing
+            and matched
+            and matched.get("type") != "none"
+            and has_transaction_action
+        ):
             result.suggestions.append({
                 "type": "link_to_existing",
                 "status": "pending",
@@ -1881,12 +1925,46 @@ Antworte NUR mit JSON:
             return
 
         if action == ProcessingAction.TRANSACTION_SUGGESTIONS:
+            # SVS_NOTICE: map SVS-specific fields to generic transaction fields
+            # so the transaction suggestion builder can find amount/description.
+            if db_type == DBDocumentType.SVS_NOTICE and result.extracted_data:
+                ed = result.extracted_data
+                if not ed.get("amount"):
+                    for svs_amount_key in ("total_contribution", "gesamtbeitrag", "beitrag_gesamt"):
+                        val = ed.get(svs_amount_key)
+                        if val is not None and val != "" and val != 0:
+                            ed["amount"] = val
+                            break
+                if not ed.get("description"):
+                    ed["description"] = "SVS Beitragsvorschreibung"
+
             # TODO(v1.4-followup): transaction auto-create still runs outside the
             # asset-path quality gate. Whole-pipeline unification is not complete.
             transaction_suggestions = self._build_transaction_suggestions(
                 document, db_type, result
             )
             result.suggestions.extend(transaction_suggestions)
+
+            # Write detected direction back to extracted_data so frontend can read it
+            if transaction_suggestions:
+                first_suggestion = transaction_suggestions[0]
+                detected_type = first_suggestion.get("transaction_type", "expense")
+                if result.extracted_data is None:
+                    result.extracted_data = {}
+                result.extracted_data["_transaction_type"] = detected_type
+                result.extracted_data["final_transaction_type"] = detected_type
+                result.extracted_data["final_transaction_type_source"] = "transaction_suggestion"
+                direction_source = (first_suggestion.get("extracted_fields") or {}).get("direction_source", "default")
+                if direction_source != "default":
+                    result.extracted_data["document_transaction_direction"] = detected_type
+                    result.extracted_data["document_transaction_direction_source"] = direction_source
+
+                # Persist commercial semantics and reversal flag from direction
+                # resolution so the frontend can display the correct label.
+                for meta_key in ("commercial_document_semantics", "is_reversal", "document_transaction_direction", "transaction_direction_resolution"):
+                    if meta_key in first_suggestion and first_suggestion[meta_key] is not None:
+                        result.extracted_data[meta_key] = first_suggestion[meta_key]
+
             if transaction_suggestions:
                 self._log_audit(
                     result,
@@ -3125,6 +3203,12 @@ Antworte NUR mit JSON:
                     tx_suggestions,
                     json_safe=self._make_json_safe,
                 )
+
+            materialize_final_transaction_type(
+                document=document,
+                ocr_result=ocr_result,
+                db=self.db,
+            )
 
             from app.services.document_year_attribution import (
                 materialize_document_temporal_metadata,

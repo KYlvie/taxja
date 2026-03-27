@@ -475,6 +475,17 @@ _EVIDENCE_MESSAGES: dict[str, dict[str, str]] = {
         "tr": "Ticari belgede alacak dekont/iptal ifadesi tespit edildi.",
         "bs": "Otkrivena formulacija knjiznog odobrenja/storna u komercijalnom dokumentu.",
     },
+    "settlement_credit_detected": {
+        "de": "Jahresabrechnung mit Gutschrift/Guthaben erkannt – Abrechnungsgutschrift, keine Stornierung.",
+        "en": "Annual settlement (Jahresabrechnung) with credit detected – settlement refund, not a reversal.",
+        "zh": "检测到年度结算账单退款（Gutschrift/Guthaben），非冲销。",
+        "fr": "Décompte annuel avec avoir détecté – remboursement de décompte, pas une annulation.",
+        "ru": "Обнаружен годовой расчёт с возвратом – расчётный возврат, не сторнирование.",
+        "hu": "Éves elszámolás jóváírással észlelve – elszámolási jóváírás, nem sztornó.",
+        "pl": "Wykryto roczne rozliczenie z nadpłatą – zwrot rozliczeniowy, nie storno.",
+        "tr": "Yıllık hesap kapatma ile alacak tespit edildi – mahsup iadesi, iptal değil.",
+        "bs": "Detektovan godišnji obračun s odobrenjem – obračunski povrat, nije storno.",
+    },
     "proforma_detected": {
         "de": "Proforma-/Angebotsformulierung im Geschäftsdokument erkannt.",
         "en": "Detected proforma/quotation wording in the commercial document.",
@@ -557,8 +568,14 @@ class ContractRoleService:
             valid_roles=RENTAL_ROLES,
             positive_role="landlord",
             negative_role="tenant",
-            positive_party=ocr_data.get("landlord_name"),
-            negative_party=ocr_data.get("tenant_name"),
+            positive_party=self._first_non_empty(
+                ocr_data.get("landlord_name"),
+                ocr_data.get("issuer"),
+            ),
+            negative_party=self._first_non_empty(
+                ocr_data.get("tenant_name"),
+                ocr_data.get("recipient"),
+            ),
             context_positive=bool((ocr_data or {}).get("_upload_context", {}).get("property_id")),
             positive_keywords=("vermieter", "landlord"),
             negative_keywords=("mieter", "tenant"),
@@ -585,8 +602,14 @@ class ContractRoleService:
             valid_roles=PURCHASE_ROLES,
             positive_role="buyer",
             negative_role="seller",
-            positive_party=ocr_data.get("buyer_name"),
-            negative_party=ocr_data.get("seller_name"),
+            positive_party=self._first_non_empty(
+                ocr_data.get("buyer_name"),
+                ocr_data.get("recipient"),
+            ),
+            negative_party=self._first_non_empty(
+                ocr_data.get("seller_name"),
+                ocr_data.get("issuer"),
+            ),
             context_positive=context_positive,
             positive_keywords=("kaeufer", "käufer", "buyer", "uebernehmer", "übernehmer"),
             negative_keywords=("verkaeufer", "verkäufer", "seller", "uebergeber", "übergeber"),
@@ -669,6 +692,50 @@ class ContractRoleService:
         )
 
     def resolve_transaction_direction(
+        self,
+        user: SensitiveUserContext,
+        document_type: DocumentType | str,
+        ocr_data: dict | None,
+        *,
+        raw_text: str | None = None,
+    ) -> TransactionDirectionResolution:
+        resolution = self._resolve_transaction_direction_core(
+            user, document_type, ocr_data, raw_text=raw_text,
+        )
+
+        # Credit notes / reversals flip the cash-flow direction:
+        #   expense credit note (Gutschrift from vendor) → income
+        #   income debit note (Lastschrift from customer) → expense
+        # Settlement credits (Jahresabrechnung Gutschrift) also flip:
+        #   the vendor owes the user money → income
+        _should_flip = (
+            (resolution.is_reversal and resolution.candidate in ("income", "expense"))
+            or (resolution.semantics == "settlement_credit" and resolution.candidate in ("expense", "unknown"))
+        )
+        if _should_flip:
+            flipped = "income" if resolution.candidate in ("expense", "unknown") else "expense"
+            evidence_msg = (
+                self._evidence_msg("settlement_credit_detected")
+                if resolution.semantics == "settlement_credit"
+                else self._evidence_msg("credit_note_detected")
+            )
+            resolution = TransactionDirectionResolution(
+                candidate=flipped,
+                confidence=resolution.confidence,
+                source=resolution.source,
+                evidence=resolution.evidence + [
+                    evidence_msg + f" Direction flipped from {resolution.candidate} to {flipped}."
+                ],
+                semantics=resolution.semantics,
+                is_reversal=resolution.is_reversal,
+                mode=resolution.mode,
+                gate_enabled=resolution.gate_enabled,
+                normalized_from=resolution.normalized_from,
+            )
+
+        return resolution
+
+    def _resolve_transaction_direction_core(
         self,
         user: SensitiveUserContext,
         document_type: DocumentType | str,
@@ -1013,6 +1080,7 @@ class ContractRoleService:
         *,
         raw_text: str | None = None,
     ) -> tuple[str, bool, list[str]]:
+        # Full haystack (raw_text + structured fields) for broad context checks
         text_parts = [
             raw_text or "",
             str(ocr_data.get("description") or ""),
@@ -1022,9 +1090,42 @@ class ContractRoleService:
             str(ocr_data.get("merchant") or ""),
         ]
         haystack = self._normalize_text(" ".join(part for part in text_parts if part))
+
+        # Short haystack (structured fields only, NO raw_text) for precise
+        # credit-note detection.  This avoids false positives from incidental
+        # mentions like "...oder Gutschriften kommen kann" in body text.
+        _structured_parts = [
+            str(ocr_data.get("description") or ""),
+            str(ocr_data.get("product_summary") or ""),
+            str(ocr_data.get("invoice_number") or ""),
+            str(ocr_data.get("supplier") or ""),
+            str(ocr_data.get("merchant") or ""),
+        ]
+        haystack_short = self._normalize_text(" ".join(p for p in _structured_parts if p))
+
         evidence: list[str] = []
 
-        if any(keyword in haystack for keyword in ("gutschrift", "credit note", "storno", "stornorechnung", "refund note")):
+        # Jahresabrechnung (annual settlement) with Gutschrift/Guthaben is a
+        # settlement refund, NOT a credit note / reversal.  Detect this BEFORE
+        # the generic credit-note check so it takes priority.
+        _settlement_ctx = ("jahresabrechnung", "abrechnung", "energieabrechnung", "gasabrechnung", "stromabrechnung")
+        _settlement_kw = ("gutschrift", "guthaben", "nachzahlung")
+        if (
+            any(kw in haystack for kw in _settlement_ctx)
+            and any(kw in haystack for kw in _settlement_kw)
+        ):
+            evidence.append(self._evidence_msg("settlement_credit_detected"))
+            return "settlement_credit", False, evidence
+
+        # Credit-note / reversal: match against structured fields only to avoid
+        # false positives from descriptive body text.  "storno" / "stornorechnung"
+        # are strong enough signals to also check the full haystack.
+        _cn_structured_kw = ("gutschrift", "credit note", "refund note")
+        _cn_strong_kw = ("storno", "stornorechnung")
+        if (
+            any(kw in haystack_short for kw in _cn_structured_kw)
+            or any(kw in haystack for kw in _cn_strong_kw)
+        ):
             evidence.append(self._evidence_msg("credit_note_detected"))
             return "credit_note", True, evidence
 

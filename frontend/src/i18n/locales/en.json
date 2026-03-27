@@ -956,7 +956,8 @@
     "sortMode": {
       "label": "Sort by",
       "uploadDate": "Upload date",
-      "documentDate": "Document date"
+      "documentDate": "Document date",
+      "fileName": "File name"
     },
     "description": "Upload and manage your tax documents with automatic recognition",
     "uploadDocument": "Upload Document",
@@ -1099,6 +1100,7 @@
         "standardInvoice": "Standard invoice",
         "invoice": "Standard invoice",
         "creditNote": "Credit note / reversal",
+        "settlementCredit": "Settlement credit (annual billing)",
         "proforma": "Proforma invoice",
         "deliveryNote": "Delivery note",
         "unknown": "Not yet determined"
@@ -1129,6 +1131,9 @@
         "tax_year": "Tax Year",
         "year": "Year",
         "taxpayer_name": "Taxpayer Name",
+        "bescheid_datum": "Assessment date",
+        "aktenzahl": "Reference number",
+        "faellig_am": "Due date",
         "steuernummer": "Tax Number",
         "employer_name": "Employer",
         "gewinn_verlust": "Profit/Loss",

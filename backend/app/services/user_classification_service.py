@@ -133,6 +133,14 @@ class UserClassificationService:
                 existing.rule_type = "strict"
                 existing.confidence = Decimal("1.00")
 
+            # Also clean up any stale opposite-direction rule
+            opposite_txn_type = "income" if txn_type == "expense" else "expense"
+            self.db.query(UserClassificationRule).filter(
+                UserClassificationRule.user_id == user_id,
+                UserClassificationRule.normalized_description == norm,
+                UserClassificationRule.txn_type == opposite_txn_type,
+            ).delete(synchronize_session=False)
+
             self.db.flush()
             logger.info(
                 "Updated user rule: user=%s desc=%r -> %s (hits=%d, type=%s)",
@@ -143,6 +151,28 @@ class UserClassificationService:
                 existing.rule_type,
             )
             return existing
+
+        # Delete any conflicting rule with the opposite direction.
+        # A description should only have ONE authoritative direction.
+        opposite_txn_type = "income" if txn_type == "expense" else "expense"
+        deleted_opposite = (
+            self.db.query(UserClassificationRule)
+            .filter(
+                UserClassificationRule.user_id == user_id,
+                UserClassificationRule.normalized_description == norm,
+                UserClassificationRule.txn_type == opposite_txn_type,
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted_opposite:
+            logger.info(
+                "Deleted %d conflicting %s rule(s) for user=%s desc=%r (new direction: %s)",
+                deleted_opposite,
+                opposite_txn_type,
+                user_id,
+                norm,
+                txn_type,
+            )
 
         # Human-confirmed category memory and confirmed bank automation both
         # start fully trusted. Soft rules start lower.

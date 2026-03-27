@@ -283,6 +283,17 @@ def extract_asset_purchase_contract_fields(
         or (previous_owners is not None and previous_owners > 0)
     )
 
+    # Extract business use percentage (Betriebliche Nutzung: 70%)
+    business_use_raw = _extract_labeled_value(
+        raw_text,
+        [
+            r"betriebliche\s+nutzung\s*[:\-]?\s*(\d{1,3})\s*%",
+            r"business\s+use\s*[:\-]?\s*(\d{1,3})\s*%",
+            r"gesch.ftliche\s+nutzung\s*[:\-]?\s*(\d{1,3})\s*%",
+        ],
+    )
+    business_use_percentage = float(business_use_raw) if business_use_raw and business_use_raw.isdigit() else None
+
     confidence = 0.45
     if purchase_price:
         confidence += 0.20
@@ -316,6 +327,8 @@ def extract_asset_purchase_contract_fields(
         field_confidence["license_plate"] = 0.75
     if mileage_km is not None:
         field_confidence["mileage_km"] = 0.75
+    if business_use_percentage is not None:
+        field_confidence["business_use_percentage"] = 0.85
 
     return {
         "purchase_contract_kind": PurchaseContractKind.ASSET.value,
@@ -331,6 +344,7 @@ def extract_asset_purchase_contract_fields(
         "mileage_km": mileage_km,
         "is_used_asset": is_used_asset,
         "previous_owners": previous_owners,
+        "business_use_percentage": business_use_percentage,
         "field_confidence": field_confidence,
         "confidence": confidence,
     }

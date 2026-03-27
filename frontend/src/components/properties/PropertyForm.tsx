@@ -57,6 +57,7 @@ const assetSchema = z.object({
   supplier: z.string().optional(),
   business_use_percentage: z.string().optional(),
   useful_life_years: z.string().optional(),
+  put_into_use_date: z.string().optional(),
   // unused but needed for union
   property_type: z.nativeEnum(PropertyType).optional(),
   rental_percentage: z.string().optional(),
@@ -119,8 +120,13 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
             asset_category: 'other' as const,
             asset_type: property.asset_type || 'other_equipment',
             asset_name: property.name || '',
+            sub_category: property.sub_category || '',
             purchase_date: property.purchase_date.split('T')[0],
             purchase_price: property.purchase_price.toString(),
+            supplier: property.supplier || '',
+            business_use_percentage: property.business_use_percentage?.toString() || '100',
+            useful_life_years: property.useful_life_years?.toString() || '',
+            put_into_use_date: property.put_into_use_date?.split('T')[0] || '',
           })
       : {
           asset_category: 'real_estate' as const,
@@ -191,6 +197,7 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
       supplier: data.supplier,
       business_use_percentage: data.business_use_percentage,
       useful_life_years: data.useful_life_years,
+      put_into_use_date: data.put_into_use_date,
     };
     onSubmit(formData);
   };
@@ -394,11 +401,20 @@ const PropertyForm = ({ property, onSubmit, onCancel }: PropertyFormProps) => {
             <input id="supplier" type="text" placeholder={t('properties.supplierPlaceholder', 'e.g. MediaMarkt, Car Dealer')} {...register('supplier')} />
           </div>
 
+          <div className="form-group">
+            <label htmlFor="put_into_use_date">{t('properties.assetDetails.putIntoUseDate', { defaultValue: 'Put into use date' })}</label>
+            <input id="put_into_use_date" type="date" {...register('put_into_use_date')} />
+            <span className="field-hint">{t('properties.putIntoUseDateHint', 'Defaults to purchase date. Change if the asset was put into use on a different date.')}</span>
+          </div>
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="business_use_percentage">{t('properties.businessUse', 'Business Use (%)')}</label>
               <input id="business_use_percentage" type="number" step="0.01" min="0" max="100" placeholder="100" {...register('business_use_percentage')} />
               <span className="field-hint">{t('properties.businessUseHint', 'Percentage used for business (affects depreciation deduction)')}</span>
+              <span className="field-hint" style={{ color: '#b45309', fontWeight: 500 }}>
+                {t('properties.businessUseWarning', 'Default 100% = fully business use. If also used privately, reduce accordingly (e.g. 70%).')}
+              </span>
             </div>
             <div className="form-group">
               <label htmlFor="useful_life_years">{t('properties.usefulLife', 'Useful Life (years)')}</label>

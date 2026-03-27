@@ -1084,6 +1084,7 @@
         "standardInvoice": "Facture standard",
         "invoice": "Facture standard",
         "creditNote": "Avoir / note de crédit",
+        "settlementCredit": "Avoir de décompte (facture annuelle)",
         "proforma": "Facture proforma",
         "deliveryNote": "Bon de livraison",
         "unknown": "Non encore déterminé"

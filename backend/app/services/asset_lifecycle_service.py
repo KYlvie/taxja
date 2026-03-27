@@ -27,8 +27,6 @@ class AssetLifecycleService:
         if start_date is None:
             return Decimal("0")
 
-        if asset.property_type == PropertyType.OWNER_OCCUPIED:
-            return Decimal("0")
         if year < start_date.year:
             return Decimal("0")
         if asset.sale_date and year > asset.sale_date.year:

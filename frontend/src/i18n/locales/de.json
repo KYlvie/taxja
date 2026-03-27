@@ -950,7 +950,8 @@
     "sortMode": {
       "label": "Sortieren nach",
       "uploadDate": "Hochladedatum",
-      "documentDate": "Dokumentdatum"
+      "documentDate": "Dokumentdatum",
+      "fileName": "Dateiname"
     },
     "description": "Laden Sie Ihre Steuerdokumente hoch und verwalten Sie sie mit automatischer Erkennung",
     "uploadDocument": "Dokument hochladen",
@@ -1093,6 +1094,7 @@
         "standardInvoice": "Rechnung",
         "invoice": "Rechnung",
         "creditNote": "Gutschrift / Storno",
+        "settlementCredit": "Abrechnungsgutschrift (Jahresabrechnung)",
         "proforma": "Proforma-Rechnung",
         "deliveryNote": "Lieferschein",
         "unknown": "Noch nicht festgelegt"
@@ -1123,6 +1125,9 @@
         "tax_year": "Steuerjahr",
         "year": "Jahr",
         "taxpayer_name": "Steuerpflichtiger",
+        "bescheid_datum": "Bescheiddatum",
+        "aktenzahl": "Aktenzahl",
+        "faellig_am": "Faellig am",
         "steuernummer": "Steuernummer",
         "employer_name": "Arbeitgeber",
         "gewinn_verlust": "Gewinn/Verlust",

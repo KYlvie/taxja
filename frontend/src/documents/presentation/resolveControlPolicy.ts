@@ -35,6 +35,8 @@ export const normalizeSemantic = (value: unknown): CommercialSemantic => {
     case 'credit_note':
     case 'gutschrift':
       return 'credit_note';
+    case 'settlement_credit':
+      return 'settlement_credit';
     case 'proforma':
     case 'proforma_invoice':
       return 'proforma';
@@ -70,6 +72,7 @@ export const resolveEffectiveTransactionType = (
 ): DocumentTransactionType => {
   const transactionType = normalizeTransactionType(
     draft?.transactionType
+      ?? readOcrValue(doc, 'final_transaction_type')
       ?? readOcrValue(doc, '_transaction_type')
       ?? readOcrValue(doc, 'transaction_type')
       ?? draft?.documentTransactionDirection

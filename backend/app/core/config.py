@@ -187,6 +187,9 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
+    CELERY_WORKER_POOL: str = ""
+    CELERY_WORKER_CONCURRENCY: int = 0
+    CELERY_WORKER_QUEUES: str = "default,ocr,ml"
     
     @property
     def CELERY_BROKER(self) -> str:

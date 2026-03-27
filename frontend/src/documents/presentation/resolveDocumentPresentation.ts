@@ -41,7 +41,11 @@ export const resolveDocumentPresentation = (
   doc: DocumentLike,
   draft?: DocumentPresentationDraft
 ): DocumentPresentationDecision => {
-  const normalizedType = normalizeDocumentType(draft?.documentType ?? doc.document_type, doc);
+  const effectiveDocumentType = draft?.documentType ?? doc.document_type;
+  const effectiveDocument = effectiveDocumentType === doc.document_type
+    ? doc
+    : { ...doc, document_type: effectiveDocumentType };
+  const normalizedType = normalizeDocumentType(effectiveDocumentType, effectiveDocument);
   const template = resolveTemplate({ doc, normalizedType });
   const initialMode: DocumentPresentationMode = doc.needs_review ? 'edit' : 'readonly';
   const controlPolicy = resolveControlPolicy(doc, draft);
@@ -61,8 +65,8 @@ export const resolveDocumentPresentation = (
     helpers,
     source: {
       rawDocumentType: doc.document_type ?? null,
-      matchedAlias: getMatchedAlias(draft?.documentType ?? doc.document_type),
-      taxImportMatched: isTaxImportDocument(doc),
+      matchedAlias: getMatchedAlias(effectiveDocumentType),
+      taxImportMatched: isTaxImportDocument(effectiveDocument),
     },
   };
 

@@ -540,8 +540,9 @@ const buildTaxFieldLabelHotfix = (config: {
   documentYear: string;
   yearBasis: string;
   yearConfidence: string;
-  bescheidDate: string;
-  dueDate: string;
+  bescheidDate?: string;
+  referenceNumber?: string;
+  dueDate?: string;
 }): LocaleObject => ({
   documents: {
     review: {
@@ -552,8 +553,9 @@ const buildTaxFieldLabelHotfix = (config: {
         document_year: config.documentYear,
         year_basis: config.yearBasis,
         year_confidence: config.yearConfidence,
-        bescheid_datum: config.bescheidDate,
-        faellig_am: config.dueDate,
+        ...(config.bescheidDate ? { bescheid_datum: config.bescheidDate } : {}),
+        ...(config.referenceNumber ? { aktenzahl: config.referenceNumber } : {}),
+        ...(config.dueDate ? { faellig_am: config.dueDate } : {}),
       },
     },
   },
@@ -2269,6 +2271,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Dokumentenjahr',
     yearBasis: 'Jahresgrundlage',
     yearConfidence: 'Jahres-Konfidenz',
+    referenceNumber: 'Aktenzahl',
   }),
   en: buildTaxFieldLabelHotfix({
     issuer: 'Issuer',
@@ -2277,6 +2280,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Document year',
     yearBasis: 'Year basis',
     yearConfidence: 'Year confidence',
+    referenceNumber: 'Reference number',
   }),
   zh: buildTaxFieldLabelHotfix({
     issuer: '开票方',
@@ -2293,6 +2297,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Annee du document',
     yearBasis: "Base de l'annee",
     yearConfidence: "Confiance de l'annee",
+    referenceNumber: 'Numero de reference',
   }),
   ru: buildTaxFieldLabelHotfix({
     issuer: 'Отправитель',
@@ -2309,6 +2314,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Dokumentum eve',
     yearBasis: 'Ev alapja',
     yearConfidence: 'Ev megbizhatosaga',
+    referenceNumber: 'Ugyszam',
   }),
   pl: buildTaxFieldLabelHotfix({
     issuer: 'Wystawca',
@@ -2317,6 +2323,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Rok dokumentu',
     yearBasis: 'Podstawa roku',
     yearConfidence: 'Pewnosc roku',
+    referenceNumber: 'Numer sprawy',
   }),
   tr: buildTaxFieldLabelHotfix({
     issuer: 'Duzenleyen',
@@ -2325,6 +2332,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Belge yili',
     yearBasis: 'Yil temeli',
     yearConfidence: 'Yil guveni',
+    referenceNumber: 'Dosya numarasi',
   }),
   bs: buildTaxFieldLabelHotfix({
     issuer: 'Izdavalac',
@@ -2333,6 +2341,7 @@ const TAX_FIELD_LABEL_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     documentYear: 'Godina dokumenta',
     yearBasis: 'Osnova godine',
     yearConfidence: 'Pouzdanost godine',
+    referenceNumber: 'Broj predmeta',
   }),
 };
 
@@ -2345,6 +2354,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Jahresgrundlage',
     yearConfidence: 'Jahres-Konfidenz',
     bescheidDate: 'Bescheiddatum',
+    referenceNumber: 'Aktenzahl',
     dueDate: 'Faellig am',
   }),
   en: buildTaxFieldLabelHotfix({
@@ -2355,6 +2365,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Year basis',
     yearConfidence: 'Year confidence',
     bescheidDate: 'Assessment date',
+    referenceNumber: 'Reference number',
     dueDate: 'Due date',
   }),
   zh: buildTaxFieldLabelHotfix({
@@ -2375,6 +2386,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: "Base de l'annee",
     yearConfidence: "Confiance de l'annee",
     bescheidDate: "Date d'avis",
+    referenceNumber: 'Numero de reference',
     dueDate: "Date d'echeance",
   }),
   ru: buildTaxFieldLabelHotfix({
@@ -2395,6 +2407,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Ev alapja',
     yearConfidence: 'Ev megbizhatosaga',
     bescheidDate: 'Hatarozat datuma',
+    referenceNumber: 'Ugyszam',
     dueDate: 'Esedekesseg',
   }),
   pl: buildTaxFieldLabelHotfix({
@@ -2405,6 +2418,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Podstawa roku',
     yearConfidence: 'Pewnosc roku',
     bescheidDate: 'Data decyzji',
+    referenceNumber: 'Numer sprawy',
     dueDate: 'Termin platnosci',
   }),
   tr: buildTaxFieldLabelHotfix({
@@ -2415,6 +2429,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Yil temeli',
     yearConfidence: 'Yil guveni',
     bescheidDate: 'Vergi karari tarihi',
+    referenceNumber: 'Dosya numarasi',
     dueDate: 'Vade tarihi',
   }),
   bs: buildTaxFieldLabelHotfix({
@@ -2425,6 +2440,7 @@ const TAX_FIELD_DATE_HOTFIXES: Record<SupportedLanguage, LocaleObject> = {
     yearBasis: 'Osnova godine',
     yearConfidence: 'Pouzdanost godine',
     bescheidDate: 'Datum rjesenja',
+    referenceNumber: 'Broj predmeta',
     dueDate: 'Rok dospijeca',
   }),
 };

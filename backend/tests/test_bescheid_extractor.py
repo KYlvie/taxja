@@ -68,6 +68,9 @@ REPUBLIK ÖSTERREICH
 Bundesministerium für Finanzen
 Finanzamt Österreich | Dienststelle Wien 3/6/7/11/15
 Marxergasse 4, 1030 Wien
+Steuernummer: 09-123/4567
+Bescheid-Datum: 15.09.2024
+Aktenzahl: FV-625207/2024
 
 DI Maria Steiner
 Landstraßer Hauptstraße 98/3
@@ -210,6 +213,8 @@ class TestBescheidExtractor:
         assert data.taxpayer_name == "DI Maria Steiner"
         assert data.finanzamt == "Finanzamt Österreich | Dienststelle Wien 3/6/7/11/15"
         assert data.steuernummer == "09-123/4567"
+        assert data.bescheid_datum == "15.09.2024"
+        assert data.aktenzahl == "FV-625207/2024"
         assert data.festgesetzte_einkommensteuer == Decimal("8957.50")
         assert data.abgabennachforderung == Decimal("957.50")
         assert data.faellig_am == "15.10.2024"

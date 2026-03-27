@@ -25,6 +25,7 @@ class BescheidData:
     taxpayer_name: Optional[str] = None
     finanzamt: Optional[str] = None
     steuernummer: Optional[str] = None
+    aktenzahl: Optional[str] = None
     bescheid_datum: Optional[str] = None
     faellig_am: Optional[str] = None
 
@@ -90,6 +91,7 @@ class BescheidExtractor:
         data.taxpayer_name = self._extract_taxpayer_name(text)
         data.finanzamt = self._extract_finanzamt(text)
         data.steuernummer = self._extract_steuernummer(text)
+        data.aktenzahl = self._extract_aktenzahl(text)
         data.bescheid_datum = self._extract_bescheid_datum(text)
         data.faellig_am = self._extract_faellig_am(text)
 
@@ -165,9 +167,19 @@ class BescheidExtractor:
             return m.group(1).strip()
         return None
 
+    def _extract_aktenzahl(self, text: str) -> Optional[str]:
+        m = re.search(
+            r"Aktenzahl[:\s]+([A-Z]{1,4}-\d{2,9}/\d{4})",
+            text,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(1).strip()
+        return None
+
     def _extract_bescheid_datum(self, text: str) -> Optional[str]:
         m = re.search(
-            r"bescheiddatum[:\s]+(\d{1,2}\.\d{1,2}\.\d{4})",
+            r"bescheid[\s-]*datum[:\s]+(\d{1,2}\.\d{1,2}\.\d{4})",
             text,
             re.IGNORECASE,
         )

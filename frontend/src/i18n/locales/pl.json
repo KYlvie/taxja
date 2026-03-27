@@ -1084,6 +1084,7 @@
         "standardInvoice": "Faktura standardowa",
         "invoice": "Faktura standardowa",
         "creditNote": "Nota korygująca / storno",
+        "settlementCredit": "Nadpłata rozliczeniowa (rozliczenie roczne)",
         "proforma": "Faktura proforma",
         "deliveryNote": "Dowód dostawy",
         "unknown": "Nie ustalono"

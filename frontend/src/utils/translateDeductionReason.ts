@@ -7,6 +7,10 @@ export const translateDeductionReason = (reason: string, language: string): stri
   const lang = language.startsWith('zh') ? 'zh'
     : language.startsWith('fr') ? 'fr'
     : language.startsWith('ru') ? 'ru'
+    : language.startsWith('hu') ? 'hu'
+    : language.startsWith('pl') ? 'pl'
+    : language.startsWith('tr') ? 'tr'
+    : language.startsWith('bs') ? 'bs'
     : 'en';
 
   const trimmed = reason.trim();
@@ -33,7 +37,7 @@ export const translateDeductionReason = (reason: string, language: string): stri
     },
   };
 
-  if (sentences[trimmed]) return sentences[trimmed][lang] || reason;
+  if (sentences[trimmed]) return sentences[trimmed][lang] || sentences[trimmed]['en'] || reason;
 
   // Keyword replacements — longest first so longer phrases match before substrings
   const map: Record<string, Record<string, string>> = {
@@ -100,7 +104,7 @@ export const translateDeductionReason = (reason: string, language: string): stri
   for (const de of sortedKeys) {
     if (result.includes(de)) {
       const escaped = de.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      result = result.replace(new RegExp(escaped, 'g'), map[de][lang] || de);
+      result = result.replace(new RegExp(escaped, 'g'), map[de][lang] || map[de]['en'] || de);
     }
   }
   return result;

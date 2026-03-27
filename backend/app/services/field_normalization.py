@@ -146,6 +146,11 @@ def normalize_amount(value: Any) -> Decimal | None:
         return value
     if isinstance(value, bool):
         return None
+    if isinstance(value, dict):
+        for key in ("total", "amount", "gross", "net", "value"):
+            if key in value:
+                return normalize_amount(value.get(key))
+        return None
     if isinstance(value, (int, float)):
         return Decimal(str(value))
     if not isinstance(value, str):

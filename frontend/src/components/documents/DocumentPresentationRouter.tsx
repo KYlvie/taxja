@@ -90,8 +90,11 @@ const DocumentPresentationRouter: React.FC<DocumentPresentationRouterProps> = ({
       initial_mode: effectiveDecision.initialMode,
       semantic: readOcrMetaValue(document, 'commercial_document_semantics'),
       transaction_type:
-        readOcrMetaValue(document, '_transaction_type')
-        ?? readOcrMetaValue(document, 'transaction_type'),
+        readOcrMetaValue(document, 'final_transaction_type')
+        ?? readOcrMetaValue(document, '_transaction_type')
+        ?? readOcrMetaValue(document, 'transaction_type')
+        ?? readOcrMetaValue(document, 'document_transaction_direction')
+        ?? readOcrMetaValue(document, 'transaction_direction'),
     });
 
     emitRouterEvent('document_template_rendered', {

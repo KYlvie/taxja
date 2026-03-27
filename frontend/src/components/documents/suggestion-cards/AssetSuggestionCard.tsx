@@ -72,7 +72,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
     || reviewReasons.includes('used_vehicle_history_missing')
   );
 
-  const [putIntoUseDate, setPutIntoUseDate] = useState<string>(d.put_into_use_date || '');
+  const [putIntoUseDate, setPutIntoUseDate] = useState<string>(d.put_into_use_date || d.purchase_date || '');
   const [businessUsePercentage, setBusinessUsePercentage] = useState<string>(
     d.business_use_percentage != null ? String(d.business_use_percentage) : '100'
   );
@@ -100,7 +100,7 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    setPutIntoUseDate(d.put_into_use_date || '');
+    setPutIntoUseDate(d.put_into_use_date || d.purchase_date || '');
     setBusinessUsePercentage(d.business_use_percentage != null ? String(d.business_use_percentage) : '100');
     setIsUsedAsset(initialUsedAsset);
     setFirstRegistrationDate(d.first_registration_date || '');
@@ -166,11 +166,6 @@ const AssetSuggestionCard: React.FC<SuggestionCardProps> = (props) => {
 
   const handleSubmit = () => {
     setLocalError(null);
-
-    if (showPutIntoUseDate && !putIntoUseDate) {
-      setLocalError(t('documents.suggestion.assetErrors.putIntoUseRequired', 'Please confirm the date put into use first.'));
-      return;
-    }
 
     const businessUse = toNumber(businessUsePercentage);
     if (businessUse === null || businessUse < 0 || businessUse > 100) {

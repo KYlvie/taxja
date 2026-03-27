@@ -22,6 +22,7 @@ export interface DocumentListSummary {
   totalCount: number;
   reviewCount: number;
   confirmableIds: number[];
+  visibleDocIds: number[];
 }
 
 interface DocumentListProps {
@@ -344,6 +345,9 @@ const getDocumentGroupId = (type: DocumentType): Exclude<DocumentGroupId, 'all'>
 
 const sortDocumentsByDate = (items: Document[], mode: SortMode = 'upload_date') =>
   [...items].sort((left, right) => {
+    if (mode === 'file_name') {
+      return (left.file_name || '').localeCompare(right.file_name || '', undefined, { numeric: true, sensitivity: 'base' });
+    }
     if (mode === 'document_date') {
       return compareDocumentsByDocumentDate(left, right);
     }
@@ -352,6 +356,28 @@ const sortDocumentsByDate = (items: Document[], mode: SortMode = 'upload_date') 
     const rightDate = new Date(right.created_at).getTime();
     return rightDate - leftDate;
   });
+
+const sortDocumentsByColumn = (
+  items: Document[],
+  col: { key: string; dir: 'asc' | 'desc' },
+): Document[] => {
+  const mult = col.dir === 'asc' ? 1 : -1;
+  return [...items].sort((a, b) => {
+    switch (col.key) {
+      case 'name': return mult * (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' });
+      case 'type': return mult * (a.document_type || '').localeCompare(b.document_type || '');
+      case 'date': return mult * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      case 'size': return mult * ((a.file_size || 0) - (b.file_size || 0));
+      case 'confidence': return mult * ((a.confidence_score || 0) - (b.confidence_score || 0));
+      case 'status': {
+        const sa = a.transaction_id ? 1 : a.needs_review ? 0 : -1;
+        const sb = b.transaction_id ? 1 : b.needs_review ? 0 : -1;
+        return mult * (sa - sb);
+      }
+      default: return 0;
+    }
+  });
+};
 
 /**
  * Extract the year(s) a document belongs to for year grouping.
@@ -399,6 +425,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const [retryingId, setRetryingId] = useState<number | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(() => loadExpandedYears(sortMode));
+  const [columnSort, setColumnSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
@@ -641,7 +668,8 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const getStatusLabel = (document: Document) => getDocumentStatusInfo(document).label;
   const getStatusTone = (document: Document) => getDocumentStatusInfo(document).tone;
 
-  const sortedDocuments = sortDocumentsByDate(documents, sortMode);
+  const baseSorted = sortDocumentsByDate(documents, sortMode);
+  const sortedDocuments = columnSort ? sortDocumentsByColumn(baseSorted, columnSort) : baseSorted;
   const groupedDocuments = documentGroups.map((group) => ({
     ...group,
     documents: sortedDocuments.filter(
@@ -693,12 +721,14 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const totalPages = Math.ceil(total / pageSize);
 
   useEffect(() => {
+    const visibleDocIds = yearFilteredDocuments.map((d) => d.id);
     onSummaryChange?.({
       totalCount: yearFilteredDocuments.length,
       reviewCount,
       confirmableIds,
+      visibleDocIds,
     });
-  }, [confirmableIdSignature, onSummaryChange, reviewCount, yearFilteredDocuments.length]);
+  }, [confirmableIdSignature, onSummaryChange, reviewCount, yearFilteredDocuments]);
 
   const renderGridItem = (document: Document) => (
     <div
@@ -901,6 +931,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
               options={[
                 { value: 'upload_date', label: t('documents.sortMode.uploadDate', 'Upload date') },
                 { value: 'document_date', label: t('documents.sortMode.documentDate', 'Document date') },
+                { value: 'file_name', label: t('documents.sortMode.fileName', 'File name') },
               ]}
             />
           </div>
@@ -1083,15 +1114,35 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
                 {!isCollapsed && (viewMode === 'list' ? (
                   <>
                     <div className="document-table-head">
-                      <span>{t('documents.list.name')}</span>
-                      <span>{t('documents.list.type')}</span>
-                      <span>{t('documents.list.uploadDate')}</span>
-                      <span>{t('documents.list.size')}</span>
-                      <span>{t('documents.list.confidence')}</span>
-                      <span>{t('documents.list.status')}</span>
+                      {[
+                        { key: 'name', label: t('documents.list.name') },
+                        { key: 'type', label: t('documents.list.type') },
+                        { key: 'date', label: t('documents.list.uploadDate') },
+                        { key: 'size', label: t('documents.list.size') },
+                        { key: 'confidence', label: t('documents.list.confidence') },
+                        { key: 'status', label: t('documents.list.status') },
+                      ].map((col) => (
+                        <span
+                          key={col.key}
+                          className={`sortable-header${columnSort?.key === col.key ? ' active' : ''}`}
+                          onClick={() => setColumnSort((prev) =>
+                            prev?.key === col.key
+                              ? prev.dir === 'asc' ? { key: col.key, dir: 'desc' } : null
+                              : { key: col.key, dir: 'asc' }
+                          )}
+                          role="button"
+                          tabIndex={0}
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          {col.label}
+                          <span className="sort-arrows" style={{ marginLeft: 6, fontSize: '1.1em', opacity: columnSort?.key === col.key ? 1 : 0.4, verticalAlign: 'middle', fontWeight: columnSort?.key === col.key ? 700 : 400, color: columnSort?.key === col.key ? 'var(--color-primary, #6366f1)' : 'inherit' }}>
+                            {columnSort?.key === col.key ? (columnSort.dir === 'asc' ? '▲' : '▼') : '⇕'}
+                          </span>
+                        </span>
+                      ))}
                       <span>{t('documents.actions')}</span>
                     </div>
-                    <div className="documents-list">{yearGroup.documents.map(renderListItem)}</div>
+                    <div className="documents-list">{(columnSort ? sortDocumentsByColumn(yearGroup.documents, columnSort) : yearGroup.documents).map(renderListItem)}</div>
                   </>
                 ) : (
                   <div className="documents-grid">{yearGroup.documents.map(renderGridItem)}</div>

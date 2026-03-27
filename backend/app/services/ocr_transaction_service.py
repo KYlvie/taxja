@@ -46,6 +46,9 @@ from app.services.transaction_rule_resolver import (
     TransactionRuleResolver,
     build_ocr_parent_description,
 )
+from app.services.final_transaction_type_service import (
+    materialize_final_transaction_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -684,6 +687,13 @@ class OCRTransactionService:
                 doc = self.db.query(Document).filter(Document.id == doc_id).first()
                 if doc and not doc.transaction_id:
                     doc.transaction_id = matching_transaction.id
+                    if isinstance(doc.ocr_result, dict):
+                        materialize_final_transaction_type(
+                            document=doc,
+                            ocr_result=doc.ocr_result,
+                            db=self.db,
+                            transaction=matching_transaction,
+                        )
                     self.db.commit()
             return OCRTransactionCreationResult(
                 transaction=matching_transaction,
@@ -818,6 +828,13 @@ class OCRTransactionService:
         document = self.db.query(Document).filter(Document.id == suggestion["document_id"]).first()
         if document and not document.transaction_id:
             document.transaction_id = transaction.id
+            if isinstance(document.ocr_result, dict):
+                materialize_final_transaction_type(
+                    document=document,
+                    ocr_result=document.ocr_result,
+                    db=self.db,
+                    transaction=transaction,
+                )
             self.db.commit()
 
         # Sync line items from document OCR data to transaction_line_items
@@ -1123,22 +1140,62 @@ class OCRTransactionService:
 
 
     def _extract_from_svs_notice(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Extract transaction data from SVS contribution notice"""
-        amount = ocr_data.get("amount") or ocr_data.get("contribution_amount")
+        """Extract transaction data from SVS contribution notice.
+
+        Three cases:
+        - Beitragsvorschreibung: amount/beitrag_gesamt → expense
+        - Nachbemessung nachzahlung: nachzahlung → expense
+        - Nachbemessung gutschrift: gutschrift → income
+        """
         date = ocr_data.get("date")
-        
+        normalized_date = normalize_date(date)
+
+        # Case 1: Gutschrift (refund from final assessment) → income
+        gutschrift = ocr_data.get("gutschrift")
+        if gutschrift:
+            amt = normalize_amount(gutschrift)
+            if amt and amt > 0:
+                # Check there's no regular beitrag_gesamt (which would mean
+                # it's a regular notice that just mentions gutschrift rules)
+                beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
+                if not beitrag:
+                    return {
+                        "amount": amt,
+                        "date": normalized_date or date,
+                        "description": "SVS Nachbemessung Gutschrift",
+                        "_svs_is_gutschrift": True,
+                    }
+
+        # Case 2: Nachzahlung (back-payment from final assessment) → expense
+        nachzahlung = ocr_data.get("nachzahlung")
+        if nachzahlung:
+            amt = normalize_amount(nachzahlung)
+            if amt and amt > 0:
+                beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
+                if not beitrag:
+                    return {
+                        "amount": amt,
+                        "date": normalized_date or date,
+                        "description": "SVS Nachbemessung Nachzahlung",
+                    }
+
+        # Case 3: Regular Beitragsvorschreibung → expense
+        amount = ocr_data.get("amount") or ocr_data.get("beitrag_gesamt") or ocr_data.get("contribution_amount")
         if not amount:
             return None
-        
+
         normalized_amount = normalize_amount(amount)
-        normalized_date = normalize_date(date)
         if normalized_amount is None:
             return None
+
+        quarter = ocr_data.get("quarter", "")
+        tax_year = ocr_data.get("tax_year", "")
+        desc = f"SVS Beitragsvorschreibung Q{quarter}/{tax_year}" if quarter and tax_year else "SVS Beitragsvorschreibung"
 
         return {
             "amount": normalized_amount,
             "date": normalized_date or date,
-            "description": "SVS social insurance contribution",
+            "description": desc,
         }
 
     def _extract_from_bescheid(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1230,6 +1287,16 @@ class OCRTransactionService:
             }
             
         elif doc_type == DocumentType.SVS_NOTICE.value:
+            # Gutschrift (refund) → income; otherwise → expense
+            is_gutschrift = transaction_data.get("_svs_is_gutschrift", False)
+            if is_gutschrift:
+                return {
+                    "transaction_type": TransactionType.INCOME.value,
+                    "category": IncomeCategory.OTHER.value,
+                    "is_deductible": False,
+                    "deduction_reason": "SVS Gutschrift (Nachbemessung refund)",
+                    "confidence": 0.90,
+                }
             return {
                 "transaction_type": TransactionType.EXPENSE.value,
                 "category": ExpenseCategory.INSURANCE.value,

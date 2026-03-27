@@ -831,6 +831,7 @@ def _build_asset_suggestion(db, document, result) -> dict:
     asset_outcome = updated_ocr.get("asset_outcome")
     existing_import_suggestion = updated_ocr.get("import_suggestion")
     if recognition_result.decision in (
+        AssetRecognitionDecision.GWG_SUGGESTION,
         AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
         AssetRecognitionDecision.CREATE_ASSET_AUTO,
     ):
@@ -875,7 +876,8 @@ def _build_asset_suggestion(db, document, result) -> dict:
                 "gwg_election_required": tax_flags.gwg_election_required,
                 "decision": (
                     recognition_result.decision
-                    if quality_gate.decision == QualityGateDecision.AUTO_CREATE
+                    if recognition_result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+                    or quality_gate.decision == QualityGateDecision.AUTO_CREATE
                     else AssetRecognitionDecision.CREATE_ASSET_SUGGESTION
                 ),
                 "recognition_decision": recognition_result.decision,
@@ -955,7 +957,11 @@ def _build_asset_suggestion(db, document, result) -> dict:
             updated_ocr["import_suggestion"] = suggestion
             asset_outcome = _build_asset_outcome_payload(
                 status=AssetOutcomeStatus.PENDING_CONFIRMATION,
-                decision=AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
+                decision=(
+                    AssetRecognitionDecision.GWG_SUGGESTION
+                    if recognition_result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+                    else AssetRecognitionDecision.CREATE_ASSET_SUGGESTION
+                ),
                 source=AssetOutcomeSource.QUALITY_GATE,
                 quality_gate_decision=(
                     QualityGateDecision.SUGGESTION_REQUIRED
@@ -1127,12 +1133,24 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
             pipeline_state = document.ocr_result.get("_pipeline") or {}
         vision_provider_preference = pipeline_state.get("ocr_provider_override")
         reprocess_mode = pipeline_state.get("reprocess_mode")
+        # When reprocessing or when the document has no meaningful type yet,
+        # do NOT lock the document type hint — the previous classification may
+        # have been wrong (e.g. SVS classified as INVOICE because only page-1
+        # text was available).  Let the VLM/classifier determine the type from
+        # the full document content.  Also skip hint for OTHER (upload default).
+        from app.models.document import DocumentType as DBDocumentType
+        _skip_hint = (
+            reprocess_mode
+            or document.document_type is None
+            or document.document_type == DBDocumentType.OTHER
+        )
+        doc_type_hint = None if _skip_hint else document.document_type
         result = ocr_engine.process_document(
             image_bytes,
             mime_type=document.mime_type,
             vision_provider_preference=vision_provider_preference,
             reprocess_mode=reprocess_mode,
-            document_type_hint=document.document_type,
+            document_type_hint=doc_type_hint,
         )
 
         document.ocr_result = _make_json_safe(result.extracted_data)
@@ -2797,9 +2815,12 @@ def create_asset_from_suggestion(
         AssetReviewReason.USED_VEHICLE_HISTORY_MISSING.value,
     }
     missing_fields = list(policy_evaluation.missing_fields)
-    if missing_fields:
+    # put_into_use_date is deferrable — asset can be created first, user fills it later
+    deferrable_fields = {"put_into_use_date"}
+    blocking_missing = [f for f in missing_fields if f not in deferrable_fields]
+    if blocking_missing:
         raise ValueError(
-            f"Missing required asset confirmation fields: {', '.join(missing_fields)}"
+            f"Missing required asset confirmation fields: {', '.join(blocking_missing)}"
         )
     active_blockers = [reason for reason in policy_evaluation.review_reasons if reason in blocking_review_reasons]
     if active_blockers:
@@ -2808,7 +2829,7 @@ def create_asset_from_suggestion(
         )
 
     purchase_date = _parse_ocr_date(data.get("purchase_date")) or date_type.today()
-    put_into_use_date = recognition_input.put_into_use_date
+    put_into_use_date = recognition_input.put_into_use_date or purchase_date
     policy_anchor_date = policy_evaluation.tax_flags.policy_anchor_date or put_into_use_date or purchase_date
 
     if data.get("useful_life_years") is not None:

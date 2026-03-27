@@ -100,6 +100,9 @@ from app.services.document_transaction_suggestion_store import (
     iter_transaction_suggestion_refs,
     mark_transaction_suggestions_stale,
 )
+from app.services.final_transaction_type_service import (
+    materialize_final_transaction_type,
+)
 
 from app.services.credit_service import CreditService, InsufficientCreditsError
 
@@ -211,6 +214,11 @@ def _create_transactions_from_stored_suggestions(
         ref["reviewed"] = True
         ref.pop("_stale", None)
 
+    materialize_final_transaction_type(
+        document=document,
+        ocr_result=ocr_result,
+        db=db,
+    )
     document.ocr_result = ocr_result
     flag_modified(document, "ocr_result")
     db.commit()
@@ -330,6 +338,7 @@ def _resolve_receipt_txn_type(receipt: Dict[str, Any], fallback: Optional[str]) 
     token = str(
 
         fallback
+        or receipt.get("final_transaction_type")
 
         or receipt.get("_transaction_type")
 
@@ -3594,7 +3603,8 @@ def review_ocr_results(
 
                  "document_transaction_direction_confidence", "transaction_direction_resolution",
 
-                 "commercial_document_semantics", "is_reversal",
+                 "final_transaction_type", "final_transaction_type_source",
+
 
                  "document_date", "document_year", "year_basis", "year_confidence",
 
@@ -3851,6 +3861,12 @@ def confirm_ocr_results(
 
         ocr_result["confirmation_notes"] = confirm_request.notes
 
+    materialize_final_transaction_type(
+        document=document,
+        ocr_result=ocr_result,
+        db=db,
+    )
+
     document.ocr_result = ocr_result
 
     # Clear the review flag so the document no longer shows as pending
@@ -4088,12 +4104,24 @@ def correct_ocr_results(
     # Update document type from user selection or request field
 
     effective_doc_type = user_doc_type or (correction_request.document_type if hasattr(correction_request, 'document_type') and correction_request.document_type else None)
+    current_doc_type = str(document.document_type.value if hasattr(document.document_type, 'value') else document.document_type)
+    requested_doc_type = str(effective_doc_type) if effective_doc_type else None
 
-    if effective_doc_type and effective_doc_type != str(document.document_type.value if hasattr(document.document_type, 'value') else document.document_type):
+    if requested_doc_type and requested_doc_type != current_doc_type:
+
+        if current_doc_type not in {"other", "unknown"}:
+
+            raise HTTPException(
+
+                status_code=status.HTTP_400_BAD_REQUEST,
+
+                detail="Document type can only be changed when the current type is Other or Unknown",
+
+            )
 
         try:
 
-            document.document_type = DocumentType(effective_doc_type)
+            document.document_type = DocumentType(requested_doc_type)
 
         except (ValueError, KeyError):
 
@@ -4127,6 +4155,12 @@ def correct_ocr_results(
     # do not consume stale pre-correction payloads.
     if updated_fields:
         mark_transaction_suggestions_stale(ocr_result)
+
+    materialize_final_transaction_type(
+        document=document,
+        ocr_result=ocr_result,
+        db=db,
+    )
 
     # Increase confidence after user correction
 
@@ -4709,6 +4743,23 @@ def correct_ocr_results(
                         current_user.id,
 
                         parent_description,
+
+                    )
+
+                # Always clean up opposite-direction rules when user explicitly
+                # sets a direction, even if no new rule could be queued (e.g.
+                # because the old category is invalid for the new direction).
+                if parent_description:
+
+                    opposite_type = "income" if receipt_txn_type == "expense" else "expense"
+
+                    classification_service.delete_rules_for_description(
+
+                        current_user.id,
+
+                        parent_description,
+
+                        txn_type=opposite_type,
 
                     )
 
@@ -6605,6 +6656,23 @@ def _has_meaningful_tax_import_fields(data: Dict[str, Any]) -> bool:
         return True
     return False
 
+
+def _merge_missing_tax_import_fields(
+    base: Dict[str, Any],
+    recovered: Dict[str, Any],
+) -> Dict[str, Any]:
+
+    """Fill missing scalar tax-import fields from specialized extractor recovery."""
+
+    if not recovered:
+        return base
+
+    merged = dict(base)
+    for key, value in recovered.items():
+        if key not in merged or merged.get(key) in (None, ""):
+            merged[key] = value
+    return merged
+
 def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
 
     """Build confirm-tax-data payload from the current OCR result."""
@@ -6618,6 +6686,14 @@ def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
             if not isinstance(value, (dict, list))
         }
         if _has_meaningful_tax_import_fields(suggestion_data):
+            recovered = _extract_specialized_tax_import_data(document)
+            if recovered:
+                recovered_tax_year = _resolve_tax_import_year(
+                    document=document, data=recovered, source=recovered
+                )
+                if recovered_tax_year is not None:
+                    recovered["tax_year"] = recovered_tax_year
+                return _merge_missing_tax_import_fields(suggestion_data, recovered)
             return suggestion_data
 
     source = ocr_result.get("extracted_data")
@@ -6674,15 +6750,14 @@ def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
 
         data["tax_year"] = tax_year
 
-    if not _has_meaningful_tax_import_fields(data):
-        recovered = _extract_specialized_tax_import_data(document)
-        if recovered:
-            recovered_tax_year = _resolve_tax_import_year(
-                document=document, data=recovered, source=recovered
-            )
-            if recovered_tax_year is not None:
-                recovered["tax_year"] = recovered_tax_year
-            return recovered
+    recovered = _extract_specialized_tax_import_data(document)
+    if recovered:
+        recovered_tax_year = _resolve_tax_import_year(
+            document=document, data=recovered, source=recovered
+        )
+        if recovered_tax_year is not None:
+            recovered["tax_year"] = recovered_tax_year
+        data = _merge_missing_tax_import_fields(data, recovered)
 
     return data
 

@@ -49,3 +49,8 @@ def test_existing_core_normalizers_remain_compatible():
     assert normalize_amount("1.234,56") == Decimal("1234.56")
     assert normalize_vat_rate("0,20") == Decimal("20")
     assert normalize_date("19. Dez. 2024") == date(2024, 12, 19)
+
+
+def test_normalize_amount_accepts_structured_payloads():
+    assert normalize_amount({"total": 545.5, "currency": "EUR"}) == Decimal("545.5")
+    assert normalize_amount({"amount": "96,00", "currency": "EUR"}) == Decimal("96.00")

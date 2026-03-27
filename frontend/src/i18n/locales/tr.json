@@ -1084,6 +1084,7 @@
         "standardInvoice": "Standart fatura",
         "invoice": "Standart fatura",
         "creditNote": "Alacak dekontou / iade",
+        "settlementCredit": "Mahsup iadesi (yıllık hesap)",
         "proforma": "Proforma fatura",
         "deliveryNote": "Irsaliye",
         "unknown": "Henuz belirlenmedi"

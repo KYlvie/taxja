@@ -82,6 +82,32 @@ export const presentationFixtures = {
     document_type: 'e1_form',
     raw_text: 'E1 Einkommensteuererklaerung 2025',
   }),
+  svsNotice: baseDoc({
+    id: 13,
+    document_type: 'svs_notice',
+    raw_text: 'SVS Beitragsvorschreibung 2024',
+  }),
+  propertyTax: baseDoc({
+    id: 14,
+    document_type: 'property_tax',
+    raw_text: 'Grundsteuer Bescheid 2024',
+  }),
+  lohnzettel: baseDoc({
+    id: 15,
+    document_type: 'lohnzettel',
+    raw_text: 'Lohnzettel 2024',
+  }),
+  u1Form: baseDoc({
+    id: 16,
+    document_type: 'u1_form',
+    raw_text: 'U1 Umsatzsteuererklaerung',
+  }),
+  otherDocument: baseDoc({
+    id: 17,
+    document_type: 'other',
+    needs_review: true,
+    raw_text: 'Unclassified OCR text',
+  }),
   needsReviewTrue: baseDoc({
     id: 10,
     document_type: 'invoice',
@@ -98,6 +124,18 @@ export const presentationFixtures = {
     ocr_result: {
       _transaction_type: 'expense',
       commercial_document_semantics: 'standard_invoice',
+    },
+  }),
+  ruleCorrectedIncome: baseDoc({
+    id: 12,
+    document_type: 'invoice',
+    needs_review: false,
+    ocr_result: {
+      final_transaction_type: 'income',
+      final_transaction_type_source: 'transaction_suggestion',
+      _transaction_type: 'expense',
+      commercial_document_semantics: 'standard_invoice',
+      document_transaction_direction: 'expense',
     },
   }),
 };

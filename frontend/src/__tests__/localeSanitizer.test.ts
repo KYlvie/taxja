@@ -239,6 +239,7 @@ describe('localeSanitizer', () => {
     expect(getValue(locales.zh, 'documents.review.taxFieldLabels.year_basis')).toBe('\u5e74\u4efd\u4f9d\u636e');
     expect(getValue(locales.zh, 'documents.review.taxFieldLabels.year_confidence')).toBe('\u5e74\u4efd\u7f6e\u4fe1\u5ea6');
     expect(getValue(locales.zh, 'documents.review.taxFieldLabels.bescheid_datum')).toBe('\u7a0e\u5355\u65e5\u671f');
+    expect(getValue(locales.zh, 'documents.review.taxFieldLabels.aktenzahl')).toBe('\u6848\u53f7');
     expect(getValue(locales.zh, 'documents.review.taxFieldLabels.faellig_am')).toBe('\u5230\u671f\u65e5');
     expect(getValue(locales.zh, 'documents.exportZipYearHint')).toBe(
       '\u8bf7\u9009\u62e9\u8981\u5bfc\u51fa\u7684\u6587\u4ef6\u5e74\u5ea6\u3002\u8fd9\u91cc\u4f7f\u7528\u6587\u6863\u5f52\u5c5e\u5e74\u4efd\uff0c\u800c\u4e0d\u662f\u4e0a\u4f20\u5e74\u4efd\u3002'
@@ -250,6 +251,7 @@ describe('localeSanitizer', () => {
     expect(getValue(locales.en, 'documents.reviewActionHint')).toBe('Click to complete confirmation');
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.document_year')).toBe('Document year');
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.bescheid_datum')).toBe('Assessment date');
+    expect(getValue(locales.en, 'documents.review.taxFieldLabels.aktenzahl')).toBe('Reference number');
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.faellig_am')).toBe('Due date');
     expect(getValue(locales.en, 'classificationRules.automationActionAutoCreate')).toBe('Auto-create');
     expect(getValue(locales.en, 'reports.taxForm.exportPackage')).toBe('Export tax package');

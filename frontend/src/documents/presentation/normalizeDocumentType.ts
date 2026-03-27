@@ -3,6 +3,7 @@ import type { DocumentLike, PresentationDocumentKind } from './types';
 
 export const TYPE_ALIAS_MAP: Record<string, PresentationDocumentKind> = {
   receipt: 'receipt',
+  payslip: 'receipt',
   invoice: 'invoice',
   credit_note: 'invoice',
   gutschrift: 'invoice',
@@ -17,6 +18,20 @@ export const TYPE_ALIAS_MAP: Record<string, PresentationDocumentKind> = {
   insurance_confirmation: 'insurance_confirmation',
   bank_statement: 'bank_statement',
   kontoauszug: 'bank_statement',
+  einkommensteuerbescheid: 'tax_form',
+  e1_form: 'tax_form',
+  l1_form: 'tax_form',
+  l1k_beilage: 'tax_form',
+  l1ab_beilage: 'tax_form',
+  e1a_beilage: 'tax_form',
+  e1b_beilage: 'tax_form',
+  e1kv_beilage: 'tax_form',
+  u1_form: 'tax_form',
+  u30_form: 'tax_form',
+  jahresabschluss: 'tax_form',
+  lohnzettel: 'tax_form',
+  svs_notice: 'tax_form',
+  property_tax: 'tax_form',
 };
 
 export const normalizeRawType = (rawType?: string | null): string => {

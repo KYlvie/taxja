@@ -34,6 +34,7 @@ export type CommercialSemantic =
   | 'standard_invoice'
   | 'receipt'
   | 'credit_note'
+  | 'settlement_credit'
   | 'proforma'
   | 'delivery_note'
   | 'unknown';

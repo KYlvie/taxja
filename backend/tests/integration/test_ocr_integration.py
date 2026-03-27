@@ -280,12 +280,15 @@ class TestOCRReviewAndCorrectionCurrentContracts:
         DI Maria Steiner
         FA: Finanzamt Oesterreich
         St.Nr. 09-123/4567
+        Bescheid-Datum: 15.09.2024
+        Aktenzahl: FV-625207/2024
         Steuerberechnung fuer 2023
         EINKOMMENSTEUERBESCHEID 2023
         Einkuenfte aus selbstaendiger Arbeit (KZ 320) EUR 42.850,00
         Einkommen EUR 42.200,00
         Festgesetzte Einkommensteuer EUR 8.957,50
         Abgabennachforderung EUR 957,50
+        Faellig am: 15.10.2024
         """.strip()
 
         document = Document(
@@ -301,8 +304,8 @@ class TestOCRReviewAndCorrectionCurrentContracts:
             ocr_result={
                 "date": "2024-09-15",
                 "amount": 957.5,
-                "merchant": "Finanzamt Österreich",
-                "description": "Einkommensteuerbescheid für das Jahr 2023",
+                "merchant": "Finanzamt Oesterreich",
+                "description": "Einkommensteuerbescheid fuer das Jahr 2023",
                 "tax_id": "09-123/4567",
                 "commercial_document_semantics": "invoice",
                 "document_transaction_direction": "expense",
@@ -323,10 +326,17 @@ class TestOCRReviewAndCorrectionCurrentContracts:
         field_names = {field["field_name"] for field in data["extracted_fields"]}
         assert "tax_year" in field_names
         assert "taxpayer_name" in field_names
+        assert "bescheid_datum" in field_names
+        assert "aktenzahl" in field_names
+        assert "faellig_am" in field_names
         assert "festgesetzte_einkommensteuer" in field_names
         assert "abgabennachforderung" in field_names
-        assert "merchant" not in field_names
-        assert "amount" not in field_names
+        field_map = {field["field_name"]: field["value"] for field in data["extracted_fields"]}
+        assert field_map["bescheid_datum"] == "15.09.2024"
+        assert field_map["aktenzahl"] == "FV-625207/2024"
+        assert field_map["faellig_am"] == "15.10.2024"
+        assert field_map["merchant"] == "Finanzamt Oesterreich"
+        assert field_map["amount"] == 957.5
 
     def test_confirm_ocr_results_marks_document_confirmed(
         self,

@@ -87,6 +87,47 @@ def test_recognize_gwg_suggestion_uses_2023_threshold():
     assert result.tax_flags.gwg_election_required is True
 
 
+def test_recognize_perpetual_license_invoice_as_gwg_asset():
+    service = AssetRecognitionService()
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("599.00"),
+            extracted_net_amount=Decimal("499.17"),
+            extracted_vat_amount=Decimal("99.83"),
+            raw_text=(
+                "Rechnung JetBrains IntelliJ IDEA Ultimate Perpetual Fallback License "
+                "Perpetual license Anlagegut Nutzungsdauer 4 Jahre"
+            ),
+            extracted_line_items=[
+                {"description": "IntelliJ IDEA Ultimate Perpetual Fallback License"}
+            ],
+        )
+    )
+
+    assert result.asset_candidate.asset_subtype == "perpetual_license"
+    assert result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+    assert result.tax_flags.gwg_eligible is True
+
+
+def test_recognize_phone_invoice_as_gwg_asset():
+    service = AssetRecognitionService()
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("999.00"),
+            extracted_net_amount=Decimal("832.50"),
+            extracted_vat_amount=Decimal("166.50"),
+            raw_text="Rechnung Apple iPhone 15 Pro 256GB Smartphone Handy",
+            extracted_line_items=[{"description": "Apple iPhone 15 Pro 256GB"}],
+        )
+    )
+
+    assert result.asset_candidate.asset_subtype == "phone"
+    assert result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+    assert result.tax_flags.gwg_eligible is True
+
+
 def test_recognize_2022_anchor_uses_old_gwg_threshold():
     service = AssetRecognitionService()
 

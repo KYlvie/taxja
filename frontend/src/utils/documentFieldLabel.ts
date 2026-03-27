@@ -29,6 +29,7 @@ const DOCUMENT_FIELD_LABEL_ALIASES: Record<string, string[]> = {
   year_basis: ['documents.review.taxFieldLabels.year_basis'],
   year_confidence: ['documents.review.taxFieldLabels.year_confidence'],
   bescheid_datum: ['documents.review.taxFieldLabels.bescheid_datum'],
+  aktenzahl: ['documents.review.taxFieldLabels.aktenzahl'],
   faellig_am: ['documents.review.taxFieldLabels.faellig_am'],
 };
 

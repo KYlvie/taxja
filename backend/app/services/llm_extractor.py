@@ -29,10 +29,11 @@ Erkennungsmerkmale für mehrere Belege:
 - Verschiedene Daten
 - Wiederholte Kopfzeilen (z.B. "Rechnung", "Kassenbon", "Beleg")
 - Verschiedene Rechnungsnummern
+AUSNAHME: Eine Jahresabrechnung (Strom, Gas, Wasser, Versicherung) mit Rechnungsbetrag + Nachzahlung/Gutschrift ist immer EIN einzelner Beleg, nicht zwei.
 
 Felder pro Beleg:
 - date: Rechnungsdatum (Format: YYYY-MM-DD)
-- amount: Gesamtbetrag in EUR (Zahl, ohne Währungszeichen). Bei Kassenbon: SUMME/TOTAL/GESAMT. Bei Rechnung: Rechnungsbetrag/Zahlbetrag. Trenne Tausender korrekt: "1.500,00" = 1500.00, "15,00" = 15.00
+- amount: Zahlbetrag in EUR (Zahl, ohne Währungszeichen). Bei Kassenbon: SUMME/TOTAL/GESAMT. Bei Rechnung: Zahlbetrag. Bei Jahresabrechnung/Abrechnung (Strom, Gas, Wasser, Versicherung): Nachzahlung oder Gutschrift verwenden, NICHT den Gesamt-Rechnungsbetrag. Trenne Tausender korrekt: "1.500,00" = 1500.00, "15,00" = 15.00
 - merchant: Name des Händlers/Lieferanten. Bei Kassenbon: steht ganz oben (z.B. "BILLA", "SPAR", "HOFER"). Bei Rechnung: Absender/Lieferant
 - tax_id: UID-Nummer (ATU...) oder Steuernummer
 - vat_amount: Mehrwertsteuerbetrag in EUR (Zahl)
@@ -40,7 +41,7 @@ Felder pro Beleg:
 - invoice_number: Rechnungsnummer / Belegnummer / BON-NR
 - description: Kurze Beschreibung der Leistung/Ware (max 100 Zeichen, fasse die wichtigsten Positionen zusammen)
 - payment_method: Zahlungsmethode ("bar", "karte", "ueberweisung", null wenn unklar)
-- line_items: Array von Einzelpositionen, jede mit {"name": "Artikelname", "quantity": Menge, "price": Einzelpreis, "total": Gesamtpreis}. Extrahiere ALLE lesbaren Positionen. Bei unlesbaren OCR-Fragmenten überspringen.
+- line_items: Array von Einzelpositionen, jede mit {"name": "Artikelname", "quantity": Menge, "price": Einzelpreis, "total": Gesamtpreis}. Extrahiere ALLE lesbaren Positionen. Bei unlesbaren OCR-Fragmenten überspringen. WICHTIG bei Jahresabrechnung (Strom, Gas, Wasser, Versicherung) mit Nachzahlung/Gutschrift: Nur EIN line_item mit dem Abrechnungsergebnis, z.B. {"name": "Gutschrift Jahresabrechnung Strom", "quantity": 1, "price": 36.00, "total": 36.00}. Die detaillierte Kostenaufstellung gehört NICHT in die line_items.
 
 Beispiel EIN Beleg:
 {"date": "2026-03-15", "amount": 23.45, "merchant": "BILLA", "tax_id": null, "vat_amount": 3.91, "vat_rate": 20, "invoice_number": "BON-4521", "description": "Lebensmittel: Milch, Brot, Kaffee", "payment_method": "karte", "line_items": [{"name": "Milch 1L", "quantity": 1, "price": 1.49, "total": 1.49}]}
@@ -198,7 +199,27 @@ EXTRACTION_PROMPTS = {
     DocumentType.U1_FORM: TAX_FORM_GENERIC_PROMPT,
     DocumentType.U30_FORM: TAX_FORM_GENERIC_PROMPT,
     DocumentType.JAHRESABSCHLUSS: TAX_FORM_GENERIC_PROMPT,
-    DocumentType.SVS_NOTICE: TAX_FORM_GENERIC_PROMPT,
+    DocumentType.SVS_NOTICE: (
+        "Du bist ein Experte für SVS (Sozialversicherung der Selbständigen) Dokumente.\n"
+        "Dies ist eine SVS-Beitragsvorschreibung. Extrahiere als JSON.\n"
+        "Beträge als Zahlen. Datum YYYY-MM-DD. Null wenn nicht gefunden.\n\n"
+        "Felder:\n"
+        "- beitrag_gesamt: GESAMTBETRAG des Quartals in EUR (z.B. 'GESAMTBETRAG Q1/2024: EUR 3.271,87' → 3271.87)\n"
+        "- beitragsgrundlage: MONATLICHE Beitragsgrundlage in EUR\n"
+        "- pensionsversicherung: PV Quartalsbetrag in EUR\n"
+        "- krankenversicherung: KV Quartalsbetrag in EUR\n"
+        "- unfallversicherung: UV Quartalsbetrag in EUR\n"
+        "- selbstaendigenvorsorge: Selbständigenvorsorge Quartalsbetrag in EUR\n"
+        "- nachzahlung: Nachzahlungsbetrag (falls vorhanden)\n"
+        "- gutschrift: Gutschrift/Rückerstattung (falls vorhanden)\n"
+        "- tax_year: Beitragsjahr (Zahl)\n"
+        "- quarter: Quartal (1-4)\n"
+        "- date: Fälligkeitsdatum (YYYY-MM-DD)\n"
+        "- versicherungsnummer: SVS-Versicherungsnummer\n"
+        "- taxpayer_name: Name des Versicherten\n\n"
+        "WICHTIG: Alle Versicherungsbeiträge sind QUARTALSWERTE (3 Monate), nicht monatlich.\n"
+        "Antworte NUR mit validem JSON."
+    ),
     DocumentType.PROPERTY_TAX: TAX_FORM_GENERIC_PROMPT,
     DocumentType.BANK_STATEMENT: TAX_FORM_GENERIC_PROMPT,
 }

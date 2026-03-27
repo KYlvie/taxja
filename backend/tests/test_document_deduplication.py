@@ -434,6 +434,38 @@ def test_create_transaction_from_suggestion_normalizes_european_amount_and_date(
     assert db.query(Transaction).count() == 1
 
 
+def test_create_transaction_from_suggestion_accepts_structured_amount_payload(db):
+    user = _make_user(db, email="structured-amount@example.com")
+    document = _make_document(db, user.id, file_name="svs.pdf")
+    document.document_type = DocumentType.INVOICE
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    service = OCRTransactionService(db)
+
+    result = service.create_transaction_from_suggestion_with_result(
+        {
+            "document_id": document.id,
+            "transaction_type": TransactionType.EXPENSE.value,
+            "amount": {"total": 545.5, "currency": "EUR"},
+            "date": "2024-03-27",
+            "description": "WKO Mitgliedsbeitrag",
+            "category": ExpenseCategory.OTHER.value,
+            "is_deductible": True,
+            "deduction_reason": "Business contribution",
+            "confidence": 0.8,
+            "needs_review": True,
+        },
+        user.id,
+    )
+
+    db.refresh(document)
+    assert result.created is True
+    assert result.transaction.amount == Decimal("545.5")
+    assert document.transaction_id == result.transaction.id
+
+
 def test_create_transaction_from_suggestion_reuses_duplicate_transaction(db):
     """OCR auto-create should skip creating a duplicate transaction."""
     user = _make_user(db, email="ocr-duplicate@example.com")

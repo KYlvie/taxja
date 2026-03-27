@@ -553,7 +553,8 @@
     "sortMode": {
       "label": "排序方式",
       "uploadDate": "上传日期",
-      "documentDate": "文档日期"
+      "documentDate": "文档日期",
+      "fileName": "文件名"
     },
     "description": "上传和管理您的税务文档，支持自动识别",
     "uploadDocument": "上传文档",
@@ -701,6 +702,7 @@
         "standardInvoice": "标准发票",
         "invoice": "标准发票",
         "creditNote": "贷项通知单/冲销",
+        "settlementCredit": "年度结算退款",
         "proforma": "形式发票",
         "deliveryNote": "送货单",
         "unknown": "尚未确定"
@@ -735,6 +737,7 @@
         "year_basis": "年份依据",
         "year_confidence": "年份置信度",
         "bescheid_datum": "税单日期",
+        "aktenzahl": "案号",
         "faellig_am": "到期日",
         "issuer": "签发方",
         "recipient": "接收方",
@@ -1820,8 +1823,10 @@
     "supplierPlaceholder": "例如：MediaMarkt, Autohaus",
     "businessUse": "业务使用比例 (%)",
     "businessUseHint": "用于业务的百分比（影响折旧抵扣）",
+    "businessUseWarning": "默认100% = 完全商用。如有私人使用，请相应降低（如70%）。",
     "usefulLife": "使用年限",
     "usefulLifeHint": "根据资产类型自动确定，可手动调整",
+    "putIntoUseDateHint": "资产首次用于业务的日期，默认为购买日期。如实际投入使用日期不同，请修改。",
     "assetTypes": {
       "vehicle": "汽车",
       "electric_vehicle": "电动汽车",

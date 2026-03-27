@@ -65,20 +65,23 @@ const PropertyList = ({
   };
 
   const calculateAccumulatedDepreciation = (property: Property): number => {
-    // Calculate accumulated depreciation based on years owned
-    const purchaseDate = new Date(property.purchase_date);
+    const startDate = property.put_into_use_date
+      ? new Date(property.put_into_use_date)
+      : new Date(property.purchase_date);
     const currentDate = property.sale_date ? new Date(property.sale_date) : new Date();
-    const yearsOwned = (currentDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-    
-    // Only calculate for rental properties
-    if (property.property_type === PropertyType.OWNER_OCCUPIED) {
+    const yearsOwned = (currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+
+    const isRE = !property.asset_type || property.asset_type === 'real_estate';
+
+    if (isRE && property.property_type === PropertyType.OWNER_OCCUPIED) {
       return 0;
     }
 
-    const depreciableValue = property.building_value * (property.rental_percentage / 100);
-    const totalDepreciation = depreciableValue * property.depreciation_rate * yearsOwned;
-    
-    // Cap at building value
+    const depreciableValue = isRE
+      ? property.building_value * (property.rental_percentage / 100)
+      : property.building_value;
+    const totalDepreciation = depreciableValue * property.depreciation_rate * Math.max(0, yearsOwned);
+
     return Math.min(totalDepreciation, depreciableValue);
   };
 
@@ -336,7 +339,7 @@ const PropertyList = ({
                     </button>
                   )}
                   <button
-                    className="btn-icon btn-danger"
+                    className="btn-icon"
                     onClick={(e) => handleDeleteClick(property, e)}
                     title={t('common.delete')}
                   >
@@ -501,7 +504,7 @@ const PropertyList = ({
                       </button>
                     )}
                     <button
-                      className="btn-icon btn-danger"
+                      className="btn-icon"
                       onClick={(e) => handleDeleteClick(property, e)}
                       title={t('common.delete')}
                     >

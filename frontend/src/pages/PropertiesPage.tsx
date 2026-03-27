@@ -87,10 +87,15 @@ const PropertiesPage = () => {
       return t('properties.pendingDocuments.needsInput', 'Needs input');
     }
     const missingFields = suggestion?.data?.missing_fields;
-    if (Array.isArray(missingFields) && missingFields.length > 0) {
+    // put_into_use_date is deferrable — user can fill it after asset creation
+    const deferrableFields = new Set(['put_into_use_date']);
+    const blockingMissing = Array.isArray(missingFields)
+      ? missingFields.filter((f: string) => !deferrableFields.has(f))
+      : [];
+    if (blockingMissing.length > 0) {
       return t('properties.pendingDocuments.missingFields', {
         defaultValue: 'Missing: {{fields}}',
-        fields: formatDocumentFieldList(missingFields, t),
+        fields: formatDocumentFieldList(blockingMissing, t),
       });
     }
     return t('properties.pendingDocuments.awaitingConfirmation', 'Awaiting confirmation');
@@ -230,6 +235,21 @@ const PropertiesPage = () => {
         updateData.registry_fees = typeof data.registry_fees === 'string'
           ? parseFloat(data.registry_fees) : data.registry_fees;
       }
+
+      // Asset-specific fields
+      if (data.asset_type) updateData.asset_type = data.asset_type;
+      if (data.asset_name) updateData.name = data.asset_name;
+      if (data.sub_category) updateData.sub_category = data.sub_category;
+      if (data.supplier !== undefined) updateData.supplier = data.supplier;
+      if (data.business_use_percentage) {
+        updateData.business_use_percentage = typeof data.business_use_percentage === 'string'
+          ? parseFloat(data.business_use_percentage) : data.business_use_percentage;
+      }
+      if (data.useful_life_years) {
+        updateData.useful_life_years = typeof data.useful_life_years === 'string'
+          ? parseInt(data.useful_life_years) : data.useful_life_years;
+      }
+      if (data.put_into_use_date) updateData.put_into_use_date = data.put_into_use_date;
 
       await updateProperty(editingProperty.id, updateData);
       setEditingProperty(undefined);

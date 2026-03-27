@@ -25,6 +25,14 @@ describe('resolveControlPolicy', () => {
     expect(policy.hideDeductibility).toBe(true);
   });
 
+  it('prefers final transaction type over stale OCR direction fields', () => {
+    const policy = resolveControlPolicy(presentationFixtures.ruleCorrectedIncome);
+
+    expect(policy.transactionType).toBe('income');
+    expect(policy.isExpenseLike).toBe(false);
+    expect(policy.hideDeductibility).toBe(true);
+  });
+
   it('marks credit notes as reversal-like while staying postable', () => {
     const policy = resolveControlPolicy(presentationFixtures.gutschrift);
 

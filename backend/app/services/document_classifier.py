@@ -1223,6 +1223,8 @@ class DocumentClassifier:
         computer_keywords = [
             "laptop", "notebook", "computer", "pc", "macbook", "imac",
             "tablet", "ipad", "server", "workstation",
+            "thinkpad", "lenovo", "dell", "hp elitebook", "surface pro",
+            "chromebook", "desktop", "monitor",
         ]
         phone_keywords = ["smartphone", "iphone", "handy", "mobiltelefon", "samsung galaxy"]
         furniture_keywords = ["schreibtisch", "bürostuhl", "buerostuhl", "büromöbel", "bueromoebel", "regal"]
@@ -1230,10 +1232,15 @@ class DocumentClassifier:
         software_keywords = [
             "software",
             "lizenz",
+            "license",
+            "licence",
             "dauerlizenz",
             "perpetual",
             "einmallizenz",
             "einmal-lizenz",
+            "anlagegut",
+            "nutzungsdauer",
+            "useful life",
         ]
         tools_keywords = ["werkzeug", "bohrmaschine", "säge", "saege", "schrauber"]
 
@@ -1256,6 +1263,9 @@ class DocumentClassifier:
             return "electric_vehicle"
         if scores["vehicle"] >= 2:
             return "vehicle"
+        # A single strong phone marker like "iPhone" is already specific enough.
+        if scores["phone"] >= 1:
+            return "phone"
 
         # Find best non-vehicle match
         best = max(scores, key=scores.get)

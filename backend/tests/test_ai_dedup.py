@@ -264,8 +264,8 @@ class TestStageSuggestWithMatch:
         db = MagicMock()
         return DocumentPipelineOrchestrator(db)
 
-    def test_match_produces_link_suggestion(self):
-        """When matched_existing is set, should produce link_to_existing suggestion."""
+    def test_bank_statement_match_produces_link_suggestion(self):
+        """Bank statements should keep explicit link-to-existing suggestions."""
         orch = self._make_orchestrator()
         doc = MagicMock()
         doc.id = 42
@@ -289,11 +289,62 @@ class TestStageSuggestWithMatch:
         result.audit_log = []
         result.stage_reached = None
 
+        decision = MagicMock()
+        decision.primary_actions = ["transaction_suggestions"]
+        decision.secondary_actions = []
+        decision.model_dump.return_value = {
+            "primary_actions": ["transaction_suggestions"],
+            "secondary_actions": [],
+        }
+
         ocr_result = MagicMock()
 
-        orch._stage_suggest(doc, DBDocumentType.RECEIPT, ocr_result, result)
+        orch._stage_suggest(
+            doc,
+            DBDocumentType.BANK_STATEMENT,
+            ocr_result,
+            result,
+            decision=decision,
+        )
 
         assert len(result.suggestions) == 1
         assert result.suggestions[0]["type"] == "link_to_existing"
         assert result.suggestions[0]["data"]["matched_type"] == "recurring"
         assert result.suggestions[0]["data"]["matched_id"] == 5
+
+    def test_receipt_match_continues_normal_transaction_suggestions(self):
+        """Receipts/invoices should not be blocked by link-to-existing suggestions."""
+        orch = self._make_orchestrator()
+        doc = MagicMock()
+        doc.id = 42
+        doc.user_id = 1
+        doc.ocr_result = {
+            "matched_existing": {
+                "type": "transaction",
+                "id": 5,
+                "reason": "Same amount",
+                "user_confirmed": None,
+            }
+        }
+
+        decision = MagicMock()
+        decision.primary_actions = ["transaction_suggestions"]
+        decision.secondary_actions = []
+        decision.model_dump.return_value = {
+            "primary_actions": ["transaction_suggestions"],
+            "secondary_actions": [],
+        }
+
+        result = MagicMock()
+        result.suggestions = []
+        result.extracted_data = {"amount": 96.0, "merchant": "Notion"}
+        result.audit_log = []
+        result.stage_reached = None
+
+        ocr_result = MagicMock()
+        orch._execute_processing_action = MagicMock()
+
+        orch._stage_suggest(doc, DBDocumentType.RECEIPT, ocr_result, result, decision=decision)
+
+        assert not any(s.get("type") == "link_to_existing" for s in result.suggestions)
+        orch._execute_processing_action.assert_called_once()

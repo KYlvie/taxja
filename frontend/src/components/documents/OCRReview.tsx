@@ -25,6 +25,9 @@ import './BescheidImport.css';
 interface OCRReviewProps {
   documentId: number;
   presentationTemplate?: DocumentPresentationTemplate;
+  documentTypeDraft?: string | null;
+  allowDocumentTypeEdit?: boolean;
+  onDocumentTypeDraftChange?: (nextType: string) => Promise<boolean> | boolean;
   onConfirm?: () => void;
   onCancel?: () => void;
   onPrevDocument?: () => void;
@@ -60,6 +63,7 @@ const TAX_FIELD_PRIORITY = [
   'tax_year',
   'year',
   'bescheid_datum',
+  'aktenzahl',
   'faellig_am',
   'taxpayer_name',
   'steuernummer',
@@ -310,7 +314,9 @@ const resolveInitialTransactionType = (
   ocrResult: ExtractedData | undefined
 ): 'income' | 'expense' => {
   const explicitType = String(
-    extractedData._transaction_type
+    extractedData.final_transaction_type
+      ?? ocrResult?.final_transaction_type
+      ?? extractedData._transaction_type
       ?? ocrResult?._transaction_type
       ?? ''
   ).toLowerCase();
@@ -367,6 +373,9 @@ const translateEvidence = (evidence: string, t: (key: string, fallback: string) 
 const OCRReview: React.FC<OCRReviewProps> = ({
   documentId,
   presentationTemplate,
+  documentTypeDraft,
+  allowDocumentTypeEdit = false,
+  onDocumentTypeDraftChange,
   onConfirm,
   onCancel,
   onPrevDocument,
@@ -403,6 +412,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!reviewData?.document) return;
+    setSelectedDocType(documentTypeDraft || reviewData.document.document_type || '');
+  }, [documentTypeDraft, reviewData?.document]);
+
   // Load document preview as blob (needed because download endpoint requires auth)
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -422,10 +436,18 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       }
       const data = await documentService.getDocumentForReview(documentId);
       setReviewData(data);
-      setEditedData(data.extracted_data || {});
+      // Merge fields from ocr_result that the review API may have filtered out
+      const ocr = data.document.ocr_result || {};
+      const merged = { ...data.extracted_data };
+      for (const key of ['issuer', 'recipient', 'merchant', 'description'] as const) {
+        if (!merged[key] && ocr[key]) {
+          merged[key] = ocr[key];
+        }
+      }
+      setEditedData(merged);
       setReprocessPending(isProcessingPipelineState(data.document));
       // Initialize document type from OCR result
-      setSelectedDocType(data.document.document_type || '');
+      setSelectedDocType(documentTypeDraft || data.document.document_type || '');
 
       const dt = data.document.document_type;
 
@@ -514,6 +536,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         selectedDocType === DocumentType.RECEIPT ||
         selectedDocType === DocumentType.BANK_STATEMENT
       ) {
+        dataToSend.final_transaction_type = selectedTxnType;
         dataToSend._transaction_type = selectedTxnType;
         dataToSend.document_transaction_direction =
           dataToSend.document_transaction_direction
@@ -524,6 +547,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           ?? editedData.commercial_document_semantics
           ?? 'unknown';
       } else if (!isTaxData) {
+        dataToSend.final_transaction_type = selectedTxnType;
         dataToSend._transaction_type = selectedTxnType;
       }
 
@@ -536,7 +560,26 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       if (!isConfirmed) {
         try {
           await documentService.confirmOCR(documentId);
-          aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+
+          // For asset purchase contracts, also trigger asset creation
+          const purchaseContractKind = editedData.purchase_contract_kind
+            || reviewData?.document?.ocr_result?.purchase_contract_kind;
+          const importSuggestion = reviewData?.document?.ocr_result?.import_suggestion;
+          if (
+            purchaseContractKind === 'asset'
+            && importSuggestion?.type === 'create_asset'
+            && importSuggestion?.status === 'pending'
+          ) {
+            try {
+              await documentService.confirmAsset(documentId);
+              aiToast(t('documents.suggestion.assetCreated', 'Asset created'), 'success');
+            } catch {
+              // Asset creation may fail, OCR confirm still succeeded
+              aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+            }
+          } else {
+            aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+          }
         } catch {
           // Confirm may fail for some doc types, still save succeeded
           aiToast(t('documents.review.changesSaved', 'Changes saved'), 'success');
@@ -711,8 +754,25 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       ?? false
     ),
   });
-  const templateWillSwitchAfterSave = Boolean(presentationTemplate)
-    && currentPresentationDecision.template !== presentationTemplate;
+  const handleDocumentTypeChange = async (nextType: string) => {
+    if (!nextType || nextType === selectedDocType) {
+      return;
+    }
+
+    if (!allowDocumentTypeEdit) {
+      return;
+    }
+
+    const accepted = onDocumentTypeDraftChange
+      ? await onDocumentTypeDraftChange(nextType)
+      : true;
+
+    if (accepted === false) {
+      return;
+    }
+
+    setSelectedDocType(nextType);
+  };
 
   const getContractRoleLabel = (role?: string) => {
     switch (role) {
@@ -821,6 +881,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         return t('documents.review.semantic.standardInvoice', '\u6b63\u5f0f\u53d1\u7968');
       case 'credit_note':
         return t('documents.review.semantic.creditNote', '\u8d37\u8bb0/\u7ea2\u5b57\u5355\u636e');
+      case 'settlement_credit':
+        return t('documents.review.semantic.settlementCredit', '\u5e74\u5ea6\u7ed3\u7b97\u9000\u6b3e');
       case 'proforma':
         return t('documents.review.semantic.proforma', '\u5f62\u5f0f\u53d1\u7968');
       case 'delivery_note':
@@ -834,6 +896,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
     { value: 'standard_invoice', label: getCommercialSemanticLabel('standard_invoice') },
     { value: 'receipt', label: getCommercialSemanticLabel('receipt') },
     { value: 'credit_note', label: getCommercialSemanticLabel('credit_note') },
+    { value: 'settlement_credit', label: getCommercialSemanticLabel('settlement_credit') },
     { value: 'proforma', label: getCommercialSemanticLabel('proforma') },
     { value: 'delivery_note', label: getCommercialSemanticLabel('delivery_note') },
     { value: 'unknown', label: getCommercialSemanticLabel('unknown') },
@@ -1014,11 +1077,19 @@ const OCRReview: React.FC<OCRReviewProps> = ({
 
           <div className="form-group">
             <label>{t('documents.documentType')}</label>
-            <Select value={selectedDocType} onChange={setSelectedDocType}
-              disabled={saving}
-              options={Object.values(DocumentType).filter(v => v !== 'unknown').map(type => ({
+            <Select value={selectedDocType} onChange={handleDocumentTypeChange}
+              disabled={saving || !allowDocumentTypeEdit}
+              options={Object.values(DocumentType).map(type => ({
                 value: type, label: getDocumentTypeLabel(type),
               }))} />
+            {!allowDocumentTypeEdit && (
+              <p className="field-help">
+                {t(
+                  'documents.review.documentTypeLocked',
+                  'System-recognized document types are locked. If this looks wrong, please reprocess the document instead of changing the type manually.'
+                )}
+              </p>
+            )}
           </div>
 
           {isAssetPurchaseContract && (
@@ -1677,7 +1748,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                 <label>{t('documents.review.fields.assetName', 'Asset Name')}</label>
                 <input
                   type="text"
-                  value={editedData.asset_name || ''}
+                  value={editedData.asset_name || editedData.description || ''}
                   onChange={(e) => handleFieldChange('asset_name', e.target.value)}
                 />
               </div>
@@ -1709,11 +1780,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.buyerName')}</label>
-                <input type="text" value={editedData.buyer_name || ''} onChange={(e) => handleFieldChange('buyer_name', e.target.value)} />
+                <input type="text" value={editedData.buyer_name || editedData.recipient || ''} onChange={(e) => handleFieldChange('buyer_name', e.target.value)} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.sellerName')}</label>
-                <input type="text" value={editedData.seller_name || ''} onChange={(e) => handleFieldChange('seller_name', e.target.value)} />
+                <input type="text" value={editedData.seller_name || editedData.issuer || editedData.merchant || ''} onChange={(e) => handleFieldChange('seller_name', e.target.value)} />
               </div>
               <div className="form-group">
                 <label>{t('documents.review.fields.firstRegistrationDate', 'First Registration Date')}</label>
@@ -1820,6 +1891,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               'correction_history', 'multiple_receipts', 'receipt_count', 'receipts',
               'total_amount', 'purchase_contract_kind', '_extraction_method', '_llm_supplement',
               'confirmed', 'confirmed_at', 'confirmed_by',
+              'document_date', 'document_year', 'year_basis', 'year_confidence',
+              'issuer', 'recipient', 'transaction_direction_resolution',
             ]);
             const extraFields = Object.entries(editedData).filter(
               ([k, v]) => !displayedKeys.has(k) && !k.startsWith('_') && v !== null && v !== undefined && typeof v !== 'object'
@@ -1858,7 +1931,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           {t('common.cancel')}
         </button>
         <button
-          className="btn btn-primary"
+          className={`btn ${isConfirmed ? 'btn-primary' : 'btn-confirm'}`}
           onClick={handleSave}
           disabled={saving}
         >

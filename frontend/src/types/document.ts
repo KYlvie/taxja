@@ -58,6 +58,8 @@ export interface ExtractedData {
   user_contract_role_source?: string;
   user_contract_role_confidence?: number;
   contract_role_resolution?: Record<string, any>;
+  final_transaction_type?: string;
+  final_transaction_type_source?: string;
   document_transaction_direction?: string;
   document_transaction_direction_source?: string;
   document_transaction_direction_confidence?: number;
@@ -139,6 +141,7 @@ export interface Document {
 }
 
 export interface UploadProgress {
+  local_id?: string;
   file: File;
   source_files?: File[];
   upload_mode?: 'single' | 'image_group';

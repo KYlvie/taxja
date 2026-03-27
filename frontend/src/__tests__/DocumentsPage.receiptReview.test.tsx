@@ -728,6 +728,82 @@ describe('DocumentsPage receipt review flow', () => {
     expect(screen.queryByText('Linked')).not.toBeInTheDocument();
   });
 
+  it('prefers final transaction type over stale OCR direction when rendering receipt-family documents', async () => {
+    const linkedTransaction = {
+      id: 1726,
+      type: 'income',
+      amount: 96,
+      date: '2024-01-02',
+      description: 'Invoice from Notion Labs Inc. (#INV-NOT-2024-AT-8812)',
+      category: 'other_income',
+      is_deductible: false,
+      line_items: [
+        {
+          description: 'Notion Plus Plan — Annual (Jan–Dec 2024)',
+          amount: 96,
+          quantity: 1,
+          category: 'other_income',
+          is_deductible: false,
+          sort_order: 0,
+        },
+      ],
+    };
+
+    const documentDetail = {
+      id: 101,
+      user_id: 1,
+      transaction_id: 1726,
+      linked_transactions: [
+        {
+          transaction_id: 1726,
+          description: 'Invoice from Notion Labs Inc. (#INV-NOT-2024-AT-8812)',
+          amount: 96,
+          date: '2024-01-02',
+          has_line_items: true,
+        },
+      ],
+      document_type: 'invoice',
+      file_path: '/tmp/notion.pdf',
+      file_name: 'A13_Notion_SaaS_Annual.pdf',
+      file_size: 100,
+      mime_type: 'application/pdf',
+      confidence_score: 0.95,
+      needs_review: false,
+      created_at: '2026-03-26T00:00:00Z',
+      updated_at: '2026-03-26T00:00:00Z',
+      ocr_result: {
+        merchant: 'Notion Labs Inc.',
+        amount: 96,
+        final_transaction_type: 'income',
+        final_transaction_type_source: 'linked_transaction',
+        _transaction_type: 'expense',
+        document_transaction_direction: 'expense',
+        line_items: [
+          {
+            description: 'Notion Plus Plan — Annual (Jan–Dec 2024)',
+            amount: 96,
+            quantity: 1,
+            category: 'other_income',
+            is_deductible: false,
+          },
+        ],
+      },
+    };
+
+    getDocument.mockReset();
+    getDocument.mockResolvedValue(documentDetail);
+    getById.mockResolvedValue(linkedTransaction);
+
+    const { container } = renderDocumentsPage();
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalledWith(101));
+    await waitFor(() => expect(getById).toHaveBeenCalledWith(1726));
+    await waitFor(() => expect(container.querySelector('.receipt-review-card h5')).not.toBeNull());
+
+    expect(screen.queryByText('Expense')).toBeNull();
+    expect(screen.getAllByText('Income')[0]).toBeInTheDocument();
+  });
+
   it('preserves unit amounts when switching a multi-quantity linked invoice from income to expense', async () => {
     const linkedTransaction = {
       id: 1333,

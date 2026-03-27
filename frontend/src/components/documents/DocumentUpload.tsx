@@ -23,6 +23,9 @@ import {
 } from '../../utils/documentUploadGrouping';
 import './DocumentUpload.css';
 
+const createUploadLocalId = () =>
+  `upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
 const DOCUMENT_PICKER_TYPES = ['image/*', 'application/pdf'];
 const EMPLOYER_ELIGIBLE_USER_TYPES = new Set(['self_employed', 'mixed']);
 
@@ -102,6 +105,15 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
   const currentUser = useAuthStore((state) => state.user);
   const nativeActionsEnabled = useMemo(() => supportsNativeFileActions(), []);
 
+  const updateUploadById = useCallback(
+    (localId: string, updater: (upload: UploadProgress) => UploadProgress) => {
+      setUploads((previous) =>
+        previous.map((upload) => (upload.local_id === localId ? updater(upload) : upload))
+      );
+    },
+    []
+  );
+
   const getDocumentLink = useCallback(
     (documentId?: number | null) => (documentId ? `/documents/${documentId}` : undefined),
     []
@@ -176,7 +188,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
   // --- Poll for OCR processing (unchanged logic) ---
 
   const pollForProcessing = useCallback(
-    async (documentId: number, uploadIndex: number, fallbackDocument: any) => {
+    async (documentId: number, uploadLocalId: string, fallbackDocument: any) => {
       let latestDocument = fallbackDocument;
 
       // Task 14: Push processing indicator to chat panel
@@ -206,17 +218,11 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
           const { ocrData, isTerminal, hasSnapshot } = getDocumentPollingState(updatedDocument);
 
           if (hasSnapshot) {
-            setUploads((previous) =>
-              previous.map((upload, index) =>
-                index === uploadIndex
-                  ? {
-                      ...upload,
-                      status: isTerminal ? 'completed' : 'processing',
-                      document: resolvedDocument,
-                    }
-                  : upload
-              )
-            );
+            updateUploadById(uploadLocalId, (upload) => ({
+              ...upload,
+              status: isTerminal ? 'completed' : 'processing',
+              document: resolvedDocument,
+            }));
             addDocument(resolvedDocument);
           }
 
@@ -600,24 +606,18 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
       // Polling timeout reached — cleanup processing indicator
       removeProcessingMessage(documentId);
 
-      setUploads((previous) =>
-        previous.map((upload, index) =>
-          index === uploadIndex
-            ? {
-                ...upload,
-                status: 'error',
-                document: latestDocument,
-                error: t(
-                  'documents.reprocessTimeout',
-                  'Reprocessing is taking too long. Please try again later.'
-                ),
-              }
-            : upload
-        )
-      );
+      updateUploadById(uploadLocalId, (upload) => ({
+        ...upload,
+        status: 'error',
+        document: latestDocument,
+        error: t(
+          'documents.reprocessTimeout',
+          'Reprocessing is taking too long. Please try again later.'
+        ),
+      }));
       addDocument(latestDocument);
     },
-    [addDocument, currentUser, pushAIMessage, pushSuggestionMessage, pushFollowUpMessage, pushProcessingMessage, removeProcessingMessage, t]
+    [addDocument, currentUser, pushAIMessage, pushSuggestionMessage, pushFollowUpMessage, pushProcessingMessage, removeProcessingMessage, t, updateUploadById]
   );
 
   // --- Upload execution ---
@@ -644,6 +644,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
 
       setPickerError(null);
       const queuedUploads: UploadProgress[] = entries.map((entry) => ({
+        local_id: createUploadLocalId(),
         file: entry.displayFile,
         source_files: entry.sourceFiles,
         upload_mode: entry.uploadMode,
@@ -652,30 +653,18 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
         status: 'pending',
       }));
 
-      let startIndex = 0;
       const submittedDocuments: Document[] = [];
-      setUploads((previous) => {
-        startIndex = previous.length;
-        return [...previous, ...queuedUploads];
-      });
+      setUploads((previous) => [...previous, ...queuedUploads]);
 
       for (const [offset, entry] of entries.entries()) {
-        const uploadIndex = startIndex + offset;
+        const uploadLocalId = queuedUploads[offset].local_id!;
         const displayName = entry.displayFile.name;
 
         try {
-          setUploads((previous) =>
-            previous.map((upload, index) =>
-              index === uploadIndex ? { ...upload, status: 'uploading' } : upload
-            )
-          );
+          updateUploadById(uploadLocalId, (upload) => ({ ...upload, status: 'uploading' }));
 
           const updateProgress = (progress: number) => {
-            setUploads((previous) =>
-              previous.map((upload, index) =>
-                index === uploadIndex ? { ...upload, progress } : upload
-              )
-            );
+            updateUploadById(uploadLocalId, (upload) => ({ ...upload, progress }));
           };
 
           const document =
@@ -705,18 +694,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
               // Keep the upload response as a minimal fallback.
             }
 
-            setUploads((previous) =>
-              previous.map((upload, index) =>
-                index === uploadIndex
-                  ? {
-                      ...upload,
-                      status: 'completed',
-                      progress: 100,
-                      document: existingDocument,
-                    }
-                  : upload
-              )
-            );
+            updateUploadById(uploadLocalId, (upload) => ({
+              ...upload,
+              status: 'completed',
+              progress: 100,
+              document: existingDocument,
+            }));
 
             addDocument(existingDocument);
             submittedDocuments.push(existingDocument as Document);
@@ -731,33 +714,21 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
             continue;
           }
 
-          setUploads((previous) =>
-            previous.map((upload, index) =>
-              index === uploadIndex
-                ? {
-                    ...upload,
-                    status: 'processing',
-                    progress: 100,
-                    document,
-                  }
-                : upload
-            )
-          );
+          updateUploadById(uploadLocalId, (upload) => ({
+            ...upload,
+            status: 'processing',
+            progress: 100,
+            document,
+          }));
 
           submittedDocuments.push(document as Document);
-          void pollForProcessing(document.id, uploadIndex, document);
+          void pollForProcessing(document.id, uploadLocalId, document);
         } catch (error: any) {
-          setUploads((previous) =>
-            previous.map((upload, index) =>
-              index === uploadIndex
-                ? {
-                    ...upload,
-                    status: 'error',
-                    error: error.response?.data?.detail || t('documents.upload.error'),
-                  }
-                : upload
-            )
-          );
+          updateUploadById(uploadLocalId, (upload) => ({
+            ...upload,
+            status: 'error',
+            error: error.response?.data?.detail || t('documents.upload.error'),
+          }));
 
           pushAIMessage({
             type: 'upload_error',
@@ -770,7 +741,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
         onDocumentsSubmitted?.(submittedDocuments);
       }
     },
-    [addDocument, getDocumentLink, onDocumentsSubmitted, pollForProcessing, propertyId, pushAIMessage, t]
+    [addDocument, getDocumentLink, onDocumentsSubmitted, pollForProcessing, propertyId, pushAIMessage, t, updateUploadById]
   );
 
   /** Upload from staging: merge all staged files into one document */
@@ -784,6 +755,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
     const queueMerged = async () => {
       setPickerError(null);
       const queuedUpload: UploadProgress = {
+        local_id: createUploadLocalId(),
         file: entry.displayFile,
         source_files: entry.sourceFiles,
         upload_mode: entry.uploadMode,
@@ -792,21 +764,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
         status: 'pending',
       };
 
-      let uploadIndex = 0;
-      setUploads((prev) => {
-        uploadIndex = prev.length;
-        return [...prev, queuedUpload];
-      });
+      const uploadLocalId = queuedUpload.local_id!;
+      setUploads((prev) => [...prev, queuedUpload]);
 
       try {
-        setUploads((prev) =>
-          prev.map((u, i) => (i === uploadIndex ? { ...u, status: 'uploading' } : u))
-        );
+        updateUploadById(uploadLocalId, (u) => ({ ...u, status: 'uploading' }));
 
         const updateProgress = (progress: number) => {
-          setUploads((prev) =>
-            prev.map((u, i) => (i === uploadIndex ? { ...u, progress } : u))
-          );
+          updateUploadById(uploadLocalId, (u) => ({ ...u, progress }));
         };
 
         const document = await documentService.uploadImageGroup(
@@ -831,11 +796,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
             };
           } catch { /* fallback */ }
 
-          setUploads((prev) =>
-            prev.map((u, i) =>
-              i === uploadIndex ? { ...u, status: 'completed', progress: 100, document: existingDocument } : u
-            )
-          );
+          updateUploadById(uploadLocalId, (u) => ({
+            ...u,
+            status: 'completed',
+            progress: 100,
+            document: existingDocument,
+          }));
           addDocument(existingDocument);
           onDocumentsSubmitted?.([existingDocument as Document]);
           pushAIMessage({
@@ -849,21 +815,20 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
           return;
         }
 
-        setUploads((prev) =>
-          prev.map((u, i) =>
-            i === uploadIndex ? { ...u, status: 'processing', progress: 100, document } : u
-          )
-        );
+        updateUploadById(uploadLocalId, (u) => ({
+          ...u,
+          status: 'processing',
+          progress: 100,
+          document,
+        }));
         onDocumentsSubmitted?.([document as Document]);
-        void pollForProcessing(document.id, uploadIndex, document);
+        void pollForProcessing(document.id, uploadLocalId, document);
       } catch (error: any) {
-        setUploads((prev) =>
-          prev.map((u, i) =>
-            i === uploadIndex
-              ? { ...u, status: 'error', error: error.response?.data?.detail || t('documents.upload.error') }
-              : u
-          )
-        );
+        updateUploadById(uploadLocalId, (u) => ({
+          ...u,
+          status: 'error',
+          error: error.response?.data?.detail || t('documents.upload.error'),
+        }));
         pushAIMessage({
           type: 'upload_error',
           content: t('ai.proactive.uploadError', { name: entry.displayFile.name }),
@@ -872,7 +837,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
     };
 
     void queueMerged();
-  }, [stagedFiles, clearStaging, propertyId, pollForProcessing, pushAIMessage, t, addDocument, onDocumentsSubmitted, getDocumentLink]);
+  }, [stagedFiles, clearStaging, propertyId, pollForProcessing, pushAIMessage, t, addDocument, onDocumentsSubmitted, getDocumentLink, updateUploadById]);
 
   /** Upload from staging: each file as a separate document */
   const uploadStagedIndividually = useCallback(() => {
@@ -964,8 +929,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
     setUploads((previous) => previous.filter((upload) => upload.status !== 'completed'));
   };
 
-  const removeUpload = (index: number) => {
-    setUploads((previous) => previous.filter((_, i) => i !== index));
+  const removeUpload = (localId?: string) => {
+    setUploads((previous) => previous.filter((upload) => upload.local_id !== localId));
   };
 
   const uploadCapturedPages = () => {
@@ -975,10 +940,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
     void queueEntries(pages);
   };
 
-  const retryFailed = (index: number) => {
-    const failedUpload = uploads[index];
-    if (failedUpload.status !== 'error') return;
-    setUploads((previous) => previous.filter((_, uploadIndex) => uploadIndex !== index));
+  const retryFailed = (localId?: string) => {
+    const failedUpload = uploads.find((upload) => upload.local_id === localId);
+    if (!failedUpload || failedUpload.status !== 'error') return;
+    setUploads((previous) => previous.filter((upload) => upload.local_id !== localId));
     void queueEntries(failedUpload.source_files || [failedUpload.file]);
   };
 
@@ -1203,7 +1168,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
 
             return (
             <div
-              key={`${upload.file.name}-${index}`}
+              key={upload.local_id || `${upload.file.name}-${index}`}
               className={`upload-item ${upload.status}${isClickableCompleted ? ' clickable' : ''}`}
               onClick={isClickableCompleted ? () => handleCompletedUploadOpen(completedDocumentId) : undefined}
               onKeyDown={isClickableCompleted ? (event) => {
@@ -1238,6 +1203,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
                 <div className="status-message processing">{t('documents.upload.processing')}</div>
               ) : null}
 
+              {upload.status === 'pending' ? (
+                <div className="status-message processing">
+                  {t('documents.upload.pending', 'Queued for processing...')}
+                </div>
+              ) : null}
+
               {upload.status === 'completed' ? (
                 <div className="status-message completed">
                   ✓ {upload.document?.deduplicated
@@ -1251,7 +1222,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
                   <button
                     type="button"
                     className="upload-item-remove-btn"
-                    onClick={(e) => { e.stopPropagation(); removeUpload(index); }}
+                    onClick={(e) => { e.stopPropagation(); removeUpload(upload.local_id); }}
                     aria-label={t('common.delete', 'Remove')}
                   >
                     <X size={14} />
@@ -1262,7 +1233,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
               {upload.status === 'error' ? (
                 <div className="status-message error">
                   <span>✕ {upload.error}</span>
-                  <button type="button" className="btn-link" onClick={() => retryFailed(index)}>
+                  <button type="button" className="btn-link" onClick={() => retryFailed(upload.local_id)}>
                     {t('documents.upload.retry')}
                   </button>
                 </div>

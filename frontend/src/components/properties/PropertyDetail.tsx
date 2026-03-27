@@ -381,17 +381,21 @@ const PropertyDetail = ({
   };
 
   const calculateAccumulatedDepreciation = (): number => {
-    const purchaseDate = new Date(property.purchase_date);
+    const startDate = property.put_into_use_date
+      ? new Date(property.put_into_use_date)
+      : new Date(property.purchase_date);
     const currentDate = property.sale_date ? new Date(property.sale_date) : new Date();
-    const yearsOwned = (currentDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-    
-    if (property.property_type === PropertyType.OWNER_OCCUPIED) {
+    const yearsOwned = (currentDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+
+    if (isRealEstate && property.property_type === PropertyType.OWNER_OCCUPIED) {
       return 0;
     }
 
-    const depreciableValue = property.building_value * (property.rental_percentage / 100);
-    const totalDepreciation = depreciableValue * property.depreciation_rate * yearsOwned;
-    
+    const depreciableValue = isRealEstate
+      ? property.building_value * (property.rental_percentage / 100)
+      : property.building_value;
+    const totalDepreciation = depreciableValue * property.depreciation_rate * Math.max(0, yearsOwned);
+
     return Math.min(totalDepreciation, depreciableValue);
   };
 
@@ -402,7 +406,7 @@ const PropertyDetail = ({
   };
 
   const calculateYearsRemaining = (): number | null => {
-    if (property.property_type === PropertyType.OWNER_OCCUPIED) {
+    if (isRealEstate && property.property_type === PropertyType.OWNER_OCCUPIED) {
       return null;
     }
 
@@ -468,8 +472,12 @@ const PropertyDetail = ({
   const remaining = calculateRemainingValue();
   const yearsRemaining = calculateYearsRemaining();
   const isRental = isRealEstate && property.property_type !== PropertyType.OWNER_OCCUPIED;
-  const assetAccumulated = property.accumulated_depreciation ?? accumulated;
-  const assetRemaining = property.remaining_value ?? Math.max(0, property.building_value - assetAccumulated);
+  const assetAccumulated = (property.accumulated_depreciation && property.accumulated_depreciation > 0)
+    ? property.accumulated_depreciation
+    : accumulated;
+  const assetRemaining = (property.remaining_value != null && property.remaining_value !== property.purchase_price)
+    ? property.remaining_value
+    : Math.max(0, property.building_value - assetAccumulated);
   const assetAnnualDepreciation = property.annual_depreciation ?? (property.building_value * property.depreciation_rate);
   const assetUsageLabel = property.business_use_percentage != null
     ? `${Number(property.business_use_percentage).toFixed(0)}%`
@@ -551,10 +559,16 @@ const PropertyDetail = ({
                 <span>{rentalDocumentLabel}</span>
               </Link>
             ) : !isRealEstate ? (
-              <Link className="btn btn-secondary btn-icon" to={documentsHubLink}>
+              <button
+                className="btn btn-secondary btn-icon"
+                onClick={() => {
+                  const section = document.getElementById('asset-linked-transactions');
+                  if (section) section.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
                 <FuturisticIcon icon={Files} tone="slate" size="xs" />
-                <span>{t('properties.documents.manageFiles', '\u7ba1\u7406\u5173\u8054\u6587\u4ef6')}</span>
-              </Link>
+                <span>{t('properties.documents.viewPurchaseTransaction', localizedText({ de: 'Kauftransaktion anzeigen', en: 'View purchase transaction', zh: '查看购买交易' }))}</span>
+              </button>
             ) : null}
           </div>
           <button className="btn btn-secondary btn-icon" onClick={() => onEdit(property)}>
@@ -756,6 +770,18 @@ const PropertyDetail = ({
                     <span className="label">{t('properties.assetDetails.businessUse', localizedText({ de: 'Betriebliche Nutzung', en: 'Business use', zh: '业务使用比例' }))}</span>
                     <span className="value">{assetUsageLabel}</span>
                   </div>
+                  {property.business_use_percentage != null && Number(property.business_use_percentage) >= 100 && (
+                    <div className="info-row" style={{ fontSize: '0.82rem', color: '#b45309' }}>
+                      <span className="label"></span>
+                      <span className="value" style={{ fontWeight: 500 }}>
+                        {t('properties.assetDetails.businessUseDefaultWarning', localizedText({
+                          de: 'Standardmäßig 100% betrieblich. Bei privater Mitnutzung bitte über „Bearbeiten" anpassen.',
+                          en: 'Defaulted to 100% business use. If also used privately, adjust via Edit.',
+                          zh: '默认100%商用。如有私人使用，请点击"编辑"调整比例。',
+                        }))}
+                      </span>
+                    </div>
+                  )}
                   {property.comparison_basis && (
                     <div className="info-row">
                       <span className="label">{t('properties.assetDetails.comparisonBasis', localizedText({ de: 'GWG-Vergleichsbasis', en: 'GWG comparison basis', zh: 'GWG 比较基数' }))}</span>
@@ -1125,7 +1151,7 @@ const PropertyDetail = ({
       )}
 
       {/* Linked Transactions Section */}
-      <div className="transactions-section">
+      <div className="transactions-section" id="asset-linked-transactions">
         <div className="section-header">
           <div className="section-header-copy">
             <h2>{sectionCopy.title}</h2>
@@ -1133,6 +1159,15 @@ const PropertyDetail = ({
               {sectionCopy.description}{' '}
               <Link to="/transactions">{sectionCopy.manageLinkLabel}</Link>
             </p>
+            {!isRealEstate && (
+              <p className="section-description" style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: '4px' }}>
+                {t('properties.assetTransactionsHint', localizedText({
+                  de: 'Hier werden nur Ausgaben (Anschaffung, Reparatur, Versicherung) erfasst. Einnahmen aus diesem Wirtschaftsgut (z.B. Lizenzgebühren) verwalten Sie in der Transaktionsliste.',
+                  en: 'Only expenses (purchase, repair, insurance) are tracked here. Income from this asset (e.g. license fees) should be managed in the transactions list.',
+                  zh: '此处仅跟踪支出（购置、维修、保险等）。如该资产产生收入（如许可费），请在交易记录中管理。',
+                }))}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1158,10 +1193,12 @@ const PropertyDetail = ({
                   <div className="year-header">
                     <h3>{year}</h3>
                     <div className="year-summary">
+                      {isRealEstate && (
                       <div className="summary-item income">
                         <span className="summary-label">{t('properties.rentalIncome')}</span>
                         <span className="summary-value">{formatCurrency(yearData.rental_income)}</span>
                       </div>
+                      )}
                       <div className="summary-item expense">
                         <span className="summary-label">{t('properties.expenses')}</span>
                         <span className="summary-value">{formatCurrency(yearData.expenses)}</span>

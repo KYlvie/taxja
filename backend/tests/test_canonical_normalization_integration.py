@@ -226,3 +226,49 @@ def test_invoice_sample_normalizes_document_backed_line_items_when_syncing_from_
     assert first_item.is_deductible is False
     assert second_item.amount == Decimal("3500.00")
     assert second_item.quantity == 1
+
+
+def test_invoice_sample_accepts_structured_total_amount_end_to_end(db):
+    user = _make_user(db, email="structured-total-int@example.com")
+    document = _make_document(
+        db,
+        user.id,
+        file_name="wko-membership.pdf",
+        document_type=DocumentType.INVOICE,
+    )
+
+    orchestrator = DocumentPipelineOrchestrator.__new__(DocumentPipelineOrchestrator)
+    validation = ValidationResult(is_valid=True)
+    extracted = {
+        "amount": {"total": 545.5, "currency": "EUR"},
+        "date": "27.03.2024",
+        "merchant": "WKO",
+        "description": "Mitgliedsbeitrag 2024",
+    }
+
+    orchestrator._autofix_amount(extracted, validation)
+    orchestrator._autofix_date(extracted, validation)
+    assert validation.error_count == 0
+    extracted.update(validation.corrected_fields)
+
+    service = OCRTransactionService(db)
+    result = service.create_transaction_from_suggestion_with_result(
+        {
+            "document_id": document.id,
+            "amount": extracted["amount"],
+            "date": extracted["date"],
+            "description": extracted["description"],
+            "transaction_type": TransactionType.EXPENSE.value,
+            "category": ExpenseCategory.OTHER.value,
+            "confidence": 0.8,
+            "needs_review": True,
+            "reviewed": False,
+            "is_deductible": True,
+        },
+        user.id,
+    )
+
+    transaction = result.transaction
+    assert result.created is True
+    assert transaction.amount == Decimal("545.5")
+    assert transaction.transaction_date.isoformat() == "2024-03-27"

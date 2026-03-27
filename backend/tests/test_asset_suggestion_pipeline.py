@@ -68,6 +68,50 @@ def test_build_asset_suggestion_for_invoice_persists_recognition(db):
     assert document.ocr_result["asset_outcome"]["source"] == "quality_gate"
 
 
+def test_build_asset_suggestion_for_phone_invoice_persists_gwg_recognition(db):
+    user = create_test_user(
+        db,
+        email="asset-phone@example.com",
+        user_type=UserType.SELF_EMPLOYED,
+        vat_number="ATU12345678",
+        business_type="freiberufler",
+    )
+    document = create_test_document(
+        db,
+        user=user,
+        document_type=DocumentType.INVOICE,
+        file_name="iphone-rechnung.pdf",
+        file_hash="hash-iphone-001",
+        mime_type="application/pdf",
+        ocr_result={
+            "amount": 999.00,
+            "vat_amount": 166.50,
+            "merchant": "A1 Shop Mariahilfer Straße",
+            "date": "2024-03-18",
+            "line_items": [{"description": "Apple iPhone 15 Pro 256GB"}],
+        },
+        raw_text=(
+            "A1 Shop Mariahilfer Straße Rechnung Apple iPhone 15 Pro 256GB "
+            "Smartphone Handy GWG Grenze sofort absetzbar"
+        ),
+        confidence_score=Decimal("0.95"),
+    )
+
+    result = SimpleNamespace(raw_text=document.raw_text, confidence_score=Decimal("0.95"))
+
+    suggestion_payload = _build_asset_suggestion(db, document, result)
+    db.refresh(document)
+
+    suggestion = suggestion_payload["import_suggestion"] or suggestion_payload["auto_create_payload"]
+    assert suggestion is not None
+    assert suggestion["type"] == "create_asset"
+    assert suggestion["data"]["asset_type"] == "phone"
+    assert suggestion["data"]["decision"] == "gwg_suggestion"
+    assert suggestion["data"]["gwg_eligible"] is True
+    assert document.ocr_result["asset_recognition"]["decision"] == "gwg_suggestion"
+    assert document.ocr_result["asset_outcome"]["status"] in {"pending_confirmation", "auto_created"}
+
+
 def test_asset_suggestion_audit_uses_persisted_tax_profile_inputs_without_vat_number(db):
     user = create_test_user(
         db,

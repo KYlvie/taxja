@@ -69,6 +69,10 @@ class ProcessingDecisionService:
             primary_actions = [ProcessingAction.INSURANCE_RECURRING]
         elif db_type == DBDocumentType.BANK_STATEMENT:
             primary_actions = [ProcessingAction.BANK_STATEMENT_IMPORT]
+        elif db_type == DBDocumentType.SVS_NOTICE:
+            # SVS Beitragsvorschreibung: extract tax data AND create expense transaction
+            primary_actions = [ProcessingAction.TAX_FORM_IMPORT]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         elif db_type in tax_form_types:
             primary_actions = [ProcessingAction.TAX_FORM_IMPORT]
         else:

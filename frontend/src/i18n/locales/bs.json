@@ -1090,6 +1090,7 @@
         "standardInvoice": "Standardna faktura",
         "invoice": "Standardna faktura",
         "creditNote": "Knjizno odobrenje / storno",
+        "settlementCredit": "Obračunski povrat (godišnji obračun)",
         "proforma": "Predracun",
         "deliveryNote": "Otpremnica",
         "unknown": "Nije jos odredjeno"

@@ -229,4 +229,5 @@ export interface PropertyFormData {
   supplier?: string;
   business_use_percentage?: number | string;
   useful_life_years?: number | string;
+  put_into_use_date?: string;
 }

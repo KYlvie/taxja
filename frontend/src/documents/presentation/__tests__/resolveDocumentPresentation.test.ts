@@ -29,6 +29,21 @@ describe('resolveDocumentPresentation', () => {
     expect(decision.source?.taxImportMatched).toBe(true);
   });
 
+  it('routes all supported tax and notice aliases into the tax import flow', () => {
+    const taxLikeFixtures = [
+      presentationFixtures.svsNotice,
+      presentationFixtures.propertyTax,
+      presentationFixtures.lohnzettel,
+      presentationFixtures.u1Form,
+    ];
+
+    for (const fixture of taxLikeFixtures) {
+      const decision = resolveDocumentPresentation(fixture);
+      expect(decision.normalizedType).toBe('tax_form');
+      expect(decision.template).toBe('tax_import');
+    }
+  });
+
   it('routes bank statements into the dedicated bank statement review template', () => {
     const decision = resolveDocumentPresentation(presentationFixtures.kontoauszug);
 
@@ -56,5 +71,21 @@ describe('resolveDocumentPresentation', () => {
     expect(decision.template).toBe('receipt_workbench');
     expect(decision.controlPolicy.isPostable).toBe(true);
     expect(decision.badges).not.toContain('Non-postable');
+  });
+
+  it('switches from other to the target template when a draft document type is provided', () => {
+    const bankStatementDecision = resolveDocumentPresentation(presentationFixtures.otherDocument, {
+      documentType: 'bank_statement',
+    });
+    const contractDecision = resolveDocumentPresentation(presentationFixtures.otherDocument, {
+      documentType: 'rental_contract',
+    });
+    const taxDecision = resolveDocumentPresentation(presentationFixtures.otherDocument, {
+      documentType: 'svs_notice',
+    });
+
+    expect(bankStatementDecision.template).toBe('bank_statement_review');
+    expect(contractDecision.template).toBe('contract_review');
+    expect(taxDecision.template).toBe('tax_import');
   });
 });

@@ -500,6 +500,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
             </div>
 
             <SuggestedQuestions
+              key={contextData?.page}
               contextData={contextData}
               onQuestionClick={handleSuggestedQuestion}
             />
@@ -1018,6 +1019,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
           <div className="chat-error">
             <p>{error}</p>
           </div>
+        )}
+        {!isEmpty && !isLoading && (
+          <SuggestedQuestions
+            key={contextData?.page}
+            contextData={contextData}
+            onQuestionClick={handleSuggestedQuestion}
+          />
         )}
         <div ref={messagesEndRef} />
       </div>

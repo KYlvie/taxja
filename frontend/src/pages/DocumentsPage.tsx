@@ -44,6 +44,7 @@ import { resolveControlPolicy } from '../documents/presentation/resolveControlPo
 import type {
   DocumentPresentationDraft,
 } from '../documents/presentation/types';
+import { useConfirm } from '../hooks/useConfirm';
 import '../components/common/ConfirmDialog.css';
 import './DocumentsPage.css';
 
@@ -578,7 +579,8 @@ const buildReceiptPresentationDrafts = (
       'delivery_note',
     ].includes(resolvedDocumentType);
     const transactionType = String(
-      receipt._transaction_type
+      receipt.final_transaction_type
+        ?? receipt._transaction_type
         ?? receipt.transaction_type
         ?? receipt.document_transaction_direction
         ?? receipt.transaction_direction
@@ -612,6 +614,8 @@ const buildReceiptPresentationDrafts = (
 
 const RECEIPT_PRESENTATION_SCALAR_SKIP_KEYS = new Set([
   'document_type',
+  'final_transaction_type',
+  'final_transaction_type_source',
   'transaction_type',
   '_transaction_type',
   'document_transaction_direction',
@@ -670,6 +674,11 @@ const buildUpdatedReceiptCorrections = (
     return {
       ...receipt,
       document_type: presentationDraft.documentType ?? receipt.document_type ?? documentType ?? 'receipt',
+      final_transaction_type:
+        presentationDraft.transactionType
+        ?? receipt.final_transaction_type
+        ?? receipt._transaction_type
+        ?? receipt.transaction_type,
       _transaction_type: presentationDraft.transactionType ?? receipt._transaction_type ?? receipt.transaction_type,
       document_transaction_direction:
         presentationDraft.documentTransactionDirection
@@ -692,6 +701,7 @@ const buildUpdatedReceiptCorrections = (
   const primaryReceipt = updatedReceipts[0] || null;
 
   corrections._document_type = primaryReceipt?.document_type ?? documentType ?? 'receipt';
+  corrections.final_transaction_type = primaryReceipt?.final_transaction_type ?? undefined;
   corrections._transaction_type = primaryReceipt?._transaction_type ?? undefined;
   corrections.document_transaction_direction = primaryReceipt?.document_transaction_direction ?? undefined;
   corrections.commercial_document_semantics = primaryReceipt?.commercial_document_semantics ?? undefined;
@@ -897,6 +907,7 @@ const buildTransactionLineItems = (
 const DocumentsPage = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { confirm: showConfirm } = useConfirm();
   const { documentId } = useParams<{ documentId: string }>();
   const [searchParams] = useSearchParams();
   const uploadPropertyId = searchParams.get('property_id');
@@ -919,7 +930,6 @@ const DocumentsPage = () => {
     confirmableIds: [],
   });
   const [taxOverrides, setTaxOverrides] = useState<Record<number, boolean>>({});
-  const [docIdList, setDocIdList] = useState<number[]>([]);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportYears, setExportYears] = useState<DocumentExportYearOption[]>([]);
   const [loadingExportYears, setLoadingExportYears] = useState(false);
@@ -1059,13 +1069,8 @@ const DocumentsPage = () => {
     }
   };
 
-  // Fetch document ID list for prev/next navigation
-  useEffect(() => {
-    documentService.getDocuments().then((docs: any) => {
-      const list = (docs.documents || docs || []).map((d: any) => d.id).sort((a: number, b: number) => b - a);
-      setDocIdList(list);
-    }).catch(() => {});
-  }, [refreshKey]);
+  // Use visible document IDs from DocumentList for prev/next navigation
+  const docIdList = documentSummary.visibleDocIds || [];
 
   const navigateToDocument = (direction: 'prev' | 'next') => {
     if (!documentId || docIdList.length === 0) return;
@@ -1090,6 +1095,60 @@ const DocumentsPage = () => {
     return idx >= 0 && idx < docIdList.length - 1;
   })();
 
+  const [ocrReviewPresentationDrafts, setOcrReviewPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
+
+  const getOcrReviewDraft = useCallback(
+    (doc?: Document | null) => (doc ? ocrReviewPresentationDrafts[doc.id] : undefined),
+    [ocrReviewPresentationDrafts],
+  );
+
+  const canEditDetectedDocumentType = useCallback(
+    (doc?: Document | null) =>
+      Boolean(doc && DOCUMENT_TYPE_EDITABLE_TYPES.has(String(doc.document_type || '').toLowerCase())),
+    [],
+  );
+
+  const handleDocumentTypeTemplateSwitch = useCallback(
+    async (doc: Document, nextType: string) => {
+      if (!canEditDetectedDocumentType(doc)) {
+        return false;
+      }
+
+      const currentDraftType = getOcrReviewDraft(doc)?.documentType || doc.document_type;
+      if (!nextType || nextType === currentDraftType) {
+        return true;
+      }
+
+      const confirmed = await showConfirm(
+        t(
+          'documents.review.templateSwitchWarning',
+          'Switching to a new template may not preserve all unsaved fields. Continue?'
+        ),
+        {
+          title: t('documents.review.templateSwitchTitle', 'Switch template'),
+          variant: 'warning',
+          confirmText: t('common.continue', 'Continue'),
+          cancelText: t('common.cancel', 'Cancel'),
+        },
+      );
+
+      if (!confirmed) {
+        return false;
+      }
+
+      setOcrReviewPresentationDrafts((current) => ({
+        ...current,
+        [doc.id]: {
+          ...current[doc.id],
+          documentType: nextType,
+        },
+      }));
+
+      return true;
+    },
+    [canEditDetectedDocumentType, getOcrReviewDraft, showConfirm, t],
+  );
+
   const [receiptItemDrafts, setReceiptItemDrafts] = useState<Record<number, ReceiptDraftItem[]>>({});
   const [receiptPresentationDrafts, setReceiptPresentationDrafts] = useState<Record<number, DocumentPresentationDraft>>({});
   const [expandedReceiptIndexes, setExpandedReceiptIndexes] = useState<number[]>([]);
@@ -1102,15 +1161,22 @@ const DocumentsPage = () => {
   } | null>(null);
   const previousViewingDocumentIdRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    if (!viewingDocument && !reviewingDocument) {
+      setOcrReviewPresentationDrafts({});
+    }
+  }, [reviewingDocument, viewingDocument]);
+
   // Inline OCR scalar field editing
   const [editingOcrField, setEditingOcrField] = useState<string | null>(null);
   const [editingOcrValue, setEditingOcrValue] = useState<string>('');
   const [savingOcrField, setSavingOcrField] = useState<string | null>(null);
   const [ocrFieldError, setOcrFieldError] = useState<string | null>(null);
 
-  const RECEIPT_INLINE_TYPES = new Set(['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note']);
-  const isReceiptOrInvoice = (doc: Document) =>
-    RECEIPT_INLINE_TYPES.has((doc.document_type as string || '').toLowerCase());
+const RECEIPT_INLINE_TYPES = new Set(['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note']);
+const DOCUMENT_TYPE_EDITABLE_TYPES = new Set(['other', 'unknown']);
+const isReceiptOrInvoice = (doc: Document) =>
+  RECEIPT_INLINE_TYPES.has((doc.document_type as string || '').toLowerCase());
 
 
   const handleOcrFieldClick = (scopeKey: string, val: unknown) => {
@@ -1645,12 +1711,26 @@ const DocumentsPage = () => {
   };
 
   const handleReviewComplete = () => {
+    if (reviewingDocument) {
+      setOcrReviewPresentationDrafts((current) => {
+        const next = { ...current };
+        delete next[reviewingDocument.id];
+        return next;
+      });
+    }
     setReviewingDocument(null);
     navigate('/documents', { replace: true });
     setRefreshKey((k) => k + 1);
   };
 
   const handleReviewCancel = () => {
+    if (reviewingDocument) {
+      setOcrReviewPresentationDrafts((current) => {
+        const next = { ...current };
+        delete next[reviewingDocument.id];
+        return next;
+      });
+    }
     setReviewingDocument(null);
     navigate('/documents', { replace: true });
   };
@@ -1893,26 +1973,37 @@ const DocumentsPage = () => {
     navigateToDocument,
   ]);
 
-  const renderGenericDocumentReview = useCallback((document: Document) => {
-    return (
-      <OCRReview
-        documentId={Number(document.id)}
-        presentationTemplate="generic_review"
-        onConfirm={handleReviewComplete}
-        onCancel={handleReviewCancel}
-        onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-        onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-        hasPrevDocument={hasPrevDoc}
-        hasNextDocument={hasNextDoc}
-      />
-    );
-  }, [
+  const renderOcrReviewForDocument = useCallback((
+    document: Document,
+    presentationTemplate: 'receipt_workbench' | 'contract_review' | 'tax_import' | 'generic_review',
+  ) => (
+    <OCRReview
+      documentId={Number(document.id)}
+      presentationTemplate={presentationTemplate}
+      documentTypeDraft={getOcrReviewDraft(document)?.documentType ?? null}
+      allowDocumentTypeEdit={canEditDetectedDocumentType(document)}
+      onDocumentTypeDraftChange={(nextType) => handleDocumentTypeTemplateSwitch(document, nextType)}
+      onConfirm={handleReviewComplete}
+      onCancel={handleReviewCancel}
+      onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
+      onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
+      hasPrevDocument={hasPrevDoc}
+      hasNextDocument={hasNextDoc}
+    />
+  ), [
+    canEditDetectedDocumentType,
+    getOcrReviewDraft,
+    handleDocumentTypeTemplateSwitch,
     handleReviewCancel,
     handleReviewComplete,
     hasNextDoc,
     hasPrevDoc,
     navigateToDocument,
   ]);
+
+  const renderGenericDocumentReview = useCallback((document: Document) => {
+    return renderOcrReviewForDocument(document, 'generic_review');
+  }, [renderOcrReviewForDocument]);
 
   async function handleOpenTransactionInline(
     transactionId: number,
@@ -2183,56 +2274,25 @@ const DocumentsPage = () => {
   };
 
   if (reviewingDocument) {
+    const liveReviewDecision = resolverEnabled
+      ? resolveDocumentPresentation(reviewingDocument, getOcrReviewDraft(reviewingDocument))
+      : null;
+
     if (resolverEnabled) {
       return (
         <div className="documents-page">
           <DocumentPresentationRouter
             document={reviewingDocument}
-            renderReceiptWorkbench={() => (
-              <OCRReview
-                documentId={Number(reviewingDocument.id)}
-
-                presentationTemplate="generic_review"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
-            )}
-            renderContractReview={() => (
-              <OCRReview
-                documentId={Number(reviewingDocument.id)}
-
-                presentationTemplate="contract_review"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
-            )}
+            decision={liveReviewDecision ?? undefined}
+            renderReceiptWorkbench={() => renderOcrReviewForDocument(reviewingDocument, 'receipt_workbench')}
+            renderContractReview={() => renderOcrReviewForDocument(reviewingDocument, 'contract_review')}
             renderBankStatementReview={() => (
               renderBankStatementReview(reviewingDocument)
             )}
             renderGenericReview={() => (
               renderGenericDocumentReview(reviewingDocument)
             )}
-            renderTaxImport={() => (
-              <OCRReview
-                documentId={Number(reviewingDocument.id)}
-
-                presentationTemplate="tax_import"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
-            )}
+            renderTaxImport={() => renderOcrReviewForDocument(reviewingDocument, 'tax_import')}
           />
         </div>
       );
@@ -2250,7 +2310,10 @@ const DocumentsPage = () => {
 
   if (viewingDocument) {
     const liveViewerDecision = resolverEnabled
-      ? resolveDocumentPresentation(viewingDocument, receiptPresentationDrafts[0])
+      ? resolveDocumentPresentation(
+          viewingDocument,
+          getOcrReviewDraft(viewingDocument) ?? receiptPresentationDrafts[0],
+        )
       : null;
 
     if (resolverEnabled && liveViewerDecision?.template !== 'receipt_workbench') {
@@ -2260,38 +2323,14 @@ const DocumentsPage = () => {
             document={viewingDocument}
             decision={liveViewerDecision ?? undefined}
             renderReceiptWorkbench={() => null}
-            renderContractReview={() => (
-              <OCRReview
-                documentId={Number(viewingDocument.id)}
-
-                presentationTemplate="contract_review"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
-            )}
+            renderContractReview={() => renderOcrReviewForDocument(viewingDocument, 'contract_review')}
             renderBankStatementReview={() => (
               renderBankStatementReview(viewingDocument)
             )}
             renderGenericReview={() => (
               renderGenericDocumentReview(viewingDocument)
             )}
-            renderTaxImport={() => (
-              <OCRReview
-                documentId={Number(viewingDocument.id)}
-
-                presentationTemplate="tax_import"
-                onConfirm={handleReviewComplete}
-                onCancel={handleReviewCancel}
-                onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
-                onNextDocument={hasNextDoc ? () => navigateToDocument('next') : undefined}
-                hasPrevDocument={hasPrevDoc}
-                hasNextDocument={hasNextDoc}
-              />
-            )}
+            renderTaxImport={() => renderOcrReviewForDocument(viewingDocument, 'tax_import')}
           />
           {renderInlineTransactionOverlay()}
         </div>
@@ -2541,7 +2580,12 @@ const DocumentsPage = () => {
                     zahlungsfrequenz: t('documents.ocr.paymentFrequency', 'Payment frequency'),
                   };
 
-                  const skipKeys = ['field_confidence', 'confidence', 'import_suggestion', 'asset_outcome', 'line_items', 'items', 'vat_summary', 'tax_analysis', '_additional_receipts', '_receipt_count', '_pipeline', '_validation', 'correction_history', 'multiple_receipts', 'receipt_count', 'receipts', 'total_amount', 'purchase_contract_kind'];
+                  // Whitelist: only show fields users actually need to see
+                  const docType = viewingDocument.document_type as string;
+                  const receiptInvoiceFields = ['date', 'amount', 'merchant', 'supplier', 'recipient', 'description', 'product_summary', 'invoice_number', 'tax_id', 'vat_amount', 'vat_rate', 'payment_method', 'currency'];
+                  const skipKeys = new Set(['field_confidence', 'confidence', 'import_suggestion', 'asset_outcome', 'line_items', 'items', 'vat_summary', 'tax_analysis', '_additional_receipts', '_receipt_count', '_pipeline', '_validation', 'correction_history', 'multiple_receipts', 'receipt_count', 'receipts', 'total_amount', 'purchase_contract_kind', 'vat_amounts', 'raw_text', 'learning_data', 'confirmed', 'confirmed_at', 'confirmed_by']);
+                  const isReceiptOrInvoice = ['receipt', 'invoice'].includes(docType);
+                  const allowedFields = isReceiptOrInvoice ? new Set(receiptInvoiceFields) : null;
 
                   // Define expected fields per document type so users can see & edit missing ones
                   const purchaseContractKind =
@@ -2554,7 +2598,7 @@ const DocumentsPage = () => {
                       : 'property';
                   const purchaseContractFields =
                     purchaseContractKind === 'asset'
-                      ? ['asset_name', 'asset_type', 'purchase_price', 'purchase_date', 'seller_name', 'buyer_name', 'first_registration_date', 'vehicle_identification_number', 'license_plate', 'mileage_km', 'is_used_asset']
+                      ? ['asset_name', 'asset_type', 'description', 'purchase_price', 'purchase_date', 'seller_name', 'buyer_name', 'issuer', 'recipient', 'merchant', 'first_registration_date', 'vehicle_identification_number', 'license_plate', 'mileage_km', 'is_used_asset', 'vat_amount', 'vat_rate']
                       : ['property_address', 'street', 'unit_number', 'city', 'postal_code', 'purchase_price', 'purchase_date', 'building_value', 'land_value', 'grunderwerbsteuer', 'notary_fees', 'registry_fees', 'buyer_name', 'seller_name', 'construction_year', 'property_type'];
                   const expectedFieldsByType: Record<string, string[]> = {
                     purchase_contract: purchaseContractFields,
@@ -2564,13 +2608,16 @@ const DocumentsPage = () => {
                     loan_contract: ['loan_amount', 'interest_rate', 'monthly_payment', 'lender_name', 'borrower_name', 'contract_number', 'start_date', 'end_date', 'term_years', 'purpose', 'property_address', 'annual_interest_amount', 'certificate_year'],
                     versicherungsbestaetigung: ['insurer_name', 'policy_holder_name', 'insurance_type', 'praemie', 'polizze', 'payment_frequency', 'start_date', 'end_date'],
                   };
-                  const docType = viewingDocument.document_type as string;
                   const expectedFields = expectedFieldsByType[docType] || [];
 
                   // Build entries: existing data fields + missing expected fields (as null)
                   const existingEntries = Object.entries(data).filter(
-                    ([k, v]) => !skipKeys.includes(k) && !k.startsWith('_') && v !== null && v !== undefined
-                      && typeof v !== 'object'
+                    ([k, v]) => {
+                      if (skipKeys.has(k) || k.startsWith('_')) return false;
+                      if (v === null || v === undefined || typeof v === 'object') return false;
+                      if (allowedFields && !allowedFields.has(k)) return false;
+                      return true;
+                    }
                   );
                   const existingKeys = new Set(existingEntries.map(([k]) => k));
                   const missingEntries: [string, unknown][] = expectedFields
@@ -2803,6 +2850,7 @@ const DocumentsPage = () => {
                                         <option value="receipt">{t('documents.review.semantic.receipt', 'Receipt')}</option>
                                         <option value="standard_invoice">{t('documents.review.semantic.invoice', 'Standard invoice')}</option>
                                         <option value="credit_note">{t('documents.review.semantic.creditNote', 'Credit note')}</option>
+                                        <option value="settlement_credit">{t('documents.review.semantic.settlementCredit', 'Settlement credit')}</option>
                                         <option value="proforma">{t('documents.review.semantic.proforma', 'Proforma')}</option>
                                         <option value="delivery_note">{t('documents.review.semantic.deliveryNote', 'Delivery note')}</option>
                                       </select>
@@ -3612,7 +3660,7 @@ const DocumentsPage = () => {
                       )}
                       {item.deduction_reason && (
                         <div className="tax-item-reason">
-                          {t('documents.ocr.reason')}: {item.deduction_reason}
+                          {t('documents.ocr.reason')}: {translateDeductionReason(item.deduction_reason, i18n?.language || 'de')}
                         </div>
                       )}
                       <button

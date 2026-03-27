@@ -187,14 +187,47 @@ class OCREngine:
             # Check if PDF and try direct text extraction first (much faster)
             if image_bytes[:5] == b"%PDF-":
                 pdf_text = self._extract_text_from_pdf(image_bytes)
-                if pdf_text and len(pdf_text.strip()) > 20:
-                    # PDF has a text layer — skip Tesseract entirely
-                    return self._process_from_raw_text(
+                text_len = len(pdf_text.strip()) if pdf_text else 0
+                pdf_page_count = self._count_pdf_pages(image_bytes)
+
+                # Multi-page PDF with thin text → single vision call (classify+extract)
+                # (text layer is likely only on cover page, real data on scanned pages)
+                if pdf_page_count >= 3 and text_len < 2500:
+                    logger.info(
+                        "Multi-page scanned PDF (%d pages, %d chars text) -> vision classify+extract",
+                        pdf_page_count, text_len,
+                    )
+                    vision_result = self._process_scanned_pdf_via_vision(
+                        image_bytes,
+                        start_time=start_time,
+                        document_type_hint=normalized_hint,
+                    )
+                    if vision_result is not None:
+                        return vision_result
+                    # Fallback to old path if vision fails
+                    return self._process_document_via_claude_direct(
+                        image_bytes,
+                        mime_type="application/pdf",
+                        start_time=start_time,
+                        document_type_hint=normalized_hint,
+                    )
+
+                if pdf_text and text_len > 20:
+                    # PDF has a text layer — process from extracted text
+                    result = self._process_from_raw_text(
                         pdf_text.strip(),
                         image_bytes,
                         start_time,
                         document_type_hint=normalized_hint,
                     )
+                    # Quality gate: if extraction looks thin, try VLM fallback
+                    # This catches mixed PDFs (text layer on page 1, scanned pages 2+)
+                    vlm_fallback = self._try_vlm_fallback_for_thin_extraction(
+                        result, image_bytes, start_time, normalized_hint,
+                    )
+                    if vlm_fallback is not None:
+                        return vlm_fallback
+                    return result
 
             # 1. Scanned PDF or image — prefer VLM (fast API) over Tesseract (slow CPU)
             if image_bytes[:5] == b"%PDF-":
@@ -318,6 +351,260 @@ class OCREngine:
 
         return None
 
+    # -- All known document types for vision classify+extract -----------------
+    _VISION_DOCUMENT_TYPES = ", ".join([doc.value for doc in DocumentType])
+
+    _VISION_EXTRACT_INSTRUCTIONS = (
+        "Based on document_type, extract ALL relevant fields:\n"
+        "- SVS (svs_notice): beitrag_gesamt, beitragsgrundlage, pensionsversicherung, "
+        "krankenversicherung, unfallversicherung, selbstaendigenvorsorge, nachzahlung, "
+        "gutschrift, tax_year, quarter, date (YYYY-MM-DD), versicherungsnummer, taxpayer_name\n"
+        "- Receipt/Invoice: amount, date, merchant, description, vat_amount, vat_rate, "
+        "invoice_number, issuer, recipient, line_items [{name,total_price}]\n"
+        "- Lohnzettel: tax_year, employer_name, gross_income, net_income, lohnsteuer, "
+        "sozialversicherung, steuernummer\n"
+        "- Einkommensteuerbescheid: tax_year, festgesetzte_einkommensteuer, einkommen, "
+        "gesamtbetrag_einkuenfte, steuernummer, finanzamt\n"
+        "- Kaufvertrag/Mietvertrag: property_address, purchase_price, monthly_rent, "
+        "contract_date, parties\n"
+        "- Other types: extract what you can find (amounts, dates, names, IDs)\n"
+        "- Always include dedup_hints: {entity_name, address, identifier, merchant}\n"
+        "Amounts as numbers. Dates YYYY-MM-DD. null if not found."
+    )
+
+    def _process_scanned_pdf_via_vision(
+        self,
+        pdf_bytes: bytes,
+        *,
+        start_time: datetime,
+        document_type_hint: Optional[DocumentType],
+    ) -> Optional[OCRResult]:
+        """Single vision API call: classify + extract from scanned PDF pages.
+
+        Renders up to 5 pages as JPEG → sends to Groq multi-image → gets
+        document_type + extracted fields in one JSON response (~5s total).
+        For PDFs > 5 pages, batches in groups of 5, transcribes, then
+        classifies + extracts from the combined text.
+        """
+        import fitz
+        import json as _json
+        from app.services.llm_service import get_llm_service
+
+        llm = get_llm_service()
+        if not llm.is_available:
+            return None
+
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            total_pages = len(doc)
+            images: list[tuple[bytes, str]] = []
+
+            render_pages = min(total_pages, 5)
+            for i in range(render_pages):
+                mat = fitz.Matrix(120 / 72, 120 / 72)  # 120 DPI JPEG
+                pix = doc[i].get_pixmap(matrix=mat)
+                images.append((pix.tobytes("jpeg"), "image/jpeg"))
+            doc.close()
+        except Exception as e:
+            logger.warning("Failed to render PDF pages: %s", e)
+            return None
+
+        if not images:
+            return None
+
+        hint_text = ""
+        if document_type_hint is not None:
+            hint_text = f"Expected type: '{document_type_hint.value}'. "
+
+        # Single call: classify + extract from first 5 pages
+        # Even for >5 page PDFs, first 5 pages contain the key data
+        system_prompt = (
+            "You are an expert Austrian tax document processor. "
+            f"Step 1: Identify document_type from: {self._VISION_DOCUMENT_TYPES}. "
+            f"Step 2: {self._VISION_EXTRACT_INSTRUCTIONS}\n"
+            "Return ONLY valid JSON: {\"document_type\": \"...\", ...extracted fields...}"
+        )
+        user_prompt = (
+            f"{hint_text}Classify this document and extract all relevant fields. "
+            "JSON only, no markdown."
+        )
+
+        try:
+            response = llm.generate_vision_multi(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                images=images,
+                temperature=0.0,
+                max_tokens=2000,
+                provider_preference=self._vision_provider_preference,
+            )
+        except Exception as e:
+            logger.warning("Vision classify+extract failed: %s", e)
+            return None
+
+        # Parse the JSON response from the single classify+extract call
+        response_text = response.strip()
+        if response_text.startswith("```"):
+            # Strip markdown code block
+            lines = response_text.split("\n")
+            response_text = "\n".join(lines[1:])
+            if response_text.endswith("```"):
+                response_text = response_text[:-3].strip()
+
+        try:
+            data = _json.loads(response_text)
+        except _json.JSONDecodeError:
+            # Try to find JSON in the response
+            match = re.search(r"\{[^{}]*\}", response_text, re.DOTALL)
+            if match:
+                try:
+                    data = _json.loads(match.group())
+                except _json.JSONDecodeError:
+                    logger.warning("Could not parse vision response as JSON")
+                    return None
+            else:
+                return None
+
+        if not isinstance(data, dict):
+            return None
+
+        # Extract document type
+        raw_type = data.pop("document_type", "unknown") or "unknown"
+        doc_type = None
+        try:
+            doc_type = DocumentType(raw_type)
+        except (ValueError, KeyError):
+            pass
+        if doc_type is None:
+            doc_type = document_type_hint or DocumentType.UNKNOWN
+
+        # SVS post-processing
+        if doc_type == DocumentType.SVS_NOTICE:
+            data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
+            data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
+            if data.get("taxpayer_name"):
+                data.setdefault("recipient", data["taxpayer_name"])
+            if data.get("beitrag_gesamt") and not data.get("amount"):
+                data["amount"] = data["beitrag_gesamt"]
+            q = data.get("quarter", "")
+            yr = data.get("tax_year", "")
+            data.setdefault(
+                "description",
+                f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
+            )
+            # English aliases for frontend
+            if data.get("pensionsversicherung"):
+                data.setdefault("pension_insurance", data["pensionsversicherung"])
+            if data.get("krankenversicherung"):
+                data.setdefault("health_insurance", data["krankenversicherung"])
+            if data.get("unfallversicherung"):
+                data.setdefault("accident_insurance", data["unfallversicherung"])
+
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        initial_result = OCRResult(
+            document_type=doc_type,
+            extracted_data=data,
+            raw_text=response_text,
+            confidence_score=0.92,
+            needs_review=False,
+            processing_time_ms=processing_time,
+            suggestions=["Processed via single-pass AI vision (classify+extract)."],
+            provider_used="groq",
+        )
+
+        # For large PDFs (> 5 pages): if extraction from first 5 pages is thin,
+        # batch-transcribe remaining pages and re-extract with full text.
+        if total_pages > 5 and self._is_extraction_thin(initial_result):
+            logger.info(
+                "Large PDF (%d pages): first-5-page extraction is thin, "
+                "batch-transcribing remaining pages %d-%d",
+                total_pages, 6, total_pages,
+            )
+            extra_text = self._batch_transcribe_remaining_pages(
+                pdf_bytes, start_page=5, max_page=min(total_pages, 20), llm=llm,
+            )
+            if extra_text:
+                # Combine: vision JSON response + transcribed remaining pages
+                combined_text = response_text + "\n\n" + extra_text
+                return self._process_from_raw_text(
+                    combined_text,
+                    pdf_bytes,
+                    start_time,
+                    document_type_hint=doc_type,  # use already-classified type
+                    provider_used="groq",
+                )
+
+        logger.info(
+            "Vision classify+extract: type=%s, %d fields, %.0fms",
+            doc_type.value, len(data), processing_time,
+        )
+        return initial_result
+
+    def _batch_transcribe_remaining_pages(
+        self,
+        pdf_bytes: bytes,
+        start_page: int,
+        max_page: int,
+        llm,
+    ) -> str:
+        """Render pages [start_page..max_page) as JPEG and transcribe in batches of 5."""
+        import fitz
+
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            end_page = min(len(doc), max_page)
+            remaining_images: list[tuple[bytes, str]] = []
+            for i in range(start_page, end_page):
+                mat = fitz.Matrix(120 / 72, 120 / 72)
+                pix = doc[i].get_pixmap(matrix=mat)
+                remaining_images.append((pix.tobytes("jpeg"), "image/jpeg"))
+            doc.close()
+        except Exception as e:
+            logger.warning("Failed to render remaining PDF pages: %s", e)
+            return ""
+
+        if not remaining_images:
+            return ""
+
+        system_prompt = (
+            "You are a meticulous OCR transcription system for tax and business documents. "
+            "Read every visible word, number, code, table cell, tax ID, date, and amount. "
+            "Do not summarize. Do not explain. Return plain text only."
+        )
+
+        text_parts: list[str] = []
+        batch_size = 5
+        for batch_start in range(0, len(remaining_images), batch_size):
+            batch = remaining_images[batch_start:batch_start + batch_size]
+            page_offset = start_page + batch_start + 1  # 1-indexed
+
+            try:
+                batch_text = llm.generate_vision_multi(
+                    system_prompt=system_prompt,
+                    user_prompt=(
+                        f"Pages {page_offset}-{page_offset + len(batch) - 1}. "
+                        "Transcribe ALL. Prefix each: --- PAGE N ---. Plain text only."
+                    ),
+                    images=batch,
+                    temperature=0.0,
+                    max_tokens=4000,
+                    provider_preference=self._vision_provider_preference,
+                ).strip()
+                if batch_text:
+                    text_parts.append(batch_text)
+                    logger.info(
+                        "Batch transcribed pages %d-%d: %d chars",
+                        page_offset, page_offset + len(batch) - 1, len(batch_text),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Batch transcription pages %d-%d failed: %s",
+                    page_offset, page_offset + len(batch) - 1, e,
+                )
+
+        return "\n\n".join(text_parts)
+
     def _process_document_via_claude_direct(
         self,
         image_bytes: bytes,
@@ -369,7 +656,25 @@ class OCREngine:
             doc_type = document_type_hint
             classification_confidence = classification_confidence_hint or 0.99
         else:
-            doc_type, classification_confidence = self.classifier.classify(None, raw_text)
+            # ── LLM-first classification ──
+            # LLM (Groq) understands context much better than regex keywords,
+            # especially for documents where only partial text is available
+            # (e.g. SVS cover letter without "svs"+"beitrag" both present).
+            # Regex serves only as a fallback when LLM is unavailable.
+            doc_type = None
+            classification_confidence = 0.0
+            llm_type_str = self.llm_extractor.classify_document(raw_text)
+            if llm_type_str:
+                try:
+                    doc_type = DocumentType(llm_type_str)
+                    classification_confidence = 0.95
+                    logger.info("LLM classification: %s (confidence %.2f)", doc_type.value, classification_confidence)
+                except (ValueError, KeyError):
+                    logger.warning("LLM returned unknown type '%s', falling back to regex", llm_type_str)
+                    doc_type = None
+            if doc_type is None:
+                doc_type, classification_confidence = self.classifier.classify(None, raw_text)
+                logger.info("Regex classification fallback: %s (confidence %.2f)", doc_type.value, classification_confidence)
 
         if doc_type in (DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG, DocumentType.RENTAL_CONTRACT):
             extraction_type = DocumentType.MIETVERTRAG if doc_type == DocumentType.RENTAL_CONTRACT else doc_type
@@ -682,6 +987,11 @@ class OCREngine:
         if doc_type not in (DocumentType.RECEIPT, DocumentType.INVOICE):
             return False
 
+        # Jahresabrechnung (annual utility settlement) is always ONE document,
+        # even though it spans multiple pages with multiple totals.
+        if re.search(r"(?:jahresabrechnung|energieabrechnung|stromabrechnung|gasabrechnung)", raw_text, re.IGNORECASE):
+            return False
+
         page_markers = len(re.findall(r"--- PAGE \d+ ---", raw_text))
         header_hits = len(re.findall(
             r"(?:Rechnung|Invoice|Receipt|Beleg|Quittung|Kassenbon|Kassabon|BON\s*NR)\s*(?:\||:|\b|#|\d)",
@@ -718,6 +1028,210 @@ class OCREngine:
         except Exception as e:
             logger.warning("VLM PDF fallback failed: %s", e)
             return None
+
+    # -- Minimum expected fields per document type for quality gating -----------
+    # If the initial extraction has fewer non-null fields than the threshold,
+    # we consider it "thin" and retry with VLM multi-page vision.
+    _THIN_EXTRACTION_EXPECTED_FIELDS: Dict[DocumentType, tuple[int, tuple[str, ...]]] = {
+        # (min_fields_required, key_field_names_to_check)
+        DocumentType.INVOICE: (3, (
+            "amount", "date", "merchant", "supplier", "issuer",
+            "invoice_number", "vat_amount", "description",
+        )),
+        DocumentType.RECEIPT: (2, (
+            "amount", "date", "merchant", "supplier",
+            "vat_amount", "description",
+        )),
+        # NOTE: for INVOICE and RECEIPT, missing "amount" alone is fatal —
+        # see _is_extraction_thin override below.
+        DocumentType.EINKOMMENSTEUERBESCHEID: (3, (
+            "tax_year", "festgesetzte_einkommensteuer", "einkommen",
+            "gesamtbetrag_einkuenfte", "steuernummer", "finanzamt",
+            "einkuenfte_nichtselbstaendig", "einkuenfte_selbstaendig",
+            "abgabengutschrift", "abgabennachforderung",
+        )),
+        DocumentType.LOHNZETTEL: (3, (
+            "tax_year", "employer_name", "gross_income", "net_income",
+            "lohnsteuer", "sozialversicherung", "steuernummer",
+        )),
+        DocumentType.E1_FORM: (3, (
+            "tax_year", "steuernummer", "einkuenfte_selbstaendig",
+            "einkuenfte_nichtselbstaendig", "einkuenfte_gewerbebetrieb",
+        )),
+        DocumentType.L1_FORM: (3, (
+            "tax_year", "steuernummer", "employer_name",
+        )),
+        DocumentType.SVS_NOTICE: (2, (
+            "amount", "date", "merchant", "description",
+        )),
+        DocumentType.E1A_BEILAGE: (2, (
+            "tax_year", "gewinn_verlust", "betriebseinnahmen",
+        )),
+        DocumentType.E1B_BEILAGE: (2, (
+            "tax_year", "ueberschuss", "mieteinnahmen",
+        )),
+    }
+
+    def _is_extraction_thin(self, result: OCRResult) -> bool:
+        """Check if the extraction result is missing too many expected fields.
+
+        Two signals:
+          1. Key structured fields are missing for the document type.
+          2. The raw_text is suspiciously short for a multi-page PDF
+             (indicates partial text-layer extraction).
+        """
+        spec = self._THIN_EXTRACTION_EXPECTED_FIELDS.get(result.document_type)
+        if spec is None:
+            # Not a structured document type — can't judge quality by field count
+            return False
+
+        min_fields, key_fields = spec
+        extracted = result.extracted_data or {}
+
+        present = sum(
+            1 for f in key_fields
+            if extracted.get(f) is not None and extracted.get(f) != "" and extracted.get(f) != 0
+        )
+
+        # Signal 1: too few key fields
+        if present < min_fields:
+            logger.info(
+                "Thin extraction detected for %s: %d/%d key fields present (need %d)",
+                result.document_type.value, present, len(key_fields), min_fields,
+            )
+            return True
+
+        # Signal 1b: INVOICE/RECEIPT without amount is always thin — amount is
+        # essential for creating a transaction; other fields alone are useless.
+        if result.document_type in (DocumentType.INVOICE, DocumentType.RECEIPT):
+            amt = extracted.get("amount")
+            if amt is None or amt == "" or amt == 0:
+                logger.info(
+                    "Thin extraction detected for %s: amount is missing/zero",
+                    result.document_type.value,
+                )
+                return True
+
+        # Signal 2: raw_text is very short for a structured document
+        # Bescheid/Lohnzettel/tax forms typically have 2000+ chars of meaningful text.
+        # If we only got <1500 chars, the text layer is likely incomplete.
+        raw_len = len(result.raw_text or "")
+        if raw_len < 1500:
+            logger.info(
+                "Thin extraction detected for %s: raw_text only %d chars (expected 1500+)",
+                result.document_type.value, raw_len,
+            )
+            return True
+
+        return False
+
+    def _try_vlm_fallback_for_thin_extraction(
+        self,
+        initial_result: OCRResult,
+        pdf_bytes: bytes,
+        start_time: datetime,
+        document_type_hint: Optional[DocumentType],
+    ) -> Optional[OCRResult]:
+        """
+        Quality gate: if the initial PDF text-layer extraction is thin
+        (too few structured fields), retry with local Tesseract OCR first
+        (free, fast), then VLM as last resort.
+
+        This catches mixed PDFs where only page 1 has a text layer and
+        subsequent pages are scanned images.
+        """
+        if not self._is_extraction_thin(initial_result):
+            return None
+
+        initial_text_len = len(initial_result.raw_text or "")
+        logger.info(
+            "Extraction for %s is thin (confidence %.2f, %d extracted fields, %d chars). "
+            "Attempting Tesseract OCR on all pages first.",
+            initial_result.document_type.value,
+            initial_result.confidence_score,
+            len([v for v in (initial_result.extracted_data or {}).values()
+                 if v is not None and v != ""]),
+            initial_text_len,
+        )
+
+        # Send PDF directly to OpenAI/Anthropic (no image conversion)
+        logger.info(
+            "Trying VLM multi-page fallback: initial_type=%s, caller_hint=%s",
+            initial_result.document_type.value,
+            document_type_hint.value if document_type_hint else "None",
+        )
+        try:
+            # Use the already-classified type as hint to skip re-classification
+            effective_hint = document_type_hint or initial_result.document_type
+            vlm_result = self._process_document_via_claude_direct(
+                pdf_bytes,
+                mime_type="application/pdf",
+                start_time=start_time,
+                document_type_hint=effective_hint,
+            )
+            if vlm_result and vlm_result.raw_text and len(vlm_result.raw_text.strip()) > initial_text_len:
+                logger.info(
+                    "VLM fallback yielded %d chars (was %d). Re-extracting.",
+                    len(vlm_result.raw_text), initial_text_len,
+                )
+                if self._is_extraction_thin(vlm_result):
+                    merged = self._merge_extraction_results(initial_result, vlm_result)
+                    if merged is not None:
+                        return merged
+                return vlm_result
+        except Exception as e:
+            logger.warning("VLM multi-page fallback failed: %s", e)
+
+        # No improvement — return None to keep the initial result
+        logger.info("All fallbacks failed, keeping initial result.")
+        return None
+
+    def _merge_extraction_results(
+        self,
+        initial: OCRResult,
+        vlm: OCRResult,
+    ) -> Optional[OCRResult]:
+        """Merge two extraction results, preferring VLM values for missing fields."""
+        merged_data = dict(initial.extracted_data or {})
+        vlm_data = vlm.extracted_data or {}
+        filled = 0
+
+        for key, value in vlm_data.items():
+            if value is None or value == "" or value == 0:
+                continue
+            existing = merged_data.get(key)
+            if existing is None or existing == "" or existing == 0:
+                merged_data[key] = value
+                filled += 1
+
+        if filled == 0:
+            return None
+
+        # Use the longer raw_text
+        best_raw = vlm.raw_text if len(vlm.raw_text or "") > len(initial.raw_text or "") else initial.raw_text
+        best_confidence = max(initial.confidence_score, vlm.confidence_score)
+
+        logger.info(
+            "Merged extraction: VLM filled %d missing fields, confidence %.2f → %.2f",
+            filled, initial.confidence_score, best_confidence,
+        )
+
+        merged_data["_extraction_method"] = "pdf_text+vlm_fallback"
+
+        processing_time = (
+            (initial.processing_time_ms or 0) + (vlm.processing_time_ms or 0)
+        )
+
+        return OCRResult(
+            document_type=vlm.document_type or initial.document_type,
+            extracted_data=merged_data,
+            raw_text=best_raw,
+            confidence_score=best_confidence,
+            needs_review=initial.needs_review and vlm.needs_review,
+            processing_time_ms=processing_time,
+            suggestions=["AI vision fallback used to supplement incomplete PDF text extraction."],
+            provider_used=vlm.provider_used or initial.provider_used,
+        )
 
     def _try_vlm_pdf_multi_receipt_ocr(
         self,
@@ -818,14 +1332,17 @@ class OCREngine:
         *,
         mime_type: Optional[str],
         document_type_hint: Optional[DocumentType],
-        max_pdf_pages: int = 8,
+        max_pdf_pages: int = 20,
     ) -> str:
-        """Use Claude vision as a strict OCR transcription pass for manual retry."""
+        """Send file to AI for transcription.
+
+        PDF: render pages as images → send to Groq (fastest) page by page.
+        Fallback: OpenAI → Anthropic for native PDF.
+        Image: Groq → OpenAI → Anthropic vision chain.
+        """
         from app.services.llm_service import get_llm_service
 
         llm = get_llm_service()
-        if not getattr(llm, "anthropic_client", None):
-            raise RuntimeError("Anthropic Claude is not configured for direct retry")
 
         hint_text = ""
         if document_type_hint is not None:
@@ -840,35 +1357,96 @@ class OCREngine:
             "Do not summarize. Do not explain. Return plain text only."
         )
 
-        if image_bytes[:5] == b"%PDF-":
-            images = self._render_pdf_pages_for_vision(image_bytes, max_pages=max_pdf_pages)
-            if not images:
-                return ""
-            return llm.generate_vision_multi_strict_provider(
-                provider_name="anthropic",
-                system_prompt=system_prompt,
-                user_prompt=(
-                    f"{hint_text} Transcribe the attached PDF exactly. "
-                    "Prefix each page with '--- PAGE N ---'. "
-                    "Preserve the reading order as much as possible. Plain text only."
-                ).strip(),
-                images=images,
-                temperature=0.0,
-                max_tokens=4000,
-            ).strip()
+        is_pdf = image_bytes[:5] == b"%PDF-"
 
-        return llm.generate_vision_strict_provider(
-            provider_name="anthropic",
-            system_prompt=system_prompt,
-            user_prompt=(
-                f"{hint_text} Transcribe this document image exactly as plain text. "
-                "Preserve labels, amounts, names, and form field values. Plain text only."
-            ).strip(),
-            image_bytes=image_bytes,
-            mime_type=mime_type or "image/jpeg",
-            temperature=0.0,
-            max_tokens=3000,
+        if is_pdf:
+            # Render PDF pages as JPEG images → send to Groq multi-image in batches
+            # Groq limit: max 5 images per request → batch pages in groups of 5
+            # 120 DPI JPEG ≈ 350KB/page, fast (~10s per batch)
+            try:
+                import fitz
+                doc = fitz.open(stream=image_bytes, filetype="pdf")
+                total_pages = min(len(doc), max_pdf_pages)
+                all_page_images: list[tuple[bytes, str]] = []
+
+                for i in range(total_pages):
+                    mat = fitz.Matrix(120 / 72, 120 / 72)  # 120 DPI
+                    pix = doc[i].get_pixmap(matrix=mat)
+                    all_page_images.append((pix.tobytes("jpeg"), "image/jpeg"))
+                doc.close()
+
+                if all_page_images:
+                    all_text_parts: list[str] = []
+                    batch_size = 5  # Groq max images per request
+
+                    for batch_start in range(0, len(all_page_images), batch_size):
+                        batch = all_page_images[batch_start:batch_start + batch_size]
+                        page_offset = batch_start + 1  # 1-indexed
+
+                        multi_prompt = (
+                            f"{hint_text} These are pages {page_offset}-{page_offset + len(batch) - 1} "
+                            f"of a {total_pages}-page document. "
+                            f"Transcribe ALL pages. Prefix each page with '--- PAGE N ---' "
+                            f"(starting from PAGE {page_offset}). Plain text only."
+                        ).strip()
+
+                        try:
+                            batch_result = llm.generate_vision_multi(
+                                system_prompt=system_prompt,
+                                user_prompt=multi_prompt,
+                                images=batch,
+                                temperature=0.0,
+                                max_tokens=4000,
+                                provider_preference=self._vision_provider_preference,
+                            ).strip()
+                            if batch_result:
+                                all_text_parts.append(batch_result)
+                                logger.info(
+                                    "PDF batch %d-%d transcribed: %d chars",
+                                    page_offset, page_offset + len(batch) - 1,
+                                    len(batch_result),
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                "PDF batch %d-%d transcription failed: %s",
+                                page_offset, page_offset + len(batch) - 1, e,
+                            )
+
+                    if all_text_parts:
+                        result = "\n\n".join(all_text_parts)
+                        logger.info(
+                            "PDF transcription complete: %d pages in %d batch(es), %d chars",
+                            total_pages,
+                            (total_pages + batch_size - 1) // batch_size,
+                            len(result),
+                        )
+                        return result
+            except Exception as e:
+                logger.warning("PDF multi-image transcription failed: %s", e)
+
+            return ""
+
+        # --- Non-PDF image: try all vision providers in order ---
+        user_prompt = (
+            f"{hint_text} Transcribe the attached document exactly. Plain text only."
         ).strip()
+        vision_chain = llm._build_vision_provider_chain()
+        for provider in vision_chain:
+            try:
+                result = llm.generate_vision_strict_provider(
+                    provider_name=provider["name"],
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type or "image/jpeg",
+                    temperature=0.0,
+                    max_tokens=3000,
+                ).strip()
+                if result:
+                    return result
+            except Exception as e:
+                logger.warning("Image transcription via %s failed: %s", provider["name"], e)
+        return ""
 
     def _try_vlm_ocr(
         self, image_bytes: bytes, mime_type: str, start_time: datetime
@@ -1269,6 +1847,26 @@ class OCREngine:
             if not extracted_data:
                 return None
 
+            # SVS_NOTICE: fill in fixed/derived fields
+            if doc_type == DocumentType.SVS_NOTICE:
+                extracted_data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
+                extracted_data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
+                if extracted_data.get("taxpayer_name"):
+                    extracted_data.setdefault("recipient", extracted_data["taxpayer_name"])
+                # amount = beitrag_gesamt (for transaction creation)
+                if extracted_data.get("beitrag_gesamt") and not extracted_data.get("amount"):
+                    extracted_data["amount"] = extracted_data["beitrag_gesamt"]
+                # English aliases for frontend compatibility
+                if extracted_data.get("pensionsversicherung"):
+                    extracted_data.setdefault("pension_insurance", extracted_data["pensionsversicherung"])
+                if extracted_data.get("krankenversicherung"):
+                    extracted_data.setdefault("health_insurance", extracted_data["krankenversicherung"])
+                if extracted_data.get("unfallversicherung"):
+                    extracted_data.setdefault("accident_insurance", extracted_data["unfallversicherung"])
+                q = extracted_data.get("quarter", "")
+                yr = extracted_data.get("tax_year", "")
+                extracted_data.setdefault("description", f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung")
+
             # Ensure vat_amounts is populated from vat_rate/vat_amount
             self._ensure_vat_amounts(extracted_data)
 
@@ -1325,6 +1923,31 @@ class OCREngine:
         "JSON only, no markdown."
     )
 
+    _VLM_CONTRACT_ASSET_KAUFVERTRAG_PROMPT = (
+        "You are an Austrian tax document extraction expert.\n"
+        "This is a Kaufvertrag (purchase contract) for a vehicle or asset. Extract ALL fields as JSON.\n"
+        "Use null for fields you cannot find. Dates in YYYY-MM-DD. Amounts as plain numbers.\n"
+        "{\n"
+        '  "asset_name": "make/model/description of the asset (e.g. Volkswagen Passat 2.0 TDI)",\n'
+        '  "asset_type": "vehicle, electric_vehicle, machinery, office_equipment, or other_equipment",\n'
+        '  "purchase_price": total price including VAT as number,\n'
+        '  "purchase_date": "YYYY-MM-DD contract/signing date",\n'
+        '  "buyer_name": "buyer full name",\n'
+        '  "seller_name": "seller/dealer full name",\n'
+        '  "first_registration_date": "YYYY-MM-DD first registration date or null",\n'
+        '  "vehicle_identification_number": "VIN/FIN/Fahrgestellnummer or null",\n'
+        '  "license_plate": "Kennzeichen or null",\n'
+        '  "mileage_km": mileage in km as number or null,\n'
+        '  "is_used_asset": true if used/Gebraucht false if new/Neuwagen,\n'
+        '  "vat_rate": VAT rate as number (e.g. 20),\n'
+        '  "vat_amount": VAT amount as number\n'
+        "}\n"
+        "CRITICAL: Look for Kaufpreis/Gesamtpreis for purchase_price. "
+        "Look for Marke/Modell, Fahrzeug, Kaufgegenstand for asset_name. "
+        "Look for FIN/Fahrgestellnummer for VIN. Look for Erstzulassung for first_registration_date.\n"
+        "JSON only, no markdown."
+    )
+
     _VLM_CONTRACT_MIETVERTRAG_PROMPT = (
         "You are an Austrian tax document extraction expert.\n"
         "This is a Mietvertrag (rental contract). Extract ALL of these fields as JSON.\n"
@@ -1372,7 +1995,10 @@ class OCREngine:
 
         # Determine prompt based on contract type
         if contract_type == "kaufvertrag":
-            system_prompt = self._VLM_CONTRACT_KAUFVERTRAG_PROMPT
+            if extracted_data.get("purchase_contract_kind") == "asset":
+                system_prompt = self._VLM_CONTRACT_ASSET_KAUFVERTRAG_PROMPT
+            else:
+                system_prompt = self._VLM_CONTRACT_KAUFVERTRAG_PROMPT
         else:
             system_prompt = self._VLM_CONTRACT_MIETVERTRAG_PROMPT
 
@@ -1529,24 +2155,28 @@ class OCREngine:
                         raw_text,
                         classifier=self.classifier,
                     )
+                    extracted_data["purchase_contract_kind"] = PurchaseContractKind.ASSET.value
                     conf = float(extracted_data.get("confidence") or 0.0)
-                    processing_time = (datetime.now() - start_time).total_seconds() * 1000
-                    return OCRResult(
-                        document_type=doc_type,
-                        extracted_data=extracted_data,
-                        raw_text=raw_text,
-                        confidence_score=conf,
-                        needs_review=conf < self.TAX_FORM_LLM_FALLBACK_THRESHOLD,
-                        processing_time_ms=processing_time,
-                        suggestions=self._generate_contract_suggestions(conf),
-                    )
+                    # Only skip LLM/VLM if regex confidence is very high
+                    if conf >= 0.90:
+                        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                        return OCRResult(
+                            document_type=doc_type,
+                            extracted_data=extracted_data,
+                            raw_text=raw_text,
+                            confidence_score=conf,
+                            needs_review=False,
+                            processing_time_ms=processing_time,
+                            suggestions=self._generate_contract_suggestions(conf),
+                        )
+                    # Fall through to LLM/VLM supplement below
+                else:
+                    from app.services.kaufvertrag_ocr_service import KaufvertragOCRService
 
-                from app.services.kaufvertrag_ocr_service import KaufvertragOCRService
-
-                service = KaufvertragOCRService()
-                result = service.process_kaufvertrag_from_text(raw_text)
-                extracted_data = service.extractor.to_dict(result.kaufvertrag_data)
-                extracted_data["purchase_contract_kind"] = PurchaseContractKind.PROPERTY.value
+                    service = KaufvertragOCRService()
+                    result = service.process_kaufvertrag_from_text(raw_text)
+                    extracted_data = service.extractor.to_dict(result.kaufvertrag_data)
+                    extracted_data["purchase_contract_kind"] = PurchaseContractKind.PROPERTY.value
             else:
                 from app.services.mietvertrag_ocr_service import MietvertragOCRService
 
@@ -1612,6 +2242,19 @@ class OCREngine:
 
             # Sync confidence into extracted_data so DB value matches
             extracted_data["confidence"] = conf
+
+            # Map VLM/LLM generic field names to contract-specific field names
+            _ASSET_FIELD_MAP = {
+                "issuer": "seller_name",
+                "merchant": "seller_name",
+                "recipient": "buyer_name",
+                "description": "asset_name",
+            }
+            if extracted_data.get("purchase_contract_kind") == "asset":
+                for src, dst in _ASSET_FIELD_MAP.items():
+                    if not extracted_data.get(dst) and extracted_data.get(src):
+                        extracted_data[dst] = extracted_data[src]
+
             processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
             return OCRResult(
@@ -1690,7 +2333,7 @@ class OCREngine:
         DocumentType.U1_FORM,
         DocumentType.U30_FORM,
         DocumentType.JAHRESABSCHLUSS,
-        DocumentType.SVS_NOTICE,
+        # SVS_NOTICE: use generic LLM extraction (faster, more accurate than regex)
         DocumentType.PROPERTY_TAX,
         DocumentType.BANK_STATEMENT,
     }
@@ -2515,6 +3158,18 @@ OCR text:
 
         return image
 
+    @staticmethod
+    def _count_pdf_pages(pdf_bytes: bytes) -> int:
+        """Return the number of pages in a PDF, or 0 on error."""
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            count = len(doc)
+            doc.close()
+            return count
+        except Exception:
+            return 0
+
     def _extract_text_from_pdf(self, pdf_bytes: bytes) -> str:
         """Extract text directly from PDF using PyMuPDF (no OCR needed if text layer exists).
 
@@ -2549,7 +3204,7 @@ OCR text:
             for i in range(max_pages):
                 page = doc[i]
                 page_text = page.get_text()
-                if page_text:
+                if page_text and len(page_text.strip()) > 20:
                     text_parts.append(f"--- PAGE {i + 1} ---\n{page_text}")
 
                 # Extract AcroForm widget values (filled-in form fields)
