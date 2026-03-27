@@ -18,6 +18,7 @@ import DocumentActionGate from '../components/documents/DocumentActionGate';
 import DocumentPresentationRouter from '../components/documents/DocumentPresentationRouter';
 import SuggestionCardFactory from '../components/documents/SuggestionCardFactory';
 import TransactionDetail from '../components/transactions/TransactionDetail';
+import TransactionForm from '../components/transactions/TransactionForm';
 import {
   documentService,
   type AssetSuggestionConfirmationPayload,
@@ -29,7 +30,7 @@ import { propertyService } from '../services/propertyService';
 import { Document } from '../types/document';
 import type { BankStatementTransactionSummary } from '../types/bankImport';
 import { Property } from '../types/property';
-import { ExpenseCategory, IncomeCategory, Transaction, TransactionType } from '../types/transaction';
+import { ExpenseCategory, IncomeCategory, Transaction, TransactionFormData, TransactionType } from '../types/transaction';
 import { saveBlobWithNativeShare } from '../mobile/files';
 import { useRefreshStore } from '../stores/refreshStore';
 import { aiToast } from '../stores/aiToastStore';
@@ -623,18 +624,88 @@ const RECEIPT_PRESENTATION_SCALAR_SKIP_KEYS = new Set([
   'document_transaction_direction_confidence',
   'commercial_document_semantics',
   'is_reversal',
+  'document_date',
+  'document_year',
+  'year_basis',
+  'year_confidence',
 ]);
 
-const buildReceiptScalarEntries = (receipt: Record<string, any>): [string, unknown][] =>
-  Object.entries(receipt).filter(
+const normalizeReceiptComparisonValue = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const hasReceiptScalarValue = (value: unknown): boolean => (
+  value !== null
+  && value !== undefined
+  && typeof value !== 'object'
+  && String(value).trim() !== ''
+);
+
+const buildReceiptScalarEntries = (receipt: Record<string, any>): [string, unknown][] => {
+  const entries: [string, unknown][] = [];
+  const addedKeys = new Set<string>();
+  const lineItems = getDisplayLineItems(receipt);
+  const resolvedDocumentType = String(receipt.document_type || '').toLowerCase();
+  const isInvoiceFamilyDocumentType = [
+    'invoice',
+    'credit_note',
+    'gutschrift',
+    'proforma_invoice',
+    'delivery_note',
+  ].includes(resolvedDocumentType);
+  const pushEntry = (key: string, value: unknown) => {
+    if (addedKeys.has(key) || !hasReceiptScalarValue(value)) return;
+    entries.push([key, value]);
+    addedKeys.add(key);
+  };
+
+  pushEntry('date', receipt.date);
+  pushEntry('amount', receipt.amount);
+
+  const sellerFieldPriority = isInvoiceFamilyDocumentType
+    ? ['issuer', 'supplier', 'merchant']
+    : ['merchant', 'supplier', 'issuer'];
+  const primarySellerKey = sellerFieldPriority.find((key) => hasReceiptScalarValue(receipt[key]));
+  const primarySellerValue = primarySellerKey ? receipt[primarySellerKey] : null;
+  pushEntry(primarySellerKey || 'merchant', primarySellerValue);
+
+  const recipientValue = receipt.recipient;
+  if (
+    hasReceiptScalarValue(recipientValue)
+    && normalizeReceiptComparisonValue(recipientValue) !== normalizeReceiptComparisonValue(primarySellerValue)
+  ) {
+    pushEntry('recipient', recipientValue);
+  }
+
+  if (lineItems.length === 0) {
+    pushEntry('description', receipt.description);
+    if (
+      hasReceiptScalarValue(receipt.product_summary)
+      && normalizeReceiptComparisonValue(receipt.product_summary) !== normalizeReceiptComparisonValue(receipt.description)
+    ) {
+      pushEntry('product_summary', receipt.product_summary);
+    }
+  }
+
+  pushEntry('invoice_number', receipt.invoice_number);
+  pushEntry('tax_id', receipt.tax_id);
+  pushEntry('vat_amount', receipt.vat_amount);
+  pushEntry('vat_rate', receipt.vat_rate);
+  pushEntry('payment_method', receipt.payment_method);
+  if (hasReceiptScalarValue(receipt.currency) && String(receipt.currency).trim().toUpperCase() !== 'EUR') {
+    pushEntry('currency', receipt.currency);
+  }
+
+  return entries.filter(
     ([key, value]) =>
       !key.startsWith('_')
       && !OCR_META_SKIP_KEYS.includes(key)
       && !RECEIPT_PRESENTATION_SCALAR_SKIP_KEYS.has(key)
-      && value !== null
-      && value !== undefined
-      && typeof value !== 'object'
+      && hasReceiptScalarValue(value)
   );
+};
 
 const buildUpdatedReceiptCorrections = (
   ocrResult: unknown,
@@ -907,7 +978,7 @@ const buildTransactionLineItems = (
 const DocumentsPage = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { confirm: showConfirm } = useConfirm();
+  const { confirm: showConfirm, alert: showAlert } = useConfirm();
   const { documentId } = useParams<{ documentId: string }>();
   const [searchParams] = useSearchParams();
   const uploadPropertyId = searchParams.get('property_id');
@@ -919,6 +990,7 @@ const DocumentsPage = () => {
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null);
   const [linkedTransaction, setLinkedTransaction] = useState<Transaction | null>(null);
   const [inlineTransaction, setInlineTransaction] = useState<Transaction | null>(null);
+  const [inlineTransactionMode, setInlineTransactionMode] = useState<'detail' | 'edit'>('detail');
   const [linkedAsset, setLinkedAsset] = useState<Property | null>(null);
   const [viewerBlobUrl, setViewerBlobUrl] = useState<string | null>(null);
   const [confirmingAction, setConfirmingAction] = useState<string | null>(null);
@@ -1984,6 +2056,7 @@ const isReceiptOrInvoice = (doc: Document) =>
       documentTypeDraft={getOcrReviewDraft(document)?.documentType ?? null}
       allowDocumentTypeEdit={canEditDetectedDocumentType(document)}
       onDocumentTypeDraftChange={(nextType) => handleDocumentTypeTemplateSwitch(document, nextType)}
+      onOpenTransaction={(transactionId) => handleOpenTransactionInline(transactionId)}
       onConfirm={handleReviewComplete}
       onCancel={handleReviewCancel}
       onPrevDocument={hasPrevDoc ? () => navigateToDocument('prev') : undefined}
@@ -2012,6 +2085,7 @@ const isReceiptOrInvoice = (doc: Document) =>
     fallbackLineDate?: string | null,
     fallbackLineAmount?: string | null,
   ) {
+    setInlineTransactionMode('detail');
     const inferTransactionType = (): TransactionType => {
       if (
         previewTransaction?.type
@@ -2051,6 +2125,11 @@ const isReceiptOrInvoice = (doc: Document) =>
 
     const preview = buildPreviewTransaction();
 
+    if (linkedTransaction?.id === transactionId) {
+      setInlineTransaction(linkedTransaction);
+      return;
+    }
+
     if (previewTransaction || fallbackLineDate || fallbackLineAmount) {
       setInlineTransaction(preview);
     }
@@ -2070,19 +2149,193 @@ const isReceiptOrInvoice = (doc: Document) =>
 
   const handleCloseInlineTransaction = useCallback(() => {
     setInlineTransaction(null);
+    setInlineTransactionMode('detail');
   }, []);
+
+  const refreshViewingDocumentAfterInlineMutation = useCallback(async (
+    fallbackTransaction?: Transaction | null,
+    deletedTransactionId?: number | null,
+  ) => {
+    if (!viewingDocument) return;
+
+    const updatedDocument = await documentService.getDocument(viewingDocument.id);
+    setViewingDocument(updatedDocument);
+
+    const linkedTransactionId = updatedDocument.transaction_id;
+    if (linkedTransactionId && linkedTransactionId !== deletedTransactionId) {
+      if (fallbackTransaction && fallbackTransaction.id === linkedTransactionId) {
+        setLinkedTransaction(fallbackTransaction);
+      } else {
+        const refreshedTransaction = await transactionService.getById(linkedTransactionId);
+        setLinkedTransaction(refreshedTransaction);
+      }
+    } else if (linkedTransaction?.id === deletedTransactionId || !linkedTransactionId) {
+      setLinkedTransaction(null);
+    }
+
+    setRefreshKey((current) => current + 1);
+  }, [linkedTransaction?.id, viewingDocument]);
+
+  const handleInlineTransactionEdit = useCallback(() => {
+    setInlineTransactionMode('edit');
+  }, []);
+
+  const handleInlineTransactionEditCancel = useCallback(() => {
+    setInlineTransactionMode('detail');
+  }, []);
+
+  const handleInlineTransactionUpdate = useCallback(async (data: TransactionFormData) => {
+    if (!inlineTransaction) return;
+
+    try {
+      const updated = await transactionService.update(inlineTransaction.id, data);
+      setInlineTransaction(updated);
+      if (linkedTransaction?.id === updated.id) {
+        setLinkedTransaction(updated);
+      }
+      await refreshViewingDocumentAfterInlineMutation(updated);
+      useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+      setInlineTransactionMode('detail');
+      aiToast(t('transactions.updateSuccess', 'Transaction updated'), 'success');
+    } catch (err: any) {
+      const message = getApiErrorMessage(
+        err,
+        t('transactions.updateError', 'Could not update transaction.'),
+      );
+      aiToast(message, 'error');
+      throw err;
+    }
+  }, [inlineTransaction, linkedTransaction?.id, refreshViewingDocumentAfterInlineMutation, t]);
+
+  const handleInlineTransactionDelete = useCallback(async () => {
+    if (!inlineTransaction) return;
+
+    try {
+      const check = await transactionService.deleteCheck(inlineTransaction.id);
+
+      if (check.warning_type === 'document_only') {
+        if (check.document_id === viewingDocument?.id) {
+          await showAlert(
+            t(
+              'transactions.deleteCheck.documentOnlyInline',
+              'This transaction is managed by the current document. Delete or change it from the document workflow instead.',
+            ),
+            {
+              variant: 'info',
+              confirmText: t('common.close', 'Close'),
+            },
+          );
+        } else {
+          const goToDocument = await showConfirm(
+            t('transactions.deleteCheck.documentOnly', { name: check.document_name }),
+            {
+              variant: 'info',
+              confirmText: t('transactions.deleteCheck.goToDocument', 'View Document'),
+              cancelText: t('common.close', 'Close'),
+            },
+          );
+          if (goToDocument && check.document_id) {
+            navigate(`/documents/${check.document_id}`);
+          }
+        }
+        return;
+      }
+
+      let forceDelete = false;
+
+      if (check.warning_type === 'document_multi') {
+        const confirmed = await showConfirm(
+          t('transactions.deleteCheck.documentMulti', {
+            name: check.document_name || '-',
+            count: check.linked_transaction_count ?? 0,
+          }),
+          { variant: 'warning' },
+        );
+        if (!confirmed) return;
+        forceDelete = true;
+      } else if (check.warning_type === 'recurring') {
+        const confirmed = await showConfirm(t('transactions.deleteCheck.recurring'), {
+          variant: 'warning',
+        });
+        if (!confirmed) return;
+        forceDelete = true;
+      } else {
+        const confirmed = await showConfirm(
+          t('transactions.deleteCheck.confirmDelete'),
+          { variant: 'danger' },
+        );
+        if (!confirmed) return;
+      }
+
+      await transactionService.delete(inlineTransaction.id, forceDelete);
+      await refreshViewingDocumentAfterInlineMutation(null, inlineTransaction.id);
+      useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+      setInlineTransaction(null);
+      setInlineTransactionMode('detail');
+      aiToast(t('transactions.deleteSuccess', 'Transaction deleted'), 'success');
+    } catch (err: any) {
+      const message = getApiErrorMessage(
+        err,
+        t('transactions.deleteError', 'Could not delete transaction.'),
+      );
+      aiToast(message, 'error');
+    }
+  }, [inlineTransaction, navigate, refreshViewingDocumentAfterInlineMutation, showAlert, showConfirm, t, viewingDocument?.id]);
 
   function renderInlineTransactionOverlay() {
     if (!inlineTransaction) return null;
 
-    return (
-      <TransactionDetail
-        transaction={inlineTransaction}
-        hideLinkedDocumentSection
-        onClose={handleCloseInlineTransaction}
-        onEdit={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
-        onDelete={() => navigate(`/transactions?transactionId=${inlineTransaction.id}`)}
-      />
+    if (inlineTransactionMode === 'edit') {
+      return createPortal(
+        <div className="transaction-detail-overlay" onClick={handleCloseInlineTransaction}>
+          <div
+            className="transaction-detail transaction-inline-edit-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="detail-header">
+              <h2>{t('transactions.editTransaction', 'Edit Transaction')}</h2>
+              <button className="btn-close" onClick={handleCloseInlineTransaction}>
+                ×
+              </button>
+            </div>
+            <div className="detail-body transaction-inline-edit-body">
+              <TransactionForm
+                transaction={inlineTransaction}
+                onSubmit={handleInlineTransactionUpdate}
+                onCancel={handleInlineTransactionEditCancel}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      );
+    }
+
+    return createPortal(
+      <div className="transaction-detail-overlay" onClick={handleCloseInlineTransaction}>
+        <div
+          className="transaction-detail transaction-inline-detail-modal"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="detail-header">
+            <h2>{t('documents.linkedTransaction.title', 'Linked Transaction')}</h2>
+            <button className="btn-close" onClick={handleCloseInlineTransaction}>
+              ×
+            </button>
+          </div>
+          <div className="detail-body">
+            <TransactionDetail
+              transaction={inlineTransaction}
+              hideLinkedDocumentSection
+              hideEditAction
+              onClose={handleCloseInlineTransaction}
+            />
+          </div>
+        </div>
+      </div>,
+      document.body,
     );
   }
 
@@ -2537,6 +2790,8 @@ const isReceiptOrInvoice = (doc: Document) =>
                     employee_name: t('documents.ocr.employeeName'),
                     personnel_number: t('documents.ocr.personnelNumber'),
                     amount: t('documents.ocr.amount', 'Amount'),
+                    issuer: t('documents.review.taxFieldLabels.issuer', 'Issuer'),
+                    recipient: t('documents.review.taxFieldLabels.recipient', 'Recipient'),
                     merchant: t('documents.ocr.merchant', 'Merchant'),
                     supplier: t('documents.ocr.supplier', 'Supplier'),
                     description: t('documents.ocr.description', 'Description'),
@@ -2875,28 +3130,6 @@ const isReceiptOrInvoice = (doc: Document) =>
                                     </label>
                                   </div>
 
-                                  {(liveReceiptDecision.badges.length > 0 || liveReceiptDecision.helpers.length > 0) && (
-                                    <div className="receipt-presentation-meta">
-                                      {liveReceiptDecision.badges.length > 0 && (
-                                        <div className="receipt-presentation-badges">
-                                          {liveReceiptDecision.badges.map((badge) => (
-                                            <span key={`${receiptIndex}-${badge}`} className="receipt-presentation-badge">
-                                              {badge}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                      {liveReceiptDecision.helpers.length > 0 && (
-                                        <div className="receipt-presentation-helpers">
-                                          {liveReceiptDecision.helpers.map((helper) => (
-                                            <p key={`${receiptIndex}-${helper}`} className="receipt-presentation-helper">
-                                              {helper}
-                                            </p>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
 
                                 {receiptEntries.length > 0 && (

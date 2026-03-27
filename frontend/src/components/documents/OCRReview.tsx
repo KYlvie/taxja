@@ -1047,8 +1047,8 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               <div key={`${e.type}-${e.id}`} className={`ocr-linked-entity ocr-linked-entity--${e.type}`}>
                 <strong>{e.label}</strong>
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => {
-                  if (e.type === 'transaction') {
-                    navigate(`/transactions?highlight=${e.id}`);
+                  if (e.type === 'transaction' && onOpenTransaction) {
+                    void onOpenTransaction(Number(e.id));
                   } else if (e.type === 'recurring') navigate('/recurring');
                   else if (e.type === 'property' || e.type === 'asset') navigate(`/properties/${e.id}`);
                   else navigate('/transactions');
