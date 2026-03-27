@@ -102,6 +102,7 @@ class OCRResult:
     processing_time_ms: float
     suggestions: List[str]
     provider_used: Optional[str] = None
+    classification_source: Optional[str] = None  # "unified_vision", "vlm_ocr", "text_pipeline", etc.
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -157,6 +158,7 @@ class OCREngine:
         vision_provider_preference: Optional[str] = None,
         reprocess_mode: Optional[str] = None,
         document_type_hint: Optional[Any] = None,
+        user_identity: Optional[str] = None,
     ) -> OCRResult:
         """
         Process a single document image or PDF
@@ -175,6 +177,8 @@ class OCREngine:
 
         try:
             normalized_hint = self._normalize_document_type_hint(document_type_hint)
+            self._last_unified_vision_dedup_hints = None
+            self._last_unified_vision_type = None
 
             if reprocess_mode == "claude_direct":
                 return self._process_document_via_claude_direct(
@@ -184,14 +188,60 @@ class OCREngine:
                     document_type_hint=normalized_hint,
                 )
 
-            # Check if PDF and try direct text extraction first (much faster)
-            if image_bytes[:5] == b"%PDF-":
+            # -- Pre-process PDF: extract text layer --
+            is_pdf = image_bytes[:5] == b"%PDF-"
+            pdf_text = None
+            text_len = 0
+            use_vlm_first = False
+
+            if is_pdf:
                 pdf_text = self._extract_text_from_pdf(image_bytes)
                 text_len = len(pdf_text.strip()) if pdf_text else 0
+                use_vlm_first = self._should_use_vlm_first(pdf_text, text_len, image_bytes)
+            else:
+                # Images: always VLM-first
+                use_vlm_first = True
+
+            # -- VLM-first path: unified vision (classify+extract in one call) --
+            if use_vlm_first:
+                supplementary_text = pdf_text.strip() if pdf_text and text_len > 20 else None
+                vlm_result = self._process_via_unified_vision(
+                    image_bytes,
+                    mime_type,
+                    start_time,
+                    document_type_hint=normalized_hint,
+                    supplementary_text=supplementary_text,
+                    user_identity=user_identity,
+                )
+                if vlm_result is not None:
+                    return vlm_result
+
+                # Unified VLM classified to a specialist type → route to dedicated extractor
+                if self._last_unified_vision_type is not None:
+                    specialist_type = self._last_unified_vision_type
+                    # Use text layer if available, otherwise fall through to old path
+                    if pdf_text and text_len > 50:
+                        logger.info(
+                            "Routing specialist type %s to text-based extractor",
+                            specialist_type.value,
+                        )
+                        return self._process_from_raw_text(
+                            pdf_text.strip(),
+                            image_bytes,
+                            start_time,
+                            document_type_hint=specialist_type,
+                            classification_confidence_hint=0.90,
+                        )
+                    # No text layer: fall through to existing paths below
+
+            # -- Existing paths (text-first for rich-text PDFs, fallbacks) --
+            # These remain unchanged for: tax forms, contracts, bank statements,
+            # lohnzettel, and as fallback when VLM is unavailable.
+
+            if is_pdf:
                 pdf_page_count = self._count_pdf_pages(image_bytes)
 
                 # Multi-page PDF with thin text → single vision call (classify+extract)
-                # (text layer is likely only on cover page, real data on scanned pages)
                 if pdf_page_count >= 3 and text_len < 2500:
                     logger.info(
                         "Multi-page scanned PDF (%d pages, %d chars text) -> vision classify+extract",
@@ -204,7 +254,6 @@ class OCREngine:
                     )
                     if vision_result is not None:
                         return vision_result
-                    # Fallback to old path if vision fails
                     return self._process_document_via_claude_direct(
                         image_bytes,
                         mime_type="application/pdf",
@@ -213,15 +262,12 @@ class OCREngine:
                     )
 
                 if pdf_text and text_len > 20:
-                    # PDF has a text layer — process from extracted text
                     result = self._process_from_raw_text(
                         pdf_text.strip(),
                         image_bytes,
                         start_time,
                         document_type_hint=normalized_hint,
                     )
-                    # Quality gate: if extraction looks thin, try VLM fallback
-                    # This catches mixed PDFs (text layer on page 1, scanned pages 2+)
                     vlm_fallback = self._try_vlm_fallback_for_thin_extraction(
                         result, image_bytes, start_time, normalized_hint,
                     )
@@ -229,29 +275,21 @@ class OCREngine:
                         return vlm_fallback
                     return result
 
-            # 1. Scanned PDF or image — prefer VLM (fast API) over Tesseract (slow CPU)
-            if image_bytes[:5] == b"%PDF-":
-                # Try VLM first for scanned PDFs — much faster than Tesseract
-                # on low-resource servers (2-5s API call vs 20-30s CPU OCR)
+                # Scanned PDF fallback
                 vlm_result = self._try_vlm_ocr_for_pdf(image_bytes, start_time)
                 if vlm_result is not None:
                     return vlm_result
 
-                # VLM unavailable — fall back to Tesseract
-                # Quick OCR: first 2 pages only for classification (~8s vs ~23s)
                 raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=2)
-
                 if not raw_text.strip():
                     logger.warning(
                         "Tesseract also returned empty text for PDF, no OCR possible"
                     )
 
-                # Classify from partial text
                 doc_type, classification_confidence = self.classifier.classify(
                     None, raw_text
                 )
 
-                # Contracts: VLM reads images directly, skip full Tesseract OCR
                 if doc_type in (
                     DocumentType.KAUFVERTRAG, DocumentType.MIETVERTRAG,
                     DocumentType.RENTAL_CONTRACT,
@@ -269,18 +307,16 @@ class OCREngine:
                         raw_text, start_time
                     )
 
-                # Non-contract: OCR all pages for full text extraction
                 if raw_text.strip():
                     raw_text = self._ocr_all_pdf_pages(image_bytes, max_pages=5)
             else:
-                # For images: try VLM (AI vision) first, then Tesseract as fallback
+                # Image fallback (VLM was unavailable)
                 vlm_result = self._try_vlm_ocr(
                     image_bytes, mime_type or "image/jpeg", start_time
                 )
                 if vlm_result is not None:
                     return vlm_result
 
-                # VLM unavailable — fall back to Tesseract
                 image = self._load_image(image_bytes)
                 processed_image = self.preprocessor.preprocess(image)
                 raw_text = self._extract_text(processed_image)
@@ -350,6 +386,61 @@ class OCREngine:
                 return fallback_map[normalized]
 
         return None
+
+    def _should_use_vlm_first(
+        self,
+        pdf_text: Optional[str],
+        text_len: int,
+        image_bytes: bytes,
+    ) -> bool:
+        """Decide if a PDF should go through unified VLM-first path.
+
+        Uses a combination of signals rather than just text length:
+        - Text length and quality (alphanumeric ratio)
+        - Whether the PDF has AcroForm fields (tax forms → text-first)
+        - Page count
+
+        Returns True for scanned/thin-text/low-quality-text PDFs.
+        Returns False for rich-text PDFs (tax forms, contracts with good text).
+        """
+        # Very short text → almost certainly scanned
+        if text_len < 50:
+            return True
+
+        # Check text quality: low alphanumeric ratio = OCR garbage or minimal content
+        text = pdf_text.strip() if pdf_text else ""
+        if text:
+            alnum_count = sum(1 for c in text if c.isalnum())
+            alnum_ratio = alnum_count / len(text) if len(text) > 0 else 0
+            # Low quality text (lots of symbols/garbage) → VLM-first
+            if alnum_ratio < 0.3:
+                return True
+
+        # Check for AcroForm fields (tax forms with form widgets → text-first)
+        if text_len > 100:
+            try:
+                import fitz
+                doc = fitz.open(stream=image_bytes, filetype="pdf")
+                # Quick check: if PDF has form fields, it's likely a tax form
+                has_form_fields = False
+                for page in doc[:2]:  # Check first 2 pages only
+                    widgets = list(page.widgets())
+                    if len(widgets) > 3:  # More than a few form fields
+                        has_form_fields = True
+                        break
+                doc.close()
+                if has_form_fields:
+                    logger.info("PDF has AcroForm fields, using text-first path")
+                    return False
+            except Exception:
+                pass
+
+        # Moderate text but short → VLM-first (likely partial text layer)
+        if text_len < 200:
+            return True
+
+        # Rich text layer → text-first (specialist extractors are more accurate)
+        return False
 
     # -- All known document types for vision classify+extract -----------------
     _VISION_DOCUMENT_TYPES = ", ".join([doc.value for doc in DocumentType])
@@ -604,6 +695,314 @@ class OCREngine:
                 )
 
         return "\n\n".join(text_parts)
+
+    # -- Types that must always be routed to specialist extractors ---------------
+    # Even if unified VLM classifies to one of these, we hand off to the
+    # dedicated extractor chain (text-based) instead of using VLM extraction.
+    # Built lazily in _get_specialist_types() because TAX_FORM_EXTRACTOR_TYPES
+    # is defined later in the class body.
+    _SPECIALIST_TYPES_CACHE: Optional[set] = None
+
+    @classmethod
+    def _get_specialist_types(cls) -> set:
+        if cls._SPECIALIST_TYPES_CACHE is None:
+            cls._SPECIALIST_TYPES_CACHE = {
+                DocumentType.KAUFVERTRAG,
+                DocumentType.MIETVERTRAG,
+                DocumentType.RENTAL_CONTRACT,
+                DocumentType.LOAN_CONTRACT,
+                DocumentType.EINKOMMENSTEUERBESCHEID,
+                DocumentType.E1_FORM,
+                DocumentType.LOHNZETTEL,
+                DocumentType.BANK_STATEMENT,
+                DocumentType.L1_FORM,
+                DocumentType.L1K_BEILAGE,
+                DocumentType.L1AB_BEILAGE,
+                DocumentType.E1A_BEILAGE,
+                DocumentType.E1B_BEILAGE,
+                DocumentType.E1KV_BEILAGE,
+                DocumentType.U1_FORM,
+                DocumentType.U30_FORM,
+                DocumentType.JAHRESABSCHLUSS,
+                DocumentType.PROPERTY_TAX,
+            }
+        return cls._SPECIALIST_TYPES_CACHE
+
+    # -- Unified VLM prompt: first-batch types only (receipt/invoice/svs/other) --
+    _UNIFIED_VISION_TYPES = (
+        "receipt, invoice, svs_notice, "
+        "betriebskostenabrechnung, versicherungsbestaetigung, "
+        "spendenbestaetigung, kirchenbeitrag, other"
+    )
+
+    _UNIFIED_VISION_EXTRACT_INSTRUCTIONS = (
+        "Extract ALL relevant fields as FLAT key-value pairs (no nested objects).\n"
+        "Fields (null if missing): raw_text (first 200 chars), "
+        "date (YYYY-MM-DD), amount (total number), "
+        "issuer (company/person who CREATED this invoice and will RECEIVE payment — "
+        "their name usually appears in the letterhead/logo at top of page), "
+        "recipient (company/person who RECEIVES this invoice and must PAY — "
+        "their name appears in a smaller address block below the header), "
+        "merchant (same as issuer — the seller/service provider name), "
+        "description (brief summary), vat_amount, vat_rate, "
+        "invoice_number, payment_method, tax_id, "
+        "line_items [{name,quantity,unit_price,total_price,vat_rate}], "
+        "vat_summary [{rate,net_amount,vat_amount}].\n"
+        "CRITICAL: issuer, recipient, merchant must be plain strings, NOT objects.\n"
+        "For SVS (svs_notice): beitrag_gesamt, beitragsgrundlage, pensionsversicherung, "
+        "krankenversicherung, unfallversicherung, selbstaendigenvorsorge, nachzahlung, "
+        "gutschrift, tax_year, quarter, date, versicherungsnummer, taxpayer_name.\n"
+        "For Versicherungsbestätigung: insurer_name, praemie, polizze, versicherungsart, date.\n"
+        "For other types: extract what you can find (amounts, dates, names, IDs).\n"
+        "IMPORTANT: If MULTIPLE separate receipts/invoices are visible, return a JSON "
+        "array with one object per receipt. If only one document, return a single object.\n"
+        "Also include: dedup_hints: {entity_name, entity_address, entity_identifier}.\n"
+        "Amounts as numbers. Dates YYYY-MM-DD. null if not found."
+    )
+
+    def _process_via_unified_vision(
+        self,
+        image_bytes: bytes,
+        mime_type: Optional[str],
+        start_time: datetime,
+        document_type_hint: Optional[DocumentType] = None,
+        supplementary_text: Optional[str] = None,
+        user_identity: Optional[str] = None,
+    ) -> Optional[OCRResult]:
+        """Unified VLM entry: classify + extract in one call.
+
+        Handles images (JPEG/PNG) and PDFs (rendered to JPEG pages).
+        Only covers first-batch types: receipt, invoice, svs_notice, other.
+        If VLM classifies to a specialist type (tax form, contract, etc.),
+        returns None so the caller can route to the dedicated extractor.
+
+        Returns OCRResult with classification_source="unified_vision", or None.
+        """
+        import json as _json
+        from app.services.llm_service import get_llm_service
+
+        llm = get_llm_service()
+        if not llm.is_available:
+            return None
+
+        # -- Prepare image(s) --
+        is_pdf = image_bytes[:5] == b"%PDF-"
+        images: list[tuple[bytes, str]] = []
+
+        if is_pdf:
+            try:
+                import fitz
+
+                doc = fitz.open(stream=image_bytes, filetype="pdf")
+                render_pages = min(len(doc), 5)
+                for i in range(render_pages):
+                    mat = fitz.Matrix(120 / 72, 120 / 72)  # 120 DPI
+                    pix = doc[i].get_pixmap(matrix=mat)
+                    images.append((pix.tobytes("jpeg"), "image/jpeg"))
+                doc.close()
+            except Exception as e:
+                logger.warning("Unified vision: failed to render PDF pages: %s", e)
+                return None
+        else:
+            # Single image
+            effective_mime = mime_type or "image/jpeg"
+            images.append((image_bytes, effective_mime))
+
+        if not images:
+            return None
+
+        # -- Build prompt --
+        hint_text = ""
+        if document_type_hint is not None:
+            hint_text = f"Expected type: '{document_type_hint.value}'. "
+
+        # Build user identity context for direction detection
+        user_context = ""
+        if user_identity:
+            user_context = (
+                f"\nThe document owner/taxpayer is: {user_identity}. "
+                "If the issuer matches this person/company, set transaction_direction to \"income\" "
+                "(they issued the invoice, they will receive payment). "
+                "If the recipient matches, set transaction_direction to \"expense\" "
+                "(they received the invoice, they must pay). "
+                "If unclear, set transaction_direction to \"unknown\".\n"
+            )
+
+        system_prompt = (
+            "You are an expert Austrian tax document processor. "
+            f"Step 1: Identify document_type from: {self._UNIFIED_VISION_TYPES}. "
+            "If the document is a tax form (E1, L1, U1, etc.), contract (Kaufvertrag, "
+            "Mietvertrag, Kreditvertrag), bank statement, or payslip (Lohnzettel), "
+            "set document_type to the specific type name.\n"
+            f"Step 2: {self._UNIFIED_VISION_EXTRACT_INSTRUCTIONS}\n"
+            f"{user_context}"
+            "Return ONLY valid JSON: {\"document_type\": \"...\", ...extracted fields...}"
+        )
+
+        user_prompt = (
+            f"{hint_text}Classify this document and extract all relevant fields. "
+            "JSON only, no markdown."
+        )
+        if supplementary_text:
+            # Append text layer as context (capped at 3000 chars)
+            user_prompt += (
+                f"\n\nText layer content (for reference):\n"
+                f"{supplementary_text[:3000]}"
+            )
+
+        # -- Single VLM call --
+        try:
+            if len(images) == 1:
+                response = llm.generate_vision(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    image_bytes=images[0][0],
+                    mime_type=images[0][1],
+                    temperature=0.0,
+                    max_tokens=4000,
+                    provider_preference=self._vision_provider_preference,
+                )
+            else:
+                response = llm.generate_vision_multi(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    images=images,
+                    temperature=0.0,
+                    max_tokens=4000,
+                    provider_preference=self._vision_provider_preference,
+                )
+        except Exception as e:
+            logger.warning("Unified vision call failed: %s", e)
+            return None
+
+        # -- Parse response --
+        data = self._parse_vlm_json(response)
+        if data is None:
+            logger.warning("Unified vision: unparseable response")
+            return None
+
+        # Handle multi-receipt array
+        if isinstance(data, list):
+            if len(data) == 0:
+                return None
+            if len(data) == 1:
+                data = data[0]
+            else:
+                # Multiple receipts detected
+                logger.info("Unified vision: %d receipts in one document", len(data))
+                # Persist dedup_hints from first receipt
+                first_hints = data[0].get("dedup_hints") if isinstance(data[0], dict) else None
+                processing_time = (datetime.now() - start_time).total_seconds() * 1000
+                payload = self._build_multi_receipt_payload(data)
+                if first_hints:
+                    payload["dedup_hints"] = first_hints
+                return OCRResult(
+                    document_type=DocumentType.RECEIPT,
+                    extracted_data=payload,
+                    raw_text=response,
+                    confidence_score=0.88,
+                    needs_review=True,
+                    processing_time_ms=processing_time,
+                    suggestions=[
+                        f"AI detected {len(data)} receipts. "
+                        "Please upload each receipt separately for best results."
+                    ],
+                    provider_used=llm.last_provider_used if hasattr(llm, 'last_provider_used') else "vlm",
+                    classification_source="unified_vision",
+                )
+
+        if not isinstance(data, dict):
+            return None
+
+        # -- Extract document type --
+        raw_type = data.pop("document_type", "unknown") or "unknown"
+        doc_type = None
+        try:
+            doc_type = DocumentType(raw_type)
+        except (ValueError, KeyError):
+            pass
+        if doc_type is None:
+            doc_type = document_type_hint or DocumentType.UNKNOWN
+
+        # -- Check if VLM classified to a specialist type → return None to hand off --
+        if doc_type in self._get_specialist_types():
+            logger.info(
+                "Unified vision classified as specialist type %s, handing off",
+                doc_type.value,
+            )
+            # Store dedup_hints in a temporary attribute for the caller to use
+            self._last_unified_vision_dedup_hints = data.get("dedup_hints")
+            self._last_unified_vision_type = doc_type
+            return None
+
+        # -- Flatten nested issuer/recipient objects --
+        # VLMs sometimes return {"name": "...", "address": "...", "uid": "..."}
+        # instead of flat strings. Flatten them for downstream compatibility.
+        for role in ("issuer", "recipient"):
+            val = data.get(role)
+            if isinstance(val, dict):
+                name = val.get("name", "")
+                data[role] = name
+                if val.get("address"):
+                    data[f"{role}_address"] = val["address"]
+                if val.get("uid"):
+                    data[f"{role}_uid"] = val["uid"]
+
+        # Auto-fill merchant from issuer (issuer = seller = merchant)
+        if not data.get("merchant") or data.get("merchant") == "Unbekannt":
+            issuer_val = data.get("issuer")
+            if issuer_val and isinstance(issuer_val, str) and issuer_val.strip():
+                data["merchant"] = issuer_val
+
+        # -- SVS post-processing (same as _process_scanned_pdf_via_vision) --
+        if doc_type == DocumentType.SVS_NOTICE:
+            data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
+            data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
+            if data.get("taxpayer_name"):
+                data.setdefault("recipient", data["taxpayer_name"])
+            if data.get("beitrag_gesamt") and not data.get("amount"):
+                data["amount"] = data["beitrag_gesamt"]
+            q = data.get("quarter", "")
+            yr = data.get("tax_year", "")
+            data.setdefault(
+                "description",
+                f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
+            )
+            if data.get("pensionsversicherung"):
+                data.setdefault("pension_insurance", data["pensionsversicherung"])
+            if data.get("krankenversicherung"):
+                data.setdefault("health_insurance", data["krankenversicherung"])
+            if data.get("unfallversicherung"):
+                data.setdefault("accident_insurance", data["unfallversicherung"])
+
+        # Normalize receipt/invoice payload
+        extracted_data = self._normalize_receipt_payload(data)
+
+        # Ensure dedup_hints are preserved in extracted_data
+        dedup_hints = data.get("dedup_hints")
+        if dedup_hints and isinstance(dedup_hints, dict):
+            extracted_data["dedup_hints"] = dedup_hints
+
+        field_count = len([v for v in extracted_data.values() if v is not None and v != ""])
+        confidence = min(0.95, 0.7 + field_count * 0.03)
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        logger.info(
+            "Unified vision: type=%s, %d fields, confidence=%.2f, %.0fms",
+            doc_type.value, field_count, confidence, processing_time,
+        )
+
+        return OCRResult(
+            document_type=doc_type,
+            extracted_data=extracted_data,
+            raw_text=response,
+            confidence_score=confidence,
+            needs_review=confidence < self.config.CONFIDENCE_THRESHOLD,
+            processing_time_ms=processing_time,
+            suggestions=["Processed via unified AI vision (classify+extract in one call)."],
+            provider_used=llm.last_provider_used if hasattr(llm, 'last_provider_used') else "vlm",
+            classification_source="unified_vision",
+        )
 
     def _process_document_via_claude_direct(
         self,

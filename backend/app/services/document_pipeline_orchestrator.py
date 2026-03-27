@@ -671,12 +671,30 @@ class DocumentPipelineOrchestrator:
             or document.document_type == DBDocumentType.OTHER
         )
         doc_type_hint = None if _skip_hint else document.document_type
+
+        # Build user identity string for VLM direction detection
+        user_identity = None
+        try:
+            from app.models.user import User as _User
+            _user = self.db.query(_User).filter(_User.id == document.user_id).first()
+            if _user:
+                parts = []
+                if _user.name:
+                    parts.append(_user.name)
+                if getattr(_user, "business_name", None):
+                    parts.append(_user.business_name)
+                if parts:
+                    user_identity = " / ".join(parts)
+        except Exception:
+            pass
+
         ocr_result = self.ocr_engine.process_document(
             image_bytes,
             mime_type=document.mime_type,
             vision_provider_preference=vision_provider_preference,
             reprocess_mode=reprocess_mode,
             document_type_hint=doc_type_hint,
+            user_identity=user_identity,
         )
         result.provider_used = ocr_result.provider_used
         result.ocr_confidence_score = ocr_result.confidence_score
@@ -692,6 +710,19 @@ class DocumentPipelineOrchestrator:
 
     # ---- Stage 2: Classification arbitration ----
 
+    # Types that can be directly trusted from unified VLM classification
+    # (first-batch types only — not tax forms, contracts, bank statements)
+    _VLM_DIRECT_PASSTHROUGH_TYPES = {
+        DBDocumentType.RECEIPT,
+        DBDocumentType.INVOICE,
+        DBDocumentType.SVS_NOTICE,
+        DBDocumentType.OTHER,
+        DBDocumentType.SPENDENBESTAETIGUNG,
+        DBDocumentType.KIRCHENBEITRAG,
+        DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+        DBDocumentType.BETRIEBSKOSTENABRECHNUNG,
+    }
+
     def _stage_classify(
         self, document: Document, ocr_result: OCRResult, result: PipelineResult
     ) -> DBDocumentType:
@@ -699,6 +730,7 @@ class DocumentPipelineOrchestrator:
         Classify document type with multi-signal arbitration.
 
         Priority:
+          0. VLM direct pass-through (unified_vision with high confidence)
           1. OCR engine classification (regex patterns)
           2. Filename hints (if OCR confidence is low)
           3. LLM classification (if still ambiguous and LLM available)
@@ -706,6 +738,39 @@ class DocumentPipelineOrchestrator:
         ocr_type = ocr_result.document_type
         ocr_confidence = ocr_result.confidence_score
 
+        # -- VLM direct pass-through --
+        # When the unified VLM already classified with high confidence AND
+        # the type is in our first-batch allowlist, trust it and skip arbitration.
+        classification_source = getattr(ocr_result, "classification_source", None)
+        if (
+            classification_source == "unified_vision"
+            and ocr_confidence >= 0.85
+        ):
+            if ocr_type in OCR_TO_DB_TYPE_MAP:
+                db_type = OCR_TO_DB_TYPE_MAP[ocr_type]
+            else:
+                try:
+                    db_type = DBDocumentType[ocr_type.name]
+                except KeyError:
+                    db_type = DBDocumentType.OTHER
+
+            if db_type in self._VLM_DIRECT_PASSTHROUGH_TYPES:
+                classification = ClassificationResult(
+                    document_type=db_type.value,
+                    confidence=ocr_confidence,
+                    method="vlm_direct",
+                )
+                document.document_type = db_type
+                result.classification = classification
+                result.stage_reached = PipelineStage.CLASSIFY
+                self._log_audit(
+                    result, "classify",
+                    f"VLM direct pass-through: {db_type.value} "
+                    f"(confidence {ocr_confidence:.2f})"
+                )
+                return db_type
+
+        # -- Standard multi-signal arbitration --
         classification = ClassificationResult(
             document_type=ocr_type.value,
             confidence=ocr_confidence,
@@ -1560,11 +1625,12 @@ class DocumentPipelineOrchestrator:
         result: "PipelineResult",
         decision=None,
     ):
-        """Use LLM to check if the new document matches an existing entity.
+        """DB-only duplicate entity check (no LLM call).
 
-        Queries user's existing properties, recurring expenses, loans, assets,
-        and recent transactions, then asks GPT-4o if the new document is a
-        duplicate or related to any of them.
+        Matches extracted data against user's existing entities using
+        deterministic rules. Only serves matched_existing / link_to_existing
+        suggestions — does NOT participate in transaction creation gating
+        or asset recognition blocking.
 
         If a match is found, stores it in ocr_result["matched_existing"] so
         suggestion builders can change behavior (link instead of create).
@@ -1582,87 +1648,161 @@ class DocumentPipelineOrchestrator:
                 return
 
             extracted = result.extracted_data or {}
-
             user_id = document.user_id
 
-            # Build compact summaries of existing entities
-            summaries = self._build_entity_summaries(user_id)
-            if not summaries:
-                self._log_audit(result, "dedup", "Skipping dedup check: no_existing_entities")
-                return  # New user, nothing to match
+            match = self._db_match_entity(user_id, db_type, extracted)
 
-            # Call LLM for dedup check
-            from app.services.llm_service import LLMService
-            llm = LLMService()
-            if not llm.is_available:
-                self._log_audit(result, "dedup", "LLM not available, skipping dedup check")
-                return
-
-            # Build compact extracted data summary (avoid sending entire blob)
-            extracted_summary = self._build_dedup_extracted_summary(extracted, db_type)
-
-            prompt = f"""Du bist ein Duplikat-Erkennungsassistent für österreichische Steuerdokumente.
-Prüfe, ob das neue Dokument zu einer bereits existierenden Entität des Benutzers gehört.
-
-Neues Dokument (OCR-Extraktion):
-{json.dumps(extracted_summary, ensure_ascii=False, default=str)}
-
-Bestehende Entitäten des Benutzers:
-{summaries}
-
-Regeln:
-- Gleiche Versicherung (gleicher Versicherer + ähnlicher Betrag) → match
-- Gleiche Adresse (gleiche Straße/PLZ) → match mit Immobilie
-- Gleiche monatliche Zahlung an gleichen Empfänger → match mit wiederkehrender Ausgabe
-- Gleiches Unternehmen + ähnlicher Betrag innerhalb 7 Tage → match mit Transaktion
-- Im Zweifelsfall: match = false
-
-Antworte NUR mit JSON:
-{{"match": true/false, "matched_type": "property|recurring|loan|asset|transaction|none", "matched_id": ID_oder_null, "reason": "kurze Begründung auf Deutsch"}}"""
-
-            response = llm.generate_simple(
-                system_prompt="Du bist ein JSON-Antwort-Bot. Antworte NUR mit validem JSON.",
-                user_prompt=prompt,
-                temperature=0.1,
-                max_tokens=200,
-            )
-
-            # Parse LLM response
-            import json as _json
-            try:
-                # Strip markdown code blocks if present
-                clean = response.strip()
-                if clean.startswith("```"):
-                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-                    clean = clean.rsplit("```", 1)[0]
-                match_result = _json.loads(clean)
-            except (_json.JSONDecodeError, ValueError):
-                self._log_audit(result, "dedup", f"LLM dedup response unparseable: {response[:100]}")
-                return
-
-            if match_result.get("match"):
-                # Store match in ocr_result for suggestion builders
+            if match:
                 ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
                 ocr_json["matched_existing"] = {
-                    "type": match_result.get("matched_type", "unknown"),
-                    "id": match_result.get("matched_id"),
-                    "reason": match_result.get("reason", ""),
-                    "user_confirmed": None,  # Will be set by user action
+                    "type": match["type"],
+                    "id": match.get("id"),
+                    "reason": match.get("reason", ""),
+                    "user_confirmed": None,
                 }
                 document.ocr_result = ocr_json
 
                 self._log_audit(
                     result, "dedup",
-                    f"Match found: {match_result.get('matched_type')} "
-                    f"#{match_result.get('matched_id')} — {match_result.get('reason')}"
+                    f"DB match found: {match['type']} #{match.get('id')} — {match.get('reason')}"
                 )
             else:
-                self._log_audit(result, "dedup", "No duplicate entity match found")
+                self._log_audit(result, "dedup", "No duplicate entity match (DB-only)")
 
         except Exception as e:
-            # Dedup check is non-critical — don't fail the pipeline
             logger.warning(f"Dedup check failed (non-critical): {e}")
             self._log_audit(result, "dedup", f"Dedup check error (skipped): {e}")
+
+    def _db_match_entity(
+        self,
+        user_id: int,
+        db_type: DBDocumentType,
+        extracted: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Deterministic DB matching for duplicate entity detection.
+
+        Only serves matched_existing / link_to_existing suggestions.
+        Returns match dict or None.
+        """
+        # Extract matching signals from VLM dedup_hints or standard fields
+        dedup_hints = extracted.get("dedup_hints", {})
+        if isinstance(dedup_hints, str):
+            dedup_hints = {}
+        entity_name = (
+            dedup_hints.get("entity_name")
+            or extracted.get("merchant")
+            or extracted.get("issuer")
+            or ""
+        ).strip().lower()
+        entity_address = (
+            dedup_hints.get("entity_address")
+            or extracted.get("property_address")
+            or ""
+        ).strip().lower()
+        amount = None
+        for amt_key in ("amount", "purchase_price", "monthly_rent", "praemie", "beitrag_gesamt"):
+            raw = extracted.get(amt_key)
+            if raw is not None:
+                try:
+                    amount = float(raw)
+                    break
+                except (ValueError, TypeError):
+                    continue
+
+        doc_date = extracted.get("date")
+
+        if not entity_name and not entity_address and amount is None:
+            return None
+
+        # 1. Match properties by address
+        if entity_address and len(entity_address) > 5:
+            try:
+                from app.models.property import Property, PropertyStatus
+                properties = self.db.query(Property).filter(
+                    Property.user_id == user_id,
+                    Property.status == PropertyStatus.ACTIVE,
+                ).limit(10).all()
+                for p in properties:
+                    addr = (getattr(p, "address", "") or "").strip().lower()
+                    if addr and len(addr) > 5:
+                        # Substring match (normalized)
+                        if addr in entity_address or entity_address in addr:
+                            return {
+                                "type": "property",
+                                "id": p.id,
+                                "reason": f"Adresse stimmt überein: {addr[:50]}",
+                            }
+            except Exception:
+                pass
+
+        # 2. Match recurring transactions by merchant + amount (±5%)
+        if entity_name and amount is not None:
+            try:
+                from app.models.recurring_transaction import RecurringTransaction
+                recurrings = self.db.query(RecurringTransaction).filter(
+                    RecurringTransaction.user_id == user_id,
+                    RecurringTransaction.is_active == True,
+                ).limit(20).all()
+                for r in recurrings:
+                    r_desc = (r.description or "").strip().lower()
+                    r_amount = float(r.amount) if r.amount else None
+                    if r_desc and r_amount is not None:
+                        name_match = entity_name in r_desc or r_desc in entity_name
+                        amount_match = (
+                            abs(amount - r_amount) / max(abs(r_amount), 1.0) <= 0.05
+                        )
+                        if name_match and amount_match:
+                            return {
+                                "type": "recurring",
+                                "id": r.id,
+                                "reason": f"Wiederkehrend: {r_desc[:40]} €{r_amount}",
+                            }
+            except Exception:
+                pass
+
+        # 3. Match recent transactions by merchant + amount + date (±7 days)
+        if entity_name and amount is not None:
+            try:
+                from app.models.transaction import Transaction
+                from datetime import timedelta
+                cutoff = datetime.utcnow() - timedelta(days=90)
+                recent = self.db.query(Transaction).filter(
+                    Transaction.user_id == user_id,
+                    Transaction.transaction_date >= cutoff,
+                ).order_by(Transaction.transaction_date.desc()).limit(30).all()
+                for t in recent:
+                    t_desc = (t.description or "").strip().lower()
+                    t_amount = float(t.amount) if t.amount else None
+                    if t_desc and t_amount is not None:
+                        name_match = entity_name in t_desc or t_desc in entity_name
+                        amount_match = (
+                            abs(amount - t_amount) / max(abs(t_amount), 1.0) <= 0.05
+                        )
+                        date_match = True
+                        if doc_date and t.transaction_date:
+                            try:
+                                from datetime import datetime as dt_cls
+                                if isinstance(doc_date, str):
+                                    doc_dt = dt_cls.strptime(doc_date[:10], "%Y-%m-%d").date()
+                                else:
+                                    doc_dt = doc_date
+                                t_dt = t.transaction_date
+                                if hasattr(t_dt, "date"):
+                                    t_dt = t_dt.date()
+                                date_match = abs((doc_dt - t_dt).days) <= 7
+                            except Exception:
+                                date_match = True  # Can't parse → don't block match
+
+                        if name_match and amount_match and date_match:
+                            return {
+                                "type": "transaction",
+                                "id": t.id,
+                                "reason": f"Ähnliche Transaktion: {t_desc[:40]} €{t_amount}",
+                            }
+            except Exception:
+                pass
+
+        return None
 
     def _build_entity_summaries(self, user_id: int) -> str:
         """Build compact text summaries of user's existing entities for LLM context."""
@@ -2341,6 +2481,32 @@ Antworte NUR mit JSON:
             )
             return {}
 
+    _income_category_cache: Dict[int, str] = {}
+
+    def _resolve_income_category(self, user_id: int) -> str:
+        """Map user's business_type to an income category."""
+        if user_id in self._income_category_cache:
+            return self._income_category_cache[user_id]
+
+        category = "self_employment"  # default
+        try:
+            from app.models.user import User as _User
+            _user = self.db.query(_User).filter(_User.id == user_id).first()
+            if _user and getattr(_user, "business_type", None):
+                bt = _user.business_type.lower()
+                # Map Austrian business types to income categories
+                type_map = {
+                    "freiberufler": "freelance_income",      # §22 EStG
+                    "gewerblich": "business_income",         # §23 EStG
+                    "neue_selbstaendige": "self_employment", # NSA
+                }
+                category = type_map.get(bt, "self_employment")
+        except Exception:
+            pass
+
+        self._income_category_cache[user_id] = category
+        return category
+
     def _build_transaction_suggestions(
         self, document: Document, db_type: DBDocumentType, result: PipelineResult,
     ) -> List[Dict[str, Any]]:
@@ -2394,6 +2560,88 @@ Antworte NUR mit JSON:
                 suggestions = service.create_split_suggestions(
                     document.id, document.user_id
                 )
+
+            # -- Direction override: VLM + UID matching + name matching --
+            # Priority chain (first confirmed wins):
+            #   1. VLM transaction_direction (has user identity context)
+            #   2. UID match: issuer_uid/tax_id matches user's vat_number
+            #   3. Name match: issuer/recipient matches user name/business_name
+            # ContractRoleService already ran inside create_split_suggestions,
+            # but these signals can override it when they're more reliable.
+            ed = result.extracted_data or {}
+            confirmed_direction = None
+            override_source = None
+
+            # Signal 1: VLM transaction_direction (highest priority — has full context)
+            vlm_dir = ed.get("transaction_direction")
+            if vlm_dir in ("income", "expense"):
+                confirmed_direction = vlm_dir
+                override_source = "vlm_direction"
+
+            # Signal 2: UID match (deterministic — if user's ATU matches issuer_uid)
+            if confirmed_direction is None or confirmed_direction == "expense":
+                issuer_uid = str(ed.get("issuer_uid") or ed.get("tax_id") or "").strip().upper()
+                if issuer_uid and len(issuer_uid) > 5:
+                    if not hasattr(self, '_user_uids') or self._user_uids is None:
+                        self._user_uids = set()
+                        try:
+                            from app.services.contract_role_service import load_sensitive_user_context
+                            _uctx = load_sensitive_user_context(self.db, document.user_id)
+                            if _uctx:
+                                for uid_field in [_uctx.vat_number, _uctx.tax_number]:
+                                    if uid_field:
+                                        self._user_uids.add(str(uid_field).strip().upper())
+                        except Exception:
+                            pass
+                    if self._user_uids and issuer_uid in self._user_uids:
+                        confirmed_direction = "income"
+                        override_source = "uid_match"
+                        logger.info(
+                            "UID match: issuer_uid '%s' matches user UID -> income for doc %d",
+                            issuer_uid[:15], document.id,
+                        )
+
+            # Signal 3: Name match (issuer or recipient matches user name)
+            if confirmed_direction is None:
+                issuer = str(ed.get("issuer") or "").strip().lower()
+                recipient = str(ed.get("recipient") or "").strip().lower()
+                if not hasattr(self, '_user_identity_tokens_direction'):
+                    self._user_identity_tokens_direction = set()
+                    try:
+                        from app.models.user import User as _User
+                        _user = self.db.query(_User).filter(_User.id == document.user_id).first()
+                        if _user:
+                            for field in [_user.name, getattr(_user, "business_name", None)]:
+                                if field:
+                                    self._user_identity_tokens_direction.add(str(field).strip().lower())
+                                    parts = str(field).strip().lower().split()
+                                    if len(parts) > 1:
+                                        self._user_identity_tokens_direction.add(" ".join(parts[-2:]))
+                    except Exception:
+                        pass
+                if self._user_identity_tokens_direction:
+                    for token in self._user_identity_tokens_direction:
+                        if token and len(token) > 2:
+                            if issuer and token in issuer:
+                                confirmed_direction = "income"
+                                override_source = "issuer_name_match"
+                                break
+                            if recipient and token in recipient:
+                                confirmed_direction = "income"
+                                override_source = "recipient_name_match"
+                                break
+
+            # Apply override to all suggestions
+            if confirmed_direction:
+                for s in suggestions:
+                    old_type = s.get("transaction_type")
+                    if old_type != confirmed_direction:
+                        s["transaction_type"] = confirmed_direction
+                        s["category"] = self._resolve_income_category(document.user_id) if confirmed_direction == "income" else s.get("category", "other")
+                        logger.info(
+                            "Direction override (%s): %s -> %s for doc %d",
+                            override_source, old_type, confirmed_direction, document.id,
+                        )
 
             # OCR-level confidence must come from the current OCR pass, not the
             # persisted document row (which may still hold a stale earlier run
@@ -2569,53 +2817,67 @@ Antworte NUR mit JSON:
             if amount is None:
                 continue
 
-            # Direction detection: match issuer/recipient against user identity
+            # Direction detection: prefer VLM's transaction_direction, fall back to token matching
             issuer = str(receipt_data.get("issuer") or "").strip()
             recipient = str(receipt_data.get("recipient") or "").strip()
             merchant = receipt_data.get("merchant") or receipt_data.get("supplier") or issuer or recipient or "Unknown"
             detected_direction = "expense"  # default
             direction_confirmed = False
 
-            # Load user identity tokens for matching
-            if not hasattr(self, '_user_identity_tokens'):
-                self._user_identity_tokens = set()
-                try:
-                    from app.models.user import User as _User
-                    _user = self.db.query(_User).filter(_User.id == document.user_id).first()
-                    if _user:
-                        for field in [_user.name, getattr(_user, "business_name", None)]:
-                            if field:
-                                self._user_identity_tokens.add(str(field).strip().lower())
-                                parts = str(field).strip().lower().split()
-                                if len(parts) > 1:
-                                    self._user_identity_tokens.add(" ".join(parts[-2:]))
-                except Exception:
-                    pass
+            # Priority 1: VLM already determined direction (unified vision path)
+            vlm_direction = receipt_data.get("transaction_direction")
+            if vlm_direction in ("income", "expense"):
+                detected_direction = vlm_direction
+                direction_confirmed = True
+                if vlm_direction == "income":
+                    merchant = recipient or merchant  # counterparty is the customer
+                logger.info(
+                    "Direction from VLM: %s for doc %d (issuer='%s', recipient='%s')",
+                    vlm_direction, document.id, issuer[:50], recipient[:50],
+                )
 
-            # If issuer matches user → user issued this invoice → income
-            if issuer and self._user_identity_tokens:
-                issuer_lower = issuer.lower()
-                for token in self._user_identity_tokens:
-                    if token and len(token) > 2 and token in issuer_lower:
-                        detected_direction = "income"
-                        direction_confirmed = True
-                        merchant = recipient or merchant
-                        break
+            # Priority 2: Fall back to token matching if VLM didn't determine direction
+            if not direction_confirmed:
+                if not hasattr(self, '_user_identity_tokens'):
+                    self._user_identity_tokens = set()
+                    try:
+                        from app.models.user import User as _User
+                        _user = self.db.query(_User).filter(_User.id == document.user_id).first()
+                        if _user:
+                            for field in [_user.name, getattr(_user, "business_name", None)]:
+                                if field:
+                                    self._user_identity_tokens.add(str(field).strip().lower())
+                                    parts = str(field).strip().lower().split()
+                                    if len(parts) > 1:
+                                        self._user_identity_tokens.add(" ".join(parts[-2:]))
+                    except Exception:
+                        pass
 
-            # If issuer didn't match but recipient matches user → AI swapped them → income
-            if not direction_confirmed and recipient and self._user_identity_tokens:
-                recipient_lower = recipient.lower()
-                for token in self._user_identity_tokens:
-                    if token and len(token) > 2 and token in recipient_lower:
-                        # AI put user in recipient instead of issuer — swap and mark as income
-                        detected_direction = "income"
-                        direction_confirmed = True
-                        merchant = issuer or merchant  # issuer is actually the customer
-                        logger.info(
-                            "Direction swap: user found in recipient '%s', treating as income for doc %d",
-                            recipient[:50], document.id,
-                        )
-                        break
+                if issuer and self._user_identity_tokens:
+                    issuer_lower = issuer.lower()
+                    for token in self._user_identity_tokens:
+                        if token and len(token) > 2 and token in issuer_lower:
+                            detected_direction = "income"
+                            direction_confirmed = True
+                            merchant = recipient or merchant
+                            logger.info(
+                                "Direction token match: issuer '%s' matches '%s' -> income for doc %d",
+                                issuer[:50], token, document.id,
+                            )
+                            break
+
+                if not direction_confirmed and recipient and self._user_identity_tokens:
+                    recipient_lower = recipient.lower()
+                    for token in self._user_identity_tokens:
+                        if token and len(token) > 2 and token in recipient_lower:
+                            detected_direction = "income"
+                            direction_confirmed = True
+                            merchant = issuer or merchant
+                            logger.info(
+                                "Direction swap: user in recipient '%s' -> income for doc %d",
+                                recipient[:50], document.id,
+                            )
+                            break
 
             date_val = receipt_data.get("date")
             date_str = None
@@ -2637,7 +2899,7 @@ Antworte NUR mit JSON:
                 "amount": str(amount),
                 "date": date_str,
                 "description": description,
-                "category": "other" if detected_direction == "expense" else "self_employment",
+                "category": self._resolve_income_category(document.user_id) if detected_direction == "income" else "other",
                 "is_deductible": False if detected_direction == "income" else False,
                 "deduction_reason": None,
                 "confidence": float(receipt_data.get("amount_confidence", 0.8)),
