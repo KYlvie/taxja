@@ -3525,8 +3525,8 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     updated_ocr["zahlungsfrequenz"] = frequency
     updated_ocr["is_deductible"] = is_deductible
     updated_ocr["deduction_reason"] = deduction_reason
-    if data.get("polizze") or data.get("versicherungsnummer"):
-        updated_ocr["polizze"] = data.get("polizze") or data.get("versicherungsnummer") or ""
+    if ocr_data.get("polizze") or ocr_data.get("versicherungsnummer"):
+        updated_ocr["polizze"] = ocr_data.get("polizze") or ocr_data.get("versicherungsnummer") or ""
 
     # Save suggestion into document's ocr_result
     updated_ocr["import_suggestion"] = suggestion
