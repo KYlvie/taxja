@@ -743,7 +743,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           ?? (isReceiptDocument ? 'receipt' : isInvoiceDocument ? 'standard_invoice' : 'unknown')
       )
     : 'unknown';
-  const _currentPresentationDecision = resolveDocumentPresentation(document, {
+  resolveDocumentPresentation(document, {
     documentType: selectedDocType,
     transactionType: selectedTxnType,
     documentTransactionDirection: selectedTransactionDirection,
