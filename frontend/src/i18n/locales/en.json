@@ -1115,7 +1115,7 @@
       "directionConfidenceLabel": "Confidence",
       "directionReversal": "This is a reversal / credit note",
       "directionLabel": "Direction",
-      "semanticLabel": "Semantics",
+      "semanticLabel": "Document nature",
       "reversal": "Reversal",
       "nonPostable": "Non-postable",
       "nonPostableHint": "This document stays as a reference document and will not create a transaction.",
@@ -1257,7 +1257,9 @@
       "recommendation": "💡 Recommendation: If you just want to clean up the document file, choose 'Delete document only'",
       "cancel": "Cancel",
       "confirmDocumentOnly": "Delete Document Only",
-      "confirmWithData": "Delete Everything"
+      "confirmWithData": "Delete Everything",
+      "asset": "Asset",
+      "assetWarn": "Deleting everything will also remove this asset and its acquisition transaction"
     },
     "tabs": {
       "list": "My Documents",

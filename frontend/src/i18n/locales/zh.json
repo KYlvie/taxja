@@ -717,7 +717,7 @@
       "directionConfidenceLabel": "置信度",
       "directionReversal": "这是一笔冲销/贷项通知单",
       "directionLabel": "方向",
-      "semanticLabel": "语义",
+      "semanticLabel": "单据性质",
       "reversal": "冲销",
       "nonPostable": "不可过账",
       "nonPostableHint": "该文件将作为参考文件保留，不会创建交易。",
@@ -1135,7 +1135,9 @@
       "recommendation": "💡 建议：如果只想清理文档文件，请选择「仅删除文档」",
       "cancel": "取消",
       "confirmDocumentOnly": "仅删除文档",
-      "confirmWithData": "全部删除"
+      "confirmWithData": "全部删除",
+      "asset": "资产",
+      "assetWarn": "选择「全部删除」将一并删除此资产及其采购交易"
     },
     "bescheid": {
       "title": "导入所得税评估报告",
@@ -1650,7 +1652,9 @@
       "incomeTitle": "收入详情",
       "categoryEditHint": "使用上方选择器为整张收据应用一个类别，或在下方逐行调整。",
       "categoryReadonlyHint": "点击编辑以解锁此收据的类别和可扣除性更改。",
-      "selectIncomeCategory": "保存此收入文档前，请先选择一个收入类别。"
+      "selectIncomeCategory": "保存此收入文档前，请先选择一个收入类别。",
+      "expandDetails": "展开详情",
+      "hideDetails": "收起详情"
     },
     "prev": "上一个",
     "next": "下一个",

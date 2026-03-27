@@ -48,6 +48,8 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
 const EXPANDED_YEARS_STORAGE_PREFIX = 'taxja.documents.expandedYears';
 const FINAL_IMPORT_STATUSES = new Set(['confirmed', 'auto_created']);
+const PENDING_ASSET_IMPORT_STATUSES = new Set(['pending', 'ready_to_confirm']);
+const PENDING_ASSET_OUTCOME_STATUSES = new Set(['pending_confirmation']);
 const FINAL_TRANSACTION_SUGGESTION_STATUSES = new Set(['confirmed', 'dismissed']);
 const CONFIDENT_TRANSACTION_THRESHOLD = 0.9;
 
@@ -117,8 +119,27 @@ const hasFinalTransactionSuggestionOutcome = (ocr: Record<string, any>): boolean
   });
 };
 
+const hasPendingAssetReview = (doc: Document): boolean => {
+  const ocr = (doc.ocr_result || {}) as Record<string, any>;
+  const importSuggestion = ocr.import_suggestion as Record<string, any> | undefined;
+  const assetOutcome = ocr.asset_outcome as Record<string, any> | undefined;
+
+  const pendingAssetImport =
+    String(importSuggestion?.type || '') === 'create_asset' &&
+    PENDING_ASSET_IMPORT_STATUSES.has(String(importSuggestion?.status || ''));
+
+  const pendingAssetOutcome =
+    PENDING_ASSET_OUTCOME_STATUSES.has(String(assetOutcome?.status || ''));
+
+  return pendingAssetImport || pendingAssetOutcome;
+};
+
 const hasFinalDocumentOutcome = (doc: Document): boolean => {
   const ocr = (doc.ocr_result || {}) as Record<string, any>;
+  if (hasPendingAssetReview(doc)) {
+    return false;
+  }
+
   if (ocr.confirmed === true) {
     return true;
   }
@@ -579,6 +600,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       return false;
     }
 
+    if (hasPendingAssetReview(doc)) {
+      return true;
+    }
+
     if (hasFinalDocumentOutcome(doc)) {
       return false;
     }
@@ -647,7 +672,7 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       'kreditvertrag', 'versicherungsbestaetigung', 'insurance_confirmation',
     ];
 
-    if (receiptTypes.includes(docType)) {
+    if (receiptTypes.includes(docType) && hasTransaction) {
       return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
     }
     if (contractTypes.includes(docType)) {

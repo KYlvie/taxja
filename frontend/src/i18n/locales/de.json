@@ -1109,7 +1109,7 @@
       "directionConfidenceLabel": "Konfidenz",
       "directionReversal": "Dies ist eine Storno-/Gutschriftbelastung",
       "directionLabel": "Richtung",
-      "semanticLabel": "Semantik",
+      "semanticLabel": "Belegart",
       "reversal": "Storno",
       "nonPostable": "Nicht buchbar",
       "nonPostableHint": "Dieses Dokument bleibt als Referenzdokument erhalten und erzeugt keine Transaktion.",
@@ -1251,7 +1251,9 @@
       "recommendation": "💡 Empfehlung: Wenn Sie nur die Dokumentdatei bereinigen möchten, wählen Sie 'Nur Dokument löschen'",
       "cancel": "Abbrechen",
       "confirmDocumentOnly": "Nur Dokument löschen",
-      "confirmWithData": "Alles löschen"
+      "confirmWithData": "Alles löschen",
+      "asset": "Anlage",
+      "assetWarn": "Bei 'Alles löschen' wird auch diese Anlage und ihre Anschaffungstransaktion gelöscht"
     },
     "tabs": {
       "list": "Meine Dokumente",
