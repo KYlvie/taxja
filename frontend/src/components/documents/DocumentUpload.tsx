@@ -596,6 +596,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
               }
             }
 
+            onDocumentsSubmitted?.([resolvedDocument as Document]);
             return;
           }
         } catch {
@@ -617,7 +618,18 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ propertyId, onDocuments
       }));
       addDocument(latestDocument);
     },
-    [addDocument, currentUser, pushAIMessage, pushSuggestionMessage, pushFollowUpMessage, pushProcessingMessage, removeProcessingMessage, t, updateUploadById]
+    [
+      addDocument,
+      currentUser,
+      onDocumentsSubmitted,
+      pushAIMessage,
+      pushSuggestionMessage,
+      pushFollowUpMessage,
+      pushProcessingMessage,
+      removeProcessingMessage,
+      t,
+      updateUploadById,
+    ]
   );
 
   // --- Upload execution ---

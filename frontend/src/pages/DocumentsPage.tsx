@@ -1009,6 +1009,9 @@ const DocumentsPage = () => {
   const [selectedExportYear, setSelectedExportYear] = useState<string>('');
   const [downloadingExport, setDownloadingExport] = useState(false);
   const [bulkConfirming, setBulkConfirming] = useState(false);
+  const handleDocumentsSubmitted = useCallback(() => {
+    setRefreshKey((current) => current + 1);
+  }, []);
 
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
   const currentFilters = useDocumentStore((s) => s.filters);
@@ -4009,7 +4012,10 @@ const isReceiptOrInvoice = (doc: Document) =>
             </span>
           </div>
         )}
-        <DocumentUpload propertyId={uploadPropertyId} />
+        <DocumentUpload
+          propertyId={uploadPropertyId}
+          onDocumentsSubmitted={handleDocumentsSubmitted}
+        />
       </div>
 
       <div className="documents-list-section">

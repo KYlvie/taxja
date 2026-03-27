@@ -65,6 +65,7 @@
   font-size: 0.92rem;
   line-height: 1.65;
   color: var(--color-text-secondary, #4b5563);
+  white-space: pre-line;
 }
 
 .cfd-modal-extra {
@@ -251,6 +252,7 @@
   font-size: 0.95rem;
   line-height: 1.65;
   color: rgba(255, 255, 255, 0.82);
+  white-space: pre-line;
 }
 
 .cfd-robot-bubble-extra {

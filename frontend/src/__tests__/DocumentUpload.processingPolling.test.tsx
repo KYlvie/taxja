@@ -138,7 +138,8 @@ describe('DocumentUpload terminal polling', () => {
   });
 
   it('waits for terminal OCR completion before marking the upload complete', async () => {
-    const { container } = render(<DocumentUpload />);
+    const onDocumentsSubmitted = vi.fn();
+    const { container } = render(<DocumentUpload onDocumentsSubmitted={onDocumentsSubmitted} />);
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
     fireEvent.change(input, {
@@ -171,6 +172,14 @@ describe('DocumentUpload terminal polling', () => {
         ocr_status: 'completed',
       }),
     );
+    expect(onDocumentsSubmitted).toHaveBeenCalled();
+    expect(onDocumentsSubmitted).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        id: 325,
+        confidence_score: 0.95,
+        ocr_status: 'completed',
+      }),
+    ]);
   }, 15000);
 
   it('keeps per-file progress state stable even after removing another completed upload', async () => {

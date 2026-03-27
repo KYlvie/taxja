@@ -4428,4 +4428,7 @@
       "auditChecklist": "Audit ellenőrzési lista",
       "auditSelectYear": "Adóév kiválasztása",
       "flatRateNotApplicable": "Az átalány-összehasonlítás csak önfoglalkoztatóknak érhető el.",
-      "noDataAvailable": "Még nincsene
+      "noDataAvailable": "Még nincsenek adatok. Töltsön fel dokumentumokat."
+    }
+  }
+}

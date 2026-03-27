@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from app.schemas.asset_recognition import (
     AssetRecognitionDecision,
@@ -48,6 +49,70 @@ def test_recognize_service_invoice_as_expense_only():
     assert result.decision == AssetRecognitionDecision.EXPENSE_ONLY
     assert result.requires_user_confirmation is False
     assert result.tax_flags.depreciable is False
+
+
+@patch("app.services.llm_service.get_llm_service")
+def test_llm_semantics_classifies_office_supplies_as_expense(mock_get_llm):
+    service = AssetRecognitionService()
+    mock_llm = MagicMock()
+    mock_llm.is_available = True
+    mock_llm.generate_simple.return_value = (
+        '{"purchase_kind":"expense","asset_subtype":null,"confidence":0.96,'
+        '"reason":"Office supplies and consumables"}'
+    )
+    mock_get_llm.return_value = mock_llm
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("99.29"),
+            extracted_net_amount=Decimal("82.74"),
+            extracted_vat_amount=Decimal("16.55"),
+            extracted_vendor="PAGRO DISKONT",
+            extracted_invoice_number="PG-2024-K-44512",
+            raw_text=(
+                "Rechnung PAGRO DISKONT Ordner A4 breit 5x Kopierpapier A4 500Bl. "
+                "Kugelschreiber 10er Druckerpatronen Set Bueromaterial"
+            ),
+            extracted_line_items=[
+                {"description": "Ordner A4 breit 5x"},
+                {"description": "Kopierpapier A4 500Bl. 3x"},
+                {"description": "Kugelschreiber 10er"},
+                {"description": "Druckerpatronen Set"},
+            ],
+        )
+    )
+
+    assert result.decision == AssetRecognitionDecision.EXPENSE_ONLY
+    assert result.requires_user_confirmation is False
+    assert result.asset_candidate.asset_subtype is None
+
+
+def test_recognize_office_supplies_invoice_as_expense_only():
+    service = AssetRecognitionService()
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("99.29"),
+            extracted_net_amount=Decimal("82.74"),
+            extracted_vat_amount=Decimal("16.55"),
+            extracted_vendor="PAGRO DISKONT",
+            extracted_invoice_number="PG-2024-K-44512",
+            raw_text=(
+                "Rechnung PAGRO DISKONT Ordner A4 breit 5x Kopierpapier A4 500Bl. "
+                "Kugelschreiber 10er Druckerpatronen Set Büromaterial"
+            ),
+            extracted_line_items=[
+                {"description": "Ordner A4 breit 5x"},
+                {"description": "Kopierpapier A4 500Bl. 3x"},
+                {"description": "Kugelschreiber 10er"},
+                {"description": "Druckerpatronen Set"},
+            ],
+        )
+    )
+
+    assert result.decision == AssetRecognitionDecision.EXPENSE_ONLY
+    assert result.requires_user_confirmation is False
+    assert result.asset_candidate.asset_subtype is None
 
 
 def test_recognize_computer_invoice_above_gwg_creates_asset_suggestion():
@@ -102,6 +167,32 @@ def test_recognize_perpetual_license_invoice_as_gwg_asset():
             extracted_line_items=[
                 {"description": "IntelliJ IDEA Ultimate Perpetual Fallback License"}
             ],
+        )
+    )
+
+    assert result.asset_candidate.asset_subtype == "perpetual_license"
+    assert result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+    assert result.tax_flags.gwg_eligible is True
+
+
+@patch("app.services.llm_service.get_llm_service")
+def test_llm_semantics_classifies_perpetual_license_as_asset(mock_get_llm):
+    service = AssetRecognitionService()
+    mock_llm = MagicMock()
+    mock_llm.is_available = True
+    mock_llm.generate_simple.return_value = (
+        '{"purchase_kind":"asset","asset_subtype":"perpetual_license","confidence":0.91,'
+        '"reason":"Perpetual software license with multi-year use"}'
+    )
+    mock_get_llm.return_value = mock_llm
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("599.00"),
+            extracted_net_amount=Decimal("499.17"),
+            extracted_vat_amount=Decimal("99.83"),
+            raw_text="Invoice JetBrains IntelliJ IDEA Ultimate Perpetual Fallback License",
+            extracted_line_items=[{"description": "IntelliJ IDEA Ultimate Perpetual Fallback License"}],
         )
     )
 

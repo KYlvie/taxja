@@ -1,6 +1,7 @@
 """Recognition-stage decisioning for Austrian asset tax handling."""
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterable
 from datetime import date
@@ -33,6 +34,7 @@ class AssetRecognitionService:
 
     AUTO_CREATE_CONFIDENCE_THRESHOLD = Decimal("0.95")
     SUGGESTION_CONFIDENCE_THRESHOLD = Decimal("0.65")
+    LLM_SEMANTICS_CONFIDENCE_THRESHOLD = Decimal("0.75")
     GWG_THRESHOLD_2022 = Decimal("800.00")
     GWG_THRESHOLD_2023 = Decimal("1000.00")
 
@@ -52,14 +54,25 @@ class AssetRecognitionService:
             return self._duplicate_result(data, duplicate, suspected=True)
 
         normalized_text = self._normalized_text(data.raw_text, data.extracted_line_items)
+        llm_semantics = self._llm_classify_purchase_semantics(data, normalized_text)
+        candidate: AssetCandidate | None = None
+
+        if llm_semantics and llm_semantics["confidence"] >= self.LLM_SEMANTICS_CONFIDENCE_THRESHOLD:
+            if llm_semantics["purchase_kind"] == "expense":
+                return self._expense_result(data, AssetReasonCode.EXPENSE_DEFAULT_LOW_RISK)
+            if llm_semantics["purchase_kind"] == "asset" and llm_semantics["asset_subtype"]:
+                candidate = self._candidate_from_subtype(data, normalized_text, llm_semantics["asset_subtype"])
+
         if self._looks_like_inventory_or_resale(normalized_text):
             return self._expense_result(data, AssetReasonCode.INVENTORY_OR_RESALE_DETECTED)
         if self._looks_like_repair_or_maintenance(normalized_text):
             return self._expense_result(data, AssetReasonCode.REPAIR_OR_MAINTENANCE_DETECTED)
         if self._looks_like_service_or_subscription(normalized_text):
             return self._expense_result(data, AssetReasonCode.SERVICE_OR_SUBSCRIPTION_DETECTED)
+        if self._looks_like_office_consumables(normalized_text):
+            return self._expense_result(data, AssetReasonCode.EXPENSE_DEFAULT_LOW_RISK)
 
-        candidate = self._build_candidate(data, normalized_text)
+        candidate = candidate or self._build_candidate(data, normalized_text)
         if not candidate.asset_subtype:
             # Regex didn't detect asset type — try LLM for high-value items
             if data.extracted_amount and data.extracted_amount >= Decimal("400"):
@@ -185,8 +198,37 @@ class AssetRecognitionService:
         ]
         return any(keyword in text for keyword in keywords)
 
+    def _looks_like_office_consumables(self, text: str) -> bool:
+        keywords = [
+            "ordner",
+            "hefter",
+            "kopierpapier",
+            "papier",
+            "kugelschreiber",
+            "druckerpatrone",
+            "druckerpatronen",
+            "patronen set",
+            "toner",
+            "tinte",
+            "buromaterial",
+            "büromaterial",
+            "office supplies",
+            "notizblock",
+            "marker",
+            "textmarker",
+        ]
+        return any(keyword in text for keyword in keywords)
+
     def _build_candidate(self, data: AssetRecognitionInput, text: str) -> AssetCandidate:
         subtype = self._detect_asset_subtype(text)
+        return self._candidate_from_subtype(data, text, subtype)
+
+    def _candidate_from_subtype(
+        self,
+        data: AssetRecognitionInput,
+        text: str,
+        subtype: str | None,
+    ) -> AssetCandidate:
         asset_type = self._map_asset_type(subtype)
         vehicle_category = (
             subtype
@@ -271,6 +313,134 @@ class AssetRecognitionService:
         "machinery", "tools", "perpetual_license", "printer_scanner",
         "monitor_av", "server_network", "other_equipment",
     }
+    _LLM_PURCHASE_VALID_KINDS = {"asset", "expense", "unclear"}
+
+    def _llm_classify_purchase_semantics(
+        self, data: AssetRecognitionInput, normalized_text: str
+    ) -> dict[str, Any] | None:
+        """Ask the model whether the purchase is an asset or a normal expense."""
+        try:
+            from app.services.llm_service import get_llm_service
+
+            llm = get_llm_service()
+            if not llm.is_available:
+                return None
+
+            description = self._build_llm_description(data, normalized_text, max_chars=1200)
+            if not description:
+                return None
+
+            response = llm.generate_simple(
+                system_prompt=(
+                    "You classify Austrian business purchases before tax depreciation rules are applied. "
+                    "Return ONLY valid JSON with keys purchase_kind, asset_subtype, confidence, reason. "
+                    "purchase_kind must be one of: asset, expense, unclear. "
+                    "asset_subtype must be null unless purchase_kind is asset, and if present must be one of: "
+                    "pkw, electric_pkw, truck_van, fiscal_truck, motorcycle, special_vehicle, computer, phone, "
+                    "office_furniture, machinery, tools, perpetual_license, printer_scanner, monitor_av, "
+                    "server_network, other_equipment. "
+                    "Treat consumables and office supplies such as folders, paper, pens, toner, ink, cartridges, "
+                    "stationery, binders, labels, notebooks and routine low-value supplies as expense. "
+                    "Treat subscriptions, services, maintenance, consulting, rent, hosting and SaaS renewals as expense. "
+                    "Treat durable business equipment and perpetual software licenses with useful life over one year as asset. "
+                    "Multiple similar assets can be purchased repeatedly; that does not make them duplicates. "
+                    "Use unclear only if the description is genuinely ambiguous."
+                ),
+                user_prompt=(
+                    f"Amount: EUR {data.extracted_amount}\n"
+                    f"Document type: {data.document_type}\n"
+                    f"Description:\n{description}"
+                ),
+                temperature=0.0,
+                max_tokens=200,
+            )
+            parsed = self._parse_json_payload(response)
+            if not parsed:
+                return None
+
+            purchase_kind = str(parsed.get("purchase_kind") or "").strip().lower()
+            asset_subtype = parsed.get("asset_subtype")
+            confidence = self._safe_decimal(parsed.get("confidence"), default=Decimal("0"))
+
+            if purchase_kind not in self._LLM_PURCHASE_VALID_KINDS:
+                return None
+            if asset_subtype is not None:
+                asset_subtype = str(asset_subtype).strip().lower()
+                if asset_subtype not in self._LLM_ASSET_VALID_SUBTYPES:
+                    asset_subtype = None
+
+            return {
+                "purchase_kind": purchase_kind,
+                "asset_subtype": asset_subtype,
+                "confidence": max(Decimal("0.00"), min(Decimal("1.00"), confidence)),
+                "reason": str(parsed.get("reason") or "").strip(),
+            }
+        except Exception as exc:
+            logger.warning("LLM purchase semantics classification failed: %s", exc)
+            return None
+
+    def _build_llm_description(
+        self,
+        data: AssetRecognitionInput,
+        normalized_text: str,
+        *,
+        max_chars: int,
+    ) -> str:
+        parts: list[str] = []
+        if data.extracted_vendor:
+            parts.append(f"Vendor: {data.extracted_vendor}")
+        if data.extracted_invoice_number:
+            parts.append(f"Invoice: {data.extracted_invoice_number}")
+        for item in data.extracted_line_items or []:
+            if isinstance(item, dict):
+                name = item.get("description") or item.get("name") or ""
+                qty = item.get("quantity")
+                if name:
+                    if qty not in (None, "", 0):
+                        parts.append(f"Item: {name} (qty {qty})")
+                    else:
+                        parts.append(f"Item: {name}")
+            elif item:
+                parts.append(f"Item: {item}")
+        if normalized_text:
+            parts.append(f"Raw text: {normalized_text[:max_chars]}")
+        description = "\n".join(part for part in parts if part).strip()
+        return description[:max_chars]
+
+    def _parse_json_payload(self, response: str) -> dict[str, Any] | None:
+        if not response:
+            return None
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            pass
+
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            parsed = json.loads(cleaned[start : end + 1])
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+    def _safe_decimal(self, value: Any, *, default: Decimal) -> Decimal:
+        try:
+            return Decimal(str(value))
+        except Exception:
+            return default
 
     def _llm_detect_asset_subtype(
         self, data: AssetRecognitionInput, normalized_text: str
@@ -283,18 +453,7 @@ class AssetRecognitionService:
             if not llm.is_available:
                 return None
 
-            # Build description from all available sources
-            parts = []
-            if data.extracted_vendor:
-                parts.append(f"Vendor: {data.extracted_vendor}")
-            for item in data.extracted_line_items or []:
-                if isinstance(item, dict):
-                    name = item.get("description") or item.get("name") or ""
-                    if name:
-                        parts.append(f"Item: {name}")
-            if normalized_text:
-                parts.append(normalized_text[:400])
-            description = " ".join(parts).strip()
+            description = self._build_llm_description(data, normalized_text, max_chars=400)
             if not description:
                 return None
 

@@ -9,7 +9,6 @@ function loadSortMode(): SortMode {
   try {
     const stored = localStorage.getItem(SORT_MODE_STORAGE_KEY);
     if (stored === 'document_date') return 'document_date';
-    if (stored === 'file_name') return 'file_name';
   } catch {
     // localStorage unavailable
   }

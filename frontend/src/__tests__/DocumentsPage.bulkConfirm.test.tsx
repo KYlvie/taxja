@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
@@ -12,6 +12,8 @@ const confirmOCR = vi.fn();
 const getExportYears = vi.fn();
 const getExportZipUrl = vi.fn();
 const aiToast = vi.fn();
+let latestUploadProps: any = null;
+let latestListProps: any = null;
 
 vi.mock('react-i18next', () => ({
   initReactI18next: {
@@ -43,9 +45,16 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../components/documents/DocumentUpload', () => ({ default: () => <div data-testid="doc-upload" /> }));
+vi.mock('../components/documents/DocumentUpload', () => ({
+  default: (props: any) => {
+    latestUploadProps = props;
+    return <div data-testid="doc-upload" />;
+  },
+}));
 vi.mock('../components/documents/DocumentList', () => ({
-  default: ({ onSummaryChange }: any) => {
+  default: (props: any) => {
+    const { onSummaryChange, refreshTrigger } = props;
+    latestListProps = { onSummaryChange, refreshTrigger };
     React.useEffect(() => {
       onSummaryChange?.({
         totalCount: 5,
@@ -112,6 +121,8 @@ vi.mock('../documents/presentation/featureFlag', () => ({
 describe('DocumentsPage bulk confirm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    latestUploadProps = null;
+    latestListProps = null;
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: vi.fn(),
@@ -185,5 +196,27 @@ describe('DocumentsPage bulk confirm', () => {
     expect(clickSpy).toHaveBeenCalledTimes(1);
 
     clickSpy.mockRestore();
+  });
+
+  it('refreshes the document list when upload completion is reported back to the page', async () => {
+    render(
+      <MemoryRouter initialEntries={['/documents']}>
+        <Routes>
+          <Route path="/documents" element={<DocumentsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByTestId('doc-upload');
+    expect(latestUploadProps?.onDocumentsSubmitted).toBeTypeOf('function');
+    expect(latestListProps?.refreshTrigger).toBe(0);
+
+    await act(async () => {
+      latestUploadProps.onDocumentsSubmitted([]);
+    });
+
+    await waitFor(() => {
+      expect(latestListProps?.refreshTrigger).toBe(1);
+    });
   });
 });

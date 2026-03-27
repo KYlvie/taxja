@@ -283,4 +283,26 @@ describe('DocumentList year grouping', () => {
       expect(screen.getByText('Mietvertrag.pdf')).toBeInTheDocument();
     });
   });
+
+  it('does not offer file-name sorting and falls back persisted file-name sort to upload date', async () => {
+    window.localStorage.setItem('taxja_doc_sort_mode', 'file_name');
+    useDocumentStore.setState({ sortMode: 'upload_date' });
+    getDocuments.mockResolvedValue({
+      documents: [rentalContractDocument],
+      total: 1,
+    });
+
+    render(
+      <MemoryRouter>
+        <DocumentList />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '2026' })).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('File name')).not.toBeInTheDocument();
+    expect(screen.queryByText('文件名')).not.toBeInTheDocument();
+  });
 });

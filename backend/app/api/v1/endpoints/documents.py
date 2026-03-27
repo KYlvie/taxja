@@ -2002,6 +2002,68 @@ async def list_export_document_years(
     return {"years": years}
 
 
+class BatchDeleteRequest(BaseModel):
+    ids: List[int]
+    delete_mode: str = "document_only"
+
+@router.post("/batch-delete")
+def batch_delete_documents(
+    request: Request,
+    body: BatchDeleteRequest = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Batch delete multiple documents.
+
+    Accepts a list of document IDs and a delete_mode ('document_only' or 'with_data').
+    Reuses the single-document delete logic for each document.
+
+    Returns a summary of deleted and failed document IDs.
+    """
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="No document IDs provided")
+    if len(body.ids) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 documents per batch")
+    if body.delete_mode not in ("document_only", "with_data"):
+        raise HTTPException(status_code=400, detail="Invalid delete_mode")
+
+    # Validate all IDs belong to the current user
+    unique_ids = list(set(body.ids))
+    owned_docs = (
+        db.query(Document.id)
+        .filter(Document.id.in_(unique_ids), Document.user_id == current_user.id)
+        .all()
+    )
+    owned_ids = {row[0] for row in owned_docs}
+
+    deleted = []
+    failed = []
+
+    for doc_id in unique_ids:
+        if doc_id not in owned_ids:
+            failed.append(doc_id)
+            continue
+        try:
+            delete_document(
+                request=request,
+                document_id=doc_id,
+                delete_mode=body.delete_mode,
+                current_user=current_user,
+                db=db,
+            )
+            deleted.append(doc_id)
+        except Exception as e:
+            logger.warning(f"Batch delete failed for document {doc_id}: {e}")
+            db.rollback()
+            failed.append(doc_id)
+
+    return {
+        "deleted": deleted,
+        "failed": failed,
+        "total": len(unique_ids),
+    }
+
 @router.get("/{document_id}")
 
 def get_document(
@@ -2167,68 +2229,6 @@ async def download_document(
         },
 
     )
-
-class BatchDeleteRequest(BaseModel):
-    ids: List[int]
-    delete_mode: str = "document_only"
-
-@router.post("/batch-delete")
-def batch_delete_documents(
-    request: Request,
-    body: BatchDeleteRequest = Body(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Batch delete multiple documents.
-
-    Accepts a list of document IDs and a delete_mode ('document_only' or 'with_data').
-    Reuses the single-document delete logic for each document.
-
-    Returns a summary of deleted and failed document IDs.
-    """
-    if not body.ids:
-        raise HTTPException(status_code=400, detail="No document IDs provided")
-    if len(body.ids) > 200:
-        raise HTTPException(status_code=400, detail="Maximum 200 documents per batch")
-    if body.delete_mode not in ("document_only", "with_data"):
-        raise HTTPException(status_code=400, detail="Invalid delete_mode")
-
-    # Validate all IDs belong to the current user
-    unique_ids = list(set(body.ids))
-    owned_docs = (
-        db.query(Document.id)
-        .filter(Document.id.in_(unique_ids), Document.user_id == current_user.id)
-        .all()
-    )
-    owned_ids = {row[0] for row in owned_docs}
-
-    deleted = []
-    failed = []
-
-    for doc_id in unique_ids:
-        if doc_id not in owned_ids:
-            failed.append(doc_id)
-            continue
-        try:
-            delete_document(
-                request=request,
-                document_id=doc_id,
-                delete_mode=body.delete_mode,
-                current_user=current_user,
-                db=db,
-            )
-            deleted.append(doc_id)
-        except Exception as e:
-            logger.warning(f"Batch delete failed for document {doc_id}: {e}")
-            db.rollback()
-            failed.append(doc_id)
-
-    return {
-        "deleted": deleted,
-        "failed": failed,
-        "total": len(unique_ids),
-    }
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 
