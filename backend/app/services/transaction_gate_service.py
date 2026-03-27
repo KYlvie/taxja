@@ -68,11 +68,18 @@ class TransactionGateResult:
 
     @property
     def needs_review(self) -> bool:
-        return self.decision == TransactionGateDecision.PENDING_REVIEW
+        # All auto-created transactions need user confirmation (soft review).
+        # This doesn't block report generation — unreviewed transactions
+        # are still included in E/A reports and tax calculations.
+        return self.decision in (
+            TransactionGateDecision.AUTO_CREATE,
+            TransactionGateDecision.PENDING_REVIEW,
+        )
 
     @property
     def reviewed(self) -> bool:
-        return self.decision == TransactionGateDecision.AUTO_CREATE
+        # Never auto-mark as reviewed — user must explicitly confirm.
+        return False
 
 
 # ---------------------------------------------------------------------------

@@ -2052,7 +2052,7 @@ class DocumentPipelineOrchestrator:
             if msg:
                 result.suggestions.append({
                     "type": "svs_info",
-                    "status": "needs_review" if svs_sub in ("kontoauszug", "herabsetzung", "befreiung", "saeumniszuschlag", "ratenzahlung") else "dismissed",
+                    "status": "needs_review" if svs_sub in ("saeumniszuschlag", "ratenzahlung") else "dismissed",
                     "data": result.extracted_data or {},
                     "review_reason": msg,
                     "confidence": classification.confidence if classification else 0,
