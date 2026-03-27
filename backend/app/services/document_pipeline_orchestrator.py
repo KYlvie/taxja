@@ -2627,8 +2627,13 @@ class DocumentPipelineOrchestrator:
             }
 
             # Store in document.ocr_result.import_suggestion
+            # Don't overwrite if a higher-priority suggestion already exists
+            # (e.g. create_recurring_expense from Ratenzahlung)
             import json as _json
             updated_ocr = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+            existing_imp = updated_ocr.get("import_suggestion", {})
+            if isinstance(existing_imp, dict) and existing_imp.get("type") == "create_recurring_expense":
+                return suggestion  # Don't overwrite recurring expense suggestion
             updated_ocr["import_suggestion"] = suggestion
             document.ocr_result = updated_ocr
             from sqlalchemy.orm.attributes import flag_modified
