@@ -1150,15 +1150,27 @@ class OCRTransactionService:
         date = ocr_data.get("date")
         normalized_date = normalize_date(date)
 
+        # Detect Nachbemessung documents by description, keywords, or field patterns
+        desc_lower = str(ocr_data.get("description") or "").lower()
+        all_text = desc_lower + " " + str(ocr_data.get("raw_text") or "")[:500].lower()
+        is_nachbemessung = (
+            "nachbemessung" in all_text
+            or "nachforderung" in all_text
+            or "endabrechnung" in all_text
+            # If nachzahlung or gutschrift field exists, it's a Nachbemessung
+            or bool(ocr_data.get("nachzahlung"))
+            or bool(ocr_data.get("gutschrift"))
+        )
+
         # Case 1: Gutschrift (refund from final assessment) → income
         gutschrift = ocr_data.get("gutschrift")
         if gutschrift:
             amt = normalize_amount(gutschrift)
             if amt and amt > 0:
-                # Check there's no regular beitrag_gesamt (which would mean
-                # it's a regular notice that just mentions gutschrift rules)
+                # For Nachbemessung documents, the gutschrift IS the transaction
+                # even if beitrag_gesamt is also present (it may be the base amount)
                 beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
-                if not beitrag:
+                if not beitrag or is_nachbemessung or (beitrag and beitrag < 0):
                     return {
                         "amount": amt,
                         "date": normalized_date or date,
@@ -1172,7 +1184,7 @@ class OCRTransactionService:
             amt = normalize_amount(nachzahlung)
             if amt and amt > 0:
                 beitrag = normalize_amount(ocr_data.get("amount") or ocr_data.get("beitrag_gesamt"))
-                if not beitrag:
+                if not beitrag or is_nachbemessung:
                     return {
                         "amount": amt,
                         "date": normalized_date or date,
@@ -1292,7 +1304,7 @@ class OCRTransactionService:
             if is_gutschrift:
                 return {
                     "transaction_type": TransactionType.INCOME.value,
-                    "category": IncomeCategory.OTHER.value,
+                    "category": IncomeCategory.OTHER_INCOME.value,
                     "is_deductible": False,
                     "deduction_reason": "SVS Gutschrift (Nachbemessung refund)",
                     "confidence": 0.90,

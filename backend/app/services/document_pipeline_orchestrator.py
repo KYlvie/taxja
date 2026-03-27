@@ -1050,6 +1050,9 @@ class DocumentPipelineOrchestrator:
 
         # Auto-fix + validate common fields
         self._autofix_amount(extracted_data, validation)
+        # SVS: build date from quarter + tax_year before generic date autofix
+        if db_type == DBDocumentType.SVS_NOTICE:
+            self._autofix_svs_date(extracted_data, validation)
         self._autofix_date(extracted_data, validation)
         self._autofix_missing_fields(extracted_data, db_type, validation)
 
@@ -1108,6 +1111,42 @@ class DocumentPipelineOrchestrator:
                     severity="info",
                 ))
             # Zero is OK — might be a free item or zero-cost document
+
+    def _autofix_svs_date(self, data: Dict[str, Any], validation: ValidationResult):
+        """Build SVS date from quarter + tax_year if date is missing/unparseable.
+
+        SVS quarterly notices often don't have a clear invoice date, but they
+        have quarter (1-4) and tax_year fields. Use the quarter end date
+        so each quarter gets a unique date and dedup doesn't merge them.
+        """
+        existing_date = data.get("date")
+        if existing_date:
+            parsed = normalize_date(existing_date)
+            if parsed and parsed.year >= 2000 and parsed.year <= 2100:
+                return  # Date already valid, no fix needed
+
+        quarter = data.get("quarter")
+        tax_year = data.get("tax_year")
+        if not quarter or not tax_year:
+            return
+
+        try:
+            q = int(quarter)
+            y = int(tax_year)
+            if q < 1 or q > 4 or y < 2000:
+                return
+            # Use quarter end date: Q1→03-31, Q2→06-30, Q3→09-30, Q4→12-31
+            quarter_end = {1: "03-31", 2: "06-30", 3: "09-30", 4: "12-31"}
+            svs_date = f"{y}-{quarter_end[q]}"
+            data["date"] = svs_date
+            validation.corrected_fields["date"] = svs_date
+            validation.issues.append(ValidationIssue(
+                field="date",
+                issue=f"SVS date built from Q{q}/{y}: {svs_date}",
+                severity="info",
+            ))
+        except (ValueError, TypeError):
+            pass
 
     def _autofix_date(self, data: Dict[str, Any], validation: ValidationResult):
         """Auto-fix date fields: unparseable→today, future→today."""
@@ -2562,6 +2601,10 @@ class DocumentPipelineOrchestrator:
                 )
 
             # -- Direction override: VLM + UID matching + name matching --
+            # Skip for SVS notices — SVS direction is determined by the SVS
+            # extractor (_extract_from_svs_notice) which knows about Gutschrift
+            # vs Nachforderung vs regular Beitragsvorschreibung.
+            _skip_direction_override = db_type == DBDocumentType.SVS_NOTICE
             # Priority chain (first confirmed wins):
             #   1. VLM transaction_direction (has user identity context)
             #   2. UID match: issuer_uid/tax_id matches user's vat_number
@@ -2631,8 +2674,8 @@ class DocumentPipelineOrchestrator:
                                 override_source = "recipient_name_match"
                                 break
 
-            # Apply override to all suggestions
-            if confirmed_direction:
+            # Apply override to all suggestions (skip SVS — has its own logic)
+            if confirmed_direction and not _skip_direction_override:
                 for s in suggestions:
                     old_type = s.get("transaction_type")
                     if old_type != confirmed_direction:
