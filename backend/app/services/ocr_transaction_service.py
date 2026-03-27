@@ -1016,6 +1016,7 @@ class OCRTransactionService:
         elif doc_type == DocumentType.LOHNZETTEL.value:
             return self._extract_from_lohnzettel(ocr_data)
         elif doc_type == DocumentType.SVS_NOTICE.value:
+            ocr_data["_file_name"] = document.file_name or ""
             return self._extract_from_svs_notice(ocr_data)
         elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:
             return self._extract_from_bescheid(ocr_data)
@@ -1142,11 +1143,28 @@ class OCRTransactionService:
     def _extract_from_svs_notice(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract transaction data from SVS contribution notice.
 
-        Three cases:
+        Four cases:
+        - Kontobestätigung (annual confirmation): → NO transaction (return None)
         - Beitragsvorschreibung: amount/beitrag_gesamt → expense
         - Nachbemessung nachzahlung: nachzahlung → expense
         - Nachbemessung gutschrift: gutschrift → income
         """
+        # Kontobestätigung = annual confirmation listing all quarters.
+        # It's a proof document, not a payment demand — skip transaction creation.
+        # Check description, raw_text, and file_name for detection.
+        desc_lower = str(ocr_data.get("description") or "").lower()
+        raw_lower = str(ocr_data.get("raw_text") or "")[:2000].lower()
+        file_name_lower = str(ocr_data.get("_file_name") or "").lower()
+        all_text = desc_lower + " " + raw_lower + " " + file_name_lower
+        kontobestaetigung_markers = (
+            "kontobestätigung", "kontobestaetigung", "kontobestatigung",
+            "beitragsbestätigung", "beitragsbestaetigung",
+            "jahresbestätigung", "jahresbestaetigung",
+        )
+        if any(marker in all_text for marker in kontobestaetigung_markers):
+            logger.info("SVS Kontobestätigung detected — skipping transaction creation")
+            return None
+
         date = ocr_data.get("date")
         normalized_date = normalize_date(date)
 
