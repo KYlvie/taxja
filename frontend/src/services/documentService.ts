@@ -335,6 +335,12 @@ export const documentService = {
     return response.data;
   },
 
+  // Confirm insurance recurring creation from Versicherungsbestätigung
+  confirmInsuranceRecurring: async (id: number): Promise<any> => {
+    const response = await api.post(`/documents/${id}/confirm-insurance-recurring`);
+    return response.data;
+  },
+
   // Confirm loan creation from Kreditvertrag OCR suggestion
   confirmLoan: async (id: number): Promise<any> => {
     const response = await api.post(`/documents/${id}/confirm-loan`);

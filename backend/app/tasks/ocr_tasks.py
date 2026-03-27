@@ -3393,6 +3393,45 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
                 except ValueError:
                     continue
 
+    # Insurance subtype and deductibility based on type
+    insurance_subtype = ocr_data.get("insurance_subtype", "").strip().lower()
+    if not insurance_subtype:
+        # Infer from versicherungsart or insurance_type
+        _type_lower = (insurance_type or "").lower()
+        _subtype_map = {
+            "haftpflicht": "berufshaftpflicht",
+            "berufshaftpflicht": "berufshaftpflicht",
+            "betriebsunterbrechung": "betriebsunterbrechung",
+            "rechtsschutz": "rechtsschutz",
+            "kfz": "kfz", "auto": "kfz", "fahrzeug": "kfz",
+            "gebäude": "gebaeudeversicherung", "gebaeudeversicherung": "gebaeudeversicherung",
+            "haushalt": "haushaltsversicherung", "haushaltsversicherung": "haushaltsversicherung",
+            "kranken": "private_krankenversicherung",
+            "unfall": "unfallversicherung",
+            "leben": "lebensversicherung",
+        }
+        for keyword, subtype in _subtype_map.items():
+            if keyword in _type_lower:
+                insurance_subtype = subtype
+                break
+        if not insurance_subtype:
+            insurance_subtype = "other"
+
+    # Set deductibility based on subtype
+    _DEDUCTIBILITY_MAP = {
+        "berufshaftpflicht": (True, "Betriebsausgabe — E1a KZ 9230"),
+        "betriebsunterbrechung": (True, "Betriebsausgabe — E1a KZ 9230"),
+        "rechtsschutz": (True, "Nur gewerblicher Anteil absetzbar — E1a KZ 9230"),
+        "kfz": (True, "Nur gewerblicher KFZ-Anteil absetzbar — E1a KZ 9230"),
+        "gebaeudeversicherung": (True, "Werbungskosten Vermietung — E1b"),
+        "haushaltsversicherung": (True, "Nur Home-Office-Anteil absetzbar — E1a KZ 9230"),
+        "private_krankenversicherung": (True, "Sonderausgaben — E1 KZ 455"),
+        "unfallversicherung": (True, "Sonderausgaben — E1 KZ 455"),
+        "lebensversicherung": (True, "Sonderausgaben — E1 KZ 455"),
+        "other": (False, "Bitte prüfen Sie die steuerliche Absetzbarkeit"),
+    }
+    is_deductible, deduction_reason = _DEDUCTIBILITY_MAP.get(insurance_subtype, (False, ""))
+
     suggestion = {
         "type": "create_insurance_recurring",
         "status": "pending",
@@ -3400,7 +3439,10 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             "praemie": float(praemie_decimal),
             "frequency": frequency,
             "insurance_type": insurance_type,
+            "insurance_subtype": insurance_subtype,
             "insurer_name": insurer_name,
+            "is_deductible": is_deductible,
+            "deduction_reason": deduction_reason,
             "linked_property_id": linked_property_id,
             "linked_asset_id": linked_asset_id,
             "start_date": start_date.isoformat() if start_date else None,

@@ -634,6 +634,16 @@ const OCRReview: React.FC<OCRReviewProps> = ({
             } catch {
               aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
             }
+          } else if (
+            importSuggestion?.type === 'create_insurance_recurring'
+            && importSuggestion?.status === 'pending'
+          ) {
+            try {
+              await documentService.confirmInsuranceRecurring(documentId);
+              aiToast(t('documents.suggestion.insuranceRecurringCreated', 'Insurance recurring created'), 'success');
+            } catch {
+              aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+            }
           } else {
             aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
           }
