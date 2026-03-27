@@ -2202,6 +2202,26 @@ class DocumentPipelineOrchestrator:
             return
 
         if action == ProcessingAction.TAX_FORM_IMPORT:
+            # SVS: override suggestion status based on subtype
+            if db_type == DBDocumentType.SVS_NOTICE:
+                doc_ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+                ed = result.extracted_data or {}
+                svs_sub = doc_ocr.get("_svs_subtype") or ed.get("_svs_subtype") or ed.get("svs_subtype", "")
+
+                # Reference-only subtypes: mark as dismissed, no review needed
+                _SVS_DISMISSED_SUBTYPES = {
+                    "kontoauszug", "herabsetzung", "versicherungspflicht",
+                    "mindestbeitrag", "zahlungserinnerung", "kontobestaetigung",
+                    "befreiung",
+                }
+                if svs_sub in _SVS_DISMISSED_SUBTYPES:
+                    suggestion = self._build_tax_form_suggestion(document, db_type, result)
+                    if suggestion:
+                        suggestion["status"] = "dismissed"
+                        result.suggestions.append(suggestion)
+                        self._log_audit(result, "suggest", f"SVS {svs_sub}: reference document, dismissed")
+                    return
+
             suggestion = self._build_tax_form_suggestion(document, db_type, result)
             if suggestion:
                 result.suggestions.append(suggestion)
