@@ -540,13 +540,19 @@
     },
     "batchDeleteCheck": {
       "summary": "{{safe}} können gelöscht werden, {{confirm}} benötigen Bestätigung, {{blocked}} sind blockiert.",
-      "blocked": "{{count}} Transaktion(en) sind mit Dokumenten verknüpft und können nicht gelöscht werden."
+      "blocked": "{{count}} Transaktion(en) sind mit hochgeladenen Belegen verknüpft und können nicht direkt gelöscht werden. Bitte verwalten Sie die Transaktionen über die Dokumentenverwaltung."
     },
     "fields": {
       "lohnsteuer": "Lohnsteuer"
     },
     "partiallyDeductible": "Teilweise",
-    "deductibilityDerivedFromItems": "Abgeleitet aus Einzelposten"
+    "deductibilityDerivedFromItems": "Abgeleitet aus Einzelposten",
+    "sortMode": {
+      "label": "Sortieren nach",
+      "date": "Datum",
+      "amount": "Betrag",
+      "description": "Beschreibung"
+    }
   },
   "properties": {
     "title": "Immobilien",

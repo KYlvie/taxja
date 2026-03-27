@@ -546,13 +546,19 @@
     },
     "batchDeleteCheck": {
       "summary": "{{safe}} can be deleted, {{confirm}} need confirmation, {{blocked}} are blocked.",
-      "blocked": "{{count}} transaction(s) are linked to documents and cannot be deleted."
+      "blocked": "{{count}} transaction(s) are linked to uploaded documents (invoices, receipts, etc.) and cannot be deleted directly. Please manage them from the Documents page."
     },
     "fields": {
       "lohnsteuer": "Lohnsteuer"
     },
     "partiallyDeductible": "Partial",
-    "deductibilityDerivedFromItems": "Derived from line items"
+    "deductibilityDerivedFromItems": "Derived from line items",
+    "sortMode": {
+      "label": "Sort by",
+      "date": "Date",
+      "amount": "Amount",
+      "description": "Description"
+    }
   },
   "properties": {
     "title": "Properties",

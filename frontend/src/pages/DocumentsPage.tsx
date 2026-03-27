@@ -2085,6 +2085,7 @@ const isReceiptOrInvoice = (doc: Document) =>
     fallbackLineDate?: string | null,
     fallbackLineAmount?: string | null,
   ) {
+    console.log('[DEBUG] handleOpenTransactionInline called with transactionId:', transactionId);
     setInlineTransactionMode('detail');
     const inferTransactionType = (): TransactionType => {
       if (
@@ -2135,10 +2136,12 @@ const isReceiptOrInvoice = (doc: Document) =>
     }
 
     try {
+      console.log('[DEBUG] Fetching transaction', transactionId);
       const transaction = await transactionService.getById(transactionId);
+      console.log('[DEBUG] Got transaction:', transaction);
       setInlineTransaction(transaction);
     } catch (error) {
-      console.error('Failed to load transaction detail inline:', error);
+      console.error('[DEBUG] Failed to load transaction detail inline:', error);
       if (previewTransaction || fallbackLineDate || fallbackLineAmount) {
         setInlineTransaction(preview);
         return;
@@ -2313,29 +2316,15 @@ const isReceiptOrInvoice = (doc: Document) =>
       );
     }
 
-    return createPortal(
-      <div className="transaction-detail-overlay" onClick={handleCloseInlineTransaction}>
-        <div
-          className="transaction-detail transaction-inline-detail-modal"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="detail-header">
-            <h2>{t('documents.linkedTransaction.title', 'Linked Transaction')}</h2>
-            <button className="btn-close" onClick={handleCloseInlineTransaction}>
-              ×
-            </button>
-          </div>
-          <div className="detail-body">
-            <TransactionDetail
-              transaction={inlineTransaction}
-              hideLinkedDocumentSection
-              hideEditAction
-              onClose={handleCloseInlineTransaction}
-            />
-          </div>
-        </div>
-      </div>,
-      document.body,
+    return (
+      <TransactionDetail
+        transaction={inlineTransaction}
+        hideLinkedDocumentSection
+        hideEditAction
+        onEdit={() => {}}
+        onDelete={handleInlineTransactionDelete}
+        onClose={handleCloseInlineTransaction}
+      />
     );
   }
 
@@ -2548,6 +2537,7 @@ const isReceiptOrInvoice = (doc: Document) =>
             )}
             renderTaxImport={() => renderOcrReviewForDocument(reviewingDocument, 'tax_import')}
           />
+          {renderInlineTransactionOverlay()}
         </div>
       );
     }
