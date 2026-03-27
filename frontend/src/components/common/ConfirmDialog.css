@@ -6,7 +6,7 @@
 .cfd-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 20000;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -145,7 +145,7 @@
 .cfd-robot-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: 20000;
   background: radial-gradient(ellipse at 40% 50%, rgba(10, 5, 25, 0.97), rgba(3, 3, 12, 0.99)) !important;
   display: flex;
   justify-content: center;

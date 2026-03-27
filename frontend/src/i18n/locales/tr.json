@@ -546,7 +546,13 @@
       "lohnsteuer": "Ücret vergisi"
     },
     "partiallyDeductible": "Kısmi",
-    "deductibilityDerivedFromItems": "Kalemlerden türetildi"
+    "deductibilityDerivedFromItems": "Kalemlerden türetildi",
+    "sortMode": {
+      "label": "Sırala",
+      "date": "Tarih",
+      "amount": "Tutar",
+      "description": "Açıklama"
+    }
   },
   "properties": {
     "title": "Mulkler",
@@ -710,10 +716,11 @@
     "disposalError": "Varlık çıkarılamadı",
     "salePriceRequired": "Satış fiyatı zorunludur",
     "salePriceHint": "Sermaye kazancı hesaplaması için kullanılır",
-    "confirmDeleteWithImpact": "\"{{address}}\" mulkunu silmek istediginizden emin misiniz?\n\nAsagidaki bagli veriler etkilenecektir:\n{{impact}}\n\nIslemler baglantisi kesilecek (silinmeyecek). Yinelenen islemler ve krediler kalici olarak silinecektir.",
+    "confirmDeleteWithImpact": "\"{{address}}\" adresini silmek istediğinizden emin misiniz?\n\n⚠️ Aşağıdaki bağlı veriler etkilenecektir:",
     "deleteImpactTransactions": "{{count}} islem(ler)in baglantisi kesilecek",
     "deleteImpactRecurring": "{{count}} yinelenen islem(ler) silinecek",
     "deleteImpactLoans": "{{count}} kredi(ler) silinecek",
+    "deleteImpactNote": "İşlemler bağlantısı kaldırılacak (silinmeyecek). Yinelenen işlemler ve krediler kalıcı olarak silinecektir. Devam etmeden önce bağlı verileri inceleyebilirsiniz.",
     "manageYourProperties": "Kiralik mulklerinizi yonetin ve amortismani takip edin",
     "rentalYield": "Kira Getirisi",
     "expenseRatio": "Gider Orani",
@@ -958,6 +965,15 @@
     "confirmDelete": "Bu belgeyi silmek istediginizden emin misiniz? Bagli islem de silinecektir.",
     "deleteSuccess": "Belge basariyla silindi",
     "deleteError": "Belge silinemedi",
+    "batchDelete": "Seçilenleri sil ({{count}})",
+    "batchDeleteSuccess": "{{count}} belge silindi",
+    "batchDeleteFailed": "{{failed}} belge silinemedi",
+    "batchDeleteConfirm": "{{count}} seçili belgeyi silmek istiyor musunuz?",
+    "batchDeleteHasLinkedData": "Seçili belgelerden {{count}} tanesinin bağlı işlemleri veya mülkleri var.",
+    "batchDeleteChooseMode": "Nasıl silmek istiyorsunuz?",
+    "selectedCount": "{{count}} seçili",
+    "selectAll": "Tümünü seç",
+    "selectDocument": "Belgeyi seç",
     "downloadFailed": "Indirme basarisiz, lutfen tekrar deneyin",
     "reprocess": "Belgeyi yeniden isle",
     "reprocessing": "Yeniden isleniyor...",
@@ -1242,7 +1258,9 @@
       "recommendation": "Oneri: Yalnizca belge dosyasini temizlemek istiyorsaniz, 'Yalnizca belgeyi sil' secenegini secin",
       "cancel": "Iptal",
       "confirmDocumentOnly": "Yalnizca Belgeyi Sil",
-      "confirmWithData": "Her Seyi Sil"
+      "confirmWithData": "Her Seyi Sil",
+      "asset": "Varlik",
+      "assetWarn": "'Her Seyi Sil' secenegi bu varligi ve satin alma islemini de silecektir"
     },
     "tabs": {
       "list": "Belgelerim",

@@ -5,6 +5,7 @@ import Select from '../common/Select';
 import { documentService } from '../../services/documentService';
 import { useDocumentStore, SortMode } from '../../stores/documentStore';
 import { useAIAdvisorStore } from '../../stores/aiAdvisorStore';
+import { useAIConfirmation } from '../../hooks/useAIConfirmation';
 import {
   compareDocumentsByDocumentDate,
   resolveDocumentYear,
@@ -447,6 +448,9 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(() => loadExpandedYears(sortMode));
   const [columnSort, setColumnSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const { confirm: aiConfirm } = useAIConfirmation();
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
 
   useEffect(() => {
@@ -591,6 +595,121 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       aiToast(t('documents.reviewActionFailed', 'Review failed'), 'error');
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  // Clear selection when filters, sort, or page changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filters, sortMode, page, activeGroup, activeYear]);
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (docs: Document[]) => {
+    const ids = docs.map((d) => d.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of ids) next.delete(id);
+      } else {
+        for (const id of ids) next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchDeleting(true);
+    try {
+      // Count how many selected docs have linked data
+      const selectedDocs = documents.filter((d) => selectedIds.has(d.id));
+      const withLinkedData = selectedDocs.filter(
+        (d) => d.transaction_id || (d.linked_transaction_count && d.linked_transaction_count > 0)
+      ).length;
+
+      // Build confirmation message
+      let message = t('documents.batchDeleteConfirm', { count: selectedIds.size });
+      if (withLinkedData > 0) {
+        message += '\n\n' + t('documents.batchDeleteHasLinkedData', { count: withLinkedData });
+      }
+      message += '\n\n' + t('documents.batchDeleteChooseMode');
+
+      // First ask if they want to delete at all
+      const confirmed = await aiConfirm(message, {
+        variant: 'danger',
+        confirmText: t('documents.deleteDialog.documentOnly'),
+      });
+      if (!confirmed) return;
+
+      // Delete with document_only mode (default safe mode)
+      // For "with_data", users would need to ask again — keep it simple and use document_only
+      const result = await documentService.batchDelete(
+        Array.from(selectedIds),
+        'document_only'
+      );
+
+      if (result.deleted.length > 0) {
+        aiToast(t('documents.batchDeleteSuccess', { count: result.deleted.length }), 'success');
+      }
+      if (result.failed.length > 0) {
+        aiToast(t('documents.batchDeleteFailed', { failed: result.failed.length }), 'error');
+      }
+
+      setSelectedIds(new Set());
+      await loadDocuments();
+    } catch (error: any) {
+      console.error('Failed to batch delete documents:', error);
+      const msg = error.response?.data?.detail || t('documents.deleteError');
+      aiToast(msg, 'error');
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const handleBatchDeleteWithData = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchDeleting(true);
+    try {
+      const confirmed = await aiConfirm(
+        t('documents.batchDeleteConfirm', { count: selectedIds.size }) +
+          '\n\n' +
+          t('documents.deleteDialog.withDataDesc'),
+        {
+          variant: 'danger',
+          confirmText: t('documents.deleteDialog.withData'),
+        }
+      );
+      if (!confirmed) return;
+
+      const result = await documentService.batchDelete(
+        Array.from(selectedIds),
+        'with_data'
+      );
+
+      if (result.deleted.length > 0) {
+        aiToast(t('documents.batchDeleteSuccess', { count: result.deleted.length }), 'success');
+      }
+      if (result.failed.length > 0) {
+        aiToast(t('documents.batchDeleteFailed', { failed: result.failed.length }), 'error');
+      }
+
+      setSelectedIds(new Set());
+      await loadDocuments();
+    } catch (error: any) {
+      console.error('Failed to batch delete documents:', error);
+      const msg = error.response?.data?.detail || t('documents.deleteError');
+      aiToast(msg, 'error');
+    } finally {
+      setBatchDeleting(false);
     }
   };
 
@@ -758,10 +877,18 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const renderGridItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-card ${isPendingReview(document) ? 'pending-review-row' : ''}`}
+      className={`document-card ${isPendingReview(document) ? 'pending-review-row' : ''}${selectedIds.has(document.id) ? ' selected' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
       <div className="document-card-top">
+        <div className="doc-card-checkbox" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selectedIds.has(document.id)}
+            onChange={() => handleToggleSelect(document.id)}
+            aria-label={t('documents.selectDocument')}
+          />
+        </div>
         <div className="document-card-icon">{getDocumentIconLabel(document)}</div>
         <span className={`document-status-badge ${getStatusTone(document)}`}>
           {getStatusLabel(document)}
@@ -836,9 +963,17 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const renderListItem = (document: Document) => (
     <div
       key={document.id}
-      className={`document-row ${isPendingReview(document) ? 'pending-review-row' : ''}`}
+      className={`document-row ${isPendingReview(document) ? 'pending-review-row' : ''}${selectedIds.has(document.id) ? ' selected' : ''}`}
       onClick={() => handleDocumentClick(document)}
     >
+      <div className="doc-col-checkbox" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selectedIds.has(document.id)}
+          onChange={() => handleToggleSelect(document.id)}
+          aria-label={t('documents.selectDocument')}
+        />
+      </div>
       <div className="document-main-cell">
         <div className="document-icon-small">{getDocumentIconLabel(document)}</div>
         <div className="document-name-stack">
@@ -1139,6 +1274,27 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
                 {!isCollapsed && (viewMode === 'list' ? (
                   <>
                     <div className="document-table-head">
+                      <span className="doc-col-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={
+                            yearGroup.documents.length > 0 &&
+                            yearGroup.documents.every((d) => selectedIds.has(d.id))
+                          }
+                          ref={(el) => {
+                            if (!el) return;
+                            const allSelected =
+                              yearGroup.documents.length > 0 &&
+                              yearGroup.documents.every((d) => selectedIds.has(d.id));
+                            const someSelected = yearGroup.documents.some((d) =>
+                              selectedIds.has(d.id)
+                            );
+                            el.indeterminate = someSelected && !allSelected;
+                          }}
+                          onChange={() => handleToggleSelectAll(yearGroup.documents)}
+                          aria-label={t('documents.selectAll')}
+                        />
+                      </span>
                       {[
                         { key: 'name', label: t('documents.list.name') },
                         { key: 'type', label: t('documents.list.type') },
@@ -1191,6 +1347,41 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
                 disabled={page === totalPages}
               >
                 {t('common.next')}
+              </button>
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="doc-batch-action-bar">
+              <span>{t('documents.selectedCount', { count: selectedIds.size })}</span>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleBatchDelete}
+                disabled={batchDeleting}
+              >
+                <DeleteIcon />
+                {batchDeleting
+                  ? t('common.loading')
+                  : t('documents.batchDelete', { count: selectedIds.size })}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger btn-danger--strong"
+                onClick={handleBatchDeleteWithData}
+                disabled={batchDeleting}
+              >
+                <DeleteIcon />
+                {batchDeleting
+                  ? t('common.loading')
+                  : t('documents.deleteDialog.withData')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                {t('common.cancel')}
               </button>
             </div>
           )}

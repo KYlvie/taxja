@@ -93,11 +93,11 @@ const PropertyList = ({
 
   const handleDeleteClick = async (property: Property, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     try {
       // First check impact without deleting (force=false)
       const result = await propertyService.checkDeleteImpact(property.id);
-      
+
       // Property already gone (404 handled gracefully)
       if (result.deleted) {
         onDelete(property.id);
@@ -108,29 +108,55 @@ const PropertyList = ({
       const hasLinkedData = transaction_count > 0 || recurring_count > 0 || loan_count > 0;
 
       if (hasLinkedData) {
-        const impactLines: string[] = [];
-        if (transaction_count > 0) {
-          impactLines.push(t('properties.deleteImpactTransactions', { count: transaction_count }));
-        }
-        if (recurring_count > 0) {
-          impactLines.push(t('properties.deleteImpactRecurring', { count: recurring_count }));
-        }
-        if (loan_count > 0) {
-          impactLines.push(t('properties.deleteImpactLoans', { count: loan_count }));
-        }
-        
         const confirmMessage = t('properties.confirmDeleteWithImpact', {
           address: property.address,
-          impact: impactLines.join('\n'),
+          impact: '',
         });
-        
-        const recurringLink = recurring_count > 0 ? React.createElement(
-          'a',
-          { href: '/recurring', style: { color: '#7c3aed', textDecoration: 'underline', fontSize: '0.85rem', display: 'inline-block', marginTop: '4px' } },
-          `→ ${t('recurring.title', 'Recurring Transactions')}`
-        ) : undefined;
 
-        const ok = await showConfirm(confirmMessage, { variant: 'danger', confirmText: t('common.delete'), messageNode: recurringLink });
+        const linkStyle: React.CSSProperties = {
+          color: '#7c3aed',
+          textDecoration: 'underline',
+          fontSize: '0.85rem',
+          display: 'inline-block',
+          marginLeft: '6px',
+        };
+        const lineStyle: React.CSSProperties = {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          margin: '4px 0',
+          fontSize: '0.9rem',
+        };
+
+        const linkedDataNode = React.createElement('div', { style: { marginTop: '8px' } },
+          transaction_count > 0 && React.createElement('div', { key: 'txn', style: lineStyle },
+            `• ${t('properties.deleteImpactTransactions', { count: transaction_count })}`,
+            React.createElement('a', { href: '/transactions', style: linkStyle },
+              `→ ${t('transactions.title', 'Transactions')}`
+            ),
+          ),
+          recurring_count > 0 && React.createElement('div', { key: 'rec', style: lineStyle },
+            `• ${t('properties.deleteImpactRecurring', { count: recurring_count })}`,
+            React.createElement('a', { href: '/recurring', style: linkStyle },
+              `→ ${t('recurring.title', 'Recurring Transactions')}`
+            ),
+          ),
+          loan_count > 0 && React.createElement('div', { key: 'loan', style: lineStyle },
+            `• ${t('properties.deleteImpactLoans', { count: loan_count })}`,
+            React.createElement('a', { href: '/liabilities', style: linkStyle },
+              `→ ${t('liabilities.title', 'Liabilities')}`
+            ),
+          ),
+          React.createElement('div', {
+            style: { marginTop: '10px', fontSize: '0.82rem', color: '#6b7280' },
+          }, t('properties.deleteImpactNote')),
+        );
+
+        const ok = await showConfirm(confirmMessage, {
+          variant: 'danger',
+          confirmText: t('common.delete'),
+          messageNode: linkedDataNode,
+        });
         if (ok) {
           onDelete(property.id);
         }

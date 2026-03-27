@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 import io
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -475,6 +476,73 @@ class TestOCRReviewAndCorrectionCurrentContracts:
         assert items[1]["duplicate_of_id"] == 502
         assert items[1]["needs_review"] is False
         assert items[1]["reviewed"] is True
+
+    def test_confirm_ocr_results_auto_confirms_pending_asset_suggestion(
+        self,
+        ocr_authenticated_client,
+        processed_receipt_document,
+        db,
+    ):
+        processed_receipt_document.ocr_result = {
+            **processed_receipt_document.ocr_result,
+            "import_suggestion": {
+                "type": "create_asset",
+                "status": "pending",
+                "data": {
+                    "name": "Apple iPhone 15 Pro 256GB",
+                    "asset_type": "phone",
+                    "purchase_price": "999.00",
+                    "purchase_date": "2024-03-18",
+                },
+            },
+            "asset_outcome": {
+                "status": "pending_confirmation",
+                "source": "quality_gate",
+            },
+        }
+        db.add(processed_receipt_document)
+        db.commit()
+        db.refresh(processed_receipt_document)
+
+        def _fake_create_asset_from_suggestion(db_session, document, suggestion_data, confirmation, trigger_source):
+            assert trigger_source == "user"
+            assert confirmation is None
+            updated = json.loads(json.dumps(document.ocr_result or {}))
+            updated["asset_outcome"] = {
+                "status": "confirmed",
+                "asset_id": 321,
+                "transaction_id": 654,
+            }
+            updated.pop("import_suggestion", None)
+            document.ocr_result = updated
+            db_session.add(document)
+            db_session.commit()
+            db_session.refresh(document)
+            return {"asset_id": 321, "transaction_id": 654}
+
+        with patch(
+            "app.services.ocr_transaction_service.OCRTransactionService.create_transaction_suggestion",
+            return_value=None,
+        ), patch(
+            "app.tasks.ocr_tasks.create_asset_from_suggestion",
+            side_effect=_fake_create_asset_from_suggestion,
+        ) as mock_confirm_asset:
+            response = ocr_authenticated_client.post(
+                f"/api/v1/documents/{processed_receipt_document.id}/confirm",
+                json={"confirmed": True},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "asset #321 created" in data["message"]
+        assert data["can_create_transaction"] is False
+        assert mock_confirm_asset.call_count == 1
+
+        db.refresh(processed_receipt_document)
+        assert processed_receipt_document.ocr_result["confirmed"] is True
+        assert processed_receipt_document.ocr_result["asset_outcome"]["status"] == "confirmed"
+        assert processed_receipt_document.ocr_result["asset_outcome"]["asset_id"] == 321
+        assert "import_suggestion" not in processed_receipt_document.ocr_result
 
     def test_correct_ocr_results_marks_multi_transaction_suggestions_stale(
         self,

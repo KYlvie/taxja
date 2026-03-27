@@ -51,7 +51,7 @@ const mergeLocaleResources = (
 }
 
 const getInitialLanguage = (): string =>
-  normalizeLanguage(localStorage.getItem('language') || navigator.language)
+  normalizeLanguage(localStorage.getItem('language') || 'de')
 
 const syncLanguageState = (language: string) => {
   const normalizedLanguage = normalizeLanguage(language)

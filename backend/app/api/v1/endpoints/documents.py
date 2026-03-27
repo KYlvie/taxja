@@ -2168,6 +2168,68 @@ async def download_document(
 
     )
 
+class BatchDeleteRequest(BaseModel):
+    ids: List[int]
+    delete_mode: str = "document_only"
+
+@router.post("/batch-delete")
+def batch_delete_documents(
+    request: Request,
+    body: BatchDeleteRequest = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Batch delete multiple documents.
+
+    Accepts a list of document IDs and a delete_mode ('document_only' or 'with_data').
+    Reuses the single-document delete logic for each document.
+
+    Returns a summary of deleted and failed document IDs.
+    """
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="No document IDs provided")
+    if len(body.ids) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 documents per batch")
+    if body.delete_mode not in ("document_only", "with_data"):
+        raise HTTPException(status_code=400, detail="Invalid delete_mode")
+
+    # Validate all IDs belong to the current user
+    unique_ids = list(set(body.ids))
+    owned_docs = (
+        db.query(Document.id)
+        .filter(Document.id.in_(unique_ids), Document.user_id == current_user.id)
+        .all()
+    )
+    owned_ids = {row[0] for row in owned_docs}
+
+    deleted = []
+    failed = []
+
+    for doc_id in unique_ids:
+        if doc_id not in owned_ids:
+            failed.append(doc_id)
+            continue
+        try:
+            delete_document(
+                request=request,
+                document_id=doc_id,
+                delete_mode=body.delete_mode,
+                current_user=current_user,
+                db=db,
+            )
+            deleted.append(doc_id)
+        except Exception as e:
+            logger.warning(f"Batch delete failed for document {doc_id}: {e}")
+            db.rollback()
+            failed.append(doc_id)
+
+    return {
+        "deleted": deleted,
+        "failed": failed,
+        "total": len(unique_ids),
+    }
+
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 
 def delete_document(
@@ -2612,6 +2674,42 @@ def delete_document(
 
                         logger.warning(f"Failed to recalculate rental percentage: {e}")
 
+        # Delete linked asset (non-real-estate property created from invoice/receipt)
+        if document.document_type != DocumentType.PURCHASE_CONTRACT:
+            linked_assets = db.query(Property).filter(
+                Property.kaufvertrag_document_id == document_id,
+                Property.asset_type != "real_estate"
+            ).all()
+
+            for asset in linked_assets:
+                logger.info(f"Cascade deleting asset {asset.id} ({asset.asset_type}) linked to document {document_id}")
+
+                # 1. Delete transactions linked to this asset
+                asset_txns = db.query(Transaction).filter(
+                    Transaction.property_id == asset.id
+                ).all()
+
+                for atxn in asset_txns:
+                    # Unlink documents referencing this transaction
+                    db.query(Document).filter(
+                        Document.transaction_id == atxn.id
+                    ).update({Document.transaction_id: None}, synchronize_session="fetch")
+
+                    db.flush()
+
+                    bank_import_service.handle_deleted_transactions([atxn.id], current_user.id)
+                    db.delete(atxn)
+
+                db.flush()
+
+                # 2. Clear kaufvertrag reference and delete asset
+                asset.kaufvertrag_document_id = None
+                db.flush()
+                db.delete(asset)
+                db.flush()
+
+                logger.info(f"Asset {asset.id} cascade deleted")
+
         # Collect all transaction IDs to delete (direct document links)
 
         txn_ids_to_delete = set()
@@ -2728,6 +2826,17 @@ def delete_document(
                 linked_property.mietvertrag_document_id = None
 
         
+
+        # Unlink asset (non-real-estate property created from invoice/receipt)
+        if document.document_type != DocumentType.PURCHASE_CONTRACT:
+            linked_assets = db.query(Property).filter(
+                Property.kaufvertrag_document_id == document_id,
+                Property.asset_type != "real_estate"
+            ).all()
+
+            for asset in linked_assets:
+                logger.info(f"Unlinking asset {asset.id} from document {document_id}")
+                asset.kaufvertrag_document_id = None
 
         # Unlink all transactions but keep them
 
@@ -3028,6 +3137,29 @@ def get_document_related_data(
                 if generated_count > 0:
 
                     related_data["generated_transactions_count"] = generated_count
+
+    # Check for linked asset (non-real-estate property created from invoice/receipt)
+    if "property" not in related_data:
+        linked_asset = db.query(Property).filter(
+            Property.kaufvertrag_document_id == document_id,
+            Property.asset_type != "real_estate"
+        ).first()
+
+        if linked_asset:
+            has_related_data = True
+            asset_txn_count = db.query(Transaction).filter(
+                Transaction.property_id == linked_asset.id
+            ).count()
+            related_data["asset"] = {
+                "id": str(linked_asset.id),
+                "name": linked_asset.name or linked_asset.address,
+                "asset_type": linked_asset.asset_type,
+                "sub_category": linked_asset.sub_category if hasattr(linked_asset, 'sub_category') else None,
+                "purchase_price": float(linked_asset.purchase_price) if linked_asset.purchase_price else 0,
+                "purchase_date": linked_asset.purchase_date.isoformat() if linked_asset.purchase_date else None,
+                "supplier": linked_asset.supplier if hasattr(linked_asset, 'supplier') else None,
+                "transactions_count": asset_txn_count,
+            }
 
     # Check for linked transactions
 
@@ -3882,6 +4014,7 @@ def confirm_ocr_results(
     transaction_created = False
     created_ids: list[int] = []
     reused_ids: list[int] = []
+    asset_id = None
 
     if confirm_request.confirmed:
 
@@ -3936,6 +4069,35 @@ def confirm_ocr_results(
 
             logger.warning(f"Auto-create transaction failed for doc {document_id}: {e}")
 
+        try:
+            latest_ocr_result = document.ocr_result or {}
+            asset_outcome = latest_ocr_result.get("asset_outcome")
+            import_suggestion = latest_ocr_result.get("import_suggestion")
+            asset_pending = (
+                isinstance(import_suggestion, dict)
+                and import_suggestion.get("type") == "create_asset"
+                and import_suggestion.get("status", "pending")
+                in {"pending", "ready_to_confirm"}
+                and not (
+                    isinstance(asset_outcome, dict)
+                    and asset_outcome.get("status") in {"confirmed", "auto_created"}
+                )
+            )
+            if asset_pending:
+                from app.tasks.ocr_tasks import create_asset_from_suggestion
+
+                asset_result = create_asset_from_suggestion(
+                    db,
+                    document,
+                    import_suggestion.get("data", {}),
+                    None,
+                    trigger_source="user",
+                )
+                asset_id = asset_result.get("asset_id")
+                transaction_id = asset_result.get("transaction_id") or transaction_id
+        except Exception as e:
+            logger.warning(f"Auto-confirm asset failed for doc {document_id}: {e}")
+
     msg = "Results confirmed successfully"
 
     if created_ids or reused_ids:
@@ -3956,6 +4118,9 @@ def confirm_ocr_results(
 
             msg += f" and {total_finalized} transactions were finalized"
             msg += f" ({len(created_ids)} created, {len(reused_ids)} reused)"
+
+    if asset_id:
+        msg += f" and asset #{asset_id} created"
 
     return OCRConfirmResponse(
 

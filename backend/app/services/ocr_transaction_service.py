@@ -1020,6 +1020,13 @@ class OCRTransactionService:
             return self._extract_from_svs_notice(ocr_data)
         elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:
             return self._extract_from_bescheid(ocr_data)
+        elif doc_type == DocumentType.KIRCHENBEITRAG.value:
+            return self._extract_from_kirchenbeitrag(ocr_data)
+        elif doc_type == DocumentType.SPENDENBESTAETIGUNG.value:
+            return self._extract_from_spendenbestaetigung(ocr_data)
+        elif doc_type == DocumentType.FORTBILDUNGSKOSTEN.value:
+            # Fortbildungskosten is essentially a receipt/invoice for training
+            return self._extract_from_receipt(ocr_data)
         else:
             return self._extract_generic(ocr_data)
 
@@ -1228,6 +1235,81 @@ class OCRTransactionService:
             "description": desc,
         }
 
+    def _extract_from_kirchenbeitrag(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract transaction from Kirchenbeitrag (church tax) confirmation.
+
+        Always expense / Sonderausgaben. Cap: €600 (2024+) / €400 (before 2024).
+        Goes into E1 KZ 458.
+        """
+        amount = ocr_data.get("amount") or ocr_data.get("beitrag") or ocr_data.get("betrag")
+        if not amount:
+            return None
+        normalized_amount = normalize_amount(amount)
+        if normalized_amount is None:
+            return None
+
+        date = ocr_data.get("date")
+        normalized_date = normalize_date(date)
+        tax_year = ocr_data.get("tax_year")
+
+        parish = (
+            ocr_data.get("merchant")
+            or ocr_data.get("issuer")
+            or ocr_data.get("pfarre")
+            or ocr_data.get("kirchengemeinde")
+            or "Kirchenbeitrag"
+        )
+        desc = f"Kirchenbeitrag {tax_year}" if tax_year else f"Kirchenbeitrag — {parish}"
+
+        return {
+            "amount": normalized_amount,
+            "date": normalized_date or date,
+            "description": desc,
+            "_kirchenbeitrag": True,
+        }
+
+    def _extract_from_spendenbestaetigung(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract transaction from Spendenbestätigung (donation confirmation).
+
+        Always expense / Sonderausgaben. Cap: 10% of total income.
+        Only for §4a EStG registered organisations (SO-Nummer).
+        Goes into E1 KZ 451.
+        Note: from 2024 most donations are auto-reported to Finanzamt
+        (automatische Datenübermittlung).
+        """
+        amount = ocr_data.get("amount") or ocr_data.get("spendenbetrag") or ocr_data.get("betrag")
+        if not amount:
+            return None
+        normalized_amount = normalize_amount(amount)
+        if normalized_amount is None:
+            return None
+
+        date = ocr_data.get("date")
+        normalized_date = normalize_date(date)
+        tax_year = ocr_data.get("tax_year")
+
+        org = (
+            ocr_data.get("merchant")
+            or ocr_data.get("issuer")
+            or ocr_data.get("organisation")
+            or ocr_data.get("verein")
+            or "Spende"
+        )
+        so_nummer = ocr_data.get("so_nummer") or ocr_data.get("registrierungsnummer")
+        desc = f"Spende — {org}"
+        if so_nummer:
+            desc += f" (SO {so_nummer})"
+        if tax_year:
+            desc = f"Spende {tax_year} — {org}"
+
+        return {
+            "amount": normalized_amount,
+            "date": normalized_date or date,
+            "description": desc,
+            "_spendenbestaetigung": True,
+            "_so_nummer": so_nummer,
+        }
+
     def _extract_from_bescheid(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract primary transaction from Einkommensteuerbescheid OCR data"""
         einkommen = ocr_data.get("einkommen")
@@ -1333,6 +1415,39 @@ class OCRTransactionService:
                 "is_deductible": True,
                 "deduction_reason": "SVS contributions are deductible as Sonderausgaben",
                 "confidence": 0.95,
+            }
+
+        elif doc_type == DocumentType.KIRCHENBEITRAG.value:
+            return {
+                "transaction_type": TransactionType.EXPENSE.value,
+                "category": ExpenseCategory.OTHER.value,
+                "is_deductible": True,
+                "deduction_reason": "Kirchenbeitrag — Sonderausgaben gem. §18 Abs.1 Z5 EStG (E1 KZ 458, max €600 ab 2024)",
+                "confidence": 0.95,
+            }
+
+        elif doc_type == DocumentType.SPENDENBESTAETIGUNG.value:
+            so_nummer = transaction_data.get("_so_nummer")
+            reason = "Spende — Sonderausgaben gem. §4a EStG (E1 KZ 451, max 10% der Einkünfte)"
+            if so_nummer:
+                reason += f" | SO-Nr: {so_nummer}"
+            else:
+                reason += " | Hinweis: Ab 2024 werden die meisten Spenden automatisch ans Finanzamt gemeldet."
+            return {
+                "transaction_type": TransactionType.EXPENSE.value,
+                "category": ExpenseCategory.OTHER.value,
+                "is_deductible": True,
+                "deduction_reason": reason,
+                "confidence": 0.95,
+            }
+
+        elif doc_type == DocumentType.FORTBILDUNGSKOSTEN.value:
+            return {
+                "transaction_type": TransactionType.EXPENSE.value,
+                "category": ExpenseCategory.EDUCATION.value,
+                "is_deductible": True,
+                "deduction_reason": "Fortbildungskosten — Werbungskosten (L1 KZ 720) oder Betriebsausgaben (E1a KZ 9230)",
+                "confidence": 0.90,
             }
 
         elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:

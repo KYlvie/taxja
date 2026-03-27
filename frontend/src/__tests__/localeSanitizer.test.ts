@@ -149,6 +149,16 @@ describe('localeSanitizer', () => {
       'documents.receiptReview.expandDetails',
       'documents.receiptReview.hideDetails',
       'documents.receiptReview.linkedTransactionShort',
+      'documents.receiptReview.noCategory',
+      'documents.receiptReview.mixedCategories',
+      'documents.receiptReview.categoryEditHint',
+      'documents.receiptReview.categoryReadonlyHint',
+      'documents.receiptReview.incomeTitle',
+      'documents.receiptReview.incomeStatus',
+      'documents.receiptReview.incomeEditingHint',
+      'documents.receiptReview.incomeStatusHint',
+      'documents.receiptReview.incomeEditing',
+      'documents.receiptReview.extractedDetails',
       'documents.bankWorkbench.mode.import',
       'documents.bankWorkbench.mode.extracted',
       'documents.bankWorkbench.fallbackSummaryTitle',
@@ -246,9 +256,13 @@ describe('localeSanitizer', () => {
     );
     expect(getValue(locales.de, 'documents.reviewAction')).toBe('Weiter pruefen');
     expect(getValue(locales.de, 'documents.reviewActionHint')).toBe('Klicken, um die Bestaetigung abzuschliessen');
+    expect(getValue(locales.de, 'documents.receiptReview.extractedDetails')).toBe('Extrahierte Details');
     expect(getValue(locales.de, 'classificationRules.automationSectionTitle')).toBe('Regeln zur automatischen Verarbeitung');
     expect(getValue(locales.en, 'documents.reviewAction')).toBe('Continue review');
     expect(getValue(locales.en, 'documents.reviewActionHint')).toBe('Click to complete confirmation');
+    expect(getValue(locales.en, 'documents.receiptReview.categoryReadonlyHint')).toBe(
+      'Click Edit to unlock category and deductibility changes for this receipt.'
+    );
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.document_year')).toBe('Document year');
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.bescheid_datum')).toBe('Assessment date');
     expect(getValue(locales.en, 'documents.review.taxFieldLabels.aktenzahl')).toBe('Reference number');

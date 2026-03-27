@@ -4,6 +4,24 @@
   margin: 0 auto;
 }
 
+.transaction-inline-edit-modal {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.transaction-inline-edit-body {
+  padding-top: 0;
+}
+
+.transaction-inline-edit-body .transaction-form {
+  margin: 0;
+  box-shadow: none;
+  border: 0;
+  padding: 0;
+  max-width: none;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;

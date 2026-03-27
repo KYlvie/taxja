@@ -552,7 +552,13 @@
       "lohnsteuer": "Bérjövedelemadó"
     },
     "partiallyDeductible": "Részleges",
-    "deductibilityDerivedFromItems": "A tételekből származtatva"
+    "deductibilityDerivedFromItems": "A tételekből származtatva",
+    "sortMode": {
+      "label": "Rendezés",
+      "date": "Dátum",
+      "amount": "Összeg",
+      "description": "Leírás"
+    }
   },
   "properties": {
     "title": "Ingatlanok",
@@ -716,10 +722,11 @@
     "disposalError": "Az eszköz kivezetése sikertelen",
     "salePriceRequired": "Az eladási ár megadása kötelező",
     "salePriceHint": "Az árfolyamnyereség számításához használt",
-    "confirmDeleteWithImpact": "Biztosan törölni szeretné a(z) \"{{address}}\" ingatlant?\n\n⚠️ A következő kapcsolt adatok érintettek lesznek:\n{{impact}}\n\nA tranzakciók leválasztásra kerülnek (nem törölve). Az ismétlődő tranzakciók és hitelek véglegesen törlődnek.",
-    "deleteImpactTransactions": "• {{count}} tranzakció leválasztásra kerül",
-    "deleteImpactRecurring": "• {{count}} ismétlődő tranzakció törlődik",
-    "deleteImpactLoans": "• {{count}} hitel törlődik",
+    "confirmDeleteWithImpact": "Biztosan törölni szeretné a következőt: \"{{address}}\"?\n\n⚠️ A következő kapcsolódó adatok érintettek:",
+    "deleteImpactTransactions": "{{count}} tranzakció leválasztásra kerül",
+    "deleteImpactRecurring": "{{count}} ismétlődő tranzakció törlődik",
+    "deleteImpactLoans": "{{count}} hitel törlődik",
+    "deleteImpactNote": "A tranzakciók leválasztásra kerülnek (nem törlődnek). Az ismétlődő tranzakciók és hitelek véglegesen törlődnek. A törlés előtt megtekintheti a kapcsolódó adatokat.",
     "manageYourProperties": "Bérleti ingatlanok kezelése és értékcsökkenés nyomon követése",
     "rentalYield": "Bérleti hozam",
     "expenseRatio": "Kiadási arány",
@@ -964,6 +971,15 @@
     "confirmDelete": "Biztosan törölni szeretné ezt a dokumentumot? A kapcsolt tranzakció is törlődik.",
     "deleteSuccess": "Dokumentum sikeresen törölve",
     "deleteError": "A dokumentum törlése sikertelen",
+    "batchDelete": "Kijelöltek törlése ({{count}})",
+    "batchDeleteSuccess": "{{count}} dokumentum törölve",
+    "batchDeleteFailed": "{{failed}} dokumentumot nem sikerült törölni",
+    "batchDeleteConfirm": "Törli a kijelölt {{count}} dokumentumot?",
+    "batchDeleteHasLinkedData": "A kijelölt dokumentumok közül {{count}} rendelkezik kapcsolódó tranzakciókkal vagy ingatlanokkal.",
+    "batchDeleteChooseMode": "Hogyan szeretné törölni?",
+    "selectedCount": "{{count}} kijelölve",
+    "selectAll": "Összes kijelölése",
+    "selectDocument": "Dokumentum kijelölése",
     "downloadFailed": "A letöltés sikertelen, kérjük próbálja újra",
     "reprocess": "Dokumentum újrafeldolgozása",
     "reprocessing": "Újrafeldolgozás...",
@@ -1248,7 +1264,9 @@
       "recommendation": "💡 Javaslat: Ha csak a dokumentum fájlt szeretné eltávolítani, válassza a 'Csak a dokumentum törlése' opciót",
       "cancel": "Mégse",
       "confirmDocumentOnly": "Csak dokumentum törlése",
-      "confirmWithData": "Mindent töröl"
+      "confirmWithData": "Mindent töröl",
+      "asset": "Eszköz",
+      "assetWarn": "A 'Mindent töröl' opció választása az eszközt és annak beszerzési tranzakcióját is törli"
     },
     "tabs": {
       "list": "Dokumentumaim",
@@ -4410,7 +4428,4 @@
       "auditChecklist": "Audit ellenőrzési lista",
       "auditSelectYear": "Adóév kiválasztása",
       "flatRateNotApplicable": "Az átalány-összehasonlítás csak önfoglalkoztatóknak érhető el.",
-      "noDataAvailable": "Még nincsenek adatok. Töltsön fel dokumentumokat."
-    }
-  }
-}
+      "noDataAvailable": "Még nincsene

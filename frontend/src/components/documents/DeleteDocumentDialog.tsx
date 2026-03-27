@@ -48,6 +48,16 @@ interface RelatedData {
       document_id: number;
       file_name: string;
     };
+    asset?: {
+      id: string;
+      name: string;
+      asset_type: string;
+      sub_category?: string;
+      purchase_price: number;
+      purchase_date: string;
+      supplier?: string;
+      transactions_count?: number;
+    };
   };
 }
 
@@ -178,6 +188,35 @@ const DeleteDocumentDialog = ({
                     {formatCurrency(relatedData.related_data.property.purchase_price)} •{' '}
                     {formatDate(relatedData.related_data.property.purchase_date)}
                   </span>
+                </div>
+              )}
+
+              {relatedData.related_data.asset && (
+                <div className="ddd-related-item">
+                  <strong>{t('documents.deleteDialog.asset', 'Asset')}:</strong>
+                  <span>{relatedData.related_data.asset.name}</span>
+                  <span className="ddd-meta">
+                    {relatedData.related_data.asset.asset_type}
+                    {relatedData.related_data.asset.purchase_price
+                      ? ` • ${formatCurrency(relatedData.related_data.asset.purchase_price)}`
+                      : ''}
+                    {relatedData.related_data.asset.purchase_date
+                      ? ` • ${formatDate(relatedData.related_data.asset.purchase_date)}`
+                      : ''}
+                    {relatedData.related_data.asset.supplier
+                      ? ` • ${relatedData.related_data.asset.supplier}`
+                      : ''}
+                  </span>
+                  {relatedData.related_data.asset.transactions_count
+                    ? (
+                      <span className="ddd-meta ddd-meta--warn">
+                        {t(
+                          'documents.deleteDialog.assetWarn',
+                          "Deleting everything will also remove this asset and its acquisition transaction"
+                        )}
+                      </span>
+                    )
+                    : null}
                 </div>
               )}
 

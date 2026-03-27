@@ -2007,18 +2007,44 @@ class DocumentPipelineOrchestrator:
             self._log_audit(result, "suggest", "Transaction fallback suggestion (needs_review)")
             return
 
-        # Betriebskostenabrechnung
+        # Kinderbetreuungskosten — since 2019, no longer separately deductible
+        # (replaced by Familienbonus Plus)
+        if db_type == DBDocumentType.KINDERBETREUUNGSKOSTEN:
+            result.suggestions.append({
+                "type": "manual_review",
+                "status": "needs_review",
+                "data": result.extracted_data or {},
+                "review_reason": (
+                    "Kinderbetreuungskosten-Bestätigung erkannt. "
+                    "Seit 2019 werden Kinderbetreuungskosten nicht mehr separat abgesetzt, "
+                    "sondern über den Familienbonus Plus berücksichtigt. "
+                    "Bitte prüfen Sie, ob der Familienbonus Plus bereits beantragt wurde."
+                ),
+                "confidence": classification.confidence if classification else 0,
+                "document_id": document.id,
+                "user_id": document.user_id,
+            })
+            self._log_audit(result, "suggest", "Kinderbetreuungskosten: Familienbonus Plus hint")
+            return
+
+        # Betriebskostenabrechnung — complex, needs property context
         if db_type == DBDocumentType.BETRIEBSKOSTENABRECHNUNG:
             result.suggestions.append({
                 "type": "manual_review",
                 "status": "needs_review",
                 "data": result.extracted_data or {},
-                "review_reason": "Betriebskostenabrechnung erkannt. Bitte überprüfen Sie die einzelnen Positionen.",
+                "review_reason": (
+                    "Betriebskostenabrechnung erkannt. "
+                    "Bitte bestätigen Sie Ihre Rolle: Als Vermieter kann ein Teil der Kosten "
+                    "als Werbungskosten geltend gemacht werden (nicht umlagefähiger Anteil). "
+                    "Als Mieter ist die Abrechnung in der Regel steuerlich nicht relevant. "
+                    "Bitte überprüfen Sie Nachzahlung/Gutschrift und die einzelnen Positionen."
+                ),
                 "confidence": classification.confidence if classification else 0,
                 "document_id": document.id,
                 "user_id": document.user_id,
             })
-            self._log_audit(result, "suggest", "Betriebskosten fallback suggestion (needs_review)")
+            self._log_audit(result, "suggest", "Betriebskosten: role clarification needed")
             return
 
         # Generic fallback — any other type

@@ -546,7 +546,13 @@
       "lohnsteuer": "Impôt sur les salaires"
     },
     "partiallyDeductible": "Partiel",
-    "deductibilityDerivedFromItems": "Dérivé des postes"
+    "deductibilityDerivedFromItems": "Dérivé des postes",
+    "sortMode": {
+      "label": "Trier par",
+      "date": "Date",
+      "amount": "Montant",
+      "description": "Description"
+    }
   },
   "properties": {
     "title": "Biens immobiliers",
@@ -710,10 +716,11 @@
     "disposalError": "Échec de la sortie de l'actif",
     "salePriceRequired": "Le prix de vente est obligatoire",
     "salePriceHint": "Utilisé pour le calcul des plus-values",
-    "confirmDeleteWithImpact": "Êtes-vous sûr de vouloir supprimer « {{address}} » ?\n\n⚠️ Les données liées suivantes seront affectées :\n{{impact}}\n\nLes transactions seront dissociées (non supprimées). Les transactions récurrentes et les prêts seront définitivement supprimés.",
-    "deleteImpactTransactions": "• {{count}} transaction(s) sera/seront dissociée(s)",
-    "deleteImpactRecurring": "• {{count}} transaction(s) récurrente(s) sera/seront supprimée(s)",
-    "deleteImpactLoans": "• {{count}} prêt(s) sera/seront supprimé(s)",
+    "confirmDeleteWithImpact": "Voulez-vous vraiment supprimer \"{{address}}\" ?\n\n⚠️ Les données liées suivantes seront affectées :",
+    "deleteImpactTransactions": "{{count}} transaction(s) sera/seront dissociée(s)",
+    "deleteImpactRecurring": "{{count}} transaction(s) récurrente(s) sera/seront supprimée(s)",
+    "deleteImpactLoans": "{{count}} prêt(s) sera/seront supprimé(s)",
+    "deleteImpactNote": "Les transactions seront dissociées (pas supprimées). Les transactions récurrentes et les prêts seront définitivement supprimés. Vous pouvez consulter les données liées avant de procéder.",
     "manageYourProperties": "Gérez vos biens locatifs et suivez l'amortissement",
     "rentalYield": "Rendement locatif",
     "expenseRatio": "Ratio de dépenses",
@@ -958,6 +965,15 @@
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce document ? La transaction liée sera également supprimée.",
     "deleteSuccess": "Document supprimé avec succès",
     "deleteError": "Échec de la suppression du document",
+    "batchDelete": "Supprimer la sélection ({{count}})",
+    "batchDeleteSuccess": "{{count}} documents supprimés",
+    "batchDeleteFailed": "{{failed}} documents n'ont pas pu être supprimés",
+    "batchDeleteConfirm": "Supprimer {{count}} documents sélectionnés ?",
+    "batchDeleteHasLinkedData": "{{count}} des documents sélectionnés ont des transactions ou propriétés liées.",
+    "batchDeleteChooseMode": "Comment voulez-vous supprimer ?",
+    "selectedCount": "{{count}} sélectionnés",
+    "selectAll": "Tout sélectionner",
+    "selectDocument": "Sélectionner le document",
     "downloadFailed": "Échec du téléchargement, veuillez réessayer",
     "reprocess": "Retraiter le document",
     "reprocessing": "Retraitement en cours...",
@@ -1242,7 +1258,9 @@
       "recommendation": "💡 Recommandation : si vous souhaitez simplement nettoyer le fichier du document, choisissez « Supprimer le document uniquement »",
       "cancel": "Annuler",
       "confirmDocumentOnly": "Supprimer le document uniquement",
-      "confirmWithData": "Tout supprimer"
+      "confirmWithData": "Tout supprimer",
+      "asset": "Actif",
+      "assetWarn": "En choisissant « Tout supprimer », cet actif et sa transaction d'acquisition seront également supprimés"
     },
     "tabs": {
       "list": "Mes documents",

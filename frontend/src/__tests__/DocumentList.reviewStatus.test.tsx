@@ -123,7 +123,7 @@ describe('DocumentList review status', () => {
       total: 1,
     });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <DocumentList onSummaryChange={onSummaryChange} />
       </MemoryRouter>,
@@ -134,6 +134,7 @@ describe('DocumentList review status', () => {
         totalCount: 1,
         reviewCount: 0,
         confirmableIds: [],
+        visibleDocIds: [201],
       });
     });
 
@@ -186,7 +187,7 @@ describe('DocumentList review status', () => {
       total: 2,
     });
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <DocumentList onSummaryChange={onSummaryChange} />
       </MemoryRouter>,
@@ -197,8 +198,68 @@ describe('DocumentList review status', () => {
         totalCount: 2,
         reviewCount: 0,
         confirmableIds: [],
+        visibleDocIds: [211, 212],
       });
     });
+  });
+
+  it('treats pending asset confirmation as pending review even when a transaction already exists', async () => {
+    const onSummaryChange = vi.fn();
+
+    getDocuments.mockResolvedValue({
+      documents: [
+        {
+          id: 213,
+          user_id: 7,
+          document_type: DocumentType.INVOICE,
+          file_path: 'users/7/documents/iphone.pdf',
+          file_name: 'A11_iPhone_GWG.pdf',
+          file_size: 4096,
+          mime_type: 'application/pdf',
+          confidence_score: 0.95,
+          needs_review: false,
+          transaction_id: 1800,
+          ocr_result: {
+            confirmed: true,
+            import_suggestion: { type: 'create_asset', status: 'pending' },
+            asset_outcome: { status: 'pending_confirmation' },
+          },
+          ocr_status: 'completed',
+          created_at: '2026-03-27T10:00:00.000Z',
+          uploaded_at: '2026-03-27T10:00:00.000Z',
+          updated_at: '2026-03-27T10:00:00.000Z',
+          processed_at: '2026-03-27T10:00:00.000Z',
+        },
+      ],
+      total: 1,
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <DocumentList onSummaryChange={onSummaryChange} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(onSummaryChange).toHaveBeenLastCalledWith({
+        totalCount: 1,
+        reviewCount: 1,
+        confirmableIds: [],
+        visibleDocIds: [213],
+      });
+    });
+
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
+
+    expect(screen.getByText('Pending review')).toBeInTheDocument();
+    expect(screen.queryByText('Transaction created')).not.toBeInTheDocument();
   });
 
   it('confirms a pending-review document directly from the list action', async () => {

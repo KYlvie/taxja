@@ -52,6 +52,8 @@ interface TransactionListProps {
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
   onToggleSelectAll?: () => void;
+  columnSort?: { key: string; dir: 'asc' | 'desc' } | null;
+  onColumnSort?: (sort: { key: string; dir: 'asc' | 'desc' } | null) => void;
 }
 
 const TransactionList = ({
@@ -66,6 +68,8 @@ const TransactionList = ({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
+  columnSort,
+  onColumnSort,
 }: TransactionListProps) => {
   const { t, i18n } = useTranslation();
   const locale = getLocaleForLanguage(i18n.resolvedLanguage || i18n.language);
@@ -238,6 +242,42 @@ const TransactionList = ({
     );
   };
 
+  const handleColumnSortClick = (key: string) => {
+    if (!onColumnSort) return;
+    onColumnSort(
+      columnSort?.key === key
+        ? columnSort.dir === 'asc'
+          ? { key, dir: 'desc' }
+          : null
+        : { key, dir: 'asc' }
+    );
+  };
+
+  const renderSortableHeader = (key: string, label: string) => {
+    const isActive = columnSort?.key === key;
+    return (
+      <th
+        className="sortable-col"
+        onClick={() => handleColumnSortClick(key)}
+      >
+        {label}
+        <span
+          className="sort-arrows"
+          style={{
+            marginLeft: 6,
+            fontSize: '1.1em',
+            opacity: isActive ? 1 : 0.4,
+            verticalAlign: 'middle',
+            fontWeight: isActive ? 700 : 400,
+            color: isActive ? 'var(--color-primary, #6366f1)' : 'inherit',
+          }}
+        >
+          {isActive ? (columnSort!.dir === 'asc' ? '\u25B2' : '\u25BC') : '\u21D5'}
+        </span>
+      </th>
+    );
+  };
+
   if (transactions.length === 0) {
     return (
       <div className="transaction-list-empty">
@@ -275,12 +315,12 @@ const TransactionList = ({
                   />
                 </th>
               )}
-              <th>{t('transactions.date')}</th>
-              <th>{t('transactions.description')}</th>
-              <th>{t('transactions.category')}</th>
-              <th>{t('transactions.amount')}</th>
-              <th>{t('transactions.type')}</th>
-              <th>{t('transactions.bankReconciled')}</th>
+              {renderSortableHeader('date', t('transactions.date'))}
+              {renderSortableHeader('description', t('transactions.description'))}
+              {renderSortableHeader('category', t('transactions.category'))}
+              {renderSortableHeader('amount', t('transactions.amount'))}
+              {renderSortableHeader('type', t('transactions.type'))}
+              {renderSortableHeader('bankReconciled', t('transactions.bankReconciled'))}
               <th>{t('common.actions')}</th>
             </tr>
           </thead>

@@ -355,6 +355,16 @@ const buildDocumentReviewHotfix = (config: {
   receiptExpandDetails: string;
   receiptHideDetails: string;
   receiptLinkedTransactionShort: string;
+  receiptNoCategory: string;
+  receiptMixedCategories: string;
+  receiptCategoryEditHint: string;
+  receiptCategoryReadonlyHint: string;
+  receiptIncomeTitle: string;
+  receiptIncomeStatus: string;
+  receiptIncomeEditingHint: string;
+  receiptIncomeStatusHint: string;
+  receiptIncomeEditing: string;
+  receiptExtractedDetails: string;
 }): LocaleObject => ({
   documents: {
     reviewAction: config.reviewAction,
@@ -365,6 +375,16 @@ const buildDocumentReviewHotfix = (config: {
       expandDetails: config.receiptExpandDetails,
       hideDetails: config.receiptHideDetails,
       linkedTransactionShort: config.receiptLinkedTransactionShort,
+      noCategory: config.receiptNoCategory,
+      mixedCategories: config.receiptMixedCategories,
+      categoryEditHint: config.receiptCategoryEditHint,
+      categoryReadonlyHint: config.receiptCategoryReadonlyHint,
+      incomeTitle: config.receiptIncomeTitle,
+      incomeStatus: config.receiptIncomeStatus,
+      incomeEditingHint: config.receiptIncomeEditingHint,
+      incomeStatusHint: config.receiptIncomeStatusHint,
+      incomeEditing: config.receiptIncomeEditing,
+      extractedDetails: config.receiptExtractedDetails,
     },
     review: {
       confirmed: config.confirmed,
@@ -691,6 +711,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Details einblenden',
         receiptHideDetails: 'Details ausblenden',
         receiptLinkedTransactionShort: 'Verknuepfte Transaktion',
+        receiptNoCategory: 'Keine Kategorie',
+        receiptMixedCategories: 'Gemischte Kategorien',
+        receiptCategoryEditHint: 'Waehlen Sie oben eine Kategorie fuer den ganzen Beleg oder passen Sie die einzelnen Zeilen unten an.',
+        receiptCategoryReadonlyHint: 'Klicken Sie auf Bearbeiten, um Kategorie und Abzugsfaehigkeit fuer diesen Beleg anzupassen.',
+        receiptIncomeTitle: 'Einnahmendetails',
+        receiptIncomeStatus: 'Einnahmendetails',
+        receiptIncomeEditingHint: 'Sie koennen Positionen, Mengen, Betraege und Umsatzsteuerangaben direkt korrigieren.',
+        receiptIncomeStatusHint: 'Extrahierte Positionen, Mengen, Betraege und Umsatzsteuerangaben werden hier ohne Ausgaben-spezifische Abzugslogik angezeigt.',
+        receiptIncomeEditing: 'Einnahmendetails bearbeiten',
+        receiptExtractedDetails: 'Extrahierte Details',
       })
     ),
     ...buildProactiveReminderHotfix(
@@ -803,6 +833,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Expand details',
         receiptHideDetails: 'Hide details',
         receiptLinkedTransactionShort: 'Linked transaction',
+        receiptNoCategory: 'No category assigned',
+        receiptMixedCategories: 'Mixed categories',
+        receiptCategoryEditHint: 'Use the selector above to apply one category to the whole receipt, or adjust each line item below.',
+        receiptCategoryReadonlyHint: 'Click Edit to unlock category and deductibility changes for this receipt.',
+        receiptIncomeTitle: 'Income details',
+        receiptIncomeStatus: 'Income details',
+        receiptIncomeEditingHint: 'You can correct item names, quantities, amounts, and VAT details, then save directly.',
+        receiptIncomeStatusHint: 'The extracted item, quantity, amount, and VAT details stay visible here without expense-only deductibility controls.',
+        receiptIncomeEditing: 'Editing income details',
+        receiptExtractedDetails: 'Extracted details',
       })
     ),
     ...buildProactiveReminderHotfix(
@@ -921,6 +961,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: '\u5c55\u5f00\u8be6\u60c5',
         receiptHideDetails: '\u6536\u8d77\u8be6\u60c5',
         receiptLinkedTransactionShort: '\u5df2\u5173\u8054\u4ea4\u6613',
+        receiptNoCategory: '\u672a\u5206\u7c7b',
+        receiptMixedCategories: '\u591a\u79cd\u5206\u7c7b',
+        receiptCategoryEditHint: '\u53ef\u5728\u4e0a\u65b9\u4e3a\u6574\u5f20\u5355\u636e\u9009\u62e9\u540c\u4e00\u5206\u7c7b\uff0c\u6216\u5728\u4e0b\u65b9\u9010\u884c\u8c03\u6574\u3002',
+        receiptCategoryReadonlyHint: '\u70b9\u51fb\u201c\u7f16\u8f91\u201d\u540e\u53ef\u4fee\u6539\u6b64\u5355\u636e\u7684\u5206\u7c7b\u4e0e\u53ef\u62b5\u6263\u5224\u65ad\u3002',
+        receiptIncomeTitle: '\u6536\u5165\u660e\u7ec6',
+        receiptIncomeStatus: '\u6536\u5165\u660e\u7ec6',
+        receiptIncomeEditingHint: '\u60a8\u53ef\u4ee5\u76f4\u63a5\u4fee\u6b63\u6761\u76ee\u540d\u79f0\u3001\u6570\u91cf\u3001\u91d1\u989d\u548c\u589e\u503c\u7a0e\u4fe1\u606f\u3002',
+        receiptIncomeStatusHint: '\u8fd9\u91cc\u4f1a\u663e\u793a\u63d0\u53d6\u51fa\u7684\u6761\u76ee\u3001\u6570\u91cf\u3001\u91d1\u989d\u548c\u589e\u503c\u7a0e\u4fe1\u606f\uff0c\u4e0d\u542b\u8d39\u7528\u4e13\u7528\u7684\u53ef\u62b5\u6263\u63a7\u5236\u3002',
+        receiptIncomeEditing: '\u7f16\u8f91\u6536\u5165\u660e\u7ec6',
+        receiptExtractedDetails: '\u5df2\u63d0\u53d6\u660e\u7ec6',
       })
     ),
     ...buildProactiveReminderHotfix(
@@ -1038,6 +1088,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Afficher les details',
         receiptHideDetails: 'Masquer les details',
         receiptLinkedTransactionShort: 'Transaction liee',
+        receiptNoCategory: 'Aucune categorie',
+        receiptMixedCategories: 'Categories mixtes',
+        receiptCategoryEditHint: 'Utilisez le selecteur ci-dessus pour appliquer une categorie a tout le document, ou ajustez chaque ligne ci-dessous.',
+        receiptCategoryReadonlyHint: 'Cliquez sur Modifier pour debloquer la categorie et la deductibilite de ce document.',
+        receiptIncomeTitle: 'Details du revenu',
+        receiptIncomeStatus: 'Details du revenu',
+        receiptIncomeEditingHint: 'Vous pouvez corriger les lignes, quantites, montants et donnees TVA, puis enregistrer directement.',
+        receiptIncomeStatusHint: 'Les lignes, quantites, montants et donnees TVA extraits restent visibles ici sans controles de deductibilite reserves aux depenses.',
+        receiptIncomeEditing: 'Modification du revenu',
+        receiptExtractedDetails: 'Details extraits',
       }),
       buildDocumentFiltersHotfix('Appliquer')
     ),
@@ -1180,6 +1240,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: '\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438',
         receiptHideDetails: '\u0421\u043a\u0440\u044b\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438',
         receiptLinkedTransactionShort: '\u0421\u0432\u044f\u0437\u0430\u043d\u043d\u0430\u044f \u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u044f',
+        receiptNoCategory: '\u0411\u0435\u0437 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438',
+        receiptMixedCategories: '\u0421\u043c\u0435\u0448\u0430\u043d\u043d\u044b\u0435 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438',
+        receiptCategoryEditHint: '\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044e \u0441\u0432\u0435\u0440\u0445\u0443 \u0434\u043b\u044f \u0432\u0441\u0435\u0433\u043e \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430 \u0438\u043b\u0438 \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u0435 \u043a\u0430\u0436\u0434\u0443\u044e \u0441\u0442\u0440\u043e\u043a\u0443 \u043d\u0438\u0436\u0435.',
+        receiptCategoryReadonlyHint: '\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u00ab\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c\u00bb, \u0447\u0442\u043e\u0431\u044b \u0440\u0430\u0437\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044e \u0438 \u043f\u0440\u0438\u0437\u043d\u0430\u043a \u0432\u044b\u0447\u0435\u0442\u0430.',
+        receiptIncomeTitle: '\u0414\u0435\u0442\u0430\u043b\u0438 \u0434\u043e\u0445\u043e\u0434\u0430',
+        receiptIncomeStatus: '\u0414\u0435\u0442\u0430\u043b\u0438 \u0434\u043e\u0445\u043e\u0434\u0430',
+        receiptIncomeEditingHint: '\u041c\u043e\u0436\u043d\u043e \u0441\u0440\u0430\u0437\u0443 \u0438\u0441\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u044f, \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e, \u0441\u0443\u043c\u043c\u044b \u0438 \u0434\u0430\u043d\u043d\u044b\u0435 \u041d\u0414\u0421.',
+        receiptIncomeStatusHint: '\u0417\u0434\u0435\u0441\u044c \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f \u0432\u0438\u0434\u0438\u043c\u044b\u043c\u0438 \u0438\u0437\u0432\u043b\u0435\u0447\u0451\u043d\u043d\u044b\u0435 \u043f\u043e\u0437\u0438\u0446\u0438\u0438, \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u0430, \u0441\u0443\u043c\u043c\u044b \u0438 \u0434\u0430\u043d\u043d\u044b\u0435 \u041d\u0414\u0421 \u0431\u0435\u0437 \u0440\u0430\u0441\u0445\u043e\u0434\u043d\u044b\u0445 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u0435\u0439.',
+        receiptIncomeEditing: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0434\u043e\u0445\u043e\u0434\u0430',
+        receiptExtractedDetails: '\u0418\u0437\u0432\u043b\u0435\u0447\u0451\u043d\u043d\u044b\u0435 \u0434\u0435\u0442\u0430\u043b\u0438',
       }),
       buildDocumentFiltersHotfix('\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c')
     ),
@@ -1317,6 +1387,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Reszletek megjelenitese',
         receiptHideDetails: 'Reszletek elrejtese',
         receiptLinkedTransactionShort: 'Kapcsolt tranzakcio',
+        receiptNoCategory: 'Nincs kategoria',
+        receiptMixedCategories: 'Vegyes kategoriak',
+        receiptCategoryEditHint: 'Valasszon fent egy kategoriat az egesz dokumentumhoz, vagy modositja az egyes sorokat lent.',
+        receiptCategoryReadonlyHint: 'Kattintson a Szerkesztes gombra a kategoria es a levonhatosag modositasahoz ennnel a dokumentumnal.',
+        receiptIncomeTitle: 'Bevetel reszletei',
+        receiptIncomeStatus: 'Bevetel reszletei',
+        receiptIncomeEditingHint: 'Kozvetlenul javithatja a tetelneveket, mennyisegeket, osszegeket es AFA-adatokat.',
+        receiptIncomeStatusHint: 'A kinyert tetelek, mennyisegek, osszegek es AFA-adatok itt lathatok koltsegspecifikus levonhatosagi vezerlok nelkul.',
+        receiptIncomeEditing: 'Bevetel reszleteinek szerkesztese',
+        receiptExtractedDetails: 'Kinyert reszletek',
       }),
       buildDocumentFiltersHotfix('Alkalmaz')
     ),
@@ -1460,6 +1540,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Pokaz szczegoly',
         receiptHideDetails: 'Ukryj szczegoly',
         receiptLinkedTransactionShort: 'Powiazana transakcja',
+        receiptNoCategory: 'Brak kategorii',
+        receiptMixedCategories: 'Mieszane kategorie',
+        receiptCategoryEditHint: 'Uzyj selektora powyzej, aby przypisac jedna kategorie do calego dokumentu, albo popraw poszczegolne pozycje nizej.',
+        receiptCategoryReadonlyHint: 'Kliknij Edytuj, aby odblokowac kategorie i odliczalnosc dla tego dokumentu.',
+        receiptIncomeTitle: 'Szczegoly przychodu',
+        receiptIncomeStatus: 'Szczegoly przychodu',
+        receiptIncomeEditingHint: 'Mozesz bezposrednio poprawic nazwy pozycji, ilosci, kwoty i dane VAT.',
+        receiptIncomeStatusHint: 'Wyodrebnione pozycje, ilosci, kwoty i dane VAT pozostaja tutaj widoczne bez kontrolek odliczalnosci przeznaczonych dla kosztow.',
+        receiptIncomeEditing: 'Edycja szczegolow przychodu',
+        receiptExtractedDetails: 'Wyodrebnione szczegoly',
       }),
       buildDocumentFiltersHotfix('Zastosuj')
     ),
@@ -1608,6 +1698,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Ayrintilari genislet',
         receiptHideDetails: 'Ayrintilari gizle',
         receiptLinkedTransactionShort: 'Bagli islem',
+        receiptNoCategory: 'Kategori yok',
+        receiptMixedCategories: 'Karisik kategoriler',
+        receiptCategoryEditHint: 'Tum belgeye tek bir kategori uygulamak icin yukaridaki seciciyi kullanin veya asagida her satiri ayri duzenleyin.',
+        receiptCategoryReadonlyHint: 'Bu belge icin kategori ve indirilebilirlik degisikliklerini acmak icin Duzenleye tiklayin.',
+        receiptIncomeTitle: 'Gelir detaylari',
+        receiptIncomeStatus: 'Gelir detaylari',
+        receiptIncomeEditingHint: 'Kalem adlarini, miktarlari, tutarlari ve KDV bilgilerini dogrudan duzeltebilirsiniz.',
+        receiptIncomeStatusHint: 'Cikarilan kalem, miktar, tutar ve KDV bilgileri burada giderlere ozel indirilebilirlik kontrolleri olmadan gorunur.',
+        receiptIncomeEditing: 'Gelir detaylarini duzenleme',
+        receiptExtractedDetails: 'Cikarilan detaylar',
       }),
       buildDocumentFiltersHotfix('Uygula')
     ),
@@ -1750,6 +1850,16 @@ const LOCALE_HOTFIXES: Partial<Record<SupportedLanguage, LocaleObject>> = {
         receiptExpandDetails: 'Prikazi detalje',
         receiptHideDetails: 'Sakrij detalje',
         receiptLinkedTransactionShort: 'Povezana transakcija',
+        receiptNoCategory: 'Nema kategorije',
+        receiptMixedCategories: 'Mijesane kategorije',
+        receiptCategoryEditHint: 'Koristite izbor iznad da postavite jednu kategoriju za cijeli dokument ili prilagodite svaku stavku ispod.',
+        receiptCategoryReadonlyHint: 'Kliknite Uredi da otkljucate kategoriju i odbitnost za ovaj dokument.',
+        receiptIncomeTitle: 'Detalji prihoda',
+        receiptIncomeStatus: 'Detalji prihoda',
+        receiptIncomeEditingHint: 'Mozete direktno ispraviti nazive stavki, kolicine, iznose i PDV podatke.',
+        receiptIncomeStatusHint: 'Izdvojene stavke, kolicine, iznosi i PDV podaci ostaju ovdje vidljivi bez kontrola odbitnosti koje vrijede samo za troskove.',
+        receiptIncomeEditing: 'Uredjivanje detalja prihoda',
+        receiptExtractedDetails: 'Izdvojeni detalji',
       }),
       buildDocumentFiltersHotfix('Primijeni')
     ),

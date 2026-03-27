@@ -1,6 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -148,6 +148,48 @@ describe('OCRReview contract-sensitive purchase and rental flows', () => {
     expect(screen.getByDisplayValue('我是买方')).toBeInTheDocument();
     expect(screen.getByText('合同身份判断')).toBeInTheDocument();
     expect(screen.getByText('Matched contract party to user full name.')).toBeInTheDocument();
+  });
+
+  it('opens linked transactions via the inline callback instead of leaving the document page', async () => {
+    const onOpenTransaction = vi.fn();
+
+    getDocumentForReview.mockResolvedValueOnce({
+      document: {
+        id: 126,
+        user_id: 5,
+        document_type: 'invoice',
+        file_path: '/tmp/invoice.pdf',
+        file_name: 'invoice.pdf',
+        file_size: 1234,
+        mime_type: 'application/pdf',
+        confidence_score: 0.94,
+        needs_review: false,
+        transaction_id: 778,
+        created_at: '2026-03-18T00:00:00Z',
+        updated_at: '2026-03-18T00:00:00Z',
+        raw_text: '',
+        ocr_result: {},
+      },
+      extracted_data: {
+        amount: 599,
+        description: 'Invoice from JetBrains',
+        confidence: {},
+      },
+      suggestions: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <OCRReview documentId={126} onOpenTransaction={onOpenTransaction} />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getDocumentForReview).toHaveBeenCalledWith(126);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'documents.linkedEntity.open' }));
+    expect(onOpenTransaction).toHaveBeenCalledWith(778);
   });
 
   it('renders rental role controls and a shadow warning for rental contracts', async () => {

@@ -67,8 +67,7 @@ const TransactionsPage = () => {
   const transactionsVersion = useRefreshStore((s) => s.transactionsVersion);
   const { confirm: aiConfirm, alert: aiAlert } = useAIConfirmation();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [sortBy] = useState<'date' | 'amount'>('date');
-  const [sortOrder] = useState<'asc' | 'desc'>('desc');
+  const [columnSort, setColumnSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
 
@@ -140,7 +139,7 @@ const TransactionsPage = () => {
 
   useEffect(() => {
     void fetchTransactions();
-  }, [filters, needsReviewParam, pagination.page, pagination.pageSize, sortBy, sortOrder, transactionsVersion]);
+  }, [filters, needsReviewParam, pagination.page, pagination.pageSize, transactionsVersion]);
 
   useEffect(() => {
     if (lastNeedsReviewParamRef.current === needsReviewParam) {
@@ -582,15 +581,26 @@ const TransactionsPage = () => {
     }
   };
 
-  const sortedTransactions = [...transactions].sort((left, right) => {
-    const multiplier = sortOrder === 'asc' ? 1 : -1;
+  const sortedTransactions = (() => {
+    // Default sort: newest first (date descending)
+    const baseSorted = [...transactions].sort((left, right) =>
+      new Date(right.date).getTime() - new Date(left.date).getTime()
+    );
 
-    if (sortBy === 'date') {
-      return multiplier * (new Date(left.date).getTime() - new Date(right.date).getTime());
-    }
+    if (!columnSort) return baseSorted;
 
-    return multiplier * (left.amount - right.amount);
-  });
+    return [...baseSorted].sort((left, right) => {
+      const m = columnSort.dir === 'asc' ? 1 : -1;
+      const k = columnSort.key;
+      if (k === 'date') return m * (new Date(left.date).getTime() - new Date(right.date).getTime());
+      if (k === 'description') return m * (left.description || '').localeCompare(right.description || '');
+      if (k === 'category') return m * (left.category || '').localeCompare(right.category || '');
+      if (k === 'amount') return m * (left.amount - right.amount);
+      if (k === 'type') return m * (left.type || '').localeCompare(right.type || '');
+      if (k === 'bankReconciled') return m * (Number(left.bank_reconciled || 0) - Number(right.bank_reconciled || 0));
+      return 0;
+    });
+  })();
 
   if (viewMode === 'create') {
     return (
@@ -752,6 +762,8 @@ const TransactionsPage = () => {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={handleToggleSelectAll}
+            columnSort={columnSort}
+            onColumnSort={setColumnSort}
           />
 
           {selectedIds.size > 0 && (

@@ -182,6 +182,31 @@ def test_duplicate_hash_returns_duplicate_warning():
     assert result.duplicate.matched_document_id == 22
 
 
+def test_similar_existing_asset_does_not_block_repeat_asset_purchase():
+    service = AssetRecognitionService()
+
+    result = service.recognize(
+        make_input(
+            extracted_amount=Decimal("999.00"),
+            extracted_net_amount=Decimal("832.50"),
+            extracted_vat_amount=Decimal("166.50"),
+            raw_text="Rechnung Apple iPhone 15 Pro 256GB Smartphone Handy",
+            extracted_line_items=[{"description": "Apple iPhone 15 Pro 256GB"}],
+            duplicate_asset_candidates=[
+                DuplicateCandidate(
+                    matched_asset_id="asset-1",
+                    vendor_name="Example Supplier GmbH",
+                    amount_gross=Decimal("999.00"),
+                    document_date=date(2026, 3, 10),
+                )
+            ],
+        )
+    )
+
+    assert result.decision == AssetRecognitionDecision.GWG_SUGGESTION
+    assert result.duplicate.duplicate_status == "none"
+
+
 def test_used_pkw_blocks_degressive_and_ifb():
     service = AssetRecognitionService()
 

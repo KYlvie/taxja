@@ -141,7 +141,7 @@ class AssetRecognitionService:
                     )
 
         comparable_amount = data.extracted_amount
-        for candidate in [*data.duplicate_document_candidates, *data.duplicate_asset_candidates]:
+        for candidate in data.duplicate_document_candidates:
             same_vendor = self._safe_equal(candidate.vendor_name, data.extracted_vendor)
             same_invoice = self._safe_equal(candidate.invoice_number, data.extracted_invoice_number)
             same_amount = bool(candidate.amount_gross is not None and comparable_amount == candidate.amount_gross)

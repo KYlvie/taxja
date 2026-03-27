@@ -305,7 +305,8 @@ const PropertiesPage = () => {
   const handleDeleteProperty = async (id: string) => {
     try {
       await deleteProperty(id);
-      fetchProperties();
+      // Also remove from local otherAssets state (non-real-estate assets)
+      setOtherAssets((prev) => prev.filter((a) => String(a.id) !== String(id)));
     } catch (error) {
       console.error('Failed to delete property:', error);
       await showAlert(t('properties.deleteError'), { variant: 'danger' });

@@ -546,7 +546,13 @@
       "lohnsteuer": "Podatek od wynagrodzeń"
     },
     "partiallyDeductible": "Częściowo",
-    "deductibilityDerivedFromItems": "Wynikające z pozycji"
+    "deductibilityDerivedFromItems": "Wynikające z pozycji",
+    "sortMode": {
+      "label": "Sortuj wg",
+      "date": "Data",
+      "amount": "Kwota",
+      "description": "Opis"
+    }
   },
   "properties": {
     "title": "Nieruchomości",
@@ -710,10 +716,11 @@
     "disposalError": "Nie udało się zlikwidować środka trwałego",
     "salePriceRequired": "Cena sprzedaży jest wymagana",
     "salePriceHint": "Używana do obliczenia zysku kapitałowego",
-    "confirmDeleteWithImpact": "Czy na pewno chcesz usunąć \"{{address}}\"?\n\n⚠️ Następujące powiązane dane zostaną zmienione:\n{{impact}}\n\nTransakcje zostaną odłączone (nie usunięte). Transakcje cykliczne i kredyty zostaną trwale usunięte.",
-    "deleteImpactTransactions": "• {{count}} transakcji zostanie odłączonych",
-    "deleteImpactRecurring": "• {{count}} transakcji cyklicznych zostanie usuniętych",
-    "deleteImpactLoans": "• {{count}} kredytów zostanie usuniętych",
+    "confirmDeleteWithImpact": "Czy na pewno chcesz usunąć \"{{address}}\"?\n\n⚠️ Zostaną zmienione następujące powiązane dane:",
+    "deleteImpactTransactions": "{{count}} transakcji zostanie odłączonych",
+    "deleteImpactRecurring": "{{count}} transakcji cyklicznych zostanie usuniętych",
+    "deleteImpactLoans": "{{count}} kredytów zostanie usuniętych",
+    "deleteImpactNote": "Transakcje zostaną odłączone (nie usunięte). Transakcje cykliczne i pożyczki zostaną trwale usunięte. Możesz przejrzeć powiązane dane przed kontynuowaniem.",
     "manageYourProperties": "Zarządzaj swoimi nieruchomościami na wynajem i śledź amortyzację",
     "rentalYield": "Rentowność najmu",
     "expenseRatio": "Wskaźnik wydatków",
@@ -958,6 +965,15 @@
     "confirmDelete": "Czy na pewno chcesz usunąć ten dokument? Powiązana transakcja również zostanie usunięta.",
     "deleteSuccess": "Dokument usunięty pomyślnie",
     "deleteError": "Nie udało się usunąć dokumentu",
+    "batchDelete": "Usuń zaznaczone ({{count}})",
+    "batchDeleteSuccess": "{{count}} dokumentów usunięto",
+    "batchDeleteFailed": "{{failed}} dokumentów nie można było usunąć",
+    "batchDeleteConfirm": "Usunąć {{count}} zaznaczonych dokumentów?",
+    "batchDeleteHasLinkedData": "{{count}} z zaznaczonych dokumentów ma powiązane transakcje lub nieruchomości.",
+    "batchDeleteChooseMode": "Jak chcesz usunąć?",
+    "selectedCount": "{{count}} zaznaczonych",
+    "selectAll": "Zaznacz wszystkie",
+    "selectDocument": "Zaznacz dokument",
     "downloadFailed": "Pobieranie nie powiodło się, spróbuj ponownie",
     "reprocess": "Przetwórz ponownie dokument",
     "reprocessing": "Przetwarzanie ponowne...",
@@ -1242,7 +1258,9 @@
       "recommendation": "💡 Zalecenie: Jeśli chcesz tylko posprzątać plik dokumentu, wybierz 'Usuń tylko dokument'",
       "cancel": "Anuluj",
       "confirmDocumentOnly": "Usuń tylko dokument",
-      "confirmWithData": "Usuń wszystko"
+      "confirmWithData": "Usuń wszystko",
+      "asset": "Środek trwały",
+      "assetWarn": "Wybranie 'Usuń wszystko' usunie również ten środek trwały i jego transakcję nabycia"
     },
     "tabs": {
       "list": "Moje dokumenty",

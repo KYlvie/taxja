@@ -34,6 +34,11 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.transaction-table th.sortable-col {
+  cursor: pointer;
+  user-select: none;
+}
+
 .transaction-table tbody tr {
   border-bottom: 1px solid var(--color-border-light);
   cursor: pointer;

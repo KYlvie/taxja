@@ -293,6 +293,18 @@ export const documentService = {
     await api.delete(`/documents/${id}?delete_mode=${deleteMode}`);
   },
 
+  // Batch delete documents
+  batchDelete: async (
+    ids: number[],
+    deleteMode: 'document_only' | 'with_data' = 'document_only'
+  ): Promise<{ deleted: number[]; failed: number[]; total: number }> => {
+    const response = await api.post('/documents/batch-delete', {
+      ids,
+      delete_mode: deleteMode,
+    });
+    return response.data;
+  },
+
   // Get related data for a document (before deletion)
   getDocumentRelatedData: async (id: number): Promise<any> => {
     const response = await api.get(`/documents/${id}/related-data`);

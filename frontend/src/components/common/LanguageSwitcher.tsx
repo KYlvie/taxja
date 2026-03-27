@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { normalizeLanguage } from '../../utils/locale';
+import { useAuthStore } from '../../stores/authStore';
+import { userService } from '../../services/userService';
 import Select from './Select';
 import 'flag-icons/css/flag-icons.min.css';
 import './LanguageSwitcher.css';
@@ -26,6 +28,9 @@ const LanguageSwitcher = () => {
 
   const changeLanguage = (langCode: string) => {
     void i18n.changeLanguage(langCode);
+    if (useAuthStore.getState().isAuthenticated) {
+      userService.updateProfile({ language: langCode }).catch(() => {});
+    }
   };
 
   return (

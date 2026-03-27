@@ -439,6 +439,68 @@ describe('DocumentsPage receipt review flow', () => {
     expect(screen.getByTestId('suggestion-card').getAttribute('data-disabled-reason')).toContain('proforma');
   });
 
+  it('hides internal receipt metadata and avoids repeating the same seller details', async () => {
+    const invoiceDocumentDetail = {
+      id: 101,
+      user_id: 1,
+      document_type: 'invoice',
+      file_path: '/tmp/invoice.pdf',
+      file_name: 'invoice.pdf',
+      file_size: 100,
+      mime_type: 'application/pdf',
+      confidence_score: 0.95,
+      needs_review: false,
+      created_at: '2026-03-17T00:00:00Z',
+      updated_at: '2026-03-17T00:00:00Z',
+      ocr_result: {
+        issuer: 'JetBrains s.r.o.',
+        merchant: 'JetBrains s.r.o.',
+        recipient: 'DI Maria Steiner',
+        amount: 599,
+        date: '2024-01-05',
+        invoice_number: 'INV-JB-2024-AT-00891',
+        tax_id: 'CZ26502275',
+        document_date: '2024-01-05',
+        document_year: 2024,
+        year_basis: 'date',
+        year_confidence: 0.85,
+        line_items: [
+          {
+            description: 'IntelliJ IDEA Ultimate — Perpetual Fallback License',
+            amount: 599,
+            quantity: 1,
+            vat_rate: 20,
+            category: 'other',
+            is_deductible: true,
+          },
+        ],
+      },
+    };
+
+    getDocument.mockReset();
+    getDocument
+      .mockResolvedValueOnce(invoiceDocumentDetail)
+      .mockResolvedValueOnce(invoiceDocumentDetail);
+    correctOCR.mockResolvedValue(invoiceDocumentDetail);
+
+    const { container } = renderDocumentsPage();
+
+    await waitFor(() => expect(getDocument).toHaveBeenCalledWith(101));
+    await waitFor(() =>
+      expect(container.querySelector('.receipt-review-name')?.textContent).toBe(
+        'IntelliJ IDEA Ultimate — Perpetual Fallback License',
+      ),
+    );
+
+    expect(container.textContent).toContain('Issuer');
+    expect(container.textContent).toContain('Recipient');
+    expect(container.textContent).not.toContain('Merchant');
+    expect(container.textContent).not.toContain('document_year');
+    expect(container.textContent).not.toContain('year_basis');
+    expect(container.textContent).not.toContain('year_confidence');
+    expect(container.textContent).not.toContain('document_date');
+  });
+
   it('shows category editing in the receipt workbench and syncs the chosen category to the linked transaction', async () => {
     const linkedTransaction = {
       id: 77,

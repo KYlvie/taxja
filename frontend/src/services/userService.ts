@@ -52,6 +52,7 @@ interface UpdateProfileData {
   employer_telearbeit_pauschale?: number;
   num_children?: number;
   is_single_parent?: boolean;
+  language?: string;
 }
 
 export interface IndustryOption {

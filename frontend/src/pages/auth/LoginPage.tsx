@@ -43,6 +43,9 @@ const LoginPage = () => {
     user: Record<string, any>;
   }) => {
     login(response.user as any, response.access_token);
+    if (response.user.language) {
+      i18n.changeLanguage(response.user.language);
+    }
     navigate('/dashboard');
 
     try {

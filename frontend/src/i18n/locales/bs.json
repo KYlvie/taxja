@@ -552,7 +552,13 @@
       "lohnsteuer": "Porez na plate"
     },
     "partiallyDeductible": "Djelomično",
-    "deductibilityDerivedFromItems": "Izvedeno iz stavki"
+    "deductibilityDerivedFromItems": "Izvedeno iz stavki",
+    "sortMode": {
+      "label": "Sortiraj po",
+      "date": "Datum",
+      "amount": "Iznos",
+      "description": "Opis"
+    }
   },
   "properties": {
     "title": "Nekretnine",
@@ -964,6 +970,15 @@
     "confirmDelete": "Jeste li sigurni da zelite izbrisati ovaj dokument? Povezana transakcija ce takodje biti izbrisana.",
     "deleteSuccess": "Dokument uspjesno izbrisan",
     "deleteError": "Brisanje dokumenta neuspjesno",
+    "batchDelete": "Obriši označene ({{count}})",
+    "batchDeleteSuccess": "{{count}} dokumenata obrisano",
+    "batchDeleteFailed": "{{failed}} dokumenata nije moglo biti obrisano",
+    "batchDeleteConfirm": "Obrisati {{count}} označenih dokumenata?",
+    "batchDeleteHasLinkedData": "{{count}} od označenih dokumenata ima povezane transakcije ili nekretnine.",
+    "batchDeleteChooseMode": "Kako želite obrisati?",
+    "selectedCount": "{{count}} označeno",
+    "selectAll": "Označi sve",
+    "selectDocument": "Označi dokument",
     "downloadFailed": "Preuzimanje neuspjesno, molimo pokusajte ponovo",
     "reprocess": "Ponovo obradi dokument",
     "reprocessing": "Ponovna obrada...",
@@ -1248,7 +1263,9 @@
       "recommendation": "💡 Preporuka: Ako samo zelite ocistiti datoteku dokumenta, izaberite 'Izbrisi samo dokument'",
       "cancel": "Otkazi",
       "confirmDocumentOnly": "Izbrisi samo dokument",
-      "confirmWithData": "Izbrisi sve"
+      "confirmWithData": "Izbrisi sve",
+      "asset": "Imovina",
+      "assetWarn": "Odabirom 'Izbrisi sve' ce se takodje izbrisati ova imovina i njena transakcija nabavke"
     },
     "tabs": {
       "list": "Moji dokumenti",
