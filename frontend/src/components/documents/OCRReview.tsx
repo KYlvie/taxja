@@ -70,6 +70,21 @@ const TAX_FIELD_PRIORITY = [
   'steuernummer',
   'finanzamt',
   'employer_name',
+  // SVS fields
+  'beitrag_gesamt',
+  'beitragsgrundlage',
+  'quarter',
+  'versicherungsnummer',
+  'pensionsversicherung',
+  'krankenversicherung',
+  'unfallversicherung',
+  'selbstaendigenvorsorge',
+  'nachzahlung',
+  'gutschrift',
+  'pension_insurance',
+  'health_insurance',
+  'accident_insurance',
+  // Tax fields
   'einkommen',
   'einkuenfte_nichtselbstaendig',
   'einkuenfte_vermietung',
@@ -121,6 +136,19 @@ const TAX_FIELD_SKIP = new Set([
   'document_year',
   'year_basis',
   'year_confidence',
+  'transaction_direction',
+  'final_transaction_type',
+  'final_transaction_type_source',
+  'commercial_document_semantics',
+  'is_reversal',
+  'document_transaction_direction',
+  'document_transaction_direction_source',
+  'document_transaction_direction_confidence',
+  'dedup_hints',
+  'vat_amounts',
+  'vat_summary',
+  'line_items',
+  'transaction_direction_resolution',
 ]);
 
 const TAX_CURRENCY_FIELDS = new Set([
@@ -210,16 +238,34 @@ const isProcessingPipelineState = (document: OCRReviewData['document'] | null) =
   return typeof currentState === 'string' && OCR_PROCESSING_STATES.has(currentState);
 };
 
+/** Flatten known nested objects (e.g. svs_notice_details) into top-level keys. */
+const flattenNestedDetails = (data: Record<string, any>): Record<string, any> => {
+  const result = { ...data };
+  const nestedKeys = ['svs_notice_details'];
+  for (const nk of nestedKeys) {
+    const nested = result[nk];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      for (const [k, v] of Object.entries(nested)) {
+        if (!(k in result)) {
+          result[k] = v;
+        }
+      }
+      delete result[nk];
+    }
+  }
+  return result;
+};
+
 const getTaxFieldKeys = (
   editedData: ExtractedData,
   extractedData: ExtractedData
 ): string[] => {
   const merged: Record<string, any> = {};
 
-  Object.entries(extractedData || {}).forEach(([key, value]) => {
+  Object.entries(flattenNestedDetails(extractedData || {})).forEach(([key, value]) => {
     merged[key] = value;
   });
-  Object.entries(editedData || {}).forEach(([key, value]) => {
+  Object.entries(flattenNestedDetails(editedData || {})).forEach(([key, value]) => {
     if (value !== undefined) {
       merged[key] = value;
     }

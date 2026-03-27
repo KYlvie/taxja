@@ -546,7 +546,13 @@
       "lohnsteuer": "工资税"
     },
     "partiallyDeductible": "部分可抵扣",
-    "deductibilityDerivedFromItems": "由明细条目决定"
+    "deductibilityDerivedFromItems": "由明细条目决定",
+    "sortMode": {
+      "label": "排序方式",
+      "date": "日期",
+      "amount": "金额",
+      "description": "描述"
+    }
   },
   "documents": {
     "title": "文档",
@@ -765,6 +771,12 @@
         "krankenversicherung": "医疗保险",
         "pensionsversicherung": "养老保险",
         "unfallversicherung": "意外保险",
+        "selbstaendigenvorsorge": "自雇养老金",
+        "beitrag_gesamt": "缴费合计",
+        "beitragsgrundlage": "缴费基数",
+        "versicherungsnummer": "保险号",
+        "quarter": "季度",
+        "nachzahlung": "补缴金额",
         "date": "日期",
         "amount": "金额",
         "total_amount": "总金额",
