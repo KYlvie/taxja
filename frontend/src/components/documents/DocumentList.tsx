@@ -779,21 +779,23 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       return { label: t('documents.status.processing', 'Processing'), tone: 'processing' };
     }
 
+    // Transaction created takes priority over pending review
+    const docType = doc.document_type;
+    const receiptTypes = ['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note',
+      'kirchenbeitrag', 'spendenbestaetigung', 'fortbildungskosten', 'svs_notice', 'other'];
+    if (receiptTypes.includes(docType) && hasTransaction) {
+      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
+    }
+
     if (isPendingReview(doc)) {
       return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
     }
 
     // Confirmed states — vary by document type
-    const docType = doc.document_type;
-    const receiptTypes = ['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note'];
     const contractTypes = [
       'rental_contract', 'mietvertrag', 'purchase_contract', 'loan_contract',
       'kreditvertrag', 'versicherungsbestaetigung', 'insurance_confirmation',
     ];
-
-    if (receiptTypes.includes(docType) && hasTransaction) {
-      return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
-    }
     if (contractTypes.includes(docType)) {
       return { label: t('documents.status.contractProcessed', 'Contract processed'), tone: 'linked' };
     }
@@ -1083,18 +1085,17 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
 
           <div className="sort-mode-selector">
             <label className="sort-mode-label">{t('documents.sortMode.label', 'Sort by')}</label>
-            <Select
-              value={sortMode}
-              onChange={(v: string) => { setSortMode(v as SortMode); setPage(1); }}
-              size="sm"
-              aria-label={t('documents.sortMode.label', 'Sort by')}
-              options={[
-                { value: 'upload_date', label: t('documents.sortMode.uploadDate', 'Upload date') },
-                { value: 'document_date', label: t('documents.sortMode.documentDate', 'Document date') },
-                { value: 'file_name', label: t('documents.sortMode.fileName', 'File name') },
-              ]}
-            />
-          </div>
+              <Select
+                value={sortMode}
+                onChange={(v: string) => { setSortMode(v as SortMode); setPage(1); }}
+                size="sm"
+                aria-label={t('documents.sortMode.label', 'Sort by')}
+                options={[
+                  { value: 'upload_date', label: t('documents.sortMode.uploadDate', 'Upload date') },
+                  { value: 'document_date', label: t('documents.sortMode.documentDate', 'Document date') },
+                ]}
+              />
+            </div>
         </div>
 
         <div className="document-group-tabs">
