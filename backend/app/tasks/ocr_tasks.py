@@ -3344,19 +3344,74 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     }
     frequency = freq_map.get(str(freq_raw).lower().strip(), "annually")
 
-    # Extract insurance type
+    # Extract insurance type — try OCR fields first, then infer from file name
     insurance_type = (
         ocr_data.get("versicherungsart")
         or ocr_data.get("insurance_type")
-        or "unknown"
+        or ""
     )
+    if not insurance_type or insurance_type == "unknown":
+        # Infer from file name and extracted text
+        _fn = (document.file_name or "").lower()
+        _desc = str(ocr_data.get("description", "")).lower()
+        _all = _fn + " " + _desc
+        _type_infer = {
+            "berufshaftpflicht": "Berufshaftpflicht",
+            "haftpflicht": "Haftpflicht",
+            "rechtsschutz": "Rechtsschutzversicherung",
+            "gebaeudeversicherung": "Gebäudeversicherung",
+            "gebäudeversicherung": "Gebäudeversicherung",
+            "haushaltsversicherung": "Haushaltsversicherung",
+            "haushalt": "Haushaltsversicherung",
+            "kfz": "KFZ-Versicherung",
+            "vollkasko": "KFZ-Versicherung",
+            "private_kv": "Private Krankenversicherung",
+            "krankenversicherung": "Private Krankenversicherung",
+            "kv_zusatz": "Private Krankenversicherung",
+            "unfallversicherung": "Unfallversicherung",
+            "lebensversicherung": "Lebensversicherung",
+        }
+        for keyword, label in _type_infer.items():
+            if keyword in _all:
+                insurance_type = label
+                break
+    if not insurance_type:
+        insurance_type = "unknown"
 
-    # Extract insurer name
-    insurer_name = (
+    _raw_insurer = (
         ocr_data.get("versicherer")
         or ocr_data.get("insurer_name")
         or ocr_data.get("company_name")
     )
+    # Avoid using issuer/merchant if they contain OCR artifacts
+    if not _raw_insurer:
+        for _field in ("issuer", "merchant"):
+            _val = ocr_data.get(_field)
+            if _val and not str(_val).startswith("PAGE") and _val not in ("Unbekannt", "Unknown"):
+                _raw_insurer = _val
+                break
+    insurer_name = _raw_insurer
+    if not insurer_name or insurer_name in ("Unbekannt", "Unknown"):
+        # Infer from file name
+        _fn = (document.file_name or "")
+        _known_insurers = {
+            "UNIQA": "UNIQA Insurance Group AG",
+            "Wiener": "Wiener Städtische",
+            "WienerStaedtische": "Wiener Städtische",
+            "Generali": "Generali Versicherung AG",
+            "Allianz": "Allianz Elementar",
+            "Zuerich": "Zürich Versicherungs-AG",
+            "Zurich": "Zürich Versicherungs-AG",
+            "GRAWE": "GRAWE (Grazer Wechselseitige)",
+            "Helvetia": "Helvetia Versicherungen AG",
+            "Donau": "Donau Versicherung AG",
+        }
+        for keyword, full_name in _known_insurers.items():
+            if keyword.lower() in _fn.lower():
+                insurer_name = full_name
+                break
+    if not insurer_name:
+        insurer_name = "Unbekannt"
     upload_context = ocr_data.get("_upload_context", {}) or {}
     linked_property_id = (
         upload_context.get("property_id")

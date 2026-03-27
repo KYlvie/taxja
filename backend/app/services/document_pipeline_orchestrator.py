@@ -865,6 +865,40 @@ class DocumentPipelineOrchestrator:
                     classification.confidence = min(classification.confidence + 0.15, 0.95)
                 classification.needs_llm_arbitration = True
 
+        # Rescue misclassified insurance documents
+        # VLM often returns "other" for insurance confirmations/policies
+        if db_type == DBDocumentType.OTHER:
+            _insurance_markers = (
+                "versicherung", "polizze", "praemie", "prämie",
+                "versicherungsnehmer", "versicherungsschein",
+                "haftpflicht", "rechtsschutz", "haushaltsversicherung",
+                "gebaeudeversicherung", "gebäudeversicherung",
+                "kfz-versicherung", "vollkasko", "haftpflichtversicherung",
+                "krankenversicherung", "unfallversicherung", "lebensversicherung",
+                "versicherungssumme", "deckungssumme",
+            )
+            _check_text = ""
+            if document.file_name:
+                _check_text += document.file_name.lower() + " "
+            if ocr_result.raw_text:
+                _check_text += ocr_result.raw_text[:2000].lower() + " "
+            ed = result.extracted_data or {}
+            for _f in ("versicherungsart", "insurance_type", "insurance_subtype", "insurer_name", "polizze"):
+                _v = ed.get(_f)
+                if _v:
+                    _check_text += str(_v).lower() + " "
+
+            _ins_hits = sum(1 for m in _insurance_markers if m in _check_text)
+            if _ins_hits >= 2:
+                db_type = DBDocumentType.VERSICHERUNGSBESTAETIGUNG
+                classification.method = "insurance_rescue"
+                classification.confidence = max(classification.confidence, 0.80)
+                self._log_audit(
+                    result, "classify",
+                    f"Insurance rescue: {_ins_hits} markers matched, "
+                    f"reclassified other → versicherungsbestaetigung"
+                )
+
         # Detect unsupported document types for suggestion guarantee
         if db_type == DBDocumentType.OTHER and ocr_result.raw_text:
             _text_low = ocr_result.raw_text.lower()[:2000]
