@@ -28,6 +28,7 @@ interface OCRReviewProps {
   documentTypeDraft?: string | null;
   allowDocumentTypeEdit?: boolean;
   onDocumentTypeDraftChange?: (nextType: string) => Promise<boolean> | boolean;
+  onOpenTransaction?: (transactionId: number) => void | Promise<void>;
   onConfirm?: () => void;
   onCancel?: () => void;
   onPrevDocument?: () => void;
@@ -376,6 +377,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   documentTypeDraft,
   allowDocumentTypeEdit = false,
   onDocumentTypeDraftChange,
+  onOpenTransaction,
   onConfirm,
   onCancel,
   onPrevDocument,
@@ -1044,8 +1046,10 @@ const OCRReview: React.FC<OCRReviewProps> = ({
             {entities.map((e) => (
               <div key={`${e.type}-${e.id}`} className={`ocr-linked-entity ocr-linked-entity--${e.type}`}>
                 <strong>{e.label}</strong>
-                <button className="btn btn-primary btn-sm" onClick={() => {
-                  if (e.type === 'recurring') navigate('/recurring');
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+                  if (e.type === 'transaction') {
+                    navigate(`/transactions?highlight=${e.id}`);
+                  } else if (e.type === 'recurring') navigate('/recurring');
                   else if (e.type === 'property' || e.type === 'asset') navigate(`/properties/${e.id}`);
                   else navigate('/transactions');
                 }}>
