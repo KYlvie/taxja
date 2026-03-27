@@ -58,31 +58,30 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 178.104.73.139 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 46.62.227.62 >> ~/.ssh/known_hosts
 
       - name: Deploy backend (git pull + rebuild + migrate)
         run: |
-          ssh root@178.104.73.139 << 'EOF'
+          ssh root@46.62.227.62 << 'EOF'
             set -e
             cd /opt/taxja
             git fetch origin main
             git reset --hard origin/main
-            docker compose -f docker-compose.server.yml build backend
-            docker compose -f docker-compose.server.yml up -d backend
-            sleep 8
-            # Run database migrations
-            docker compose -f docker-compose.server.yml exec -T backend alembic upgrade head
+            docker compose -f docker-compose.server.yml --env-file .env.prod build backend celery-worker
+            # Run database migrations before starting
+            docker compose -f docker-compose.server.yml --env-file .env.prod run --rm backend alembic upgrade head
+            docker compose -f docker-compose.server.yml --env-file .env.prod up -d backend celery-worker
             sleep 3
             curl -sf http://localhost:8000/api/v1/health | grep -q healthy && echo "Backend OK" || (echo "Backend health check failed" && exit 1)
           EOF
 
       - name: Upload frontend dist to server
         run: |
-          rsync -az --delete frontend/dist/ root@178.104.73.139:/opt/taxja/frontend/dist/
+          rsync -az --delete frontend/dist/ root@46.62.227.62:/opt/taxja/frontend/dist/
 
       - name: Reload nginx
         run: |
-          ssh root@178.104.73.139 "docker restart taxja-nginx"
+          ssh root@46.62.227.62 "docker restart taxja-nginx"
 
       - name: Smoke test
         run: |
