@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.tasks.trial_tasks",
         "app.tasks.classification_tasks",
         "app.tasks.credit_tasks",
+        "app.tasks.backup_tasks",
     ]
 )
 
@@ -160,6 +161,35 @@ celery_app.conf.beat_schedule = {
         'options': {
             'expires': 3600,
             'priority': 8,
+        },
+    },
+    # Daily full backup (database + documents) - runs at 02:30 Vienna time
+    'daily-full-backup': {
+        'task': 'backup.create_daily_backup',
+        'schedule': {
+            'minute': '30',
+            'hour': '2',
+        },
+        'args': (),
+        'kwargs': {},
+        'options': {
+            'expires': 3600 * 2,  # Task expires after 2 hours
+            'priority': 9,
+        },
+    },
+    # Weekly cleanup of old backups (>30 days) - runs Sunday at 04:00 Vienna time
+    'weekly-backup-cleanup': {
+        'task': 'backup.cleanup_old_backups',
+        'schedule': {
+            'minute': '0',
+            'hour': '4',
+            'day_of_week': '0',
+        },
+        'args': (),
+        'kwargs': {'keep_days': 30},
+        'options': {
+            'expires': 3600,
+            'priority': 6,
         },
     },
     # Daily ML classification model auto-retrain check - runs at 03:00 Vienna time
