@@ -2316,23 +2316,15 @@ const isReceiptOrInvoice = (doc: Document) =>
       );
     }
 
-    return createPortal(
-      <div className="transaction-detail-overlay" onClick={handleCloseInlineTransaction}>
-        <div
-          className="transaction-detail"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <TransactionDetail
-            transaction={inlineTransaction}
-            hideLinkedDocumentSection
-            hideEditAction
-            onEdit={handleInlineTransactionEdit}
-            onDelete={() => { void handleInlineTransactionDelete(); }}
-            onClose={handleCloseInlineTransaction}
-          />
-        </div>
-      </div>,
-      document.body,
+    return (
+      <TransactionDetail
+        transaction={inlineTransaction}
+        hideLinkedDocumentSection
+        hideEditAction
+        onEdit={handleInlineTransactionEdit}
+        onDelete={() => { void handleInlineTransactionDelete(); }}
+        onClose={handleCloseInlineTransaction}
+      />
     );
   }
 
