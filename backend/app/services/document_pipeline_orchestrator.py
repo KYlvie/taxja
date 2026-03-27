@@ -2920,7 +2920,11 @@ class DocumentPipelineOrchestrator:
                     except Exception:
                         direction_resolution = None
 
-                classification_confidence = float(s.get("confidence") or 0.5)
+                # Use the higher of suggestion confidence and OCR confidence.
+                # When the classifier fallback gives 0.3 but VLM classified with 0.95,
+                # the low classifier score shouldn't tank the composite.
+                suggestion_confidence = float(s.get("confidence") or 0.5)
+                classification_confidence = max(suggestion_confidence, ocr_confidence)
 
                 # Determine the classifier's explicit review flag.
                 # The suggestion's needs_review can be True due to either:
