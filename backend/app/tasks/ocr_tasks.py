@@ -3297,6 +3297,11 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
 
     updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
     updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
+
+    # Fix German number formats BEFORE processing insurance data
+    # This catches cases like 1.66 (from EUR 1.662,36) → 1660
+    from app.services.field_normalization import fix_german_number_formats
+    fix_german_number_formats(updated_ocr)
     role_resolution = _resolve_contract_role_for_document(
         db,
         document,
@@ -3310,7 +3315,8 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         return {"import_suggestion": None}
 
     # Extract premium amount - the key OCR field
-    praemie = ocr_data.get("praemie") or ocr_data.get("premium") or ocr_data.get("amount")
+    # Read praemie from updated_ocr (which has German number fixes applied)
+    praemie = updated_ocr.get("praemie") or updated_ocr.get("premium") or updated_ocr.get("amount")
     if not praemie:
         updated_ocr.pop("import_suggestion", None)
         document.ocr_result = updated_ocr
@@ -3319,6 +3325,16 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
 
     try:
         praemie_decimal = Decimal(str(praemie))
+        # Plausibility check: annual insurance premium < €10 is almost certainly wrong
+        if praemie_decimal < 10:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Insurance praemie=%s seems implausibly low for doc=%s, flagging as suspicious",
+                praemie_decimal, document.id,
+            )
+            updated_ocr.setdefault("_suspicious_fields", [])
+            if "praemie" not in updated_ocr.get("_suspicious_fields", []):
+                updated_ocr["_suspicious_fields"].append("praemie")
         if praemie_decimal <= 0:
             updated_ocr.pop("import_suggestion", None)
             document.ocr_result = updated_ocr
@@ -3425,22 +3441,42 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         or _clean_ocr_name(ocr_data.get("merchant"))
     )
     insurer_name = _raw_insurer
-    if not insurer_name:
+
+    # Known Austrian insurance companies for validation and fallback
+    _known_insurers = {
+        "UNIQA": "UNIQA Insurance Group AG",
+        "Wiener Städtische": "Wiener Städtische",
+        "Wiener Staedtische": "Wiener Städtische",
+        "Generali": "Generali Versicherung AG",
+        "Allianz": "Allianz Elementar",
+        "Zürich": "Zürich Versicherungs-AG",
+        "Zuerich": "Zürich Versicherungs-AG",
+        "Zurich": "Zürich Versicherungs-AG",
+        "GRAWE": "GRAWE (Grazer Wechselseitige)",
+        "Grazer Wechselseitige": "GRAWE (Grazer Wechselseitige)",
+        "Helvetia": "Helvetia Versicherungen AG",
+        "Donau": "Donau Versicherung AG",
+        "Merkur": "Merkur Versicherung AG",
+        "Wüstenrot": "Wüstenrot Versicherungs-AG",
+    }
+
+    # Validate insurer name — if LLM returned a non-insurance company name,
+    # override with known insurer from document text
+    _insurer_keywords = ("versicherung", "insurance", "assicurazioni", "pojišťovna")
+    _is_valid_insurer = (
+        insurer_name
+        and any(kw in insurer_name.lower() for kw in _insurer_keywords)
+    )
+    # Also accept if the LLM name directly matches a known insurer
+    if insurer_name and not _is_valid_insurer:
+        for keyword in _known_insurers:
+            if keyword.lower() in insurer_name.lower():
+                _is_valid_insurer = True
+                break
+
+    if not insurer_name or not _is_valid_insurer:
         # Try to extract from document content (never file name)
         _raw = str(ocr_data.get("raw_text", ""))[:2000] + " " + str(getattr(document, 'raw_text', '') or "")[:2000]
-        _known_insurers = {
-            "UNIQA": "UNIQA Insurance Group AG",
-            "Wiener Städtische": "Wiener Städtische",
-            "Wiener Staedtische": "Wiener Städtische",
-            "Generali": "Generali Versicherung AG",
-            "Allianz": "Allianz Elementar",
-            "Zürich": "Zürich Versicherungs-AG",
-            "Zuerich": "Zürich Versicherungs-AG",
-            "GRAWE": "GRAWE (Grazer Wechselseitige)",
-            "Grazer Wechselseitige": "GRAWE (Grazer Wechselseitige)",
-            "Helvetia": "Helvetia Versicherungen AG",
-            "Donau": "Donau Versicherung AG",
-        }
         for keyword, full_name in _known_insurers.items():
             if keyword.lower() in _raw.lower():
                 insurer_name = full_name

@@ -32,10 +32,6 @@ vi.mock('../components/dashboard/TrendCharts', () => ({
   default: () => <div data-testid="trend-charts">Trend charts</div>,
 }));
 
-vi.mock('../components/dashboard/IncomeTypeHint', () => ({
-  default: () => <div data-testid="income-type-hint">Income type hint</div>,
-}));
-
 vi.mock('../components/documents/DocumentUpload', () => ({
   default: ({ onDocumentsSubmitted }: { onDocumentsSubmitted?: (documents: Array<{ id: number }>) => void }) => (
     <button
@@ -68,6 +64,7 @@ describe('DashboardPage relocation', () => {
         user_type: 'mixed',
         employer_mode: 'regular',
         two_factor_enabled: false,
+        onboarding_completed: true,
       },
       token: 'token',
       isAuthenticated: true,
@@ -101,14 +98,13 @@ describe('DashboardPage relocation', () => {
 
     await waitFor(() => expect(screen.getByTestId('dashboard-overview')).toBeInTheDocument());
     expect(screen.getByTestId('trend-charts')).toBeInTheDocument();
-    expect(screen.getByTestId('income-type-hint')).toBeInTheDocument();
     expect(screen.queryByText('Tax position')).not.toBeInTheDocument();
     expect(screen.queryByText('Asset overview')).not.toBeInTheDocument();
     expect(screen.queryByText('AI tax advisor')).not.toBeInTheDocument();
     expect(screen.queryByText('Employer workbench')).not.toBeInTheDocument();
   });
 
-  it('navigates to the uploaded document when dashboard upload finishes', async () => {
+  it('keeps the dashboard in place when upload finishes', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <Routes>
@@ -122,6 +118,7 @@ describe('DashboardPage relocation', () => {
     await waitFor(() => expect(screen.getByTestId('dashboard-document-upload')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('dashboard-document-upload'));
 
-    await waitFor(() => expect(screen.getByTestId('document-route')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('dashboard-overview')).toBeInTheDocument());
+    expect(screen.queryByTestId('document-route')).not.toBeInTheDocument();
   });
 });
