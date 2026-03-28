@@ -2180,6 +2180,70 @@ class OCREngine:
             return [self._normalize_receipt_payload(r) for r in data if isinstance(r, dict)]
         return None
 
+    def re_extract_insurance_fields(self, document) -> Optional[dict]:
+        """Targeted VLM call to extract insurance-specific fields from document image.
+        Called when initial classification missed insurance fields (e.g. insurance_rescue)."""
+        import base64, io
+        from app.services.storage_service import StorageService
+
+        try:
+            storage = StorageService()
+            file_bytes = storage.download_file(document.file_path)
+            if not file_bytes:
+                return None
+
+            # Convert first page to image
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, dpi=150)
+            if not images:
+                return None
+
+            buf = io.BytesIO()
+            images[0].save(buf, format='PNG')
+            img_bytes = buf.getvalue()
+
+            # Focused insurance prompt
+            from app.services.llm_service import LLMService
+            llm = LLMService()
+            response = llm.generate_vision(
+                system_prompt=(
+                    "You are an insurance document data extractor. "
+                    "Extract ONLY the following fields from this insurance document. "
+                    "Return ONLY valid JSON, no other text."
+                ),
+                user_prompt=(
+                    '{"polizze_nr": "the policy number (Polizze-Nr/Polizzennummer/Vertragsnummer)", '
+                    '"versicherungsnehmer": "the insured person name (Versicherungsnehmer/Versicherte Person)", '
+                    '"vertragsbeginn": "contract start date YYYY-MM-DD (Vertragsbeginn/Versicherungsbeginn)", '
+                    '"praemie_jaehrlich": annual_premium_as_number, '
+                    '"zahlungsfrequenz": "monatlich/vierteljaehrlich/halbjaehrlich/jaehrlich"}'
+                ),
+                image_bytes=img_bytes,
+                mime_type="image/png",
+                temperature=0.0,
+                max_tokens=300,
+                provider_preference=self._vision_provider_preference,
+            )
+
+            data = self._parse_vlm_json(response)
+            if not data or not isinstance(data, dict):
+                return None
+
+            # Map praemie_jaehrlich to praemie
+            if data.get("praemie_jaehrlich") and not data.get("praemie"):
+                data["praemie"] = data.pop("praemie_jaehrlich")
+
+            # Fix German number formats
+            from app.services.field_normalization import fix_german_number_formats
+            fix_german_number_formats(data)
+
+            logger.info("Insurance re-extraction for doc %s: %s", document.id, data)
+            return data
+
+        except Exception as e:
+            logger.warning("re_extract_insurance_fields failed: %s", e)
+            return None
+
     @staticmethod
     def _parse_vlm_json(response: str) -> Optional[Any]:
         """Parse JSON from VLM response, handling markdown code blocks and nested structures."""

@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { getLocaleForLanguage } from '../../utils/locale';
+import { getErrorMessage } from '../../services/propertyService';
 import './PropertyComparison.css';
 
 interface PropertyComparisonData {
@@ -60,8 +61,8 @@ export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded
     try {
       const data = await propertyService.comparePortfolio(year, sortBy, sortOrder);
       setComparisons(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Failed to load comparison data');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load comparison data'));
     } finally {
       setIsLoading(false);
     }

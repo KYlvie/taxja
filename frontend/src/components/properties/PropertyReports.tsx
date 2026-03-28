@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Property } from '../../types/property';
 import api from '../../services/api';
+import { getErrorMessage } from '../../services/propertyService';
 import Select from '../common/Select';
 import DateInput from '../common/DateInput';
 import { getLocaleForLanguage } from '../../utils/locale';
@@ -100,12 +101,9 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         { params: { start_date: startDate, end_date: endDate } }
       );
       setIncomeStatementData(response.data);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail 
-        || err?.response?.data?.error?.message 
-        || err?.message 
-        || 'Unknown error';
-      console.error('Error generating income statement:', err?.response?.status, detail, err);
+    } catch (err: unknown) {
+      const detail = getErrorMessage(err, 'Unknown error');
+      console.error('Error generating income statement:', detail, err);
       setError(`${t('properties.reports.errorGenerating')}: ${detail}`);
     } finally {
       setIsLoading(false);
@@ -122,12 +120,9 @@ const PropertyReports = ({ property }: PropertyReportsProps) => {
         `/properties/${property.id}/reports/depreciation-schedule`
       );
       setDepreciationScheduleData(response.data);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail 
-        || err?.response?.data?.error?.message 
-        || err?.message 
-        || 'Unknown error';
-      console.error('Error generating depreciation schedule:', err?.response?.status, detail, err);
+    } catch (err: unknown) {
+      const detail = getErrorMessage(err, 'Unknown error');
+      console.error('Error generating depreciation schedule:', detail, err);
       setError(`${t('properties.reports.errorGenerating')}: ${detail}`);
     } finally {
       setIsLoading(false);

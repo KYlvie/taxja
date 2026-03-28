@@ -3314,6 +3314,31 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
+    # Check if VLM missed insurance-specific fields (common when insurance_rescue reclassified)
+    _key_fields_present = any([
+        ocr_data.get("polizze_nr"), ocr_data.get("polizze"),
+        ocr_data.get("versicherungsnehmer"), ocr_data.get("vertragsbeginn"),
+        ocr_data.get("zahlungsfrequenz"),
+    ])
+    if not _key_fields_present:
+        # VLM originally classified as other/invoice — insurance fields missing.
+        # Do a targeted re-extraction from the document image.
+        try:
+            from app.services.ocr_engine import OCREngine
+            _engine = OCREngine()
+            _re_extracted = _engine.re_extract_insurance_fields(document)
+            if _re_extracted and isinstance(_re_extracted, dict):
+                logger.info(
+                    "Insurance re-extraction for doc %s returned %d fields",
+                    document.id, len(_re_extracted),
+                )
+                for _k, _v in _re_extracted.items():
+                    if _v and not ocr_data.get(_k):
+                        ocr_data[_k] = _v
+                        updated_ocr[_k] = _v
+        except Exception as _e:
+            logger.warning("Insurance re-extraction failed for doc %s: %s", document.id, _e)
+
     # Extract premium amount - the key OCR field
     # Read praemie from updated_ocr (which has German number fixes applied)
     praemie = updated_ocr.get("praemie") or updated_ocr.get("premium") or updated_ocr.get("amount")
