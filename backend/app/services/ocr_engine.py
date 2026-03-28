@@ -466,7 +466,7 @@ class OCREngine:
         "contract_date, parties\n"
         "- Other types: extract what you can find (amounts, dates, names, IDs)\n"
         "- Always include dedup_hints: {entity_name, address, identifier, merchant}\n"
-        "Amounts as numbers. Dates YYYY-MM-DD. null if not found."
+        "Amounts as plain numbers with dot as decimal separator (e.g. 1662.36 NOT 1.662,36). Dates YYYY-MM-DD. null if not found."
     )
 
     def _process_scanned_pdf_via_vision(
@@ -574,6 +574,10 @@ class OCREngine:
             pass
         if doc_type is None:
             doc_type = document_type_hint or DocumentType.UNKNOWN
+
+        # Fix German number formats in scanned PDF vision path
+        from app.services.field_normalization import fix_german_number_formats
+        fix_german_number_formats(data)
 
         # SVS post-processing
         if doc_type == DocumentType.SVS_NOTICE:
@@ -755,6 +759,9 @@ class OCREngine:
         "line_items [{name,quantity,unit_price,total_price,vat_rate}], "
         "vat_summary [{rate,net_amount,vat_amount}].\n"
         "CRITICAL: issuer, recipient, merchant must be plain strings, NOT objects.\n"
+        "CRITICAL: All amounts must be plain numbers with DOT as decimal separator. "
+        "German format 1.662,36 must be converted to 1662.36. "
+        "German format 11,00 must be converted to 11.0. Never use comma as decimal separator in JSON.\n"
         "For SVS (svs_notice): beitrag_gesamt, beitragsgrundlage, pensionsversicherung, "
         "krankenversicherung, unfallversicherung, selbstaendigenvorsorge, nachzahlung, "
         "gutschrift, tax_year, quarter, date, versicherungsnummer, taxpayer_name, "
@@ -773,7 +780,7 @@ class OCREngine:
         "IMPORTANT: If MULTIPLE separate receipts/invoices are visible, return a JSON "
         "array with one object per receipt. If only one document, return a single object.\n"
         "Also include: dedup_hints: {entity_name, entity_address, entity_identifier}.\n"
-        "Amounts as numbers. Dates YYYY-MM-DD. null if not found."
+        "Amounts as plain numbers with dot as decimal separator (e.g. 1662.36 NOT 1.662,36). Dates YYYY-MM-DD. null if not found."
     )
 
     def _process_via_unified_vision(
@@ -990,6 +997,10 @@ class OCREngine:
                 data.setdefault("health_insurance", data["krankenversicherung"])
             if data.get("unfallversicherung"):
                 data.setdefault("accident_insurance", data["unfallversicherung"])
+
+        # Fix German number formats (1.662 → 1662, etc.)
+        from app.services.field_normalization import fix_german_number_formats
+        fix_german_number_formats(data)
 
         # Normalize receipt/invoice payload
         extracted_data = self._normalize_receipt_payload(data)

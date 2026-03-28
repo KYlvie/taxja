@@ -288,6 +288,15 @@ class LLMExtractor:
             if parsed is None:
                 return None
 
+            # Fix German number formats (1.662 → 1662, etc.)
+            from app.services.field_normalization import fix_german_number_formats
+            if isinstance(parsed, dict):
+                fix_german_number_formats(parsed)
+            elif isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        fix_german_number_formats(item)
+
             # Handle multi-receipt array response from LLM
             if isinstance(parsed, list):
                 valid = [r for r in parsed if isinstance(r, dict) and r.get("amount") is not None]

@@ -6,6 +6,59 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+
+# Fields that contain monetary amounts (for German number format fixing)
+_AMOUNT_FIELD_NAMES = {
+    "amount", "praemie", "premium", "beitrag_gesamt", "beitragsgrundlage",
+    "pensionsversicherung", "krankenversicherung", "unfallversicherung",
+    "selbstaendigenvorsorge", "nachzahlung", "gutschrift",
+    "net_amount", "vat_amount", "total_amount", "purchase_price",
+    "monthly_rent", "loan_amount", "ratenbetrag",
+    "versicherungssumme", "deckungssumme", "selbstbehalt",
+}
+
+
+def fix_german_number_formats(data: dict) -> dict:
+    """Fix German number format issues in extracted data.
+
+    LLMs processing Austrian/German documents sometimes output numbers
+    in German format (1.662,36) or partially parsed (1.662 meaning 1662).
+
+    Rules:
+    - Float with exactly 3 decimal places in an amount field (e.g. 1.662)
+      is likely a German thousand separator → multiply by 1000
+    - String "1.662,36" → parse as 1662.36
+    """
+    if not isinstance(data, dict):
+        return data
+
+    for key, value in list(data.items()):
+        if key not in _AMOUNT_FIELD_NAMES:
+            continue
+
+        if isinstance(value, str):
+            # String with German format: "1.662,36" or "13.087,48"
+            if re.match(r'^\d{1,3}(\.\d{3})+(,\d{1,2})?$', value.strip()):
+                cleaned = value.strip().replace('.', '').replace(',', '.')
+                try:
+                    data[key] = float(cleaned)
+                except ValueError:
+                    pass
+
+        elif isinstance(value, (int, float)):
+            # Float that looks like German thousand separator was parsed as decimal
+            # e.g. 1.662 (should be 1662), 13.087 (should be 13087)
+            fval = float(value)
+            str_val = f"{fval:.10g}"
+            if '.' in str_val:
+                integer_part, decimal_part = str_val.split('.', 1)
+                # If decimal part is exactly 3 digits and the result is suspiciously small
+                # for an amount field, it's likely a German thousand separator
+                if len(decimal_part) == 3 and len(integer_part) <= 2:
+                    data[key] = float(f"{integer_part}{decimal_part}")
+
+    return data
+
 _DATE_FORMATS = (
     "%Y-%m-%d",
     "%Y-%m-%dT%H:%M:%S",
