@@ -866,8 +866,9 @@ class DocumentPipelineOrchestrator:
                 classification.needs_llm_arbitration = True
 
         # Rescue misclassified insurance documents
-        # VLM often returns "other" for insurance confirmations/policies
-        if db_type == DBDocumentType.OTHER:
+        # VLM often returns "other" or "invoice" for insurance confirmations/policies
+        # (Prämienvorschreibungen look like invoices with line items)
+        if db_type in (DBDocumentType.OTHER, DBDocumentType.INVOICE, DBDocumentType.RECEIPT):
             _insurance_markers = (
                 "versicherung", "polizze", "praemie", "prämie",
                 "versicherungsnehmer", "versicherungsschein",
@@ -889,7 +890,9 @@ class DocumentPipelineOrchestrator:
                     _check_text += str(_v).lower() + " "
 
             _ins_hits = sum(1 for m in _insurance_markers if m in _check_text)
-            if _ins_hits >= 2:
+            # For invoice/receipt: need stronger signal (≥3) to avoid false positives
+            _min_hits = 3 if db_type in (DBDocumentType.INVOICE, DBDocumentType.RECEIPT) else 2
+            if _ins_hits >= _min_hits:
                 db_type = DBDocumentType.VERSICHERUNGSBESTAETIGUNG
                 classification.method = "insurance_rescue"
                 classification.confidence = max(classification.confidence, 0.80)
