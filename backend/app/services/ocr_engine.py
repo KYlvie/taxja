@@ -802,6 +802,169 @@ class OCREngine:
         "Amounts as plain numbers with dot as decimal separator (e.g. 1662.36 NOT 1.662,36). Dates YYYY-MM-DD. null if not found."
     )
 
+    # -- Step-1 classify-only prompt --
+    _CLASSIFY_ONLY_PROMPT = (
+        "Look at this document. What type is it?\n"
+        "Return ONLY valid JSON: {\"document_type\": \"TYPE\"}\n"
+        "Where TYPE is one of: invoice, receipt, svs_notice, "
+        "versicherungsbestaetigung, kirchenbeitrag, spendenbestaetigung, "
+        "betriebskostenabrechnung, rental_contract, lohnzettel, "
+        "einkommensteuerbescheid, other\n"
+        "IMPORTANT: svs_notice is ONLY for SVS (Sozialversicherung der Selbständigen). "
+        "Documents from Wirtschaftskammer (WKO), Kammerumlage, Gewerkschaft, or other "
+        "membership/trade body fees are NOT svs_notice — classify them as invoice."
+    )
+
+    # -- Step-2 type-specific extraction prompts --
+    _INSURANCE_EXTRACT_PROMPT_V2 = (
+        "This is an Austrian insurance document. Extract ALL of these fields. "
+        "Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "insurer_name": "insurance company name from letterhead/logo",\n'
+        '  "versicherungsnehmer": "policyholder name",\n'
+        '  "polizze_nr": "policy number",\n'
+        '  "insurance_type": "type of insurance (e.g. Berufshaftpflicht, KFZ, Haushaltsversicherung)",\n'
+        '  "insurance_subtype": "berufshaftpflicht|kfz|rechtsschutz|haushaltsversicherung|'
+        'gebaeudeversicherung|private_krankenversicherung|unfallversicherung|lebensversicherung|other",\n'
+        '  "praemie_jaehrlich": annual_premium_as_number,\n'
+        '  "praemie": annual_premium_as_number,\n'
+        '  "vertragsbeginn": "YYYY-MM-DD",\n'
+        '  "vertragsende": "YYYY-MM-DD or null",\n'
+        '  "zahlungsfrequenz": "monatlich|vierteljaehrlich|halbjaehrlich|jaehrlich",\n'
+        '  "versicherungsart": "type of insurance",\n'
+        '  "date": "YYYY-MM-DD",\n'
+        '  "description": "brief description",\n'
+        '  "dedup_hints": {"entity_name": "...", "entity_address": "...", "entity_identifier": "..."}\n'
+        "}\n"
+        "IMPORTANT: praemie_jaehrlich MUST be the ANNUAL total (Jahresprämie/Gesamtprämie). "
+        "If you see quarterly amounts, multiply by 4. If monthly, multiply by 12. "
+        "German format 1.662,36 = 1662.36. "
+        "Amounts as plain numbers with dot as decimal separator. Dates YYYY-MM-DD. null if not found."
+    )
+
+    _SVS_EXTRACT_PROMPT = (
+        "This is an Austrian SVS (Sozialversicherung der Selbständigen) document. "
+        "Extract ALL of these fields. Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "issuer": "SVS Sozialversicherung der Selbständigen",\n'
+        '  "recipient": "taxpayer name",\n'
+        '  "merchant": "SVS Sozialversicherung der Selbständigen",\n'
+        '  "taxpayer_name": "full name of insured person",\n'
+        '  "versicherungsnummer": "insurance number",\n'
+        '  "beitrag_gesamt": total_amount_as_number,\n'
+        '  "amount": total_amount_as_number,\n'
+        '  "beitragsgrundlage": base_amount_as_number,\n'
+        '  "pensionsversicherung": pension_amount,\n'
+        '  "krankenversicherung": health_amount,\n'
+        '  "unfallversicherung": accident_amount,\n'
+        '  "selbstaendigenvorsorge": self_employed_provision_amount,\n'
+        '  "nachzahlung": back_payment_amount_or_null,\n'
+        '  "gutschrift": credit_amount_or_null,\n'
+        '  "tax_year": "YYYY",\n'
+        '  "quarter": "Q1/Q2/Q3/Q4",\n'
+        '  "date": "YYYY-MM-DD",\n'
+        '  "svs_subtype": "vorschreibung|nachforderung|gutschrift|saeumniszuschlag|'
+        'kontoauszug|herabsetzung|versicherungspflicht|mindestbeitrag|zahlungserinnerung|'
+        'ratenzahlung|befreiung|kontobestaetigung",\n'
+        '  "beitragsjahr": "YYYY (year the Nachbemessung covers, for nachforderung/gutschrift only)",\n'
+        '  "ratenanzahl": number_of_installments_or_null,\n'
+        '  "ratenbetrag": installment_amount_or_null,\n'
+        '  "description": "brief description",\n'
+        '  "raw_text": "first 200 characters",\n'
+        '  "dedup_hints": {"entity_name": "...", "entity_address": "...", "entity_identifier": "..."}\n'
+        "}\n"
+        "Amounts as plain numbers with dot as decimal separator (German 1.662,36 = 1662.36). "
+        "Dates YYYY-MM-DD. null if not found."
+    )
+
+    _KIRCHENBEITRAG_EXTRACT_PROMPT = (
+        "This is an Austrian church contribution (Kirchenbeitrag) document. "
+        "Extract ALL relevant fields. Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "issuer": "church/diocese name",\n'
+        '  "recipient": "taxpayer name",\n'
+        '  "merchant": "church/diocese name",\n'
+        '  "amount": total_amount_as_number,\n'
+        '  "date": "YYYY-MM-DD",\n'
+        '  "tax_year": "YYYY",\n'
+        '  "description": "Kirchenbeitrag YYYY",\n'
+        '  "raw_text": "first 200 characters",\n'
+        '  "dedup_hints": {"entity_name": "...", "entity_address": "...", "entity_identifier": "..."}\n'
+        "}\n"
+        "Amounts as plain numbers with dot as decimal separator. Dates YYYY-MM-DD. null if not found."
+    )
+
+    _SPENDEN_EXTRACT_PROMPT = (
+        "This is an Austrian donation confirmation (Spendenbestätigung). "
+        "Extract ALL relevant fields. Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "issuer": "organization name",\n'
+        '  "recipient": "donor name",\n'
+        '  "merchant": "organization name",\n'
+        '  "amount": donation_amount_as_number,\n'
+        '  "date": "YYYY-MM-DD",\n'
+        '  "tax_year": "YYYY",\n'
+        '  "description": "Spende an [organization]",\n'
+        '  "raw_text": "first 200 characters",\n'
+        '  "dedup_hints": {"entity_name": "...", "entity_address": "...", "entity_identifier": "..."}\n'
+        "}\n"
+        "Amounts as plain numbers with dot as decimal separator. Dates YYYY-MM-DD. null if not found."
+    )
+
+    _BETRIEBSKOSTEN_EXTRACT_PROMPT = (
+        "This is an Austrian operating cost statement (Betriebskostenabrechnung). "
+        "Extract ALL relevant fields. Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "issuer": "property management company",\n'
+        '  "recipient": "tenant/owner name",\n'
+        '  "merchant": "property management company",\n'
+        '  "amount": total_amount_as_number,\n'
+        '  "date": "YYYY-MM-DD",\n'
+        '  "tax_year": "YYYY",\n'
+        '  "nachzahlung": additional_payment_or_null,\n'
+        '  "gutschrift": credit_amount_or_null,\n'
+        '  "description": "Betriebskostenabrechnung YYYY",\n'
+        '  "raw_text": "first 200 characters",\n'
+        '  "dedup_hints": {"entity_name": "...", "entity_address": "...", "entity_identifier": "..."}\n'
+        "}\n"
+        "Amounts as plain numbers with dot as decimal separator. Dates YYYY-MM-DD. null if not found."
+    )
+
+    def _get_extraction_prompt_for_type(self, doc_type_str: str, user_identity: Optional[str] = None) -> str:
+        """Return the type-specific extraction prompt for a classified document type.
+
+        Falls back to the legacy unified extraction instructions for invoice/receipt/unknown types.
+        """
+        user_context = ""
+        if user_identity:
+            user_context = (
+                f"\nThe document owner/taxpayer is: {user_identity}. "
+                "If the issuer matches this person/company, set transaction_direction to \"income\". "
+                "If the recipient matches, set transaction_direction to \"expense\". "
+                "If unclear, set transaction_direction to \"unknown\".\n"
+            )
+
+        _TYPE_PROMPT_MAP = {
+            "versicherungsbestaetigung": self._INSURANCE_EXTRACT_PROMPT_V2,
+            "svs_notice": self._SVS_EXTRACT_PROMPT,
+            "kirchenbeitrag": self._KIRCHENBEITRAG_EXTRACT_PROMPT,
+            "spendenbestaetigung": self._SPENDEN_EXTRACT_PROMPT,
+            "betriebskostenabrechnung": self._BETRIEBSKOSTEN_EXTRACT_PROMPT,
+        }
+
+        specific_prompt = _TYPE_PROMPT_MAP.get(doc_type_str)
+        if specific_prompt:
+            return specific_prompt + user_context
+
+        # Invoice / receipt / other → use existing unified extraction instructions
+        invoice_prompt = (
+            f"This is an Austrian {doc_type_str} document. "
+            f"{self._UNIFIED_VISION_EXTRACT_INSTRUCTIONS}"
+            f"{user_context}"
+            "Return ONLY valid JSON, no markdown."
+        )
+        return invoice_prompt
+
     def _process_via_unified_vision(
         self,
         image_bytes: bytes,
@@ -811,10 +974,12 @@ class OCREngine:
         supplementary_text: Optional[str] = None,
         user_identity: Optional[str] = None,
     ) -> Optional[OCRResult]:
-        """Unified VLM entry: classify + extract in one call.
+        """Two-step VLM pipeline: classify first, then type-specific extraction.
+
+        Step 1 — Send a SIMPLE classification-only prompt to identify document_type.
+        Step 2 — Send a FOCUSED type-specific extraction prompt based on the result.
 
         Handles images (JPEG/PNG) and PDFs (rendered to JPEG pages).
-        Only covers first-batch types: receipt, invoice, svs_notice, other.
         If VLM classifies to a specialist type (tax form, contract, etc.),
         returns None so the caller can route to the dedicated extractor.
 
@@ -853,51 +1018,135 @@ class OCREngine:
         if not images:
             return None
 
-        # -- Build prompt --
+        # ================================================================
+        # STEP 0: Text-based pre-classification (no AI call)
+        # ================================================================
+        _pre_type = None
+        _text_for_preclassify = (supplementary_text or "")[:3000].lower()
+        if _text_for_preclassify:
+            # Known institution → certain classification
+            if "svs" in _text_for_preclassify and "sozialversicherung der selbst" in _text_for_preclassify:
+                _pre_type = "svs_notice"
+                logger.info("L0 pre-classify: SVS institution name detected → svs_notice")
+            elif any(kw in _text_for_preclassify for kw in ("polizze", "polizzennummer", "versicherungspolizze")) and any(kw in _text_for_preclassify for kw in ("prämie", "praemie", "jahresprämie", "jahrespraemie", "versicherungssumme")):
+                _pre_type = "versicherungsbestaetigung"
+                logger.info("L0 pre-classify: Polizze + Prämie keywords → versicherungsbestaetigung")
+            elif any(kw in _text_for_preclassify for kw in ("uniqa", "wiener städtische", "wiener staedtische", "generali versicherung", "allianz elementar", "grawe", "grazer wechselseitige", "zürich versicherung", "zuerich versicherung")) and any(kw in _text_for_preclassify for kw in ("versicherung", "polizze", "prämie", "praemie")):
+                _pre_type = "versicherungsbestaetigung"
+                logger.info("L0 pre-classify: Known insurer + insurance keyword → versicherungsbestaetigung")
+            elif "kirchenbeitrag" in _text_for_preclassify:
+                _pre_type = "kirchenbeitrag"
+                logger.info("L0 pre-classify: Kirchenbeitrag keyword → kirchenbeitrag")
+            elif ("rechnungsnummer" in _text_for_preclassify or "rechnung nr" in _text_for_preclassify) and ("mwst" in _text_for_preclassify or "mehrwertsteuer" in _text_for_preclassify or "ust" in _text_for_preclassify):
+                _pre_type = "invoice"
+                logger.info("L0 pre-classify: Rechnungsnummer + MwSt → invoice")
+            elif any(kw in _text_for_preclassify for kw in ("kassenbon", "kassabon", "kassenbeleg")):
+                _pre_type = "receipt"
+                logger.info("L0 pre-classify: Kassenbon keyword → receipt")
+
+        # ================================================================
+        # STEP 1: Classification-only VLM call (skip if L0 is certain)
+        # ================================================================
         hint_text = ""
         if document_type_hint is not None:
-            hint_text = f"Expected type: '{document_type_hint.value}'. "
+            hint_text = f"Hint — expected type: '{document_type_hint.value}'. "
 
-        # Build user identity context for direction detection
-        user_context = ""
-        if user_identity:
-            user_context = (
-                f"\nThe document owner/taxpayer is: {user_identity}. "
-                "If the issuer matches this person/company, set transaction_direction to \"income\" "
-                "(they issued the invoice, they will receive payment). "
-                "If the recipient matches, set transaction_direction to \"expense\" "
-                "(they received the invoice, they must pay). "
-                "If unclear, set transaction_direction to \"unknown\".\n"
-            )
-
-        system_prompt = (
-            "You are an expert Austrian tax document processor. "
-            f"Step 1: Identify document_type from: {self._UNIFIED_VISION_TYPES}. "
-            "If the document is a tax form (E1, L1, U1, etc.), contract (Kaufvertrag, "
-            "Mietvertrag, Kreditvertrag), bank statement, or payslip (Lohnzettel), "
-            "set document_type to the specific type name.\n"
-            f"Step 2: {self._UNIFIED_VISION_EXTRACT_INSTRUCTIONS}\n"
-            f"{user_context}"
-            "Return ONLY valid JSON: {\"document_type\": \"...\", ...extracted fields...}"
+        classify_system = (
+            "You are an expert Austrian tax document classifier. "
+            "Your ONLY job is to identify the document type. "
+            "Return ONLY valid JSON with a single field."
         )
-
-        user_prompt = (
-            f"{hint_text}Classify this document and extract all relevant fields. "
-            "JSON only, no markdown."
+        classify_user = (
+            f"{hint_text}{self._CLASSIFY_ONLY_PROMPT}"
         )
         if supplementary_text:
-            # Append text layer as context (capped at 3000 chars)
-            user_prompt += (
+            classify_user += (
+                f"\n\nText layer content (for reference):\n"
+                f"{supplementary_text[:2000]}"
+            )
+
+        classified_type_str = "unknown"
+
+        if _pre_type:
+            # L0 pre-classification was certain — skip AI classification call
+            classified_type_str = _pre_type
+            logger.info("Unified vision step-0 L0 pre-classify: %s (skipping AI classify)", _pre_type)
+        else:
+            # L0 uncertain — ask AI to classify
+            try:
+                if len(images) == 1:
+                    classify_response = llm.generate_vision(
+                        system_prompt=classify_system,
+                        user_prompt=classify_user,
+                        image_bytes=images[0][0],
+                        mime_type=images[0][1],
+                        temperature=0.0,
+                        max_tokens=200,
+                        provider_preference=self._vision_provider_preference,
+                    )
+                else:
+                    classify_response = llm.generate_vision_multi(
+                        system_prompt=classify_system,
+                        user_prompt=classify_user,
+                        images=images,
+                        temperature=0.0,
+                        max_tokens=200,
+                        provider_preference=self._vision_provider_preference,
+                    )
+            except Exception as e:
+                logger.warning("Unified vision classify call failed: %s", e)
+                return None
+
+            classify_data = self._parse_vlm_json(classify_response)
+            if isinstance(classify_data, dict):
+                classified_type_str = classify_data.get("document_type", "unknown") or "unknown"
+            else:
+                logger.warning("Unified vision classify: unparseable response, defaulting to unknown")
+
+        logger.info("Unified vision step-1 classify: %s", classified_type_str)
+
+        # Resolve to DocumentType enum
+        doc_type = None
+        try:
+            doc_type = DocumentType(classified_type_str)
+        except (ValueError, KeyError):
+            pass
+        if doc_type is None:
+            doc_type = document_type_hint or DocumentType.UNKNOWN
+
+        # -- Check if classified to a specialist type -> return None to hand off --
+        if doc_type in self._get_specialist_types():
+            logger.info(
+                "Unified vision classified as specialist type %s, handing off",
+                doc_type.value,
+            )
+            self._last_unified_vision_dedup_hints = None
+            self._last_unified_vision_type = doc_type
+            return None
+
+        # ================================================================
+        # STEP 2: Type-specific extraction VLM call (focused prompt)
+        # ================================================================
+        extract_prompt = self._get_extraction_prompt_for_type(
+            classified_type_str, user_identity=user_identity
+        )
+
+        extract_system = (
+            "You are an expert Austrian tax document data extractor. "
+            "Extract ONLY the requested fields. Return ONLY valid JSON, no markdown."
+        )
+        extract_user = extract_prompt
+        if supplementary_text:
+            extract_user += (
                 f"\n\nText layer content (for reference):\n"
                 f"{supplementary_text[:3000]}"
             )
 
-        # -- Single VLM call --
         try:
             if len(images) == 1:
                 response = llm.generate_vision(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
+                    system_prompt=extract_system,
+                    user_prompt=extract_user,
                     image_bytes=images[0][0],
                     mime_type=images[0][1],
                     temperature=0.0,
@@ -906,32 +1155,31 @@ class OCREngine:
                 )
             else:
                 response = llm.generate_vision_multi(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
+                    system_prompt=extract_system,
+                    user_prompt=extract_user,
                     images=images,
                     temperature=0.0,
                     max_tokens=4000,
                     provider_preference=self._vision_provider_preference,
                 )
         except Exception as e:
-            logger.warning("Unified vision call failed: %s", e)
+            logger.warning("Unified vision extract call failed: %s", e)
             return None
 
-        # -- Parse response --
+        # -- Parse extraction response --
         data = self._parse_vlm_json(response)
         if data is None:
-            logger.warning("Unified vision: unparseable response")
+            logger.warning("Unified vision extract: unparseable response")
             return None
 
         # DEBUG: Log raw VLM fields for insurance documents
-        _raw_doc_type = data.get("document_type", "") if isinstance(data, dict) else ""
-        if isinstance(data, dict) and "versicherung" in str(_raw_doc_type).lower():
+        if isinstance(data, dict) and "versicherung" in classified_type_str.lower():
             logger.info(
                 "INSURANCE VLM RAW FIELDS: %s",
                 {k: v for k, v in data.items() if not k.startswith('_')}
             )
 
-        # Handle multi-receipt array
+        # Handle multi-receipt array (invoice/receipt extraction may return arrays)
         if isinstance(data, list):
             if len(data) == 0:
                 return None
@@ -940,7 +1188,6 @@ class OCREngine:
             else:
                 # Multiple receipts detected
                 logger.info("Unified vision: %d receipts in one document", len(data))
-                # Persist dedup_hints from first receipt
                 first_hints = data[0].get("dedup_hints") if isinstance(data[0], dict) else None
                 processing_time = (datetime.now() - start_time).total_seconds() * 1000
                 payload = self._build_multi_receipt_payload(data)
@@ -964,30 +1211,10 @@ class OCREngine:
         if not isinstance(data, dict):
             return None
 
-        # -- Extract document type --
-        raw_type = data.pop("document_type", "unknown") or "unknown"
-        doc_type = None
-        try:
-            doc_type = DocumentType(raw_type)
-        except (ValueError, KeyError):
-            pass
-        if doc_type is None:
-            doc_type = document_type_hint or DocumentType.UNKNOWN
-
-        # -- Check if VLM classified to a specialist type → return None to hand off --
-        if doc_type in self._get_specialist_types():
-            logger.info(
-                "Unified vision classified as specialist type %s, handing off",
-                doc_type.value,
-            )
-            # Store dedup_hints in a temporary attribute for the caller to use
-            self._last_unified_vision_dedup_hints = data.get("dedup_hints")
-            self._last_unified_vision_type = doc_type
-            return None
+        # Remove document_type if the extraction prompt accidentally returned it
+        data.pop("document_type", None)
 
         # -- Flatten nested issuer/recipient objects --
-        # VLMs sometimes return {"name": "...", "address": "...", "uid": "..."}
-        # instead of flat strings. Flatten them for downstream compatibility.
         for role in ("issuer", "recipient"):
             val = data.get(role)
             if isinstance(val, dict):
@@ -1004,7 +1231,7 @@ class OCREngine:
             if issuer_val and isinstance(issuer_val, str) and issuer_val.strip():
                 data["merchant"] = issuer_val
 
-        # -- SVS post-processing (same as _process_scanned_pdf_via_vision) --
+        # -- SVS post-processing --
         if doc_type == DocumentType.SVS_NOTICE:
             if self._is_not_svs(data):
                 doc_type = DocumentType.INVOICE
@@ -1029,7 +1256,18 @@ class OCREngine:
                 if data.get("unfallversicherung"):
                     data.setdefault("accident_insurance", data["unfallversicherung"])
 
-        # Fix German number formats (1.662 → 1662, etc.)
+        # -- Insurance post-processing: normalize praemie fields --
+        if doc_type == DocumentType.VERSICHERUNGSBESTAETIGUNG:
+            # Ensure praemie is populated from praemie_jaehrlich
+            if data.get("praemie_jaehrlich") is not None and not data.get("praemie"):
+                data["praemie"] = data["praemie_jaehrlich"]
+            elif data.get("praemie") is not None and not data.get("praemie_jaehrlich"):
+                data["praemie_jaehrlich"] = data["praemie"]
+            # Map versicherungsart to insurance_type if missing
+            if data.get("versicherungsart") and not data.get("insurance_type"):
+                data["insurance_type"] = data["versicherungsart"]
+
+        # Fix German number formats (1.662 -> 1662, etc.)
         from app.services.field_normalization import fix_german_number_formats
         fix_german_number_formats(data)
 
@@ -1046,7 +1284,7 @@ class OCREngine:
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
         logger.info(
-            "Unified vision: type=%s, %d fields, confidence=%.2f, %.0fms",
+            "Unified vision (2-step): type=%s, %d fields, confidence=%.2f, %.0fms",
             doc_type.value, field_count, confidence, processing_time,
         )
 
@@ -1057,7 +1295,9 @@ class OCREngine:
             confidence_score=confidence,
             needs_review=confidence < self.config.CONFIDENCE_THRESHOLD,
             processing_time_ms=processing_time,
-            suggestions=["Processed via unified AI vision (classify+extract in one call)."],
+            suggestions=[
+                f"Processed via 2-step AI vision (classify: {classified_type_str}, then extract)."
+            ],
             provider_used=llm.last_provider_used if hasattr(llm, 'last_provider_used') else "vlm",
             classification_source="unified_vision",
         )
