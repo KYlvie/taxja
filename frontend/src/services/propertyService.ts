@@ -1,23 +1,147 @@
+import { isAxiosError } from 'axios';
 import api from './api';
 import {
+  DisposalRequest,
   Property,
   PropertyCreate,
-  PropertyUpdate,
-  PropertyListResponse,
   PropertyDetailResponse,
+  PropertyListResponse,
   PropertyMetrics,
+  PropertyUpdate,
   RentalContract,
-  DisposalRequest,
 } from '../types/property';
+import { Transaction } from '../types/transaction';
 
-const toOptionalNumber = (value: any): number | undefined => (
+type UnknownRecord = Record<string, unknown>;
+
+interface PropertyRaw extends UnknownRecord {
+  id: string;
+  user_id: number;
+  asset_type?: string;
+  sub_category?: string | null;
+  name?: string;
+  property_type: Property['property_type'];
+  rental_percentage: number | string;
+  address: string;
+  street: string;
+  city: string;
+  postal_code: string;
+  purchase_date: string;
+  purchase_price: number | string;
+  building_value: number | string;
+  land_value?: number | string | null;
+  grunderwerbsteuer?: number | string | null;
+  notary_fees?: number | string | null;
+  registry_fees?: number | string | null;
+  construction_year?: number;
+  depreciation_rate: number | string;
+  useful_life_years?: number | null;
+  acquisition_kind?: string | null;
+  put_into_use_date?: string | null;
+  is_used_asset?: boolean | null;
+  first_registration_date?: string | null;
+  prior_owner_usage_years?: number | string | null;
+  business_use_percentage?: number | string | null;
+  comparison_basis?: string | null;
+  comparison_amount?: number | string | null;
+  gwg_eligible?: boolean | null;
+  gwg_elected?: boolean | null;
+  depreciation_method?: string | null;
+  degressive_afa_rate?: number | string | null;
+  useful_life_source?: string | null;
+  income_tax_cost_cap?: number | string | null;
+  income_tax_depreciable_base?: number | string | null;
+  vat_recoverable_status?: string | null;
+  ifb_candidate?: boolean | null;
+  ifb_rate?: number | string | null;
+  ifb_rate_source?: string | null;
+  recognition_decision?: string | null;
+  policy_confidence?: number | string | null;
+  supplier?: string | null;
+  accumulated_depreciation?: number | string | null;
+  disposal_reason?: string | null;
+  status: Property['status'];
+  sale_date?: string;
+  kaufvertrag_document_id?: number;
+  mietvertrag_document_id?: number;
+  annual_depreciation?: number | string | null;
+  remaining_value?: number | string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PropertyMetricsRaw extends UnknownRecord {
+  property_id: string;
+  accumulated_depreciation: number | string;
+  remaining_depreciable_value: number | string;
+  annual_depreciation: number | string;
+  total_rental_income: number | string;
+  total_expenses: number | string;
+  net_rental_income: number | string;
+  years_remaining?: number;
+  warnings?: unknown[];
+}
+
+interface PropertyListResponseRaw extends UnknownRecord {
+  total?: number;
+  properties?: PropertyRaw[];
+  include_archived?: boolean;
+}
+
+interface PropertyDetailResponseRaw extends PropertyRaw {
+  metrics?: PropertyMetricsRaw;
+}
+
+interface PropertyDeleteImpact {
+  transaction_count: number;
+  recurring_count: number;
+  loan_count: number;
+}
+
+interface PropertyDeleteImpactResponse extends UnknownRecord {
+  deleted: boolean;
+  impact: PropertyDeleteImpact;
+}
+
+interface PropertyTransactionsResponseRaw extends UnknownRecord {
+  transactions?: PropertyTransactionRaw[];
+}
+
+interface PropertyTransactionRaw extends UnknownRecord {
+  transaction_date?: string;
+  date?: string;
+  income_category?: string;
+  expense_category?: string;
+  category?: string;
+  amount: number | string;
+}
+
+const toOptionalNumber = (value: unknown): number | undefined => (
   value === null || value === undefined || value === ''
     ? undefined
     : Number(value)
 );
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (isAxiosError(error)) {
+    const detail = error.response?.data;
+    if (typeof detail === 'object' && detail !== null && 'detail' in detail && typeof detail.detail === 'string') {
+      return detail.detail;
+    }
+    if (typeof error.message === 'string' && error.message) {
+      return error.message;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 /** Map backend property response to frontend Property type */
-function mapProperty(raw: any): Property {
+function mapProperty(raw: PropertyRaw): Property {
   return {
     id: raw.id,
     user_id: raw.user_id,
@@ -76,13 +200,9 @@ function mapProperty(raw: any): Property {
 }
 
 export const propertyService = {
-  /**
-   * Create a new property
-   * POST /api/v1/properties
-   */
   createProperty: async (data: PropertyCreate): Promise<Property> => {
     try {
-      const payload: Record<string, any> = {
+      const payload: Record<string, unknown> = {
         street: data.street,
         city: data.city,
         postal_code: data.postal_code,
@@ -90,7 +210,6 @@ export const propertyService = {
         purchase_price: Number(data.purchase_price),
       };
 
-      // Add optional fields if provided
       if (data.property_type) payload.property_type = data.property_type;
       if (data.rental_percentage !== undefined) payload.rental_percentage = Number(data.rental_percentage);
       if (data.building_value !== undefined) payload.building_value = Number(data.building_value);
@@ -101,57 +220,48 @@ export const propertyService = {
       if (data.registry_fees !== undefined) payload.registry_fees = Number(data.registry_fees);
 
       const response = await api.post('/properties', payload);
-      return mapProperty(response.data);
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error creating property:', error);
       throw error;
     }
   },
 
-  /**
-   * Get list of properties
-   * GET /api/v1/properties
-   */
   getProperties: async (includeArchived: boolean = false): Promise<PropertyListResponse> => {
     try {
-      const params: Record<string, any> = {
-        include_archived: includeArchived,
-      };
-
-      const response = await api.get('/properties', { params });
-      const data = response.data;
+      const response = await api.get('/properties', {
+        params: { include_archived: includeArchived },
+      });
+      const data = response.data as PropertyListResponseRaw;
 
       return {
         total: data.total || 0,
         properties: (data.properties || []).map(mapProperty),
         include_archived: data.include_archived || false,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching properties:', error);
       throw error;
     }
   },
 
-  /**
-   * Get single property by ID
-   * GET /api/v1/properties/{id}
-   */
   getProperty: async (id: string): Promise<PropertyDetailResponse> => {
     try {
       const response = await api.get(`/properties/${id}`);
-      const property = mapProperty(response.data);
+      const data = response.data as PropertyDetailResponseRaw;
+      const property = mapProperty(data);
 
-      // Map metrics if present
-      const metrics = response.data.metrics
+      const metrics = data.metrics
         ? {
-            property_id: response.data.metrics.property_id,
-            accumulated_depreciation: Number(response.data.metrics.accumulated_depreciation),
-            remaining_depreciable_value: Number(response.data.metrics.remaining_depreciable_value),
-            annual_depreciation: Number(response.data.metrics.annual_depreciation),
-            total_rental_income: Number(response.data.metrics.total_rental_income),
-            total_expenses: Number(response.data.metrics.total_expenses),
-            net_rental_income: Number(response.data.metrics.net_rental_income),
-            years_remaining: response.data.metrics.years_remaining,
+            property_id: data.metrics.property_id,
+            accumulated_depreciation: Number(data.metrics.accumulated_depreciation),
+            remaining_depreciable_value: Number(data.metrics.remaining_depreciable_value),
+            annual_depreciation: Number(data.metrics.annual_depreciation),
+            total_rental_income: Number(data.metrics.total_rental_income),
+            total_expenses: Number(data.metrics.total_expenses),
+            net_rental_income: Number(data.metrics.net_rental_income),
+            years_remaining: data.metrics.years_remaining,
+            warnings: data.metrics.warnings || [],
           }
         : undefined;
 
@@ -159,21 +269,16 @@ export const propertyService = {
         ...property,
         metrics,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching property:', error);
       throw error;
     }
   },
 
-  /**
-   * Update property
-   * PUT /api/v1/properties/{id}
-   */
   updateProperty: async (id: string, data: PropertyUpdate): Promise<Property> => {
     try {
-      const payload: Record<string, any> = {};
+      const payload: Record<string, unknown> = {};
 
-      // Only include fields that are provided
       if (data.property_type) payload.property_type = data.property_type;
       if (data.rental_percentage !== undefined) payload.rental_percentage = Number(data.rental_percentage);
       if (data.street) payload.street = data.street;
@@ -191,188 +296,149 @@ export const propertyService = {
       if (data.sale_date) payload.sale_date = data.sale_date;
 
       const response = await api.put(`/properties/${id}`, payload);
-      return mapProperty(response.data);
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error updating property:', error);
       throw error;
     }
   },
 
-  /**
-   * Archive property (mark as sold)
-   * POST /api/v1/properties/{id}/archive
-   */
   archiveProperty: async (id: string, saleDate: string): Promise<Property> => {
     try {
       const response = await api.post(`/properties/${id}/archive`, {
         sale_date: saleDate,
       });
-      return mapProperty(response.data);
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error archiving property:', error);
       throw error;
     }
   },
 
-  /**
-   * Dispose of a property/asset with a specific reason
-   * POST /api/v1/properties/{id}/dispose
-   */
   disposeProperty: async (id: string, data: DisposalRequest): Promise<Property> => {
     try {
       const response = await api.post(`/properties/${id}/dispose`, data);
-      return mapProperty(response.data);
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error disposing property:', error);
       throw error;
     }
   },
 
-  /**
-   * Check delete impact for a property (without actually deleting)
-   * DELETE /api/v1/properties/{id}?force=false
-   */
-  checkDeleteImpact: async (id: string): Promise<{ deleted: boolean; impact: { transaction_count: number; recurring_count: number; loan_count: number } }> => {
+  checkDeleteImpact: async (id: string): Promise<PropertyDeleteImpactResponse> => {
     try {
       const response = await api.delete(`/properties/${id}?force=false`);
-      return response.data || { deleted: true, impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 } };
-    } catch (error: any) {
-      // Property already gone — treat as already deleted
-      if (error.response?.status === 404) {
-        return { deleted: true, impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 } };
+      return (response.data as PropertyDeleteImpactResponse) || {
+        deleted: true,
+        impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 },
+      };
+    } catch (error: unknown) {
+      if (isAxiosError(error) && error.response?.status === 404) {
+        return {
+          deleted: true,
+          impact: { transaction_count: 0, recurring_count: 0, loan_count: 0 },
+        };
       }
       console.error('Error checking delete impact:', error);
       throw error;
     }
   },
 
-  /**
-   * Force delete property (unlinks transactions, deletes recurring/loans)
-   * DELETE /api/v1/properties/{id}?force=true
-   */
   deleteProperty: async (id: string, force: boolean = true): Promise<void> => {
     try {
       await api.delete(`/properties/${id}?force=${force}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting property:', error);
       throw error;
     }
   },
 
-  /**
-   * Link transaction to property
-   * POST /api/v1/properties/{propertyId}/link-transaction
-   */
   linkTransaction: async (propertyId: string, transactionId: number): Promise<void> => {
     try {
       await api.post(`/properties/${propertyId}/link-transaction`, {
         transaction_id: transactionId,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error linking transaction:', error);
       throw error;
     }
   },
 
-  /**
-   * Unlink transaction from property
-   * DELETE /api/v1/properties/{propertyId}/unlink-transaction/{transactionId}
-   */
   unlinkTransaction: async (propertyId: string, transactionId: number): Promise<void> => {
     try {
       await api.delete(`/properties/${propertyId}/unlink-transaction/${transactionId}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error unlinking transaction:', error);
       throw error;
     }
   },
 
-  /**
-   * Get transactions linked to property
-   * GET /api/v1/properties/{propertyId}/transactions
-   */
-  getPropertyTransactions: async (propertyId: string, year?: number): Promise<any[]> => {
+  getPropertyTransactions: async (propertyId: string, year?: number): Promise<Transaction[]> => {
     try {
-      const params: Record<string, any> = {};
-      if (year) params.year = year;
+      const response = await api.get(`/properties/${propertyId}/transactions`, {
+        params: year ? { year } : undefined,
+      });
+      const responseData = response.data as PropertyTransactionsResponseRaw | PropertyTransactionRaw[];
+      const rawItems = Array.isArray(responseData) ? responseData : responseData.transactions || [];
 
-      const response = await api.get(`/properties/${propertyId}/transactions`, { params });
-      const raw = response.data.transactions || response.data || [];
-      return raw.map((t: any) => ({
-        ...t,
-        date: t.transaction_date || t.date,
-        category: t.income_category || t.expense_category || t.category || 'other',
-        amount: Number(t.amount),
-      }));
-    } catch (error: any) {
+      return rawItems.map((item) => ({
+        ...(item as UnknownRecord),
+        date: item.transaction_date || item.date || '',
+        category: item.income_category || item.expense_category || item.category || 'other',
+        amount: Number(item.amount),
+      })) as Transaction[];
+    } catch (error: unknown) {
       console.error('Error fetching property transactions:', error);
       throw error;
     }
   },
 
-  /**
-   * Preview historical depreciation backfill
-   * GET /api/v1/properties/{propertyId}/historical-depreciation
-   */
-  previewHistoricalDepreciation: async (propertyId: string): Promise<any> => {
+  previewHistoricalDepreciation: async (propertyId: string): Promise<UnknownRecord> => {
     try {
       const response = await api.get(`/properties/${propertyId}/historical-depreciation`);
-      return response.data;
-    } catch (error: any) {
+      return response.data as UnknownRecord;
+    } catch (error: unknown) {
       console.error('Error previewing historical depreciation:', error);
       throw error;
     }
   },
 
-  /**
-   * Execute historical depreciation backfill
-   * POST /api/v1/properties/{propertyId}/backfill-depreciation
-   */
-  backfillDepreciation: async (propertyId: string): Promise<any> => {
+  backfillDepreciation: async (propertyId: string): Promise<UnknownRecord> => {
     try {
       const response = await api.post(`/properties/${propertyId}/backfill-depreciation`);
-      return response.data;
-    } catch (error: any) {
+      return response.data as UnknownRecord;
+    } catch (error: unknown) {
       console.error('Error backfilling depreciation:', error);
       throw error;
     }
   },
 
-  /**
-   * Compare portfolio properties
-   * GET /api/v1/properties/portfolio/compare
-   */
   comparePortfolio: async (
     year?: number,
     sortBy: string = 'net_income',
     sortOrder: string = 'desc'
-  ): Promise<any[]> => {
+  ): Promise<UnknownRecord[]> => {
     try {
-      const params: Record<string, any> = {
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      };
-      if (year) params.year = year;
-
-      const response = await api.get('/properties/portfolio/compare', { params });
-      return response.data || [];
-    } catch (error: any) {
+      const response = await api.get('/properties/portfolio/compare', {
+        params: {
+          sort_by: sortBy,
+          sort_order: sortOrder,
+          ...(year ? { year } : {}),
+        },
+      });
+      return (response.data as UnknownRecord[]) || [];
+    } catch (error: unknown) {
       console.error('Error comparing portfolio:', error);
       throw error;
     }
   },
 
-  /**
-   * Get property metrics with warnings
-   * GET /api/v1/properties/{propertyId}/metrics
-   */
   getPropertyMetrics: async (propertyId: string, year?: number): Promise<PropertyMetrics> => {
     try {
-      const params: Record<string, any> = {};
-      if (year) params.year = year;
-
-      const response = await api.get(`/properties/${propertyId}/metrics`, { params });
-      const data = response.data;
+      const response = await api.get(`/properties/${propertyId}/metrics`, {
+        params: year ? { year } : undefined,
+      });
+      const data = response.data as PropertyMetricsRaw;
 
       return {
         property_id: data.property_id,
@@ -385,44 +451,32 @@ export const propertyService = {
         years_remaining: data.years_remaining,
         warnings: data.warnings || [],
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching property metrics:', error);
       throw error;
     }
   },
 
-  /**
-   * Get rental contracts linked to a property
-   * GET /api/v1/properties/{propertyId}/rental-contracts
-   */
   getRentalContracts: async (propertyId: string): Promise<RentalContract[]> => {
     try {
       const response = await api.get(`/properties/${propertyId}/rental-contracts`);
-      return response.data || [];
-    } catch (error: any) {
+      return (response.data as RentalContract[]) || [];
+    } catch (error: unknown) {
       console.error('Error fetching rental contracts:', error);
       throw error;
     }
   },
 
-  /**
-   * Recalculate rental percentage from active contracts
-   * POST /api/v1/properties/{propertyId}/recalculate-rental
-   */
   recalculateRental: async (propertyId: string): Promise<Property> => {
     try {
       const response = await api.post(`/properties/${propertyId}/recalculate-rental`);
-      return mapProperty(response.data);
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error recalculating rental:', error);
       throw error;
     }
   },
 
-  /**
-   * Create a non-real-estate depreciable asset
-   * POST /api/v1/properties/assets
-   */
   createAsset: async (data: {
     asset_type: string;
     name: string;
@@ -432,29 +486,31 @@ export const propertyService = {
     supplier?: string;
     business_use_percentage?: number;
     useful_life_years?: number;
-  }): Promise<any> => {
+  }): Promise<Property> => {
     try {
       const response = await api.post('/properties/assets', data);
-      return response.data;
-    } catch (error: any) {
+      return mapProperty(response.data as PropertyRaw);
+    } catch (error: unknown) {
       console.error('Error creating asset:', error);
       throw error;
     }
   },
 
-  /**
-   * List non-real-estate assets (vehicles, equipment, etc.)
-   * GET /api/v1/properties/assets
-   */
-  getAssets: async (includeArchived: boolean = false): Promise<{ total: number; assets: any[] }> => {
+  getAssets: async (includeArchived: boolean = false): Promise<{ total: number; assets: Property[] }> => {
     try {
       const response = await api.get('/properties/assets', {
         params: { include_archived: includeArchived },
       });
-      return response.data;
-    } catch (error: any) {
+      const data = response.data as { total?: number; assets?: PropertyRaw[] };
+      return {
+        total: data.total || 0,
+        assets: (data.assets || []).map(mapProperty),
+      };
+    } catch (error: unknown) {
       console.error('Error fetching assets:', error);
       throw error;
     }
   },
 };
+
+export { getErrorMessage };

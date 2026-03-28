@@ -3622,6 +3622,22 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         if _holder_match:
             _policy_holder = _holder_match.group(1).strip()
 
+    # Fallback: try recipient from OCR data, then user's name from DB
+    if not _policy_holder:
+        _policy_holder = _clean_ocr_name(updated_ocr.get("recipient")) or ""
+    if not _policy_holder:
+        try:
+            _user = document.user
+            if _user:
+                _policy_holder = (
+                    getattr(_user, 'full_name', None)
+                    or ""
+                )
+                if not _policy_holder and hasattr(_user, 'profile') and _user.profile:
+                    _policy_holder = getattr(_user.profile, 'business_name', None) or ""
+        except Exception:
+            pass
+
     # Extract contract start date (Vertragsbeginn)
     _vertragsbeginn = updated_ocr.get("vertragsbeginn") or ""
     if not _vertragsbeginn and not start_date:
@@ -3629,7 +3645,7 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             str(updated_ocr.get("raw_text", "")) or str(getattr(document, 'raw_text', '') or "")
         )
         _vb_match = _re.search(
-            r'(?:Vertragsbeginn|Versicherungsbeginn)[:\s]+(\d{1,2}[./]\d{1,2}[./]\d{4})',
+            r'(?:Vertragsbeginn|Versicherungsbeginn|F[äa]lligkeit|Faelligkeit|Beginn|g[üu]ltig\s+ab|gueltig\s+ab|Laufzeit\s+ab)[:\s]+(\d{1,2}[./]\d{1,2}[./]\d{4})',
             _raw_text, _re.IGNORECASE
         )
         if _vb_match:
@@ -3638,6 +3654,17 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             for _fmt in ("%d.%m.%Y", "%d/%m/%Y"):
                 try:
                     start_date = dt.strptime(_vertragsbeginn, _fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+    # Fallback: use OCR date fields if start_date still not found
+    if not start_date:
+        _date_fallback = updated_ocr.get("date") or updated_ocr.get("document_date") or ""
+        if _date_fallback and isinstance(_date_fallback, str):
+            for _fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+                try:
+                    start_date = dt.strptime(_date_fallback, _fmt).date()
                     break
                 except ValueError:
                     continue
@@ -3675,6 +3702,10 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
 
     # Write key insurance fields to top-level ocr_result so frontend can display them
     updated_ocr["insurer_name"] = insurer_name
+    # Clean up raw fields that may contain wrong values (e.g. "SPAR" from misclassified receipt)
+    if insurer_name and insurer_name != "Unbekannt":
+        updated_ocr["merchant"] = insurer_name
+        updated_ocr["supplier"] = insurer_name
     updated_ocr["insurance_type"] = insurance_type
     updated_ocr["insurance_subtype"] = insurance_subtype
     updated_ocr["praemie"] = float(praemie_decimal)
