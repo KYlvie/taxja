@@ -7,53 +7,95 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
-# Fields that contain monetary amounts (for German number format fixing)
-_AMOUNT_FIELD_NAMES = {
+# Fields that contain numeric values affected by German number format
+# Grouped by type for different fix strategies
+_AMOUNT_FIELDS = {
+    # Monetary amounts (€)
     "amount", "praemie", "premium", "beitrag_gesamt", "beitragsgrundlage",
     "pensionsversicherung", "krankenversicherung", "unfallversicherung",
     "selbstaendigenvorsorge", "nachzahlung", "gutschrift",
     "net_amount", "vat_amount", "total_amount", "purchase_price",
-    "monthly_rent", "loan_amount", "ratenbetrag",
+    "monthly_rent", "loan_amount", "ratenbetrag", "brutto_amount",
+    "netto_amount", "gross_amount", "deposit_amount",
     "versicherungssumme", "deckungssumme", "selbstbehalt",
+    "gesamtbetrag", "restschuld", "tilgung", "zinsen",
+    "festgesetzte_einkommensteuer", "einkommen", "abgabengutschrift",
+    "abgabennachforderung", "gesamtbetrag_einkuenfte",
+    "gross_income", "net_income", "lohnsteuer", "sozialversicherung",
+    # Line item amounts
+    "total_price", "unit_price", "price",
 }
+
+_RATE_FIELDS = {
+    # Percentages and rates (e.g. 20,00% → 20.0)
+    "vat_rate", "interest_rate", "tax_rate", "zinssatz",
+    "bonus_malus_stufe",
+}
+
+_QUANTITY_FIELDS = {
+    # Quantities that use thousand separators (e.g. 1.968 ccm → 1968)
+    "hubraum", "leistung_kw", "flaeche", "wohnflaeche", "nutzflaeche",
+    "grundstuecksflaeche", "eigentumsanteil",
+}
+
+# Combined set for quick lookup
+_GERMAN_NUMBER_FIELDS = _AMOUNT_FIELDS | _RATE_FIELDS | _QUANTITY_FIELDS
 
 
 def fix_german_number_formats(data: dict) -> dict:
     """Fix German number format issues in extracted data.
 
-    LLMs processing Austrian/German documents sometimes output numbers
-    in German format (1.662,36) or partially parsed (1.662 meaning 1662).
+    Austrian/German documents use:
+    - Comma as decimal separator: 1.662,36 means 1662.36
+    - Dot as thousand separator: 500.000 means 500000
+    - Percentage with comma: 20,00% means 20.0%
 
-    Rules:
-    - Float with exactly 3 decimal places in an amount field (e.g. 1.662)
-      is likely a German thousand separator → multiply by 1000
-    - String "1.662,36" → parse as 1662.36
+    Applied to monetary amounts, rates, and quantities.
     """
     if not isinstance(data, dict):
         return data
 
     for key, value in list(data.items()):
-        if key not in _AMOUNT_FIELD_NAMES:
+        if key not in _GERMAN_NUMBER_FIELDS:
+            # Also fix fields in line_items
+            if key == "line_items" and isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        fix_german_number_formats(item)
             continue
 
         if isinstance(value, str):
-            # String with German format: "1.662,36" or "13.087,48"
-            if re.match(r'^\d{1,3}(\.\d{3})+(,\d{1,2})?$', value.strip()):
-                cleaned = value.strip().replace('.', '').replace(',', '.')
+            cleaned = value.strip()
+            # Remove currency/unit suffixes
+            cleaned = re.sub(r'\s*[€%]?\s*$', '', cleaned)
+            cleaned = re.sub(r'^\s*[€]\s*', '', cleaned)
+            cleaned = re.sub(r'\s*(EUR|ccm|m²|kW|PS)\s*$', '', cleaned, flags=re.IGNORECASE)
+
+            # German format with both dot and comma: "1.662,36" or "500.000,00"
+            if re.match(r'^-?\d{1,3}(\.\d{3})+(,\d{1,2})?$', cleaned):
+                cleaned = cleaned.replace('.', '').replace(',', '.')
                 try:
                     data[key] = float(cleaned)
                 except ValueError:
                     pass
+                continue
+
+            # Simple comma decimal: "20,00" or "2,75" or "0,95"
+            if re.match(r'^-?\d+,\d{1,2}$', cleaned):
+                cleaned = cleaned.replace(',', '.')
+                try:
+                    data[key] = float(cleaned)
+                except ValueError:
+                    pass
+                continue
 
         elif isinstance(value, (int, float)):
-            # Float that looks like German thousand separator was parsed as decimal
-            # e.g. 1.662 (should be 1662), 13.087 (should be 13087)
             fval = float(value)
             str_val = f"{fval:.10g}"
             if '.' in str_val:
                 integer_part, decimal_part = str_val.split('.', 1)
-                # If decimal part is exactly 3 digits and the result is suspiciously small
-                # for an amount field, it's likely a German thousand separator
+                # 3 decimal digits + small integer → likely German thousand separator
+                # e.g. 1.662 → 1662, 13.087 → 13087
                 if len(decimal_part) == 3 and len(integer_part) <= 2:
                     data[key] = float(f"{integer_part}{decimal_part}")
 
