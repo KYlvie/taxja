@@ -1149,8 +1149,26 @@ const DocumentsPage = () => {
     }
   };
 
-  // Use visible document IDs from DocumentList for prev/next navigation
-  const docIdList = documentSummary.visibleDocIds || [];
+  // Use visible document IDs from DocumentList for prev/next navigation.
+  // When the detail view is open, DocumentList is not rendered so visibleDocIds
+  // will be empty.  In that case we fetch the IDs once from the API.
+  const [fetchedDocIds, setFetchedDocIds] = useState<number[]>([]);
+  const summaryDocIds = documentSummary.visibleDocIds || [];
+  const docIdList = summaryDocIds.length > 0 ? summaryDocIds : fetchedDocIds;
+
+  useEffect(() => {
+    if (documentId && summaryDocIds.length === 0 && fetchedDocIds.length === 0) {
+      documentService
+        .getDocuments(currentFilters, 1, 500)
+        .then(({ documents }) => {
+          setFetchedDocIds(documents.map((d) => d.id));
+        })
+        .catch(() => {});
+    }
+    if (!documentId) {
+      setFetchedDocIds([]);
+    }
+  }, [documentId, summaryDocIds.length, fetchedDocIds.length, currentFilters]);
 
   const navigateToDocument = (direction: 'prev' | 'next') => {
     if (!documentId || docIdList.length === 0) return;
