@@ -916,6 +916,14 @@ class OCREngine:
             logger.warning("Unified vision: unparseable response")
             return None
 
+        # DEBUG: Log raw VLM fields for insurance documents
+        _raw_doc_type = data.get("document_type", "") if isinstance(data, dict) else ""
+        if isinstance(data, dict) and "versicherung" in str(_raw_doc_type).lower():
+            logger.info(
+                "INSURANCE VLM RAW FIELDS: %s",
+                {k: v for k, v in data.items() if not k.startswith('_')}
+            )
+
         # Handle multi-receipt array
         if isinstance(data, list):
             if len(data) == 0:

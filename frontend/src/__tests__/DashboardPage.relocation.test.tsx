@@ -19,8 +19,8 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('../services/dashboardService', () => ({
   dashboardService: {
-    getDashboardData: (...args: any[]) => getDashboardData(...args),
-    getSuggestions: (...args: any[]) => getSuggestions(...args),
+    getDashboardData: (...args: unknown[]) => getDashboardData(...args),
+    getSuggestions: (...args: unknown[]) => getSuggestions(...args),
   },
 }));
 

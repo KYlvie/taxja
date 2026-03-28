@@ -12,7 +12,7 @@ export interface TaxConfigSummary {
   exemption_amount: number;
   vat_rates: Record<string, number>;
   svs_rates: Record<string, number>;
-  deduction_config: Record<string, any>;
+  deduction_config: Record<string, unknown>;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -62,14 +62,14 @@ const taxConfigService = {
   },
 
   /** Create a new year config (admin) */
-  createConfig: async (data: any): Promise<TaxConfigSummary> => {
+  createConfig: async (data: Record<string, unknown>): Promise<TaxConfigSummary> => {
     const response = await api.post('/tax-configs/', data);
     taxConfigService.invalidateCache();
     return response.data;
   },
 
   /** Update a year config (admin) */
-  updateConfig: async (year: number, data: any): Promise<TaxConfigSummary> => {
+  updateConfig: async (year: number, data: Record<string, unknown>): Promise<TaxConfigSummary> => {
     const response = await api.put(`/tax-configs/${year}`, data);
     taxConfigService.invalidateCache();
     return response.data;

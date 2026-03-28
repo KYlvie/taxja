@@ -10,7 +10,31 @@ import {
 
 const toNumber = (value: unknown): number => Number(value ?? 0);
 
-const mapLiability = (raw: any): LiabilityRecord => ({
+interface LiabilityRelatedTransactionRaw extends Record<string, unknown> {
+  amount?: unknown;
+}
+
+interface LiabilityRaw extends Record<string, unknown> {
+  source_type?: string;
+  principal_amount?: unknown;
+  outstanding_balance?: unknown;
+  interest_rate?: unknown;
+  monthly_payment?: unknown;
+  can_edit_directly?: boolean;
+  can_deactivate_directly?: boolean;
+  edit_via_document?: boolean;
+  requires_supporting_document?: boolean;
+  recommended_document_type?: string;
+  related_transactions?: LiabilityRelatedTransactionRaw[];
+  related_recurring_transactions?: LiabilityRelatedTransactionRaw[];
+}
+
+const mapRelatedAmount = (item: LiabilityRelatedTransactionRaw) => ({
+  ...item,
+  amount: toNumber(item.amount),
+});
+
+const mapLiability = (raw: LiabilityRaw): LiabilityRecord => ({
   ...raw,
   source_type: raw.source_type || 'manual',
   principal_amount: toNumber(raw.principal_amount),
@@ -24,16 +48,10 @@ const mapLiability = (raw: any): LiabilityRecord => ({
   recommended_document_type: raw.recommended_document_type || 'loan_contract',
 });
 
-const mapLiabilityDetail = (raw: any): LiabilityDetail => ({
+const mapLiabilityDetail = (raw: LiabilityRaw): LiabilityDetail => ({
   ...mapLiability(raw),
-  related_transactions: (raw.related_transactions || []).map((item: any) => ({
-    ...item,
-    amount: toNumber(item.amount),
-  })),
-  related_recurring_transactions: (raw.related_recurring_transactions || []).map((item: any) => ({
-    ...item,
-    amount: toNumber(item.amount),
-  })),
+  related_transactions: (raw.related_transactions || []).map(mapRelatedAmount),
+  related_recurring_transactions: (raw.related_recurring_transactions || []).map(mapRelatedAmount),
 });
 
 export const liabilityService = {

@@ -27,6 +27,10 @@ export interface ProactiveReminderDto {
   action?: Record<string, unknown>;
 }
 
+export interface TaxSimulationRequest {
+  [key: string]: unknown;
+}
+
 export const dashboardService = {
   getDashboardData: async (year?: number) => {
     const response = await api.get('/dashboard', { params: { year } });
@@ -54,7 +58,7 @@ export const dashboardService = {
     return response.data;
   },
 
-  simulateTax: async (data: any) => {
+  simulateTax: async (data: TaxSimulationRequest) => {
     const response = await api.post('/tax/simulate', data, { timeout: 90000 });
     return response.data;
   },

@@ -39,6 +39,34 @@ export interface DocumentExportYearOption {
   total_size_bytes: number;
 }
 
+interface ReviewExtractedField {
+  field_name: string;
+  value: unknown;
+  confidence: number;
+}
+
+interface DocumentReviewResponse {
+  extracted_fields?: ReviewExtractedField[];
+  suggestions?: string[];
+  overall_confidence?: number | null;
+}
+
+interface BackendDocumentResponse extends Record<string, unknown> {
+  created_at?: string;
+  uploaded_at?: string;
+  updated_at?: string;
+  processed_at?: string;
+  needs_review?: boolean;
+  confidence_score?: number | null;
+}
+
+const mapDocumentResponse = (doc: BackendDocumentResponse): Document => ({
+  ...(doc as unknown as Document),
+  created_at: doc.created_at || doc.uploaded_at || '',
+  updated_at: doc.updated_at || doc.processed_at || doc.uploaded_at || '',
+  needs_review: doc.needs_review ?? (doc.confidence_score != null && doc.confidence_score < 0.7),
+});
+
 export const documentService = {
   // Upload single document
   uploadDocument: async (
@@ -163,49 +191,33 @@ export const documentService = {
     const response = await api.get(`/documents?${params.toString()}`);
     const data = response.data;
     // Map backend field names to frontend Document type
-    const documents = (data.documents || []).map((doc: any) => ({
-      ...doc,
-      created_at: doc.created_at || doc.uploaded_at,
-      updated_at: doc.updated_at || doc.processed_at || doc.uploaded_at,
-      needs_review: doc.needs_review ?? (doc.confidence_score != null && doc.confidence_score < 0.7),
-    }));
+    const documents = (data.documents || []).map((doc: BackendDocumentResponse) => mapDocumentResponse(doc));
     return { documents, total: data.total || 0 };
   },
 
   // Get single document
   getDocument: async (id: number): Promise<Document> => {
     const response = await api.get(`/documents/${id}`);
-    const doc = response.data;
-    return {
-      ...doc,
-      created_at: doc.created_at || doc.uploaded_at,
-      updated_at: doc.updated_at || doc.processed_at || doc.uploaded_at,
-      needs_review: doc.needs_review ?? (doc.confidence_score != null && doc.confidence_score < 0.7),
-    };
+    return mapDocumentResponse(response.data);
   },
 
   // Get document for OCR review
   getDocumentForReview: async (id: number): Promise<OCRReviewData> => {
     // First get the document details
     const docResponse = await api.get(`/documents/${id}`);
-    const doc = docResponse.data;
-    const mappedDoc = {
-      ...doc,
-      created_at: doc.created_at || doc.uploaded_at,
-      updated_at: doc.updated_at || doc.processed_at || doc.uploaded_at,
-      needs_review: doc.needs_review ?? (doc.confidence_score != null && doc.confidence_score < 0.7),
-    };
+    const doc = docResponse.data as BackendDocumentResponse & { ocr_result?: ExtractedData };
+    const mappedDoc = mapDocumentResponse(doc);
 
     // Try to get OCR review data
-    let extractedData: any = {};
+    let extractedData: ExtractedData = {};
     let suggestions: string[] = [];
     try {
-      const reviewResponse = await api.get(`/documents/${id}/review`);
+      const reviewResponse = await api.get<DocumentReviewResponse>(`/documents/${id}/review`);
       const review = reviewResponse.data;
       // Map extracted_fields array to ExtractedData object
       if (review.extracted_fields) {
         for (const field of review.extracted_fields) {
-          extractedData[field.field_name] = field.value;
+          extractedData[field.field_name] = field.value as never;
           if (!extractedData.confidence) extractedData.confidence = {};
           extractedData.confidence[field.field_name] = field.confidence;
         }
@@ -231,7 +243,7 @@ export const documentService = {
   // Correct OCR results
   correctOCR: async (
     id: number,
-    correctedData: Record<string, any>
+    correctedData: Record<string, unknown>
   ): Promise<Document> => {
     const response = await api.post(
       `/documents/${id}/correct`,
@@ -307,7 +319,7 @@ export const documentService = {
   },
 
   // Get related data for a document (before deletion)
-  getDocumentRelatedData: async (id: number): Promise<any> => {
+  getDocumentRelatedData: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.get(`/documents/${id}/related-data`);
     return response.data;
   },
@@ -319,61 +331,61 @@ export const documentService = {
   },
 
   // Confirm property creation from Kaufvertrag OCR suggestion
-  confirmProperty: async (id: number): Promise<any> => {
+  confirmProperty: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-property`);
     return response.data;
   },
 
   // Confirm recurring income creation from Mietvertrag OCR suggestion
-  confirmRecurring: async (id: number): Promise<any> => {
+  confirmRecurring: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-recurring`);
     return response.data;
   },
 
   // Confirm recurring expense creation from invoice/insurance OCR suggestion
-  confirmRecurringExpense: async (id: number): Promise<any> => {
+  confirmRecurringExpense: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-recurring-expense`);
     return response.data;
   },
 
   // Confirm insurance recurring creation from Versicherungsbestätigung
-  confirmInsuranceRecurring: async (id: number): Promise<any> => {
+  confirmInsuranceRecurring: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-insurance-recurring`);
     return response.data;
   },
 
   // Confirm loan creation from Kreditvertrag OCR suggestion
-  confirmLoan: async (id: number): Promise<any> => {
+  confirmLoan: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-loan`);
     return response.data;
   },
 
   // Confirm standalone loan repayment creation from Kreditvertrag OCR suggestion
-  confirmLoanRepayment: async (id: number): Promise<any> => {
+  confirmLoanRepayment: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-loan-repayment`);
     return response.data;
   },
 
   // Confirm asset creation from vehicle/equipment Kaufvertrag OCR suggestion
-  confirmAsset: async (id: number, confirmation?: AssetSuggestionConfirmationPayload): Promise<any> => {
+  confirmAsset: async (id: number, confirmation?: AssetSuggestionConfirmationPayload): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-asset`, confirmation || {});
     return response.data;
   },
 
   // Dismiss an import suggestion
-  dismissSuggestion: async (id: number): Promise<any> => {
+  dismissSuggestion: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/dismiss-suggestion`);
     return response.data;
   },
 
   // Confirm tax filing data from OCR suggestion (L16, L1, E1a, E1b, etc.)
-  confirmTaxData: async (id: number): Promise<any> => {
+  confirmTaxData: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/confirm-tax-data`);
     return response.data;
   },
 
   // Retry OCR processing (re-process document)
-  retryOcr: async (id: number): Promise<any> => {
+  retryOcr: async (id: number): Promise<Record<string, unknown>> => {
     const response = await api.post(`/documents/${id}/retry-ocr`, null, { timeout: 120000 });
     return response.data;
   },
@@ -415,7 +427,7 @@ export const documentService = {
    */
   submitFollowUp: async (
     id: number,
-    answers: Record<string, any>,
+    answers: Record<string, unknown>,
     options?: {
       useDefaults?: boolean;
       suggestionVersion?: number;
@@ -439,8 +451,8 @@ export const documentService = {
   executeAction: async (
     endpoint: string,
     method: string = 'POST',
-    payload?: Record<string, any>
-  ): Promise<any> => {
+    payload?: Record<string, unknown>
+  ): Promise<Record<string, unknown>> => {
     const config = { timeout: 30000 };
     let response;
     if (method === 'POST') {
@@ -465,7 +477,7 @@ export interface ProcessStatusResponse {
   document_type: string | null;
   message: string;
   ui_state: 'processing' | 'needs_input' | 'ready_to_confirm' | 'confirmed' | 'dismissed' | 'error';
-  suggestion: Record<string, any> | null;
+  suggestion: Record<string, unknown> | null;
   phase_started_at: string | null;
   phase_updated_at: string | null;
   current_phase_attempt: number;
@@ -480,7 +492,7 @@ export interface ActionDescriptorResponse {
   target_id: string;
   endpoint: string;
   method: string;
-  payload?: Record<string, any>;
+  payload?: Record<string, unknown>;
   confirm_label?: Record<string, string>;
   dismiss_label?: Record<string, string>;
   detail_label?: Record<string, string>;
@@ -490,12 +502,12 @@ export interface FollowUpQuestionResponse {
   id: string;
   question: Record<string, string>;
   input_type: string;
-  options?: any[];
-  default_value?: any;
+  options?: unknown[];
+  default_value?: unknown;
   required: boolean;
   field_key: string;
   help_text?: Record<string, string>;
-  validation?: Record<string, any>;
+  validation?: Record<string, unknown>;
 }
 
 export interface FollowUpAnswerResponse {
@@ -503,6 +515,6 @@ export interface FollowUpAnswerResponse {
   ui_state: string;
   suggestion_version: number;
   remaining_questions: number;
-  remaining_question_list: any[];
-  applied_defaults: Record<string, any>;
+  remaining_question_list: unknown[];
+  applied_defaults: Record<string, unknown>;
 }

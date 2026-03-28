@@ -5,6 +5,47 @@ import { getApiBaseUrl, isNativeApp } from '../mobile/runtime';
 import { normalizeLanguage } from '../utils/locale';
 import { isSelfHandledAuthRequest } from './authRequestPolicy';
 
+interface ErrorEnvelope extends Record<string, unknown> {
+  detail?: unknown;
+  error?: unknown;
+  _detail_obj?: unknown;
+}
+
+interface FeatureErrorDetail {
+  error?: string;
+  required_plan?: string;
+}
+
+interface QuotaErrorDetail {
+  error?: string;
+  resource_type?: string;
+  current?: number;
+  limit?: number;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null
+);
+
+const extractMessage = (value: unknown): string | null => {
+  if (typeof value === 'string') return value;
+  if (!isRecord(value)) return null;
+
+  const message = value.message;
+  if (typeof message === 'string') return message;
+
+  const error = value.error;
+  if (typeof error === 'string') return error;
+
+  return JSON.stringify(value);
+};
+
+const getDetailObject = <T extends Record<string, unknown>>(data: unknown): T | null => {
+  if (!isRecord(data)) return null;
+  const detail = data._detail_obj;
+  return isRecord(detail) ? (detail as T) : null;
+};
+
 // ---------------------------------------------------------------------------
 // CSRF token — kept in-memory only (not localStorage)
 // ---------------------------------------------------------------------------
@@ -102,22 +143,22 @@ api.interceptors.request.use(
 // ---------------------------------------------------------------------------
 // Normalize error detail
 // ---------------------------------------------------------------------------
-function normalizeErrorDetail(data: any): void {
-  if (!data) return;
+function normalizeErrorDetail(data: unknown): void {
+  if (!isRecord(data)) return;
+  const envelope = data as ErrorEnvelope;
 
-  if (typeof data.detail === 'object' && data.detail !== null) {
-    data._detail_obj = data.detail;
-    data.detail = data.detail.message || data.detail.error || JSON.stringify(data.detail);
+  if (isRecord(envelope.detail)) {
+    envelope._detail_obj = envelope.detail;
+    envelope.detail = extractMessage(envelope.detail);
     return;
   }
 
   if (
-    (!data.detail || typeof data.detail !== 'string')
-    && typeof data.error === 'object'
-    && data.error !== null
+    (typeof envelope.detail !== 'string' || !envelope.detail)
+    && isRecord(envelope.error)
   ) {
-    data._detail_obj = data.error;
-    data.detail = data.error.message || data.error.error || JSON.stringify(data.error);
+    envelope._detail_obj = envelope.error;
+    envelope.detail = extractMessage(envelope.error);
   }
 }
 
@@ -236,7 +277,7 @@ api.interceptors.response.use(
           break;
         }
         case 403: {
-          const detailObj = (error.response.data as any)?._detail_obj;
+          const detailObj = getDetailObject<FeatureErrorDetail>(error.response.data);
           if (detailObj?.error === 'feature_not_available' || detailObj?.error === 'insufficient_plan') {
             console.warn(`Feature requires ${detailObj.required_plan} plan`);
           } else {
@@ -245,7 +286,7 @@ api.interceptors.response.use(
           break;
         }
         case 429: {
-          const quotaObj = (error.response.data as any)?._detail_obj;
+          const quotaObj = getDetailObject<QuotaErrorDetail>(error.response.data);
           if (quotaObj?.error === 'quota_exceeded') {
             console.warn(`Quota exceeded for ${quotaObj.resource_type}: ${quotaObj.current}/${quotaObj.limit}`);
           }
