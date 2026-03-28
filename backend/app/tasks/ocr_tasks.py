@@ -3584,12 +3584,15 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             )
 
     # Extract policy number from various OCR field names (use updated_ocr which has fixes)
+    # Also check invoice_number — insurance docs sometimes get classified as invoice first,
+    # so the polizze ends up in invoice_number
     _polizze_val = (
         updated_ocr.get("polizze_nr")
         or updated_ocr.get("polizze")
         or updated_ocr.get("polizzennummer")
         or updated_ocr.get("versicherungsnummer")
         or updated_ocr.get("policy_number")
+        or updated_ocr.get("invoice_number")
         or ""
     )
 

@@ -1,6 +1,14 @@
+import { isAxiosError } from 'axios';
 import { create } from 'zustand';
-import { Property, PropertyCreate, PropertyUpdate, PropertyDetailResponse, PropertyStatus, DisposalRequest } from '../types/property';
-import { propertyService } from '../services/propertyService';
+import {
+  DisposalRequest,
+  Property,
+  PropertyCreate,
+  PropertyDetailResponse,
+  PropertyStatus,
+  PropertyUpdate,
+} from '../types/property';
+import { getErrorMessage, propertyService } from '../services/propertyService';
 
 interface PropertyState {
   properties: Property[];
@@ -9,7 +17,6 @@ interface PropertyState {
   error: string | null;
   includeArchived: boolean;
 
-  // Actions
   fetchProperties: (includeArchived?: boolean) => Promise<void>;
   fetchProperty: (id: string) => Promise<void>;
   createProperty: (data: PropertyCreate) => Promise<Property>;
@@ -31,29 +38,24 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
   error: null,
   includeArchived: false,
 
-  /**
-   * Fetch all properties for the current user
-   */
   fetchProperties: async (includeArchived = false) => {
     set({ isLoading: true, error: null });
     try {
       const response = await propertyService.getProperties(includeArchived);
-      // Cast PropertyListItem[] to Property[] - the list items are a subset of full Property
       set({
         properties: response.properties as Property[],
         includeArchived: response.include_archived,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to fetch properties';
-      set({ error: errorMessage, isLoading: false });
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to fetch properties'),
+        isLoading: false,
+      });
       throw error;
     }
   },
 
-  /**
-   * Fetch a single property by ID with metrics
-   */
   fetchProperty: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -62,63 +64,55 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
         selectedProperty: property,
         isLoading: false,
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to fetch property';
-      set({ error: errorMessage, isLoading: false });
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to fetch property'),
+        isLoading: false,
+      });
       throw error;
     }
   },
 
-  /**
-   * Create a new property with optimistic update
-   */
   createProperty: async (data: PropertyCreate) => {
     set({ isLoading: true, error: null });
     try {
       const newProperty = await propertyService.createProperty(data);
-      
-      // Optimistic update: add to local state
       set((state) => ({
         properties: [newProperty, ...state.properties],
         isLoading: false,
       }));
-
       return newProperty;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to create property';
-      set({ error: errorMessage, isLoading: false });
+    } catch (error: unknown) {
+      set({
+        error: getErrorMessage(error, 'Failed to create property'),
+        isLoading: false,
+      });
       throw error;
     }
   },
 
-  /**
-   * Update an existing property with optimistic update
-   */
   updateProperty: async (id: string, data: PropertyUpdate) => {
     set({ isLoading: true, error: null });
-    
-    // Store original state for rollback
+
     const originalProperties = get().properties;
     const originalSelected = get().selectedProperty;
 
     try {
-      // Optimistic update: update local state immediately
       set((state) => ({
-        properties: state.properties.map((p) =>
-          p.id === id ? { ...p, ...data } : p
-        ),
+        properties: state.properties.map((property) => (
+          property.id === id ? { ...property, ...data } : property
+        )),
         selectedProperty: state.selectedProperty?.id === id
           ? { ...state.selectedProperty, ...data }
           : state.selectedProperty,
       }));
 
       const updatedProperty = await propertyService.updateProperty(id, data);
-      
-      // Update with actual server response
+
       set((state) => ({
-        properties: state.properties.map((p) =>
-          p.id === id ? updatedProperty : p
-        ),
+        properties: state.properties.map((property) => (
+          property.id === id ? updatedProperty : property
+        )),
         selectedProperty: state.selectedProperty?.id === id
           ? { ...state.selectedProperty, ...updatedProperty }
           : state.selectedProperty,
@@ -126,46 +120,41 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
       }));
 
       return updatedProperty;
-    } catch (error: any) {
-      // Rollback on error
+    } catch (error: unknown) {
       set({
         properties: originalProperties,
         selectedProperty: originalSelected,
-        error: error.response?.data?.detail || error.message || 'Failed to update property',
+        error: getErrorMessage(error, 'Failed to update property'),
         isLoading: false,
       });
       throw error;
     }
   },
 
-  /**
-   * Archive a property (mark as sold) with optimistic update
-   */
   archiveProperty: async (id: string, saleDate: string) => {
     set({ isLoading: true, error: null });
-    
-    // Store original state for rollback
+
     const originalProperties = get().properties;
     const originalSelected = get().selectedProperty;
 
     try {
-      // Optimistic update: mark as archived immediately
       set((state) => ({
-        properties: state.properties.map((p) =>
-          p.id === id ? { ...p, status: PropertyStatus.ARCHIVED, sale_date: saleDate } : p
-        ),
+        properties: state.properties.map((property) => (
+          property.id === id
+            ? { ...property, status: PropertyStatus.ARCHIVED, sale_date: saleDate }
+            : property
+        )),
         selectedProperty: state.selectedProperty?.id === id
           ? { ...state.selectedProperty, status: PropertyStatus.ARCHIVED, sale_date: saleDate }
           : state.selectedProperty,
       }));
 
       const archivedProperty = await propertyService.archiveProperty(id, saleDate);
-      
-      // Update with actual server response
+
       set((state) => ({
-        properties: state.properties.map((p) =>
-          p.id === id ? archivedProperty : p
-        ),
+        properties: state.properties.map((property) => (
+          property.id === id ? archivedProperty : property
+        )),
         selectedProperty: state.selectedProperty?.id === id
           ? { ...state.selectedProperty, ...archivedProperty }
           : state.selectedProperty,
@@ -173,21 +162,17 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
       }));
 
       return archivedProperty;
-    } catch (error: any) {
-      // Rollback on error
+    } catch (error: unknown) {
       set({
         properties: originalProperties,
         selectedProperty: originalSelected,
-        error: error.response?.data?.detail || error.message || 'Failed to archive property',
+        error: getErrorMessage(error, 'Failed to archive property'),
         isLoading: false,
       });
       throw error;
     }
   },
 
-  /**
-   * Dispose of a property/asset with a specific reason
-   */
   disposeProperty: async (id: string, data: DisposalRequest) => {
     set({ isLoading: true, error: null });
 
@@ -198,9 +183,9 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
       const disposedProperty = await propertyService.disposeProperty(id, data);
 
       set((state) => ({
-        properties: state.properties.map((p) =>
-          p.id === id ? disposedProperty : p
-        ),
+        properties: state.properties.map((property) => (
+          property.id === id ? disposedProperty : property
+        )),
         selectedProperty: state.selectedProperty?.id === id
           ? { ...state.selectedProperty, ...disposedProperty }
           : state.selectedProperty,
@@ -208,86 +193,62 @@ export const usePropertyStore = create<PropertyState>((set, get) => ({
       }));
 
       return disposedProperty;
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         properties: originalProperties,
         selectedProperty: originalSelected,
-        error: error.response?.data?.detail || error.message || 'Failed to dispose property',
+        error: getErrorMessage(error, 'Failed to dispose property'),
         isLoading: false,
       });
       throw error;
     }
   },
 
-  /**
-   * Delete a property with optimistic update
-   */
   deleteProperty: async (id: string) => {
     set({ isLoading: true, error: null });
-    
-    // Store original state for rollback
+
     const originalProperties = get().properties;
     const originalSelected = get().selectedProperty;
 
     try {
-      // Optimistic update: remove from local state immediately
       set((state) => ({
-        properties: state.properties.filter((p) => p.id !== id),
+        properties: state.properties.filter((property) => property.id !== id),
         selectedProperty: state.selectedProperty?.id === id ? null : state.selectedProperty,
       }));
 
       await propertyService.deleteProperty(id);
-      
       set({ isLoading: false });
-    } catch (error: any) {
-      // If 404, property is already gone — treat as success
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      if (isAxiosError(error) && error.response?.status === 404) {
         set({ isLoading: false });
         return;
       }
-      // Rollback on other errors
+
+      const message = getErrorMessage(error, 'Failed to delete property');
       set({
         properties: originalProperties,
         selectedProperty: originalSelected,
-        error: error.response?.data?.detail || error.message || 'Failed to delete property',
+        error: message,
         isLoading: false,
       });
       throw error;
     }
   },
 
-  /**
-   * Select a property by ID (loads from local state)
-   */
   selectProperty: (id: string | null) => {
     if (id === null) {
       set({ selectedProperty: null });
       return;
     }
 
-    const property = get().properties.find((p) => p.id === id);
+    const property = get().properties.find((candidate) => candidate.id === id);
     if (property) {
       set({ selectedProperty: property });
     }
   },
 
-  /**
-   * Set loading state
-   */
   setLoading: (isLoading: boolean) => set({ isLoading }),
-
-  /**
-   * Set error message
-   */
   setError: (error: string | null) => set({ error }),
-
-  /**
-   * Set includeArchived filter
-   */
   setIncludeArchived: (includeArchived: boolean) => set({ includeArchived }),
-
-  /**
-   * Clear error message
-   */
   clearError: () => set({ error: null }),
 }));

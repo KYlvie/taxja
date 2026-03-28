@@ -1,16 +1,19 @@
 import api from './api';
 import {
-  transactionTypeRequiresCategory,
+  ImportResult,
+  LineItem,
+  PaginatedResponse,
+  PaginationParams,
   Transaction,
   TransactionFilters,
   TransactionFormData,
-  ImportResult,
-  PaginationParams,
-  PaginatedResponse,
+  transactionTypeRequiresCategory,
 } from '../types/transaction';
 import { normalizeTransactionCategoryKey } from '../utils/formatTransactionCategoryLabel';
 
-export interface DeleteCheckResult {
+type UnknownRecord = Record<string, unknown>;
+
+interface DeleteCheckResult {
   can_delete: boolean;
   warning_type: 'document_only' | 'document_multi' | 'recurring' | null;
   document_id: number | null;
@@ -25,49 +28,116 @@ export interface BatchDeleteCheckResult {
   safe: number[];
 }
 
+interface TransactionLineItemRaw extends UnknownRecord {
+  amount: number | string;
+  quantity?: number | string;
+  category?: string;
+  vat_rate?: number | string | null;
+  vat_amount?: number | string | null;
+  vat_recoverable_amount?: number | string | null;
+  classification_confidence?: number | string | null;
+}
+
+interface TransactionRaw extends UnknownRecord {
+  transaction_date?: string;
+  date?: string;
+  income_category?: string;
+  expense_category?: string;
+  category?: string;
+  amount: number | string;
+  line_items?: TransactionLineItemRaw[];
+  deductible_amount?: number | string | null;
+  non_deductible_amount?: number | string | null;
+}
+
+interface TransactionsListResponseRaw extends UnknownRecord {
+  transactions?: TransactionRaw[];
+  items?: TransactionRaw[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  available_years?: Array<number | string>;
+  needs_review_count?: number;
+}
+
+type TransactionUpdatePayload = Partial<TransactionFormData> & {
+  reviewed?: boolean;
+  locked?: boolean;
+  line_items?: LineItem[];
+  suppress_rule_learning?: boolean;
+};
+
+const mapLineItem = (lineItem: TransactionLineItemRaw): LineItem => ({
+  ...(lineItem as unknown as LineItem),
+  category: normalizeTransactionCategoryKey(lineItem.category) || undefined,
+  amount: Number(lineItem.amount),
+  quantity: Number(lineItem.quantity ?? 1),
+  vat_rate: lineItem.vat_rate != null ? Number(lineItem.vat_rate) : undefined,
+  vat_amount: lineItem.vat_amount != null ? Number(lineItem.vat_amount) : undefined,
+  vat_recoverable_amount: lineItem.vat_recoverable_amount != null
+    ? Number(lineItem.vat_recoverable_amount)
+    : undefined,
+  classification_confidence: lineItem.classification_confidence != null
+    ? Number(lineItem.classification_confidence)
+    : undefined,
+});
+
 /** Map backend transaction response to frontend Transaction type */
-function mapTransaction(raw: any): Transaction {
+function mapTransaction(raw: TransactionRaw): Transaction {
   return {
-    ...raw,
-    date: raw.transaction_date || raw.date,
+    ...(raw as unknown as Transaction),
+    date: raw.transaction_date || raw.date || '',
     category:
       normalizeTransactionCategoryKey(raw.income_category || raw.expense_category || raw.category) || undefined,
     amount: Number(raw.amount),
-    line_items: raw.line_items?.map((li: any) => ({
-      ...li,
-      category: normalizeTransactionCategoryKey(li.category) || undefined,
-      amount: Number(li.amount),
-      quantity: Number(li.quantity ?? 1),
-      vat_rate: li.vat_rate != null ? Number(li.vat_rate) : undefined,
-      vat_amount: li.vat_amount != null ? Number(li.vat_amount) : undefined,
-      vat_recoverable_amount: li.vat_recoverable_amount != null
-        ? Number(li.vat_recoverable_amount)
-        : undefined,
-      classification_confidence: li.classification_confidence != null ? Number(li.classification_confidence) : undefined,
-    })) || [],
+    line_items: raw.line_items?.map(mapLineItem) || [],
     deductible_amount: raw.deductible_amount != null ? Number(raw.deductible_amount) : undefined,
     non_deductible_amount: raw.non_deductible_amount != null ? Number(raw.non_deductible_amount) : undefined,
   };
 }
+
+const mapPayloadLineItems = (lineItems: LineItem[]): LineItem[] => (
+  lineItems.map((lineItem, idx) => ({
+    ...lineItem,
+    amount: Number(lineItem.amount),
+    quantity: Number(lineItem.quantity ?? 1),
+    vat_rate: lineItem.vat_rate != null ? Number(lineItem.vat_rate) : undefined,
+    vat_amount: lineItem.vat_amount != null ? Number(lineItem.vat_amount) : undefined,
+    vat_recoverable_amount: lineItem.vat_recoverable_amount != null
+      ? Number(lineItem.vat_recoverable_amount)
+      : undefined,
+    sort_order: lineItem.sort_order ?? idx,
+  }))
+);
+
+const mapTransactionFilterParams = (
+  filters?: TransactionFilters,
+  pagination?: PaginationParams
+): Record<string, unknown> => {
+  const params: Record<string, unknown> = { ...pagination };
+  if (!filters) return params;
+
+  if (filters.start_date) params.date_from = filters.start_date;
+  if (filters.end_date) params.date_to = filters.end_date;
+  if (filters.type) params.type = filters.type;
+  if (filters.search) params.search = filters.search;
+  if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
+  if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
+  if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
+
+  return params;
+};
 
 export const transactionService = {
   getAll: async (
     filters?: TransactionFilters,
     pagination?: PaginationParams
   ): Promise<PaginatedResponse<Transaction>> => {
-    // Map frontend filter names to backend query param names
-    const params: Record<string, any> = { ...pagination };
-    if (filters) {
-      if (filters.start_date) params.date_from = filters.start_date;
-      if (filters.end_date) params.date_to = filters.end_date;
-      if (filters.type) params.type = filters.type;
-      if (filters.search) params.search = filters.search;
-      if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
-      if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
-      if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
-    }
-    const response = await api.get('/transactions', { params });
-    const data = response.data;
+    const response = await api.get('/transactions', {
+      params: mapTransactionFilterParams(filters, pagination),
+    });
+    const data = response.data as TransactionsListResponseRaw;
     const rawItems = data.transactions || data.items || [];
     return {
       items: rawItems.map(mapTransaction),
@@ -76,7 +146,9 @@ export const transactionService = {
       page_size: data.page_size || 50,
       total_pages: data.total_pages || 0,
       available_years: Array.isArray(data.available_years)
-        ? data.available_years.map((year: number | string) => Number(year)).filter((year: number) => Number.isFinite(year))
+        ? data.available_years
+            .map((year) => Number(year))
+            .filter((year) => Number.isFinite(year))
         : [],
       needs_review_count: data.needs_review_count ?? 0,
     };
@@ -84,19 +156,18 @@ export const transactionService = {
 
   getById: async (id: number): Promise<Transaction> => {
     const response = await api.get(`/transactions/${id}`);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
   create: async (transaction: TransactionFormData): Promise<Transaction> => {
-    // Map frontend field names to backend schema
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       type: transaction.type,
       amount: Number(transaction.amount),
       transaction_date: transaction.date,
       description: transaction.description,
       document_id: transaction.document_id,
     };
-    // Backend expects income_category or expense_category, not generic "category"
+
     if (transactionTypeRequiresCategory(transaction.type) && transaction.category) {
       if (transaction.type === 'income') {
         payload.income_category = transaction.category;
@@ -104,24 +175,15 @@ export const transactionService = {
         payload.expense_category = transaction.category;
       }
     }
-    // Include property_id if provided
+
     if (transaction.property_id) {
       payload.property_id = transaction.property_id;
     }
+
     if (transaction.line_items) {
-      payload.line_items = transaction.line_items.map((lineItem, idx) => ({
-        ...lineItem,
-        amount: Number(lineItem.amount),
-        quantity: Number(lineItem.quantity ?? 1),
-        vat_rate: lineItem.vat_rate != null ? Number(lineItem.vat_rate) : undefined,
-        vat_amount: lineItem.vat_amount != null ? Number(lineItem.vat_amount) : undefined,
-        vat_recoverable_amount: lineItem.vat_recoverable_amount != null
-          ? Number(lineItem.vat_recoverable_amount)
-          : undefined,
-        sort_order: lineItem.sort_order ?? idx,
-      }));
+      payload.line_items = mapPayloadLineItems(transaction.line_items);
     }
-    // Recurring fields
+
     if (transaction.is_recurring) {
       payload.is_recurring = true;
       payload.recurring_frequency = transaction.recurring_frequency || 'monthly';
@@ -129,44 +191,32 @@ export const transactionService = {
       if (transaction.recurring_end_date) payload.recurring_end_date = transaction.recurring_end_date;
       if (transaction.recurring_day_of_month) payload.recurring_day_of_month = transaction.recurring_day_of_month;
     }
+
     const response = await api.post('/transactions', payload);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
-  update: async (
-    id: number,
-    transaction: Partial<TransactionFormData> & {
-      reviewed?: boolean;
-      locked?: boolean;
-      line_items?: any[];
-      suppress_rule_learning?: boolean;
-    }
-  ): Promise<Transaction> => {
-    const payload: Record<string, any> = { ...transaction };
-    // Map date -> transaction_date
-    if (payload.date) {
+  update: async (id: number, transaction: TransactionUpdatePayload): Promise<Transaction> => {
+    const payload: Record<string, unknown> = { ...transaction };
+
+    if (typeof payload.date === 'string' && payload.date) {
       payload.transaction_date = payload.date;
       delete payload.date;
     }
-    // Map amount to number
+
     if (payload.amount !== undefined) {
       payload.amount = Number(payload.amount);
     }
-    if (payload.line_items) {
-      payload.line_items = payload.line_items.map((lineItem: any, idx: number) => ({
-        ...lineItem,
-        amount: Number(lineItem.amount),
-        quantity: Number(lineItem.quantity ?? 1),
-        vat_rate: lineItem.vat_rate != null ? Number(lineItem.vat_rate) : undefined,
-        vat_amount: lineItem.vat_amount != null ? Number(lineItem.vat_amount) : undefined,
-        vat_recoverable_amount: lineItem.vat_recoverable_amount != null
-          ? Number(lineItem.vat_recoverable_amount)
-          : undefined,
-        sort_order: lineItem.sort_order ?? idx,
-      }));
+
+    if (Array.isArray(payload.line_items)) {
+      payload.line_items = mapPayloadLineItems(payload.line_items as LineItem[]);
     }
-    // Map category to income_category/expense_category
-    if (payload.category !== undefined && payload.type && transactionTypeRequiresCategory(payload.type)) {
+
+    if (
+      payload.category !== undefined &&
+      typeof payload.type === 'string' &&
+      transactionTypeRequiresCategory(payload.type)
+    ) {
       if (payload.type === 'income') {
         payload.income_category = payload.category;
       } else {
@@ -174,40 +224,42 @@ export const transactionService = {
       }
     }
     delete payload.category;
-    // Include property_id if provided (allow null to clear the link)
+
     if (payload.property_id !== undefined) {
       payload.property_id = payload.property_id || null;
     }
-    // Recurring fields
+
     if (payload.is_recurring !== undefined) {
       if (payload.is_recurring) {
         payload.recurring_frequency = payload.recurring_frequency || 'monthly';
-        payload.recurring_start_date = payload.recurring_start_date || payload.transaction_date || payload.date;
-        // Keep recurring_end_date and recurring_day_of_month if provided
+        payload.recurring_start_date =
+          payload.recurring_start_date || payload.transaction_date || payload.date;
       } else {
-        // Turning off recurring — clear recurring fields
         payload.recurring_frequency = null;
         payload.recurring_start_date = null;
         payload.recurring_end_date = null;
         payload.recurring_day_of_month = null;
       }
     }
+
     const response = await api.put(`/transactions/${id}`, payload);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
   deleteCheck: async (id: number): Promise<DeleteCheckResult> => {
     const response = await api.get(`/transactions/${id}/delete-check`);
-    return response.data;
+    return response.data as DeleteCheckResult;
   },
 
   delete: async (id: number, force?: boolean): Promise<void> => {
-    await api.delete(`/transactions/${id}`, { params: force ? { force: true } : undefined });
+    await api.delete(`/transactions/${id}`, {
+      params: force ? { force: true } : undefined,
+    });
   },
 
-  batchDelete: async (ids: number[], force?: boolean): Promise<any> => {
+  batchDelete: async (ids: number[], force?: boolean): Promise<BatchDeleteCheckResult | UnknownRecord> => {
     const response = await api.post('/transactions/batch-delete', { ids, force: force ?? false });
-    return response.data;
+    return response.data as BatchDeleteCheckResult | UnknownRecord;
   },
 
   importCSV: async (file: File): Promise<ImportResult> => {
@@ -218,57 +270,37 @@ export const transactionService = {
         'Content-Type': 'multipart/form-data',
       },
     });
-    return response.data;
+    return response.data as ImportResult;
   },
 
   pause: async (id: number): Promise<Transaction> => {
     const response = await api.post(`/transactions/${id}/pause`);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
   resume: async (id: number): Promise<Transaction> => {
     const response = await api.post(`/transactions/${id}/resume`);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
   markReviewed: async (id: number): Promise<Transaction> => {
     const response = await api.post(`/transactions/${id}/review`);
-    return mapTransaction(response.data);
+    return mapTransaction(response.data as TransactionRaw);
   },
 
   exportCSV: async (filters?: TransactionFilters): Promise<Blob> => {
-    const params: Record<string, any> = {};
-    if (filters) {
-      if (filters.start_date) params.date_from = filters.start_date;
-      if (filters.end_date) params.date_to = filters.end_date;
-      if (filters.type) params.type = filters.type;
-      if (filters.search) params.search = filters.search;
-      if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
-      if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
-      if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
-    }
     const response = await api.get('/transactions/export', {
-      params,
+      params: mapTransactionFilterParams(filters),
       responseType: 'blob',
     });
-    return response.data;
+    return response.data as Blob;
   },
 
   exportPDF: async (filters?: TransactionFilters): Promise<Blob> => {
-    const params: Record<string, any> = {};
-    if (filters) {
-      if (filters.start_date) params.date_from = filters.start_date;
-      if (filters.end_date) params.date_to = filters.end_date;
-      if (filters.type) params.type = filters.type;
-      if (filters.search) params.search = filters.search;
-      if (filters.is_deductible !== undefined) params.is_deductible = filters.is_deductible;
-      if (filters.is_recurring !== undefined) params.is_recurring = filters.is_recurring;
-      if (filters.needs_review !== undefined) params.needs_review = filters.needs_review;
-    }
     const response = await api.get('/transactions/export/pdf', {
-      params,
+      params: mapTransactionFilterParams(filters),
       responseType: 'blob',
     });
-    return response.data;
+    return response.data as Blob;
   },
 };
