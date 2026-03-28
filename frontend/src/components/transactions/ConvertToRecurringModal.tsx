@@ -88,6 +88,7 @@ const ConvertToRecurringModal = ({
                 options={[
                   { value: 'monthly', label: t('recurring.frequency.monthly') },
                   { value: 'quarterly', label: t('recurring.frequency.quarterly') },
+                  { value: 'semi_annual', label: t('recurring.frequency.semi_annual') },
                   { value: 'annually', label: t('recurring.frequency.annually') },
                   { value: 'weekly', label: t('recurring.frequency.weekly') },
                 ]} />

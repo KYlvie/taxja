@@ -58,7 +58,8 @@ const normalizeToken = (value: string) => normalizeLine(value)
   .replace(/ü/g, 'ue')
   .replace(/ß/g, 'ss')
   .normalize('NFKD')
-  .replace(/[^\x00-\x7F]/g, '');
+  .replace(/\p{M}/gu, '')
+  .replace(/[^\p{ASCII}]/gu, '');
 
 const normalizeCounterparty = (value: string | null | undefined) => (value || '')
   .toLowerCase()

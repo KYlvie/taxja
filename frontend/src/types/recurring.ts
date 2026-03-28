@@ -1,6 +1,7 @@
 export enum RecurrenceFrequency {
   MONTHLY = 'monthly',
   QUARTERLY = 'quarterly',
+  SEMI_ANNUAL = 'semi_annual',
   ANNUALLY = 'annually',
   WEEKLY = 'weekly',
   BIWEEKLY = 'biweekly',

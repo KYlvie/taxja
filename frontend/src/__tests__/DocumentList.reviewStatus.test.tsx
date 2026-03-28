@@ -123,7 +123,7 @@ describe('DocumentList review status', () => {
       total: 1,
     });
 
-    const { container } = render(
+    render(
       <MemoryRouter>
         <DocumentList onSummaryChange={onSummaryChange} />
       </MemoryRouter>,
@@ -187,7 +187,7 @@ describe('DocumentList review status', () => {
       total: 2,
     });
 
-    const { container } = render(
+    render(
       <MemoryRouter>
         <DocumentList onSummaryChange={onSummaryChange} />
       </MemoryRouter>,

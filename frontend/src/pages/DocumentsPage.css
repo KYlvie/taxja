@@ -316,6 +316,20 @@
   gap: 4px;
 }
 
+.viewer-meta__type-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .viewer-pipeline-state {
   display: flex;
   flex-direction: column;

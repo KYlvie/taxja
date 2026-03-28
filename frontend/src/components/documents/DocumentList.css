@@ -418,7 +418,7 @@
 
 .document-table-head {
   display: grid;
-  grid-template-columns: 36px minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px minmax(140px, 1fr);
+  grid-template-columns: 36px minmax(290px, 2.5fr) minmax(148px, 1.15fr) 118px 96px 126px minmax(188px, 1.2fr) minmax(140px, 1fr);
   gap: 16px;
   padding: 14px 26px 12px;
   border-bottom: 1px solid var(--color-border-light);
@@ -437,7 +437,7 @@
 
 .document-row {
   display: grid;
-  grid-template-columns: 36px minmax(290px, 2.5fr) minmax(132px, 1.1fr) 118px 96px 126px 134px minmax(140px, 1fr);
+  grid-template-columns: 36px minmax(290px, 2.5fr) minmax(148px, 1.15fr) 118px 96px 126px minmax(188px, 1.2fr) minmax(140px, 1fr);
   gap: 16px;
   align-items: center;
   min-height: 72px;
@@ -519,6 +519,14 @@
   font-size: 0.76rem;
 }
 
+.document-mobile-type-pill,
+.document-card-type-pill {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .document-col {
   overflow: hidden;
   color: var(--color-text-secondary);
@@ -534,11 +542,14 @@
 .document-col-status {
   display: flex;
   align-items: center;
+  min-width: 0;
+  overflow: visible;
 }
 
 .document-type-pill {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   min-height: 30px;
   padding: 0 12px;
   border-radius: 999px;
@@ -546,18 +557,23 @@
   color: var(--color-primary);
   font-size: 0.78rem;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .document-status-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  max-width: 100%;
   min-height: 30px;
   padding: 0 12px;
   border-radius: 999px;
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .document-status-badge.ready {
@@ -802,6 +818,9 @@
 }
 
 .document-card-type {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
   color: var(--color-text-secondary);
   font-size: 0.86rem;
 }
@@ -844,7 +863,7 @@
 @media (max-width: 1240px) {
   .document-table-head,
   .document-row {
-    grid-template-columns: 36px minmax(280px, 2.5fr) minmax(124px, 1.1fr) 116px 120px 134px minmax(210px, 1.2fr);
+    grid-template-columns: 36px minmax(280px, 2.5fr) minmax(140px, 1.15fr) 116px 120px minmax(182px, 1.2fr) minmax(210px, 1.2fr);
   }
 
   .document-col-size,

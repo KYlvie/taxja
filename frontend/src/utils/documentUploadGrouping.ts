@@ -45,17 +45,6 @@ export const buildMergedEntry = (files: File[]): UploadEntry => ({
 });
 
 /**
- * Build individual upload entries (one per file).
- */
-export const buildIndividualEntries = (files: File[]): UploadEntry[] =>
-  files.map((file) => ({
-    displayFile: file,
-    sourceFiles: [file],
-    uploadMode: 'single' as const,
-    pageCount: 1,
-  }));
-
-/**
  * Original auto-grouping logic — used for non-staging paths
  * (single file, mixed file types, etc.)
  */

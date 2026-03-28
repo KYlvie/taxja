@@ -47,10 +47,6 @@ vi.mock('../components/documents/DocumentUpload', () => ({
   ),
 }));
 
-vi.mock('../components/dashboard/QuickActions', () => ({
-  QuickActions: () => <div data-testid="quick-actions">Quick actions</div>,
-}));
-
 vi.mock('../components/recurring/RecurringSuggestionsList', () => ({
   RecurringSuggestionsList: () => <div data-testid="recurring-suggestions">Recurring suggestions</div>,
 }));

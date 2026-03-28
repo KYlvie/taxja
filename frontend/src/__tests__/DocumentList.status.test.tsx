@@ -14,10 +14,10 @@ const { getDocuments } = vi.hoisted(() => ({
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: string | { defaultValue?: string }) =>
-      (typeof options === 'string' ? options : options?.defaultValue) ??
       (
         {
           'documents.status.transactionCreated': 'Transaction created',
+          'documents.status.contractProcessed': 'Contract processed',
           'documents.status.recognized': 'Recognized',
           'documents.groups.all': 'All documents',
           'documents.groups.expense': 'Expenses',
@@ -41,10 +41,14 @@ vi.mock('react-i18next', () => ({
           'documents.filters.clear': 'Clear filters',
           'documents.emptyGroup': 'Empty',
           'documents.types.receipt': 'Receipt',
+          'documents.types.versicherungsbestaetigung': 'Insurance confirmation',
+          'documents.typesShort.versicherungsbestaetigung': 'Insurance conf.',
           'documents.download': 'Download',
           'common.delete': 'Delete',
         } as Record<string, string>
-      )[key] ?? key,
+      )[key] ??
+      (typeof options === 'string' ? options : options?.defaultValue) ??
+      key,
     i18n: { language: 'en', resolvedLanguage: 'en' },
   }),
 }));
@@ -173,5 +177,57 @@ describe('DocumentList status', () => {
     });
 
     expect(screen.queryByText('Pending review')).not.toBeInTheDocument();
+  });
+
+  it('renders short localized type pills while keeping the full translated label as a tooltip', async () => {
+    getDocuments.mockResolvedValue({
+      documents: [
+        {
+          id: 120,
+          user_id: 5,
+          document_type: DocumentType.VERSICHERUNGSBESTAETIGUNG,
+          file_path: 'users/5/documents/insurance.pdf',
+          file_name: 'insurance.pdf',
+          file_size: 1024,
+          mime_type: 'application/pdf',
+          confidence_score: 1,
+          needs_review: false,
+          transaction_id: 1153,
+          ocr_result: { confirmed: true },
+          ocr_status: 'completed',
+          created_at: '2026-03-18T02:09:54.000Z',
+          uploaded_at: '2026-03-18T02:09:54.000Z',
+          updated_at: '2026-03-18T02:09:54.000Z',
+          processed_at: '2026-03-18T02:09:54.000Z',
+        },
+      ],
+      total: 1,
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <DocumentList />
+      </MemoryRouter>,
+    );
+
+    const yearToggle = await waitFor(() => {
+      const element = container.querySelector<HTMLButtonElement>('.document-year-header--toggle');
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    if (yearToggle.getAttribute('aria-expanded') === 'false') {
+      fireEvent.click(yearToggle);
+    }
+
+    const typePill = await waitFor(() => {
+      const element = container.querySelector<HTMLElement>('.document-type-pill[title="Insurance confirmation"]');
+      expect(element).not.toBeNull();
+      expect(element).toHaveTextContent('Insurance conf.');
+      return element!;
+    });
+    expect(typePill).toHaveAttribute('title', 'Insurance confirmation');
+
+    const statusBadge = screen.getByText('Contract processed');
+    expect(statusBadge).toHaveAttribute('title', 'Contract processed');
   });
 });

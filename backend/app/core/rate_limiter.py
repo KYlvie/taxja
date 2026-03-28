@@ -52,7 +52,7 @@ class RateLimiter:
     async def disconnect(self):
         """Disconnect from Redis"""
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.aclose()
     
     async def is_allowed(
         self,

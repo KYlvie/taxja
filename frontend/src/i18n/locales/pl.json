@@ -2991,6 +2991,7 @@
       "label": "Częstotliwość",
       "monthly": "Miesięczna",
       "quarterly": "Kwartalna",
+      "semi_annual": "Polroczna",
       "annually": "Roczna",
       "weekly": "Tygodniowa",
       "biweekly": "Dwutygodniowa"

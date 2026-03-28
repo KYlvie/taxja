@@ -2997,6 +2997,7 @@
       "label": "Ucestalost",
       "monthly": "Mjesecno",
       "quarterly": "Kvartalno",
+      "semi_annual": "Polugodisnje",
       "annually": "Godisnje",
       "weekly": "Sedmicno",
       "biweekly": "Dvosedmicno"

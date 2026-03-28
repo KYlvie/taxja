@@ -98,6 +98,30 @@ def fix_german_number_formats(data: dict) -> dict:
                 # e.g. 1.662 → 1662, 13.087 → 13087
                 if len(decimal_part) == 3 and len(integer_part) <= 2:
                     data[key] = float(f"{integer_part}{decimal_part}")
+                # 2 decimal digits + single-digit integer for AMOUNT fields →
+                # likely truncated German thousand separator where LLM dropped
+                # the last digit, e.g. 1.66 from "1.662,xx" should be ~1660
+                # Only apply to monetary amounts with single-digit integer part
+                # where the value is implausibly small (< 10 EUR)
+                elif (
+                    key in _AMOUNT_FIELDS
+                    and len(decimal_part) == 2
+                    and len(integer_part) == 1
+                    and fval < 10
+                ):
+                    candidate = float(f"{integer_part}{decimal_part}0")
+                    if candidate >= 100:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "fix_german_number_formats: %s=%s looks like truncated "
+                            "German thousands → corrected to %s (approximate)",
+                            key, fval, candidate,
+                        )
+                        data[key] = candidate
+                        # Flag as approximate so UI can show warning
+                        data.setdefault("_suspicious_fields", [])
+                        if key not in data["_suspicious_fields"]:
+                            data["_suspicious_fields"].append(key)
 
     return data
 

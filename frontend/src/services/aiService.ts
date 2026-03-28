@@ -21,7 +21,27 @@ export interface ContextData {
   page?: string;
   documentId?: string;
   transactionId?: string;
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+interface ChatHistoryMessage {
+  id: string | number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at?: string;
+  timestamp?: string;
+}
+
+interface TaxSimulationSnapshot {
+  currentTax: string | number;
+  simulatedTax: string | number;
+  taxDifference: string | number;
+  currentNetIncome: string | number;
+  simulatedNetIncome: string | number;
+}
+
+interface SuggestionsContext {
+  simulationResult?: TaxSimulationSnapshot;
 }
 
 class AIService {
@@ -72,9 +92,9 @@ class AIService {
   async getChatHistory(): Promise<ChatMessage[]> {
     const response = await api.get('/ai/history');
     // Backend returns { messages: [...], total_count, has_more }
-    const data = response.data;
-    const messages = data.messages || data;
-    return messages.map((msg: any) => ({
+    const data = response.data as { messages?: ChatHistoryMessage[] } | ChatHistoryMessage[];
+    const messages = Array.isArray(data) ? data : (data.messages || []);
+    return messages.map((msg) => ({
       id: String(msg.id),
       role: msg.role,
       content: msg.content,
@@ -87,12 +107,13 @@ class AIService {
   }
 
   async askAboutDocument(_documentId: string, question?: string): Promise<ChatResponse> {
+    void _documentId;
     return this.sendMessage(
       question || 'Explain this document and its deductibility'
     );
   }
 
-  async askForSuggestions(currentTaxData: any): Promise<ChatResponse> {
+  async askForSuggestions(currentTaxData?: SuggestionsContext | null): Promise<ChatResponse> {
     const lang = this.getLanguage();
     const parts: string[] = [];
 
@@ -113,7 +134,9 @@ class AIService {
     return this.sendMessage(prompts[lang] || prompts.de);
   }
 
-  async explainOCRResult(_documentId: string, _ocrData: any): Promise<ChatResponse> {
+  async explainOCRResult(_documentId: string, _ocrData: unknown): Promise<ChatResponse> {
+    void _documentId;
+    void _ocrData;
     return this.sendMessage(
       'Explain these OCR results and which items are deductible'
     );

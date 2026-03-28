@@ -53,13 +53,6 @@ export const formatDate = (
   return new Intl.DateTimeFormat(getLocaleForLanguage(language), options).format(date);
 };
 
-export const formatNumber = (
-  value: number,
-  language?: string | null,
-  options?: Intl.NumberFormatOptions
-): string =>
-  new Intl.NumberFormat(getLocaleForLanguage(language), options).format(value);
-
 export const getShortMonthLabels = (language?: string | null): string[] =>
   Array.from({ length: 12 }, (_, month) =>
     new Intl.DateTimeFormat(getLocaleForLanguage(language), {

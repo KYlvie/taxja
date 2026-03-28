@@ -2625,6 +2625,7 @@
       "label": "频率",
       "monthly": "每月",
       "quarterly": "每季度",
+      "semi_annual": "每半年",
       "weekly": "每周",
       "annually": "每年",
       "biweekly": "每两周"

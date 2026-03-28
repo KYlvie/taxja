@@ -3293,7 +3293,7 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     Returns dict with suggestion keys to merge into ocr_result.
     """
     from decimal import Decimal
-    from datetime import datetime as dt
+    from datetime import datetime as dt, date
 
     updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
     updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
@@ -3354,7 +3354,7 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         _freq_text = str(ocr_data.get("raw_text") or "")[:2000].lower()
         _freq_text += " " + str(getattr(document, 'raw_text', '') or "")[:2000].lower()
         _freq_text += " " + str(ocr_data.get("description") or "").lower()
-        if any(m in _freq_text for m in ("monatlich", "monats", "sepa-lastschrift", "pro monat", "_sepa_", "sepa abbuchung")):
+        if any(m in _freq_text for m in ("monatlich", "monats", "pro monat")):
             frequency = "monthly"
         elif any(m in _freq_text for m in ("vierteljährlich", "vierteljaehrlich", "quartalsweise", "quartal")):
             frequency = "quarterly"
@@ -3469,7 +3469,9 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         else:
             start_date = sd_raw
     if not start_date:
-        start_date = document.uploaded_at.date()
+        # Don't fallback to upload date — it corrupts deductibility checks
+        # for old contracts uploaded recently. Leave as None.
+        start_date = None
 
     # Parse end_date
     ed_raw = ocr_data.get("end_date") or ocr_data.get("vertragsende")
@@ -3522,6 +3524,39 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     }
     is_deductible, deduction_reason = _DEDUCTIBILITY_MAP.get(insurance_subtype, (False, ""))
 
+    # Austrian tax law: Topfsonderausgaben (§ 18 Abs 3 Z 2 EStG)
+    # - Contracts signed BEFORE 01.01.2016 were deductible until end of 2020
+    # - From tax year 2021 onwards, NO private KV/Unfall/Leben is deductible
+    # - Since we currently process tax years >= 2021, mark ALL as non-deductible
+    if insurance_subtype in (
+        "private_krankenversicherung", "unfallversicherung", "lebensversicherung"
+    ):
+        _tax_year = int(ocr_data.get("tax_year") or ocr_data.get("document_year") or 2024)
+        if _tax_year >= 2021:
+            # Transition period expired — ALL such contracts non-deductible
+            is_deductible = False
+            deduction_reason = (
+                "Topfsonderausgaben ab 2021 nicht mehr absetzbar "
+                "(§ 18 Abs 3 Z 2 EStG — Übergangsregelung ausgelaufen)"
+            )
+        elif start_date and start_date >= date(2016, 1, 1):
+            # Pre-2021 tax years: only Neuverträge ab 2016 non-deductible
+            is_deductible = False
+            deduction_reason = (
+                "Neuvertrag ab 01.01.2016 — Topfsonderausgaben nicht absetzbar "
+                "(§ 18 Abs 3 Z 2 EStG)"
+            )
+
+    # Extract policy number from various OCR field names
+    _polizze_val = (
+        ocr_data.get("polizze_nr")
+        or ocr_data.get("polizze")
+        or ocr_data.get("polizzennummer")
+        or ocr_data.get("versicherungsnummer")
+        or ocr_data.get("policy_number")
+        or ""
+    )
+
     suggestion = {
         "type": "create_insurance_recurring",
         "status": "pending",
@@ -3533,6 +3568,7 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             "insurer_name": insurer_name,
             "is_deductible": is_deductible,
             "deduction_reason": deduction_reason,
+            "polizze_nr": _polizze_val or None,
             "linked_property_id": linked_property_id,
             "linked_asset_id": linked_asset_id,
             "start_date": start_date.isoformat() if start_date else None,
@@ -3560,8 +3596,8 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     updated_ocr["zahlungsfrequenz"] = frequency
     updated_ocr["is_deductible"] = is_deductible
     updated_ocr["deduction_reason"] = deduction_reason
-    if ocr_data.get("polizze") or ocr_data.get("versicherungsnummer"):
-        updated_ocr["polizze"] = ocr_data.get("polizze") or ocr_data.get("versicherungsnummer") or ""
+    if _polizze_val:
+        updated_ocr["polizze"] = _polizze_val
 
     # Save suggestion into document's ocr_result
     updated_ocr["import_suggestion"] = suggestion
@@ -3609,6 +3645,7 @@ def create_insurance_recurring_from_suggestion(db, document, suggestion_data: di
     freq_map = {
         "monthly": RecurrenceFrequency.MONTHLY,
         "quarterly": RecurrenceFrequency.QUARTERLY,
+        "semi_annual": RecurrenceFrequency.SEMI_ANNUAL,
         "annually": RecurrenceFrequency.ANNUALLY,
     }
     frequency = freq_map.get(freq_str, RecurrenceFrequency.ANNUALLY)

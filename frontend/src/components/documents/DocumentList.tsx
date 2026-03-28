@@ -15,6 +15,10 @@ import { Document, DocumentType } from '../../types/document';
 import { canReprocessDocument } from '../../utils/documentReprocessing';
 import { saveBlobWithNativeShare } from '../../mobile/files';
 import { getLocaleForLanguage } from '../../utils/locale';
+import {
+  getDocumentTypeLabel as getFullDocumentTypeLabel,
+  getDocumentTypeShortLabel as getShortDocumentTypeLabel,
+} from '../../utils/documentTypeLabels';
 import DateInput from '../common/DateInput';
 import DeleteDocumentDialog from './DeleteDocumentDialog';
 import './DocumentList.css';
@@ -757,7 +761,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   const formatConfidence = (score?: number | null) =>
     score == null ? '-' : `${(score * 100).toFixed(0)}%`;
 
-  const getDocumentTypeLabel = (type: DocumentType) => t(`documents.types.${type}`);
+  const getDocumentTypeLabel = (type: DocumentType | string) =>
+    getFullDocumentTypeLabel(t, type);
+  const getDocumentTypeShortLabel = (type: DocumentType | string) =>
+    getShortDocumentTypeLabel(t, type);
 
   const getDocumentIconLabel = (document: Document) => {
     const mimeType = document.mime_type || '';
@@ -779,16 +786,16 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       return { label: t('documents.status.processing', 'Processing'), tone: 'processing' };
     }
 
-    // Transaction created takes priority over pending review
+    if (isPendingReview(doc)) {
+      return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
+    }
+
+    // Transaction created takes priority only after pending-review states are cleared.
     const docType = doc.document_type;
     const receiptTypes = ['receipt', 'invoice', 'credit_note', 'gutschrift', 'proforma_invoice', 'delivery_note',
       'kirchenbeitrag', 'spendenbestaetigung', 'fortbildungskosten', 'svs_notice', 'other'];
     if (receiptTypes.includes(docType) && hasTransaction) {
       return { label: t('documents.status.transactionCreated', 'Transaction created'), tone: 'linked' };
-    }
-
-    if (isPendingReview(doc)) {
-      return { label: t('documents.status.pendingReview', 'Pending review'), tone: 'pending' };
     }
 
     // Confirmed states — vary by document type
@@ -892,7 +899,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
           />
         </div>
         <div className="document-card-icon">{getDocumentIconLabel(document)}</div>
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
+        <span
+          className={`document-status-badge ${getStatusTone(document)}`}
+          title={getStatusLabel(document)}
+        >
           {getStatusLabel(document)}
         </span>
       </div>
@@ -900,7 +910,13 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       <div className="document-card-body">
         <div className="document-name">{document.file_name}</div>
         <div className="document-card-type">
-          {getDocumentTypeLabel(document.document_type)}
+          <span
+            className="document-card-type-pill"
+            title={getDocumentTypeLabel(document.document_type)}
+            aria-label={getDocumentTypeLabel(document.document_type)}
+          >
+            {getDocumentTypeShortLabel(document.document_type)}
+          </span>
         </div>
       </div>
 
@@ -981,7 +997,13 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
         <div className="document-name-stack">
           <div className="document-name">{document.file_name}</div>
           <div className="document-mobile-meta">
-            <span>{getDocumentTypeLabel(document.document_type)}</span>
+            <span
+              className="document-mobile-type-pill"
+              title={getDocumentTypeLabel(document.document_type)}
+              aria-label={getDocumentTypeLabel(document.document_type)}
+            >
+              {getDocumentTypeShortLabel(document.document_type)}
+            </span>
             <span>{formatDate(document.created_at)}</span>
             <span>{formatFileSize(document.file_size)}</span>
             <span>{formatConfidence(document.confidence_score)}</span>
@@ -990,8 +1012,12 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       </div>
 
       <div className="document-col document-col-type">
-        <span className="document-type-pill">
-          {getDocumentTypeLabel(document.document_type)}
+        <span
+          className="document-type-pill"
+          title={getDocumentTypeLabel(document.document_type)}
+          aria-label={getDocumentTypeLabel(document.document_type)}
+        >
+          {getDocumentTypeShortLabel(document.document_type)}
         </span>
       </div>
 
@@ -1002,7 +1028,10 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
       </div>
 
       <div className="document-col document-col-status">
-        <span className={`document-status-badge ${getStatusTone(document)}`}>
+        <span
+          className={`document-status-badge ${getStatusTone(document)}`}
+          title={getStatusLabel(document)}
+        >
           {getStatusLabel(document)}
         </span>
       </div>
@@ -1178,7 +1207,11 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
                 size="sm"
                 options={Object.values(DocumentType)
                   .filter((v) => v !== DocumentType.UNKNOWN)
-                  .map((v) => ({ value: v, label: t(`documents.types.${v}`) }))}
+                  .map((v) => ({
+                    value: v,
+                    label: getDocumentTypeShortLabel(v),
+                    title: getDocumentTypeLabel(v),
+                  }))}
               />
             </div>
 

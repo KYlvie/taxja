@@ -2991,6 +2991,7 @@
       "label": "Siklik",
       "monthly": "Aylik",
       "quarterly": "Uc Aylik",
+      "semi_annual": "Alti Aylik",
       "annually": "Yillik",
       "weekly": "Haftalik",
       "biweekly": "Iki Haftada Bir"

@@ -399,6 +399,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
         aria-label={ariaLabel}
         disabled={disabled}
         className={triggerCls}
+        title={selectedOption?.title ?? selectedOption?.label ?? placeholder}
         onClick={() => (isOpen ? close() : open())}
         onKeyDown={handleKeyDown}
       >

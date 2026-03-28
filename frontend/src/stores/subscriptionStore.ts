@@ -492,7 +492,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         try {
           const balance = await apiCall('/credits/balance');
           set({ creditBalance: balance, creditLoading: false });
-        } catch (error) {
+        } catch {
           set({ creditLoading: false });
         }
       },
@@ -502,7 +502,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         try {
           const history = await apiCall(`/credits/history?limit=${limit}&offset=${offset}`);
           set({ creditHistory: history, creditLoading: false });
-        } catch (error) {
+        } catch {
           set({ creditLoading: false });
         }
       },
@@ -511,7 +511,7 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         try {
           const costs = await apiCall('/credits/costs');
           set({ creditCosts: costs });
-        } catch (error) {
+        } catch {
           // silently fail
         }
       },

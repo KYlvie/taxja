@@ -13,6 +13,7 @@ class RecurrenceFrequency(str, Enum):
     """Recurrence frequency enumeration"""
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
+    SEMI_ANNUAL = "semi_annual"
     ANNUALLY = "annually"
     WEEKLY = "weekly"
     BIWEEKLY = "biweekly"
@@ -196,6 +197,17 @@ class RecurringTransaction(Base):
             # Add 3 months
             year = from_date.year
             month = from_date.month + 3
+            while month > 12:
+                month -= 12
+                year += 1
+            target_day = self.day_of_month or from_date.day
+            max_day = calendar.monthrange(year, month)[1]
+            day = min(target_day, max_day)
+            return date(year, month, day)
+        elif self.frequency == RecurrenceFrequency.SEMI_ANNUAL:
+            # Add 6 months
+            year = from_date.year
+            month = from_date.month + 6
             while month > 12:
                 month -= 12
                 year += 1

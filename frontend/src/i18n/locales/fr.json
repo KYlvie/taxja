@@ -2991,6 +2991,7 @@
       "label": "Fréquence",
       "monthly": "Mensuel",
       "quarterly": "Trimestriel",
+      "semi_annual": "Semestriel",
       "annually": "Annuel",
       "weekly": "Hebdomadaire",
       "biweekly": "Bimensuel"

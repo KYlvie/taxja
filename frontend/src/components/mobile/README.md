@@ -26,48 +26,6 @@ import { CameraCapture } from '@/components/mobile/CameraCapture';
 />
 ```
 
-### MobileDashboard
-
-Mobile-optimized dashboard with card-based layout.
-
-**Features:**
-- Quick stats cards
-- Large touch targets
-- Quick action buttons
-- Upcoming deadlines
-- Refund estimate highlight
-- Responsive grid layout
-
-**Usage:**
-```tsx
-import { MobileDashboard } from '@/components/mobile/MobileDashboard';
-
-<MobileDashboard
-  summary={dashboardSummary}
-  upcomingDeadlines={deadlines}
-/>
-```
-
-### MobileNavigation
-
-Bottom navigation bar for mobile devices.
-
-**Features:**
-- Fixed bottom position
-- 5 main navigation items
-- Floating action button (FAB)
-- Active state indicators
-- Safe area support (iOS notch)
-- Landscape mode adjustments
-
-**Usage:**
-```tsx
-import { MobileNavigation } from '@/components/mobile/MobileNavigation';
-
-// Add to App.tsx
-{isMobile && <MobileNavigation />}
-```
-
 ## Hooks
 
 ### useTouchGestures

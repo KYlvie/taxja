@@ -2997,6 +2997,7 @@
       "label": "Gyakoriság",
       "monthly": "Havi",
       "quarterly": "Negyedéves",
+      "semi_annual": "Féléves",
       "annually": "Éves",
       "weekly": "Heti",
       "biweekly": "Kéthetente"

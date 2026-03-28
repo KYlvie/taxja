@@ -3013,6 +3013,7 @@
       "label": "Frequency",
       "monthly": "Monthly",
       "quarterly": "Quarterly",
+      "semi_annual": "Semi-annually",
       "annually": "Annually",
       "weekly": "Weekly",
       "biweekly": "Biweekly"

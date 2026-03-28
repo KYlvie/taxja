@@ -10,6 +10,10 @@ import Select from '../components/common/Select';
 import RobotMascot from '../components/common/RobotMascot';
 import DocumentUpload from '../components/documents/DocumentUpload';
 import { translateDeductionReason } from '../utils/translateDeductionReason';
+import {
+  getDocumentTypeLabel as getFullDocumentTypeLabel,
+  getDocumentTypeShortLabel as getShortDocumentTypeLabel,
+} from '../utils/documentTypeLabels';
 import DocumentList, { type DocumentListSummary } from '../components/documents/DocumentList';
 import OCRReview from '../components/documents/OCRReview';
 import BankStatementWorkbench from '../components/documents/BankStatementWorkbench';
@@ -2640,6 +2644,8 @@ const isReceiptOrInvoice = (doc: Document) =>
             : null,
         ].filter(Boolean)
       : [];
+    const viewerDocumentTypeLabel = getFullDocumentTypeLabel(t, viewingDocument.document_type);
+    const viewerDocumentTypeShortLabel = getShortDocumentTypeLabel(t, viewingDocument.document_type);
 
     return (
       <div className="documents-page">
@@ -2668,7 +2674,13 @@ const isReceiptOrInvoice = (doc: Document) =>
             </div>
           </div>
           <div className="viewer-meta">
-            <span>{t(`documents.types.${viewingDocument.document_type}`)}</span>
+            <span
+              className="viewer-meta__type-badge"
+              title={viewerDocumentTypeLabel}
+              aria-label={viewerDocumentTypeLabel}
+            >
+              {viewerDocumentTypeShortLabel}
+            </span>
             <span>{new Date(viewingDocument.created_at).toLocaleDateString(getLocaleForLanguage(i18n.language))}</span>
             {viewingDocument.confidence_score != null && (
               <span>{t('documents.confidence')}: {(viewingDocument.confidence_score * 100).toFixed(0)}%</span>

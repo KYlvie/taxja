@@ -1,8 +1,51 @@
 import type { TFunction } from 'i18next';
 
-const STRIP_EDGE_PUNCTUATION = /^[\s"'`\[\](){}<>]+|[\s"'`\[\](){}<>]+$/g;
-const SURROUNDED_FIELD_PATTERN =
-  /(["'“”‘’「」『』【】\[\](){}<>])([A-Za-z][A-Za-z0-9_ ]{1,80})(["'“”‘’「」『』【】\[\](){}<>])/g;
+const EDGE_PUNCTUATION_CLASS = [
+  '\\s',
+  '"',
+  "'",
+  '`',
+  '\\[',
+  '\\]',
+  '(',
+  ')',
+  '{',
+  '}',
+  '<',
+  '>',
+].join('');
+
+const QUOTED_FIELD_CLASS = [
+  '"',
+  "'",
+  'â€œ',
+  'â€\u009d',
+  'â€˜',
+  'â€™',
+  'ã€Œ',
+  'ã€\u008d',
+  'ã€Ž',
+  'ã€\u008f',
+  'ã€\u0090',
+  'ã€\u0091',
+  '\\[',
+  '\\]',
+  '(',
+  ')',
+  '{',
+  '}',
+  '<',
+  '>',
+].join('');
+
+const STRIP_EDGE_PUNCTUATION = new RegExp(
+  `^[${EDGE_PUNCTUATION_CLASS}]+|[${EDGE_PUNCTUATION_CLASS}]+$`,
+  'g',
+);
+const SURROUNDED_FIELD_PATTERN = new RegExp(
+  `([${QUOTED_FIELD_CLASS}])([A-Za-z][A-Za-z0-9_ ]{1,80})([${QUOTED_FIELD_CLASS}])`,
+  'g',
+);
 const MISSING_FIELDS_PATTERN =
   /\b(Missing:\s*)([A-Za-z][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z][A-Za-z0-9_]*)+)/g;
 

@@ -108,6 +108,7 @@ export const documentService = {
     files: File[],
     _onProgress?: (fileIndex: number, progress: number) => void
   ): Promise<Document[]> => {
+    void _onProgress;
     const formData = new FormData();
     files.forEach((file) => {
       formData.append('files', file);
