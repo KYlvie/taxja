@@ -4091,6 +4091,7 @@
     "per_credit": "kredi basina",
     "toggle_overage": "Asimi degistir",
     "overage_this_period": "Bu donemin asimi",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "kredi",
     "unpaid_overage": "Odenmemis asim ucretleriniz var. Asimi kullanmaya devam etmek icin lutfen odemeyi tamamlayin.",
     "estimated_usage": "Yaklasik kalan",

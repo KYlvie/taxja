@@ -3264,6 +3264,7 @@
     "per_credit": "per credit",
     "toggle_overage": "Toggle overage",
     "overage_this_period": "This period's overage",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "credits",
     "unpaid_overage": "You have unpaid overage charges. Please settle to continue using overage.",
     "estimated_usage": "Approximate remaining",

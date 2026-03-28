@@ -3292,6 +3292,7 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     Does NOT create any records — only stores suggestion data for user confirmation.
     Returns dict with suggestion keys to merge into ocr_result.
     """
+    logger.info(">>> ENTERING _build_versicherung_suggestion for doc %s", document.id)
     from decimal import Decimal
     from datetime import datetime as dt, date
 
@@ -3326,11 +3327,14 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     _INSURANCE_REQUIRED_FIELDS = ["polizze_nr", "versicherungsnehmer", "vertragsbeginn", "praemie"]
 
     def _has_complete_data(d: dict) -> bool:
+        praemie_val = d.get("praemie")
+        # praemie < 50 is suspicious (likely a date misparse like 15.01)
+        praemie_ok = praemie_val and (isinstance(praemie_val, (int, float)) and praemie_val >= 50)
         return all([
             d.get("polizze_nr") or d.get("polizze"),
             d.get("versicherungsnehmer"),
             d.get("vertragsbeginn"),
-            d.get("praemie"),
+            praemie_ok,
         ])
 
     def _merge_extracted(target: dict, source: dict) -> None:
@@ -3340,6 +3344,14 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         for k, v in source.items():
             if v is not None and v != "" and v != 0:
                 target[k] = v
+
+    logger.info(">>> _has_complete_data check: polizze=%s, vnehmer=%s, vbeginn=%s, praemie=%s",
+        ocr_data.get("polizze_nr") or ocr_data.get("polizze"),
+        ocr_data.get("versicherungsnehmer"),
+        ocr_data.get("vertragsbeginn"),
+        ocr_data.get("praemie"),
+    )
+    logger.info(">>> _has_complete_data result: %s", _has_complete_data(ocr_data))
 
     if not _has_complete_data(ocr_data):
         try:

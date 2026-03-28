@@ -4091,6 +4091,7 @@
     "per_credit": "par crédit",
     "toggle_overage": "Activer/désactiver le dépassement",
     "overage_this_period": "Dépassement de cette période",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "crédits",
     "unpaid_overage": "Vous avez des frais de dépassement impayés. Veuillez les régler pour continuer à utiliser le dépassement.",
     "estimated_usage": "Estimation restante",

@@ -4101,6 +4101,7 @@
     "per_credit": "kreditenként",
     "toggle_overage": "Túlhasználat váltása",
     "overage_this_period": "Időszaki túlhasználat",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "kredit",
     "unpaid_overage": "Kifizetetlen túlhasználati díja van. Kérjük, rendezze a túlhasználat folytatásához.",
     "estimated_usage": "Hozzávetőleges fennmaradó",

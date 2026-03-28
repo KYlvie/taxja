@@ -19,6 +19,14 @@ interface PropertyListProps {
   onShowArchivedChange?: (showArchived: boolean) => void;
 }
 
+const getPropertyAssetType = (property: Property): string => property.asset_type || 'real_estate';
+
+const isRealEstateAsset = (property: Property): boolean => getPropertyAssetType(property) === 'real_estate';
+
+const getPropertyDisplayName = (property: Property): string => (
+  isRealEstateAsset(property) ? property.address : property.name || property.address
+);
+
 const PropertyList = ({
   properties,
   onEdit,
@@ -196,7 +204,7 @@ const PropertyList = ({
     : properties.filter((p) => p.status === PropertyStatus.ACTIVE);
 
   const getAssetIcon = (property: Property): { icon: LucideIcon; tone: FuturisticIconTone } => {
-    const at = (property as any).asset_type || 'real_estate';
+    const at = getPropertyAssetType(property);
     const icons: Record<string, { icon: LucideIcon; tone: FuturisticIconTone }> = {
       real_estate: { icon: House, tone: 'cyan' },
       vehicle: { icon: Car, tone: 'emerald' },
@@ -213,8 +221,12 @@ const PropertyList = ({
   };
 
   const isRealEstate = (property: Property): boolean => {
-    const at = (property as any).asset_type;
-    return !at || at === 'real_estate';
+    return isRealEstateAsset(property);
+  };
+
+  const getAssetTypeLabel = (property: Property): string => {
+    const assetType = getPropertyAssetType(property);
+    return String(t(`properties.assetTypes.${assetType}`, assetType));
   };
 
   if (isLoading) {
@@ -320,7 +332,7 @@ const PropertyList = ({
                 <div className="property-address">
                   <h3>
                     <FuturisticIcon icon={assetIcon.icon} tone={assetIcon.tone} size="sm" className="property-title-icon" />
-                    <span>{isRE ? property.address : ((property as any).name || property.address)}</span>
+                    <span>{getPropertyDisplayName(property)}</span>
                   </h3>
                   <div className="property-badges">
                     <span className={`status-badge ${property.status}`}>
@@ -332,9 +344,7 @@ const PropertyList = ({
                       </span>
                     ) : (
                       <span className="type-badge other-asset">
-                        {String(
-                          t(`properties.assetTypes.${(property as any).asset_type}`, (property as any).asset_type)
-                        )}
+                        {getAssetTypeLabel(property)}
                       </span>
                     )}
                     {property.purchase_price <= 0.01 && (
@@ -473,7 +483,7 @@ const PropertyList = ({
                     <div className="address-content">
                       <strong className="property-table-title">
                         <FuturisticIcon icon={assetIcon.icon} tone={assetIcon.tone} size="xs" />
-                        <span>{isRE ? property.address : ((property as any).name || property.address)}</span>
+                        <span>{getPropertyDisplayName(property)}</span>
                       </strong>
                       {property.sale_date && (
                         <span className="sale-date-small">
@@ -489,9 +499,7 @@ const PropertyList = ({
                       </span>
                     ) : (
                       <span className="type-badge other-asset">
-                        {String(
-                          t(`properties.assetTypes.${(property as any).asset_type}`, (property as any).asset_type)
-                        )}
+                        {getAssetTypeLabel(property)}
                       </span>
                     )}
                   </td>

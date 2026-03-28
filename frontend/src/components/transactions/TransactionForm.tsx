@@ -54,6 +54,12 @@ interface TransactionFormProps {
   onCancel: () => void;
 }
 
+type TransactionSubmitPayload = TransactionFormData & {
+  reviewed?: boolean;
+  locked?: boolean;
+  line_items?: LineItem[];
+};
+
 const TransactionForm = ({
   transaction,
   onSubmit,
@@ -236,7 +242,7 @@ const TransactionForm = ({
   const activeProperties = properties.filter(p => p.status === 'active');
 
   // ── Line item helpers ─────────────────────────────────────────────
-  const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
+  const updateLineItem = <K extends keyof LineItem>(index: number, field: K, value: LineItem[K]) => {
     setLineItems(prev => prev.map((item, i) =>
       i === index ? { ...item, [field]: value } : item
     ));
@@ -267,7 +273,7 @@ const TransactionForm = ({
 
   // Wrap onSubmit to inject reviewed/locked when user overrides AI decision
   const handleFormSubmit = (data: TransactionFormData) => {
-    const submitData: any = { ...data };
+    const submitData: TransactionSubmitPayload = { ...data };
     if (isOverriding && isDeductible !== aiDecision) {
       submitData.reviewed = true;
       submitData.locked = true;
@@ -287,7 +293,7 @@ const TransactionForm = ({
       const reconciledTotal = Number(
         submitData.line_items
           .reduce(
-            (sum: number, lineItem: any) =>
+            (sum: number, lineItem: LineItem) =>
               sum + (Number(lineItem.amount) || 0) * (Number(lineItem.quantity ?? 1) || 1),
             0
           )
@@ -307,7 +313,7 @@ const TransactionForm = ({
       }
       // Derive transaction-level is_deductible from line items
       const validItems = submitData.line_items;
-      const anyDeductible = validItems.some((li: any) => li.is_deductible);
+      const anyDeductible = validItems.some((lineItem) => lineItem.is_deductible);
       submitData.is_deductible = anyDeductible;
     } else if (!isExpenseType && transaction?.line_items?.length) {
       submitData.line_items = [];

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../../hooks/useConfirm';
 import { Link } from 'react-router-dom';
@@ -23,6 +23,7 @@ import { Property, PropertyType, PropertyStatus, RentalContract } from '../../ty
 import { Transaction, TransactionType } from '../../types/transaction';
 import { propertyService } from '../../services/propertyService';
 import { recurringService } from '../../services/recurringService';
+import { RecurringTransactionUpdate } from '../../types/recurring';
 import {
   formatCurrency as formatCurrencyForLanguage,
   formatDate as formatDateForLanguage,
@@ -202,18 +203,7 @@ const PropertyDetail = ({
     ? t(`properties.assetTypes.${property.asset_type}`, property.asset_type)
     : t('properties.assetDetails.asset', localizedText({ de: 'Asset', en: 'Asset', zh: '资产' }));
 
-  useEffect(() => {
-    loadTransactions();
-    if (isRealEstate) {
-      loadWarnings();
-      loadRentalContracts();
-    } else {
-      setWarnings([]);
-      setRentalContracts([]);
-    }
-  }, [property.id, isRealEstate]);
-
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setIsLoadingTransactions(true);
     try {
       const data = await propertyService.getPropertyTransactions(property.id);
@@ -223,9 +213,9 @@ const PropertyDetail = ({
     } finally {
       setIsLoadingTransactions(false);
     }
-  };
+  }, [property.id]);
 
-  const loadWarnings = async () => {
+  const loadWarnings = useCallback(async () => {
     try {
       const currentYear = new Date().getFullYear();
       const metrics = await propertyService.getPropertyMetrics(property.id, currentYear);
@@ -235,9 +225,9 @@ const PropertyDetail = ({
     } catch (error) {
       console.error('Failed to load warnings:', error);
     }
-  };
+  }, [property.id]);
 
-  const loadRentalContracts = async () => {
+  const loadRentalContracts = useCallback(async () => {
     setIsLoadingContracts(true);
     try {
       const data = await propertyService.getRentalContracts(property.id);
@@ -254,14 +244,26 @@ const PropertyDetail = ({
     } finally {
       setIsLoadingContracts(false);
     }
-  };
+  }, [property.id]);
+
+  useEffect(() => {
+    void loadTransactions();
+    if (isRealEstate) {
+      void loadWarnings();
+      void loadRentalContracts();
+    } else {
+      setWarnings([]);
+      setRentalContracts([]);
+    }
+  }, [isRealEstate, loadRentalContracts, loadTransactions, loadWarnings]);
 
   const saveUnitPercentage = async (contractId: number) => {
     const val = editingPercentages[contractId];
     if (!val || isNaN(Number(val)) || Number(val) <= 0 || Number(val) > 100) return;
     setSavingContractId(contractId);
     try {
-      await recurringService.update(contractId, { unit_percentage: Number(val) } as any);
+      const updateData: RecurringTransactionUpdate = { unit_percentage: Number(val) };
+      await recurringService.update(contractId, updateData);
       await loadRentalContracts();
     } catch (error) {
       console.error('Failed to save unit percentage:', error);
@@ -287,7 +289,7 @@ const PropertyDetail = ({
   const saveEditContract = async (contractId: number) => {
     setSavingContractId(contractId);
     try {
-      const updateData: any = {};
+      const updateData: RecurringTransactionUpdate = {};
       const orig = rentalContracts.find((c) => c.id === contractId);
       if (!orig) return;
 
@@ -315,7 +317,7 @@ const PropertyDetail = ({
       try {
         await propertyService.recalculateRental(property.id);
         onEdit(property);
-      } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
     } catch (error) {
       console.error('Failed to save contract:', error);
     } finally {
@@ -332,7 +334,7 @@ const PropertyDetail = ({
       try {
         await propertyService.recalculateRental(property.id);
         onEdit(property);
-      } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
     } catch (error) {
       console.error('Failed to delete contract:', error);
     }

@@ -4101,6 +4101,7 @@
     "per_credit": "po kreditu",
     "toggle_overage": "Ukljuci/iskljuci prekoracenje",
     "overage_this_period": "Prekoracenje u ovom periodu",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "kredita",
     "unpaid_overage": "Imate neplacena prekoracenja. Molimo podmirte dugovanje da nastavite koristiti prekoracenje.",
     "estimated_usage": "Preostalo priblizno",

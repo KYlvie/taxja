@@ -108,7 +108,7 @@ const TransactionDetail = ({
       <div className="transaction-detail" onClick={(e) => e.stopPropagation()}>
         <div className="detail-header">
           <h2>{t('transactions.transactionDetails')}</h2>
-          <button className="btn-close" onClick={onClose}>
+          <button type="button" className="btn-close" onClick={onClose}>
             ✕
           </button>
         </div>
@@ -326,6 +326,7 @@ const TransactionDetail = ({
               )}
               {onMarkReviewed && (
                 <button
+                  type="button"
                   className="btn btn-primary review-confirm-btn"
                   onClick={() => onMarkReviewed(transaction.id)}
                 >
@@ -340,6 +341,7 @@ const TransactionDetail = ({
               <h3>{t('transactions.linkedDocument')}</h3>
               <div className="document-info">
                 <button
+                  type="button"
                   className="document-link"
                   onClick={() => navigate(`/documents/${transaction.document_id}`)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', padding: 0, font: 'inherit' }}
@@ -383,16 +385,17 @@ const TransactionDetail = ({
         </div>
 
         <div className="detail-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             {t('common.close')}
           </button>
           <div className="action-buttons">
             {!hideEditAction && (
-              <button className="btn btn-primary" onClick={onEdit}>
+              <button type="button" className="btn btn-primary" onClick={onEdit}>
                 {t('common.edit')}
               </button>
             )}
             <button
+              type="button"
               className="btn btn-danger"
               onClick={async () => {
                 const ok = await showConfirm(t('transactions.confirmDelete'), { variant: 'danger', confirmText: t('common.delete') });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConfirm } from '../hooks/useConfirm';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -16,6 +16,81 @@ import { formatDocumentFieldList } from '../utils/documentFieldLabel';
 import { BarChart3 } from 'lucide-react';
 import './PropertiesPage.css';
 
+type AssetImportSuggestion = {
+  type?: string;
+  status?: string;
+  data?: {
+    missing_fields?: string[];
+  };
+};
+
+type AssetDocumentOcrResult = Document['ocr_result'] & {
+  import_suggestion?: AssetImportSuggestion;
+};
+
+type AssetCreatePayload = {
+  asset_type: string;
+  name: string;
+  sub_category?: string;
+  purchase_date: string;
+  purchase_price: number;
+  supplier?: string;
+  business_use_percentage?: number;
+  useful_life_years?: number;
+};
+
+type RealEstateCreatePayload = {
+  property_type: PropertyType;
+  street: string;
+  city: string;
+  postal_code: string;
+  purchase_date: string;
+  purchase_price: number;
+  rental_percentage?: number;
+  building_value?: number;
+  construction_year?: number;
+  depreciation_rate?: number;
+  grunderwerbsteuer?: number;
+  notary_fees?: number;
+  registry_fees?: number;
+  monthly_rent?: number;
+};
+
+type PropertyUpdatePayload = {
+  property_type?: PropertyType;
+  street?: string;
+  city?: string;
+  postal_code?: string;
+  purchase_date?: string;
+  purchase_price?: number;
+  rental_percentage?: number;
+  building_value?: number;
+  construction_year?: number;
+  depreciation_rate?: number;
+  grunderwerbsteuer?: number;
+  notary_fees?: number;
+  registry_fees?: number;
+  asset_type?: string;
+  name?: string;
+  sub_category?: string;
+  supplier?: string;
+  business_use_percentage?: number;
+  useful_life_years?: number;
+  put_into_use_date?: string;
+};
+
+const toNumber = (value: number | string | undefined): number | undefined => {
+  if (value === undefined || value === '') return undefined;
+  const parsed = typeof value === 'string' ? parseFloat(value) : value;
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toInteger = (value: number | string | undefined): number | undefined => {
+  if (value === undefined || value === '') return undefined;
+  const parsed = typeof value === 'string' ? parseInt(value, 10) : value;
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const PropertiesPage = () => {
   const { t } = useTranslation();
   const { alert: showAlert } = useConfirm();
@@ -23,7 +98,7 @@ const PropertiesPage = () => {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | undefined>(undefined);
-  const [otherAssets, setOtherAssets] = useState<any[]>([]);
+  const [otherAssets, setOtherAssets] = useState<Property[]>([]);
   const [disposalTarget, setDisposalTarget] = useState<Property | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [assetDocuments, setAssetDocuments] = useState<Document[]>([]);
@@ -48,13 +123,13 @@ const PropertiesPage = () => {
   const pendingAssetDocuments = useMemo(() => {
     const linkedDocumentIds = new Set(
       [...properties, ...otherAssets]
-        .map((p: any) => p.kaufvertrag_document_id)
+        .map((property) => property.kaufvertrag_document_id)
         .filter((v): v is number => typeof v === 'number'),
     );
 
     return assetDocuments.filter((doc) => {
       if (linkedDocumentIds.has(doc.id)) return false;
-      const ocrResult = doc.ocr_result as any;
+      const ocrResult = doc.ocr_result as AssetDocumentOcrResult | undefined;
       const suggestion = ocrResult?.import_suggestion;
       // Match any document whose import_suggestion is a pending asset creation
       if (suggestion?.type !== 'create_asset') return false;
@@ -63,7 +138,7 @@ const PropertiesPage = () => {
     });
   }, [properties, otherAssets, assetDocuments]);
 
-  const refreshAssetDocuments = async () => {
+  const refreshAssetDocuments = useCallback(async () => {
     setLoadingAssetDocuments(true);
     try {
       // Fetch document types that can produce assets: purchase contracts, invoices, receipts
@@ -78,10 +153,10 @@ const PropertiesPage = () => {
     } finally {
       setLoadingAssetDocuments(false);
     }
-  };
+  }, []);
 
   const getPendingAssetDocumentStatus = (doc: Document) => {
-    const ocrResult = doc.ocr_result as any;
+    const ocrResult = doc.ocr_result as AssetDocumentOcrResult | undefined;
     const suggestion = ocrResult?.import_suggestion;
     if (suggestion?.status === 'needs_input') {
       return t('properties.pendingDocuments.needsInput', 'Needs input');
@@ -101,15 +176,18 @@ const PropertiesPage = () => {
     return t('properties.pendingDocuments.awaitingConfirmation', 'Awaiting confirmation');
   };
 
-  const refreshAll = (archived = showArchived) => {
+  const refreshAll = useCallback((archived = showArchived) => {
     fetchProperties(archived);
-    propertyService.getAssets(archived).then(r => setOtherAssets(r.assets || [])).catch(() => {});
-  };
+    propertyService
+      .getAssets(archived)
+      .then((response) => setOtherAssets(response.assets || []))
+      .catch(() => {});
+  }, [fetchProperties, showArchived]);
 
   useEffect(() => {
     refreshAll();
     void refreshAssetDocuments();
-  }, [fetchProperties, propertiesVersion]);
+  }, [propertiesVersion, refreshAll, refreshAssetDocuments]);
 
   useEffect(() => {
     if (propertyId) {
@@ -121,22 +199,18 @@ const PropertiesPage = () => {
     try {
       if (data.asset_category === 'other') {
         // Non-real-estate asset: use /assets endpoint
-        const assetData: any = {
+        const assetData: AssetCreatePayload = {
           asset_type: data.asset_type,
           name: data.asset_name,
           purchase_date: data.purchase_date,
-          purchase_price: typeof data.purchase_price === 'string' ? parseFloat(data.purchase_price) : data.purchase_price,
+          purchase_price: Number(data.purchase_price),
         };
         if (data.sub_category) assetData.sub_category = data.sub_category;
         if (data.supplier) assetData.supplier = data.supplier;
-        if (data.business_use_percentage) {
-          assetData.business_use_percentage = typeof data.business_use_percentage === 'string'
-            ? parseFloat(data.business_use_percentage) : data.business_use_percentage;
-        }
-        if (data.useful_life_years) {
-          assetData.useful_life_years = typeof data.useful_life_years === 'string'
-            ? parseInt(data.useful_life_years) : data.useful_life_years;
-        }
+        const businessUsePercentage = toNumber(data.business_use_percentage);
+        if (businessUsePercentage !== undefined) assetData.business_use_percentage = businessUsePercentage;
+        const usefulLifeYears = toInteger(data.useful_life_years);
+        if (usefulLifeYears !== undefined) assetData.useful_life_years = usefulLifeYears;
 
         const newAsset = await propertyService.createAsset(assetData);
         setShowForm(false);
@@ -144,46 +218,30 @@ const PropertiesPage = () => {
         navigate(`/properties/${newAsset.id}`);
       } else {
         // Real estate: use existing /properties endpoint
-        const propertyData: any = {
+        const propertyData: RealEstateCreatePayload = {
           property_type: data.property_type,
           street: data.street,
           city: data.city,
           postal_code: data.postal_code,
           purchase_date: data.purchase_date,
-          purchase_price: typeof data.purchase_price === 'string' ? parseFloat(data.purchase_price) : data.purchase_price,
+          purchase_price: Number(data.purchase_price),
         };
-        if (data.rental_percentage) {
-          propertyData.rental_percentage = typeof data.rental_percentage === 'string'
-            ? parseFloat(data.rental_percentage) : data.rental_percentage;
-        }
-        if (data.building_value) {
-          propertyData.building_value = typeof data.building_value === 'string'
-            ? parseFloat(data.building_value) : data.building_value;
-        }
-        if (data.construction_year) {
-          propertyData.construction_year = typeof data.construction_year === 'string'
-            ? parseInt(data.construction_year) : data.construction_year;
-        }
-        if (data.depreciation_rate) {
-          propertyData.depreciation_rate = typeof data.depreciation_rate === 'string'
-            ? parseFloat(data.depreciation_rate) / 100 : data.depreciation_rate / 100;
-        }
-        if (data.grunderwerbsteuer) {
-          propertyData.grunderwerbsteuer = typeof data.grunderwerbsteuer === 'string'
-            ? parseFloat(data.grunderwerbsteuer) : data.grunderwerbsteuer;
-        }
-        if (data.notary_fees) {
-          propertyData.notary_fees = typeof data.notary_fees === 'string'
-            ? parseFloat(data.notary_fees) : data.notary_fees;
-        }
-        if (data.registry_fees) {
-          propertyData.registry_fees = typeof data.registry_fees === 'string'
-            ? parseFloat(data.registry_fees) : data.registry_fees;
-        }
-        if (data.monthly_rent) {
-          propertyData.monthly_rent = typeof data.monthly_rent === 'string'
-            ? parseFloat(data.monthly_rent) : data.monthly_rent;
-        }
+        const rentalPercentage = toNumber(data.rental_percentage);
+        if (rentalPercentage !== undefined) propertyData.rental_percentage = rentalPercentage;
+        const buildingValue = toNumber(data.building_value);
+        if (buildingValue !== undefined) propertyData.building_value = buildingValue;
+        const constructionYear = toInteger(data.construction_year);
+        if (constructionYear !== undefined) propertyData.construction_year = constructionYear;
+        const depreciationRate = toNumber(data.depreciation_rate);
+        if (depreciationRate !== undefined) propertyData.depreciation_rate = depreciationRate / 100;
+        const grunderwerbsteuer = toNumber(data.grunderwerbsteuer);
+        if (grunderwerbsteuer !== undefined) propertyData.grunderwerbsteuer = grunderwerbsteuer;
+        const notaryFees = toNumber(data.notary_fees);
+        if (notaryFees !== undefined) propertyData.notary_fees = notaryFees;
+        const registryFees = toNumber(data.registry_fees);
+        if (registryFees !== undefined) propertyData.registry_fees = registryFees;
+        const monthlyRent = toNumber(data.monthly_rent);
+        if (monthlyRent !== undefined) propertyData.monthly_rent = monthlyRent;
 
         const newProperty = await createProperty(propertyData);
         setShowForm(false);
@@ -197,58 +255,38 @@ const PropertiesPage = () => {
   const handleUpdateProperty = async (data: PropertyFormData) => {
     if (!editingProperty) return;
     try {
-      const updateData: any = {};
+      const updateData: PropertyUpdatePayload = {};
       if (data.property_type) updateData.property_type = data.property_type;
       if (data.street) updateData.street = data.street;
       if (data.city) updateData.city = data.city;
       if (data.postal_code) updateData.postal_code = data.postal_code;
       if (data.purchase_date) updateData.purchase_date = data.purchase_date;
-      if (data.purchase_price) {
-        updateData.purchase_price = typeof data.purchase_price === 'string'
-          ? parseFloat(data.purchase_price) : data.purchase_price;
-      }
-      if (data.rental_percentage) {
-        updateData.rental_percentage = typeof data.rental_percentage === 'string'
-          ? parseFloat(data.rental_percentage) : data.rental_percentage;
-      }
-      if (data.building_value) {
-        updateData.building_value = typeof data.building_value === 'string'
-          ? parseFloat(data.building_value) : data.building_value;
-      }
-      if (data.construction_year) {
-        updateData.construction_year = typeof data.construction_year === 'string'
-          ? parseInt(data.construction_year) : data.construction_year;
-      }
-      if (data.depreciation_rate) {
-        updateData.depreciation_rate = typeof data.depreciation_rate === 'string'
-          ? parseFloat(data.depreciation_rate) / 100 : data.depreciation_rate / 100;
-      }
-      if (data.grunderwerbsteuer) {
-        updateData.grunderwerbsteuer = typeof data.grunderwerbsteuer === 'string'
-          ? parseFloat(data.grunderwerbsteuer) : data.grunderwerbsteuer;
-      }
-      if (data.notary_fees) {
-        updateData.notary_fees = typeof data.notary_fees === 'string'
-          ? parseFloat(data.notary_fees) : data.notary_fees;
-      }
-      if (data.registry_fees) {
-        updateData.registry_fees = typeof data.registry_fees === 'string'
-          ? parseFloat(data.registry_fees) : data.registry_fees;
-      }
+      const purchasePrice = toNumber(data.purchase_price);
+      if (purchasePrice !== undefined) updateData.purchase_price = purchasePrice;
+      const rentalPercentage = toNumber(data.rental_percentage);
+      if (rentalPercentage !== undefined) updateData.rental_percentage = rentalPercentage;
+      const buildingValue = toNumber(data.building_value);
+      if (buildingValue !== undefined) updateData.building_value = buildingValue;
+      const constructionYear = toInteger(data.construction_year);
+      if (constructionYear !== undefined) updateData.construction_year = constructionYear;
+      const depreciationRate = toNumber(data.depreciation_rate);
+      if (depreciationRate !== undefined) updateData.depreciation_rate = depreciationRate / 100;
+      const grunderwerbsteuer = toNumber(data.grunderwerbsteuer);
+      if (grunderwerbsteuer !== undefined) updateData.grunderwerbsteuer = grunderwerbsteuer;
+      const notaryFees = toNumber(data.notary_fees);
+      if (notaryFees !== undefined) updateData.notary_fees = notaryFees;
+      const registryFees = toNumber(data.registry_fees);
+      if (registryFees !== undefined) updateData.registry_fees = registryFees;
 
       // Asset-specific fields
       if (data.asset_type) updateData.asset_type = data.asset_type;
       if (data.asset_name) updateData.name = data.asset_name;
       if (data.sub_category) updateData.sub_category = data.sub_category;
       if (data.supplier !== undefined) updateData.supplier = data.supplier;
-      if (data.business_use_percentage) {
-        updateData.business_use_percentage = typeof data.business_use_percentage === 'string'
-          ? parseFloat(data.business_use_percentage) : data.business_use_percentage;
-      }
-      if (data.useful_life_years) {
-        updateData.useful_life_years = typeof data.useful_life_years === 'string'
-          ? parseInt(data.useful_life_years) : data.useful_life_years;
-      }
+      const businessUsePercentage = toNumber(data.business_use_percentage);
+      if (businessUsePercentage !== undefined) updateData.business_use_percentage = businessUsePercentage;
+      const usefulLifeYears = toInteger(data.useful_life_years);
+      if (usefulLifeYears !== undefined) updateData.useful_life_years = usefulLifeYears;
       if (data.put_into_use_date) updateData.put_into_use_date = data.put_into_use_date;
 
       await updateProperty(editingProperty.id, updateData);

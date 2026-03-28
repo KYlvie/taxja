@@ -4091,6 +4091,7 @@
     "per_credit": "za kredyt",
     "toggle_overage": "Przełącz nadwyżkę",
     "overage_this_period": "Nadwyżka w tym okresie",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "kredytów",
     "unpaid_overage": "Mają Państwo nieuregulowane opłaty za nadwyżkę. Proszę uregulować, aby kontynuować korzystanie z nadwyżki.",
     "estimated_usage": "Przybliżona pozostała ilość",

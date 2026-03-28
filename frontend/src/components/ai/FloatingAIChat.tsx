@@ -257,6 +257,13 @@ const FloatingAIChat = () => {
     creditBalance?.overage_price_per_credit !== undefined;
   const overageEnabled = creditBalance?.overage_enabled ?? false;
   const overageSuspended = creditBalance?.has_unpaid_overage ?? false;
+  const overageCreditsUsed = creditBalance?.overage_credits_used ?? 0;
+  const overageCostValue =
+    creditBalance?.estimated_overage_cost ??
+    (creditBalance?.overage_price_per_credit != null
+      ? creditBalance.overage_price_per_credit * overageCreditsUsed
+      : null);
+  const overageCostDisplay = formatEuroAmount(overageCostValue);
   const overageRate = formatEuroAmount(creditBalance?.overage_price_per_credit);
   const overageEstimate = formatEuroAmount(creditBalance?.estimated_overage_cost);
   const overageDisplay =
@@ -293,6 +300,17 @@ const FloatingAIChat = () => {
           .filter(Boolean)
           .join(' | ')
       : t('subscription.overage_unavailable', 'No overage');
+  const showOverageMeter =
+    !!creditBalance &&
+    overageSupported &&
+    !overageSuspended &&
+    (overageEnabled || overageCreditsUsed > 0);
+  const overageMeterText = t('subscription.overage_meter_short', {
+    defaultValue: '{{credits}} cr · {{amount}}',
+    credits: overageCreditsUsed,
+    amount: overageCostDisplay ?? formatEuroAmount(0),
+  });
+  const overageMeterTitle = `${t('subscription.overage_this_period', "This period's overage")}: ${overageMeterText}`;
   const overagePillClassName = `ai-overage-pill${
     overageEnabled && !overageSuspended ? ' is-enabled' : ''
   }${overageSuspended ? ' is-suspended' : ''}`;
@@ -573,6 +591,11 @@ const FloatingAIChat = () => {
                   <span className="ai-overage-pill-label">{t('subscription.overage_mode', 'Overage')}</span>
                   <strong>{overageDisplay}</strong>
                 </button>
+                {showOverageMeter && (
+                  <span className="ai-overage-meter" title={overageMeterTitle}>
+                    {overageMeterText}
+                  </span>
+                )}
               </div>
               {!panelOpen && totalBadgeCount > 0 && (
                 <span className="ai-dock-badge">{totalBadgeCount}</span>
@@ -715,6 +738,11 @@ const FloatingAIChat = () => {
                     <span className="ai-overage-pill-label">{t('subscription.overage_mode', 'Overage')}</span>
                     <strong>{overageDisplay}</strong>
                   </button>
+                  {showOverageMeter && (
+                    <span className="ai-overage-meter" title={overageMeterTitle}>
+                      {overageMeterText}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

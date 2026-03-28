@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -95,8 +95,7 @@ const TransactionsPage = () => {
   const lastNeedsReviewParamRef = useRef<string | null>(needsReviewParam);
   const filterYear = parseFilterYearParam(yearParam);
 
-  const effectiveFilters =
-    {
+  const effectiveFilters = useMemo(() => ({
       ...filters,
       ...(needsReviewParam === 'true' ? { needs_review: true } : {}),
       ...(filterYear !== null
@@ -105,9 +104,9 @@ const TransactionsPage = () => {
             end_date: `${filterYear}-12-31`,
           }
         : {}),
-    };
+    }), [filterYear, filters, needsReviewParam]);
 
-  const setQueryParam = (key: string, value: string | null) => {
+  const setQueryParam = useCallback((key: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
     if (value == null) {
       next.delete(key);
@@ -115,15 +114,15 @@ const TransactionsPage = () => {
       next.set(key, value);
     }
     setSearchParams(next, { replace: true });
-  };
+  }, [searchParams, setSearchParams]);
 
-  const setTransactionQueryParam = (transactionId: number | null) => {
+  const setTransactionQueryParam = useCallback((transactionId: number | null) => {
     setQueryParam('transactionId', transactionId == null ? null : String(transactionId));
-  };
+  }, [setQueryParam]);
 
-  const setNeedsReviewQueryParam = (needsReview: boolean | undefined) => {
+  const setNeedsReviewQueryParam = useCallback((needsReview: boolean | undefined) => {
     setQueryParam('needs_review', needsReview ? 'true' : null);
-  };
+  }, [setQueryParam]);
 
   const openTransactionDetail = (transaction: Transaction) => {
     setSelectedTransaction(transaction);

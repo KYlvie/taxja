@@ -35,20 +35,32 @@ export const useTransactionStore = create<TransactionState>((set) => ({
     pageSize: 20,
     total: 0,
   },
-  setTransactions: (transactions) => set({ transactions }),
+  setTransactions: (transactions) =>
+    set((state) => ({
+      transactions,
+      selectedTransaction: state.selectedTransaction
+        ? transactions.find((transaction) => transaction.id === state.selectedTransaction?.id) ?? null
+        : null,
+    })),
   addTransaction: (transaction) =>
     set((state) => ({
       transactions: [transaction, ...state.transactions],
     })),
   updateTransaction: (id, updatedTransaction) =>
     set((state) => ({
-      transactions: state.transactions.map((t) =>
-        t.id === id ? { ...t, ...updatedTransaction } : t
+      transactions: state.transactions.map((transaction) =>
+        transaction.id === id ? { ...transaction, ...updatedTransaction } : transaction
       ),
+      selectedTransaction:
+        state.selectedTransaction?.id === id
+          ? { ...state.selectedTransaction, ...updatedTransaction }
+          : state.selectedTransaction,
     })),
   deleteTransaction: (id) =>
     set((state) => ({
-      transactions: state.transactions.filter((t) => t.id !== id),
+      transactions: state.transactions.filter((transaction) => transaction.id !== id),
+      selectedTransaction:
+        state.selectedTransaction?.id === id ? null : state.selectedTransaction,
     })),
   setFilters: (filters) => set({ filters }),
   setSelectedTransaction: (transaction) =>

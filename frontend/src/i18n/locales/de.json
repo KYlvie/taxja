@@ -3254,6 +3254,7 @@
     "per_credit": "pro Credit",
     "toggle_overage": "Mehrverbrauch umschalten",
     "overage_this_period": "Mehrverbrauch dieser Periode",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "Credits",
     "unpaid_overage": "Sie haben offene Mehrverbrauchskosten. Bitte begleichen Sie diese, um den Mehrverbrauch weiter nutzen zu können.",
     "estimated_usage": "Ungefähr verbleibend",

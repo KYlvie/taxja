@@ -2892,6 +2892,7 @@
     "per_credit": "每积分",
     "toggle_overage": "切换超额使用",
     "overage_this_period": "本周期超额使用",
+    "overage_meter_short": "{{credits}} cr · {{amount}}",
     "credits_word": "积分",
     "unpaid_overage": "您有未支付的超额费用。请结清以继续使用超额功能。",
     "estimated_usage": "预估剩余",
