@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -71,7 +71,7 @@ const TransactionsPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
 
-  const formatMutationErrorMessage = (err: any, fallback: string) => {
+  const formatMutationErrorMessage = (err: unknown, fallback: string) => {
     const reconciliation = getLineItemReconciliationError(err);
     if (reconciliation?.expected != null && reconciliation.reconstructed != null) {
       return t('receiptReview.syncAmountMismatch', {
@@ -137,9 +137,45 @@ const TransactionsPage = () => {
     setTransactionQueryParam(null);
   };
 
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await transactionService.getAll(effectiveFilters, {
+        page: pagination.page,
+        page_size: pagination.pageSize,
+      });
+
+      setTransactions(response.items);
+      setAvailableYears(response.available_years || []);
+      setNeedsReviewCount(response.needs_review_count ?? 0);
+      setPagination({
+        total: response.total,
+        page: response.page,
+        pageSize: response.page_size,
+      });
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.fetchError')));
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    effectiveFilters,
+    pagination.page,
+    pagination.pageSize,
+    setAvailableYears,
+    setError,
+    setLoading,
+    setNeedsReviewCount,
+    setPagination,
+    setTransactions,
+    t,
+  ]);
+
   useEffect(() => {
     void fetchTransactions();
-  }, [filters, needsReviewParam, pagination.page, pagination.pageSize, transactionsVersion]);
+  }, [fetchTransactions, transactionsVersion]);
 
   useEffect(() => {
     if (lastNeedsReviewParamRef.current === needsReviewParam) {
@@ -209,7 +245,7 @@ const TransactionsPage = () => {
         setSelectedTransaction(transaction);
         setViewMode('detail');
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         if (!active) return;
         const msg = err.response?.data?.detail || t('transactions.fetchError');
         setError(msg);
@@ -220,7 +256,7 @@ const TransactionsPage = () => {
     return () => {
       active = false;
     };
-  }, [transactionIdParam]);
+  }, [setError, setSelectedTransaction, t, transactionIdParam, setTransactionQueryParam]);
 
   useEffect(() => {
     if (!exportMenuOpen) {
@@ -271,31 +307,6 @@ const TransactionsPage = () => {
   useEffect(() => {
     setSelectedIds(new Set());
   }, [filters, needsReviewParam]);
-
-  const fetchTransactions = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await transactionService.getAll(effectiveFilters, {
-        page: pagination.page,
-        page_size: pagination.pageSize,
-      });
-
-      setTransactions(response.items);
-      setAvailableYears(response.available_years || []);
-      setNeedsReviewCount(response.needs_review_count ?? 0);
-      setPagination({
-        total: response.total,
-        page: response.page,
-        pageSize: response.page_size,
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.fetchError'));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchReviewableTransactions = async (): Promise<Transaction[]> => {
     const reviewable: Transaction[] = [];
@@ -366,8 +377,8 @@ const TransactionsPage = () => {
         setError(message);
         aiToast(message, 'error');
       }
-    } catch (err: any) {
-      const message = err.response?.data?.detail || t('common.saveFailed', 'Save failed');
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, t('common.saveFailed', 'Save failed'));
       setError(message);
       aiToast(message, 'error');
     } finally {
@@ -382,7 +393,7 @@ const TransactionsPage = () => {
       addTransaction(newTransaction);
       setViewMode('list');
       aiToast(t('transactions.createSuccess', 'Transaction created'), 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const msg = formatMutationErrorMessage(err, t('transactions.createError'));
       setError(msg);
       aiToast(msg, 'error');
@@ -400,7 +411,7 @@ const TransactionsPage = () => {
       setSelectedTransaction(null);
       setTransactionQueryParam(null);
       aiToast(t('transactions.updateSuccess', 'Transaction updated'), 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const msg = formatMutationErrorMessage(err, t('transactions.updateError'));
       setError(msg);
       aiToast(msg, 'error');
@@ -447,8 +458,8 @@ const TransactionsPage = () => {
       setSelectedTransaction(null);
       setTransactionQueryParam(null);
       aiToast(t('transactions.deleteSuccess', 'Transaction deleted'), 'success');
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || t('transactions.deleteError');
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, t('transactions.deleteError'));
       setError(msg);
       aiToast(msg, 'error');
     }
@@ -491,8 +502,8 @@ const TransactionsPage = () => {
       }
       setSelectedIds(new Set());
       aiToast(t('transactions.batchDeleteSuccess', { count: result.count }), 'success');
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || t('transactions.deleteError');
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, t('transactions.deleteError'));
       setError(msg);
       aiToast(msg, 'error');
     } finally {
@@ -529,8 +540,8 @@ const TransactionsPage = () => {
     try {
       const updated = await transactionService.pause(id);
       updateTransaction(id, updated);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.updateError'));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.updateError')));
     }
   };
 
@@ -538,8 +549,8 @@ const TransactionsPage = () => {
     try {
       const updated = await transactionService.resume(id);
       updateTransaction(id, updated);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.updateError'));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.updateError')));
     }
   };
 
@@ -548,8 +559,8 @@ const TransactionsPage = () => {
       const updated = await transactionService.markReviewed(id);
       updateTransaction(id, updated);
       setSelectedTransaction(updated);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.updateError'));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.updateError')));
     }
   };
 
@@ -562,8 +573,8 @@ const TransactionsPage = () => {
         `transactions_${new Date().toISOString().split('T')[0]}.csv`,
         t('common.export')
       );
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.exportError'));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.exportError')));
     }
   };
 
@@ -576,8 +587,8 @@ const TransactionsPage = () => {
         `transactions_${new Date().toISOString().split('T')[0]}.pdf`,
         t('common.export')
       );
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.exportError'));
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, t('transactions.exportError')));
     }
   };
 

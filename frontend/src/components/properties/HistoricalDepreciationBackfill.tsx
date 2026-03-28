@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Property, PropertyType } from '../../types/property';
 import { HistoricalDepreciationPreview, BackfillResult } from '../../types/historicalDepreciation';
-import { propertyService } from '../../services/propertyService';
+import { getErrorMessage, propertyService } from '../../services/propertyService';
 import { getLocaleForLanguage } from '../../utils/locale';
 import './HistoricalDepreciationBackfill.css';
 
@@ -46,9 +46,9 @@ const HistoricalDepreciationBackfill = ({
       const data = await propertyService.previewHistoricalDepreciation(property.id);
       setPreview(data);
       setShowModal(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading preview:', err);
-      setError(err.response?.data?.detail || t('properties.backfill.previewError'));
+      setError(getErrorMessage(err, t('properties.backfill.previewError')));
     } finally {
       setIsLoadingPreview(false);
     }
@@ -66,9 +66,9 @@ const HistoricalDepreciationBackfill = ({
       if (onBackfillComplete) {
         onBackfillComplete();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error backfilling depreciation:', err);
-      setError(err.response?.data?.detail || t('properties.backfill.error'));
+      setError(getErrorMessage(err, t('properties.backfill.error')));
     } finally {
       setIsBackfilling(false);
     }

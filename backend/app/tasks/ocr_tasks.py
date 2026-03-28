@@ -3314,40 +3314,71 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
-    # Two-step extraction strategy:
-    # Step 1 (already done): VLM classified the document type (may be via insurance_rescue)
-    # Step 2 (here): Do a FOCUSED insurance-only VLM call to extract insurance fields.
+    # ── Tiered extraction strategy (L0 → L1 → L2 → L3) ──
     #
-    # Why: The first VLM call uses a broad prompt for ALL document types, so insurance-
-    # specific fields (polizze_nr, versicherungsnehmer, vertragsbeginn, praemie) are often
-    # missed or wrong. A dedicated second call with a focused prompt is much more reliable.
+    # L0: Heuristic pre-classification already done upstream (document_type is set).
+    # L1: Type-specific focused extraction prompt (much better than the broad unified prompt).
+    # L2: Re-extract with the same default provider if L1 left fields missing.
+    # L3: Escalate to a better model (OpenAI) if L2 still has missing fields.
     #
-    # Skip the second call ONLY if the first call already returned complete insurance data
-    # (i.e., it was classified as versicherungsbestaetigung directly, not via rescue).
-    _has_complete_insurance_data = all([
-        ocr_data.get("polizze_nr") or ocr_data.get("polizze"),
-        ocr_data.get("versicherungsnehmer"),
-        ocr_data.get("vertragsbeginn"),
-        ocr_data.get("praemie"),
-    ])
-    if not _has_complete_insurance_data:
+    # Skip ALL tiers only if the initial OCR already returned complete insurance data.
+
+    _INSURANCE_REQUIRED_FIELDS = ["polizze_nr", "versicherungsnehmer", "vertragsbeginn", "praemie"]
+
+    def _has_complete_data(d: dict) -> bool:
+        return all([
+            d.get("polizze_nr") or d.get("polizze"),
+            d.get("versicherungsnehmer"),
+            d.get("vertragsbeginn"),
+            d.get("praemie"),
+        ])
+
+    def _merge_extracted(target: dict, source: dict) -> None:
+        """Merge non-empty fields from source into target."""
+        if not source or not isinstance(source, dict):
+            return
+        for k, v in source.items():
+            if v is not None and v != "" and v != 0:
+                target[k] = v
+
+    if not _has_complete_data(ocr_data):
         try:
             from app.services.ocr_engine import OCREngine
             _engine = OCREngine()
-            _re_extracted = _engine.re_extract_insurance_fields(document)
-            if _re_extracted and isinstance(_re_extracted, dict):
-                logger.info(
-                    "Insurance focused extraction for doc %s returned: %s",
-                    document.id,
-                    {k: v for k, v in _re_extracted.items() if v is not None},
-                )
-                for _k, _v in _re_extracted.items():
-                    if _v is not None and _v != "" and _v != 0:
-                        # Prefer focused extraction over initial broad extraction
-                        ocr_data[_k] = _v
-                        updated_ocr[_k] = _v
+
+            # -- L1: Type-specific extraction prompt --
+            _l1_data = _engine.extract_by_type(document, "versicherungsbestaetigung")
+            if _l1_data:
+                logger.info("L1 insurance extraction for doc %s: %s",
+                            document.id,
+                            {k: v for k, v in _l1_data.items() if v is not None})
+                _merge_extracted(ocr_data, _l1_data)
+                _merge_extracted(updated_ocr, _l1_data)
+
+            # -- L2: Re-extract if still incomplete (default provider) --
+            if not _has_complete_data(ocr_data):
+                logger.info("L1 incomplete for doc %s, trying L2 re-extraction", document.id)
+                _l2_data = _engine.re_extract_insurance_fields(document)
+                if _l2_data:
+                    logger.info("L2 insurance re-extraction for doc %s: %s",
+                                document.id,
+                                {k: v for k, v in _l2_data.items() if v is not None})
+                    _merge_extracted(ocr_data, _l2_data)
+                    _merge_extracted(updated_ocr, _l2_data)
+
+            # -- L3: Escalate to OpenAI if still incomplete --
+            if not _has_complete_data(ocr_data):
+                logger.info("L2 incomplete for doc %s, escalating to L3 (openai)", document.id)
+                _l3_data = _engine.re_extract_insurance_fields(document, provider_preference="openai")
+                if _l3_data:
+                    logger.info("L3 insurance extraction (openai) for doc %s: %s",
+                                document.id,
+                                {k: v for k, v in _l3_data.items() if v is not None})
+                    _merge_extracted(ocr_data, _l3_data)
+                    _merge_extracted(updated_ocr, _l3_data)
+
         except Exception as _e:
-            logger.warning("Insurance focused extraction failed for doc %s: %s", document.id, _e)
+            logger.warning("Tiered insurance extraction failed for doc %s: %s", document.id, _e)
 
     # Extract premium amount - the key OCR field
     # Read praemie from updated_ocr (which has German number fixes applied)

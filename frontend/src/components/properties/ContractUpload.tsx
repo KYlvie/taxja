@@ -4,6 +4,7 @@ import { documentService } from '../../services/documentService';
 import DateInput from '../common/DateInput';
 import { getLocaleForLanguage } from '../../utils/locale';
 import { PropertyFormData } from '../../types/property';
+import { getApiErrorMessage } from '../../utils/apiError';
 import './ContractUpload.css';
 
 export interface ContractData {
@@ -117,9 +118,9 @@ const ContractUpload: React.FC<ContractUploadProps> = ({ onExtracted, onCancel }
         setEditableData(propertyData);
         setUploadStatus('extracted');
 
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Contract upload error:', err);
-        setError(err.response?.data?.detail || t('properties.contractUpload.uploadError'));
+        setError(getApiErrorMessage(err, t('properties.contractUpload.uploadError')));
         setUploadStatus('error');
       }
     },

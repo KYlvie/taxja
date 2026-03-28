@@ -2216,9 +2216,217 @@ class OCREngine:
             return [self._normalize_receipt_payload(r) for r in data if isinstance(r, dict)]
         return None
 
-    def re_extract_insurance_fields(self, document) -> Optional[dict]:
+    # ------------------------------------------------------------------
+    # L0: Heuristic pre-classification (no AI)
+    # ------------------------------------------------------------------
+
+    _L0_FILENAME_PATTERNS: Dict[str, str] = {
+        "SVS_": "svs_notice",
+        "INS_": "versicherungsbestaetigung",
+    }
+
+    _L0_KEYWORD_RULES: list = [
+        # Each entry: (required_keywords, document_type)
+        # required_keywords is a tuple: ALL must be present
+        (("Polizze", ("Prämie", "Praemie")), "versicherungsbestaetigung"),
+        (("Beitragsvorschreibung", "SVS"), "svs_notice"),
+        (("Rechnungsnummer", ("MwSt", "Mehrwertsteuer")), "invoice"),
+        (("Kassenbon",), "receipt"),
+        (("Kassabon",), "receipt"),
+        (("Mietvertrag",), "rental_contract"),
+        (("Mietanbot",), "rental_contract"),
+        (("Lohnzettel",), "lohnzettel"),
+        (("Gehaltszettel",), "lohnzettel"),
+        (("Einkommensteuerbescheid",), "einkommensteuerbescheid"),
+        (("Kirchenbeitrag",), "kirchenbeitrag"),
+    ]
+
+    _L0_INSURER_NAMES = [
+        "UNIQA", "Wiener Städtische", "Wiener Staedtische", "Generali",
+        "Allianz", "Zürich", "Zuerich", "Zurich", "GRAWE",
+        "Grazer Wechselseitige", "Helvetia", "Donau Versicherung",
+        "Merkur Versicherung", "Wüstenrot",
+    ]
+
+    def pre_classify_document(self, document) -> tuple:
+        """L0 heuristic pre-classification using filename + PDF text.
+
+        Returns (document_type: str | None, confidence: float).
+        confidence >= 0.9 means "certain", < 0.9 means "uncertain".
+        Returns (None, 0.0) if no heuristic matches.
+        """
+        filename = getattr(document, "original_filename", "") or getattr(document, "file_name", "") or ""
+        filename_upper = filename.upper()
+
+        # --- Filename patterns ---
+        for pattern, doc_type in self._L0_FILENAME_PATTERNS.items():
+            if pattern in filename_upper:
+                logger.info("L0 pre-classify: filename pattern '%s' → %s", pattern, doc_type)
+                return (doc_type, 0.9)
+
+        # --- PDF text keyword matching ---
+        raw_text = self._get_document_text(document)
+        if not raw_text:
+            return (None, 0.0)
+
+        text_head = raw_text[:2000]
+
+        for rule in self._L0_KEYWORD_RULES:
+            required_keywords, doc_type = rule
+            if self._l0_keywords_match(text_head, required_keywords):
+                logger.info("L0 pre-classify: keyword rule matched → %s", doc_type)
+                return (doc_type, 0.92)
+
+        # --- Known insurer name in header text ---
+        for insurer in self._L0_INSURER_NAMES:
+            if insurer.lower() in text_head.lower():
+                # Insurer name found but not matched by keyword rules above;
+                # high confidence it is an insurance document
+                logger.info("L0 pre-classify: insurer name '%s' found → versicherungsbestaetigung", insurer)
+                return ("versicherungsbestaetigung", 0.85)
+
+        return (None, 0.0)
+
+    @staticmethod
+    def _l0_keywords_match(text: str, required_keywords: tuple) -> bool:
+        """Check if all required keywords are present in text.
+        Each element can be a string or a tuple of alternatives (OR logic)."""
+        for kw in required_keywords:
+            if isinstance(kw, tuple):
+                # OR: at least one alternative must match
+                if not any(alt.lower() in text.lower() for alt in kw):
+                    return False
+            else:
+                if kw.lower() not in text.lower():
+                    return False
+        return True
+
+    def _get_document_text(self, document) -> str:
+        """Get text content from a document, either from stored raw_text or by extracting from PDF."""
+        # Try stored raw_text first
+        raw_text = getattr(document, "raw_text", None) or ""
+        if raw_text and len(raw_text.strip()) > 50:
+            return raw_text
+
+        # Try ocr_result raw_text
+        ocr_result = getattr(document, "ocr_result", None)
+        if isinstance(ocr_result, dict):
+            ocr_raw = ocr_result.get("raw_text", "")
+            if ocr_raw and len(ocr_raw.strip()) > 50:
+                return ocr_raw
+
+        # Extract from PDF file
+        try:
+            from app.services.storage_service import StorageService
+            storage = StorageService()
+            file_bytes = storage.download_file(document.file_path)
+            if file_bytes and file_bytes[:5] == b"%PDF-":
+                return self._extract_text_from_pdf(file_bytes)
+        except Exception as e:
+            logger.debug("L0: could not extract PDF text: %s", e)
+
+        return raw_text
+
+    # ------------------------------------------------------------------
+    # Type-specific extraction prompts
+    # ------------------------------------------------------------------
+
+    INSURANCE_EXTRACT_PROMPT = (
+        "This is an Austrian insurance document (Versicherungsbestätigung/Polizze/Prämienvorschreibung).\n"
+        "Extract these fields. Return ONLY valid JSON, no other text:\n"
+        "{\n"
+        '  "insurer_name": "insurance company name from letterhead",\n'
+        '  "versicherungsnehmer": "policyholder / insured person name",\n'
+        '  "polizze_nr": "policy number (Polizze-Nr/Polizzennummer)",\n'
+        '  "versicherungsart": "type of insurance",\n'
+        '  "praemie_jaehrlich": annual_premium_as_number,\n'
+        '  "vertragsbeginn": "YYYY-MM-DD",\n'
+        '  "vertragsende": "YYYY-MM-DD or null",\n'
+        '  "zahlungsfrequenz": "monatlich/vierteljaehrlich/halbjaehrlich/jaehrlich",\n'
+        '  "insurance_subtype": "berufshaftpflicht/kfz/rechtsschutz/haushaltsversicherung/'
+        'gebaeudeversicherung/private_krankenversicherung/unfallversicherung/lebensversicherung/other"\n'
+        "}\n"
+        "German format 1.662,36 must become 1662.36. Amounts as plain numbers."
+    )
+
+    def extract_by_type(self, document, document_type: str) -> Optional[dict]:
+        """L1/L2: Type-specific extraction via VLM.
+
+        For insurance documents, uses INSURANCE_EXTRACT_PROMPT.
+        For other types, falls back to re_extract_insurance_fields (insurance) or returns None.
+        """
+        if document_type != "versicherungsbestaetigung":
+            # For non-insurance types, no type-specific prompt implemented yet — return None
+            # so the caller falls back to the existing unified vision pipeline.
+            return None
+
+        import io
+        from app.services.storage_service import StorageService
+
+        try:
+            storage = StorageService()
+            file_bytes = storage.download_file(document.file_path)
+            if not file_bytes:
+                return None
+
+            # Convert first page to image
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_bytes, first_page=1, last_page=1, dpi=150)
+            if not images:
+                return None
+
+            buf = io.BytesIO()
+            images[0].save(buf, format='PNG')
+            img_bytes = buf.getvalue()
+
+            from app.services.llm_service import LLMService
+            llm = LLMService()
+
+            response = llm.generate_vision(
+                system_prompt=(
+                    "You are an Austrian insurance document data extractor. "
+                    "Extract ONLY the requested fields. Return ONLY valid JSON, no other text."
+                ),
+                user_prompt=self.INSURANCE_EXTRACT_PROMPT,
+                image_bytes=img_bytes,
+                mime_type="image/png",
+                temperature=0.0,
+                max_tokens=400,
+                provider_preference=self._vision_provider_preference,
+            )
+
+            data = self._parse_vlm_json(response)
+            if not data or not isinstance(data, dict):
+                return None
+
+            # Normalize praemie_jaehrlich → praemie
+            if data.get("praemie_jaehrlich") is not None and not data.get("praemie"):
+                data["praemie"] = data.pop("praemie_jaehrlich")
+
+            from app.services.field_normalization import fix_german_number_formats
+            fix_german_number_formats(data)
+
+            logger.info("extract_by_type(insurance) for doc %s: %s", document.id, data)
+            return data
+
+        except Exception as e:
+            logger.warning("extract_by_type(insurance) failed for doc %s: %s",
+                           getattr(document, "id", "?"), e)
+            return None
+
+    # ------------------------------------------------------------------
+    # Insurance re-extraction (L2 / L3)
+    # ------------------------------------------------------------------
+
+    def re_extract_insurance_fields(self, document, provider_preference: Optional[str] = None) -> Optional[dict]:
         """Targeted VLM call to extract insurance-specific fields from document image.
-        Called when initial classification missed insurance fields (e.g. insurance_rescue)."""
+        Called when initial classification missed insurance fields (e.g. insurance_rescue).
+
+        Args:
+            document: Document ORM object with file_path.
+            provider_preference: Optional LLM provider to use (e.g. "openai" for L3 escalation).
+                If None, uses the engine's default _vision_provider_preference.
+        """
         import base64, io
         from app.services.storage_service import StorageService
 
@@ -2258,7 +2466,7 @@ class OCREngine:
                 mime_type="image/png",
                 temperature=0.0,
                 max_tokens=300,
-                provider_preference=self._vision_provider_preference,
+                provider_preference=provider_preference or self._vision_provider_preference,
             )
 
             data = self._parse_vlm_json(response)
@@ -2273,7 +2481,8 @@ class OCREngine:
             from app.services.field_normalization import fix_german_number_formats
             fix_german_number_formats(data)
 
-            logger.info("Insurance re-extraction for doc %s: %s", document.id, data)
+            logger.info("Insurance re-extraction for doc %s (provider=%s): %s",
+                        document.id, provider_preference or "default", data)
             return data
 
         except Exception as e:
