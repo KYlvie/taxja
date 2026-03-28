@@ -1,4 +1,5 @@
 """OCR processing tasks"""
+import re
 from celery import Task, group
 from celery.exceptions import Retry as CeleryRetry
 from typing import List, Dict, Any
@@ -3329,20 +3330,38 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         db.commit()
         return {"import_suggestion": None}
 
-    # Extract frequency (default: annually for insurance)
+    # Extract frequency — try explicit field, then infer from text
     freq_raw = (
         ocr_data.get("zahlungsfrequenz")
         or ocr_data.get("payment_frequency")
-        or "annually"
+        or ocr_data.get("zahlungsweise")
+        or ocr_data.get("frequency")
+        or ""
     )
     freq_map = {
         "monatlich": "monthly", "monthly": "monthly",
         "quartalsweise": "quarterly", "quarterly": "quarterly",
-        "vierteljährlich": "quarterly",
+        "vierteljährlich": "quarterly", "vierteljaehrlich": "quarterly",
+        "halbjährlich": "semi_annual", "halbjaehrlich": "semi_annual",
+        "semi_annual": "semi_annual", "semi-annual": "semi_annual",
         "jährlich": "annually", "annually": "annually",
         "jaehrlich": "annually",
     }
-    frequency = freq_map.get(str(freq_raw).lower().strip(), "annually")
+    frequency = freq_map.get(str(freq_raw).lower().strip(), "")
+
+    # Infer from raw_text / description / file_name if not explicitly set
+    if not frequency:
+        _freq_text = str(ocr_data.get("raw_text") or "")[:2000].lower()
+        _freq_text += " " + str(ocr_data.get("description") or "").lower()
+        _freq_text += " " + (document.file_name or "").lower()
+        if any(m in _freq_text for m in ("monatlich", "monats", "sepa-lastschrift", "pro monat", "_sepa_", "sepa abbuchung")):
+            frequency = "monthly"
+        elif any(m in _freq_text for m in ("vierteljährlich", "vierteljaehrlich", "quartalsweise", "quartal")):
+            frequency = "quarterly"
+        elif any(m in _freq_text for m in ("halbjährlich", "halbjaehrlich", "halbjahres")):
+            frequency = "semi_annual"
+        else:
+            frequency = "annually"  # Default for insurance
 
     # Extract insurance type — try OCR fields first, then infer from file name
     insurance_type = (
@@ -3378,20 +3397,29 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     if not insurance_type:
         insurance_type = "unknown"
 
+    def _clean_ocr_name(val):
+        """Remove OCR page markers and clean up names."""
+        if not val or not isinstance(val, str):
+            return None
+        # Remove page markers: "--- PAGE 1 ---", "PAGE 1 ---", "--- PAGE 1", etc.
+        cleaned = re.sub(r'-{0,3}\s*PAGE\s*\d+\s*-{0,3}', '', val, flags=re.IGNORECASE).strip()
+        # Remove leading/trailing newlines and whitespace
+        cleaned = re.sub(r'^[\s\n]+|[\s\n]+$', '', cleaned)
+        # Replace internal newlines with space
+        cleaned = re.sub(r'\s*\n\s*', ' ', cleaned)
+        if not cleaned or cleaned in ("Unbekannt", "Unknown"):
+            return None
+        return cleaned
+
     _raw_insurer = (
-        ocr_data.get("versicherer")
-        or ocr_data.get("insurer_name")
-        or ocr_data.get("company_name")
+        _clean_ocr_name(ocr_data.get("versicherer"))
+        or _clean_ocr_name(ocr_data.get("insurer_name"))
+        or _clean_ocr_name(ocr_data.get("company_name"))
+        or _clean_ocr_name(ocr_data.get("issuer"))
+        or _clean_ocr_name(ocr_data.get("merchant"))
     )
-    # Avoid using issuer/merchant if they contain OCR artifacts
-    if not _raw_insurer:
-        for _field in ("issuer", "merchant"):
-            _val = ocr_data.get(_field)
-            if _val and not str(_val).startswith("PAGE") and _val not in ("Unbekannt", "Unknown"):
-                _raw_insurer = _val
-                break
     insurer_name = _raw_insurer
-    if not insurer_name or insurer_name in ("Unbekannt", "Unknown"):
+    if not insurer_name:
         # Infer from file name
         _fn = (document.file_name or "")
         _known_insurers = {

@@ -149,6 +149,14 @@ const TAX_FIELD_SKIP = new Set([
   'vat_summary',
   'line_items',
   'transaction_direction_resolution',
+  'insurance_subtype',
+  'insurance_type',
+  'insurer_name',
+  'is_deductible',
+  'deduction_reason',
+  'zahlungsfrequenz',
+  'praemie',
+  'polizze',
 ]);
 
 const TAX_CURRENCY_FIELDS = new Set([
@@ -1949,8 +1957,9 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               'annual_interest_amount', 'certificate_year',
               // insurance
               'insurer_name', 'versicherer', 'policy_holder_name', 'versicherungsnehmer',
-              'insurance_type', 'versicherungsart', 'praemie', 'polizze',
-              'payment_frequency', 'zahlungsfrequenz',
+              'insurance_type', 'versicherungsart', 'insurance_subtype', 'praemie', 'polizze',
+              'payment_frequency', 'zahlungsfrequenz', 'zahlungsweise',
+              'is_deductible', 'deduction_reason',
               // internal/meta
               '_transaction_type', '_document_type', 'user_contract_role', 'user_contract_role_source',
               'document_transaction_direction', 'document_transaction_direction_source',
