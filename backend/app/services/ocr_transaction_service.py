@@ -1314,10 +1314,9 @@ class OCRTransactionService:
 
     def _infer_svs_subtype_legacy(self, ocr_data: Dict[str, Any]) -> str:
         """Fallback: infer SVS subtype from legacy field signals when VLM doesn't return svs_subtype."""
-        file_name = str(ocr_data.get("_file_name") or "").lower()
         desc = str(ocr_data.get("description") or "").lower()
         raw = str(ocr_data.get("raw_text") or "")[:2000].lower()
-        all_text = file_name + " " + desc + " " + raw
+        all_text = desc + " " + raw
 
         if any(m in all_text for m in ("kontobestätigung", "kontobestaetigung", "kontobestatigung")):
             return "kontobestaetigung"

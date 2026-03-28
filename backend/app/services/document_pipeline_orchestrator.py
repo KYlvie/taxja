@@ -879,8 +879,6 @@ class DocumentPipelineOrchestrator:
                 "versicherungssumme", "deckungssumme",
             )
             _check_text = ""
-            if document.file_name:
-                _check_text += document.file_name.lower() + " "
             if ocr_result.raw_text:
                 _check_text += ocr_result.raw_text[:2000].lower() + " "
             ed = result.extracted_data or {}
@@ -2250,7 +2248,6 @@ class DocumentPipelineOrchestrator:
                     from app.services.ocr_transaction_service import OCRTransactionService
                     _svc = OCRTransactionService(self.db)
                     _infer_data = dict(doc_ocr)
-                    _infer_data["_file_name"] = document.file_name or ""
                     if ed:
                         _infer_data.update({k: v for k, v in ed.items() if k not in _infer_data or not _infer_data[k]})
                     svs_sub = _svc._infer_svs_subtype_legacy(_infer_data)

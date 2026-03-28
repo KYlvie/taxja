@@ -3352,8 +3352,8 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     # Infer from raw_text / description / file_name if not explicitly set
     if not frequency:
         _freq_text = str(ocr_data.get("raw_text") or "")[:2000].lower()
+        _freq_text += " " + str(getattr(document, 'raw_text', '') or "")[:2000].lower()
         _freq_text += " " + str(ocr_data.get("description") or "").lower()
-        _freq_text += " " + (document.file_name or "").lower()
         if any(m in _freq_text for m in ("monatlich", "monats", "sepa-lastschrift", "pro monat", "_sepa_", "sepa abbuchung")):
             frequency = "monthly"
         elif any(m in _freq_text for m in ("vierteljährlich", "vierteljaehrlich", "quartalsweise", "quartal")):
@@ -3370,28 +3370,34 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         or ""
     )
     if not insurance_type or insurance_type == "unknown":
-        # Infer from file name and extracted text
-        _fn = (document.file_name or "").lower()
+        # Infer from extracted document content ONLY (never from file name)
         _desc = str(ocr_data.get("description", "")).lower()
-        _all = _fn + " " + _desc
-        _type_infer = {
-            "berufshaftpflicht": "Berufshaftpflicht",
-            "haftpflicht": "Haftpflicht",
-            "rechtsschutz": "Rechtsschutzversicherung",
-            "gebaeudeversicherung": "Gebäudeversicherung",
-            "gebäudeversicherung": "Gebäudeversicherung",
-            "haushaltsversicherung": "Haushaltsversicherung",
-            "haushalt": "Haushaltsversicherung",
-            "kfz": "KFZ-Versicherung",
-            "vollkasko": "KFZ-Versicherung",
-            "private_kv": "Private Krankenversicherung",
-            "krankenversicherung": "Private Krankenversicherung",
-            "kv_zusatz": "Private Krankenversicherung",
-            "unfallversicherung": "Unfallversicherung",
-            "lebensversicherung": "Lebensversicherung",
-        }
-        for keyword, label in _type_infer.items():
-            if keyword in _all:
+        _raw = str(ocr_data.get("raw_text", ""))[:3000].lower()
+        # Also check document.raw_text (stored separately from ocr_result)
+        _doc_raw = str(getattr(document, 'raw_text', '') or "")[:3000].lower()
+        _merchant = str(ocr_data.get("merchant") or ocr_data.get("issuer") or "").lower()
+        _content = _desc + " " + _raw + " " + _doc_raw + " " + _merchant
+        # Order matters! More specific keywords first
+        _type_infer = [
+            ("kfz", "KFZ-Versicherung"),
+            ("vollkasko", "KFZ-Versicherung"),
+            ("kraftfahrzeug", "KFZ-Versicherung"),
+            ("fahrzeugversicherung", "KFZ-Versicherung"),
+            ("berufshaftpflicht", "Berufshaftpflicht"),
+            ("rechtsschutz", "Rechtsschutzversicherung"),
+            ("gebaeudeversicherung", "Gebäudeversicherung"),
+            ("gebäudeversicherung", "Gebäudeversicherung"),
+            ("haushaltsversicherung", "Haushaltsversicherung"),
+            ("hausratversicherung", "Haushaltsversicherung"),
+            ("private krankenversicherung", "Private Krankenversicherung"),
+            ("zusatzversicherung", "Private Krankenversicherung"),
+            ("sonderklasse", "Private Krankenversicherung"),
+            ("unfallversicherung", "Unfallversicherung"),
+            ("lebensversicherung", "Lebensversicherung"),
+            ("haftpflicht", "Haftpflicht"),  # Last — generic
+        ]
+        for keyword, label in _type_infer:
+            if keyword in _content:
                 insurance_type = label
                 break
     if not insurance_type:
@@ -3420,22 +3426,23 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     )
     insurer_name = _raw_insurer
     if not insurer_name:
-        # Infer from file name
-        _fn = (document.file_name or "")
+        # Try to extract from document content (never file name)
+        _raw = str(ocr_data.get("raw_text", ""))[:2000] + " " + str(getattr(document, 'raw_text', '') or "")[:2000]
         _known_insurers = {
             "UNIQA": "UNIQA Insurance Group AG",
-            "Wiener": "Wiener Städtische",
-            "WienerStaedtische": "Wiener Städtische",
+            "Wiener Städtische": "Wiener Städtische",
+            "Wiener Staedtische": "Wiener Städtische",
             "Generali": "Generali Versicherung AG",
             "Allianz": "Allianz Elementar",
+            "Zürich": "Zürich Versicherungs-AG",
             "Zuerich": "Zürich Versicherungs-AG",
-            "Zurich": "Zürich Versicherungs-AG",
             "GRAWE": "GRAWE (Grazer Wechselseitige)",
+            "Grazer Wechselseitige": "GRAWE (Grazer Wechselseitige)",
             "Helvetia": "Helvetia Versicherungen AG",
             "Donau": "Donau Versicherung AG",
         }
         for keyword, full_name in _known_insurers.items():
-            if keyword.lower() in _fn.lower():
+            if keyword.lower() in _raw.lower():
                 insurer_name = full_name
                 break
     if not insurer_name:
