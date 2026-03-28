@@ -14,7 +14,10 @@ const getRentalContracts = vi.fn();
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     i18n: { language: 'zh' },
-    t: (key: string, fallback?: any) => {
+    t: (
+      key: string,
+      fallback?: string | { defaultValue?: string },
+    ) => {
       if (typeof fallback === 'string') return fallback;
       if (fallback && typeof fallback === 'object' && typeof fallback.defaultValue === 'string') {
         return fallback.defaultValue;
@@ -32,9 +35,9 @@ vi.mock('../hooks/useConfirm', () => ({
 
 vi.mock('../services/propertyService', () => ({
   propertyService: {
-    getPropertyTransactions: (...args: any[]) => getPropertyTransactions(...args),
-    getPropertyMetrics: (...args: any[]) => getPropertyMetrics(...args),
-    getRentalContracts: (...args: any[]) => getRentalContracts(...args),
+    getPropertyTransactions: (...args: unknown[]) => getPropertyTransactions(...args),
+    getPropertyMetrics: (...args: unknown[]) => getPropertyMetrics(...args),
+    getRentalContracts: (...args: unknown[]) => getRentalContracts(...args),
   },
 }));
 

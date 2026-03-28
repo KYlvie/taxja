@@ -49,11 +49,6 @@ export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded
   const [sortBy, setSortBy] = useState<SortField>('net_income');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
-  // Fetch comparison data
-  useEffect(() => {
-    fetchComparisons();
-  }, [year, sortBy, sortOrder]);
-
   const fetchComparisons = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -67,6 +62,11 @@ export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded
       setIsLoading(false);
     }
   }, [year, sortBy, sortOrder]);
+
+  // Fetch comparison data
+  useEffect(() => {
+    void fetchComparisons();
+  }, [fetchComparisons]);
 
   // Prepare chart data
   const chartData = useMemo(() => {
