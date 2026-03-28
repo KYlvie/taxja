@@ -1,4 +1,9 @@
-type TranslateFn = (...args: any[]) => any;
+type TranslateFn = (
+  key: string,
+  options?: {
+    defaultValue?: string;
+  }
+) => string;
 
 export function normalizeTransactionCategoryKey(category?: string | null): string {
   const normalized = String(category || '').trim();

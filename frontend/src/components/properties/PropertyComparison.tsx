@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Select from '../common/Select';
 import { propertyService } from '../../services/propertyService';
@@ -54,7 +54,7 @@ export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded
     fetchComparisons();
   }, [year, sortBy, sortOrder]);
 
-  const fetchComparisons = async () => {
+  const fetchComparisons = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
@@ -66,7 +66,7 @@ export const PropertyComparison: React.FC<PropertyComparisonProps> = ({ embedded
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [year, sortBy, sortOrder]);
 
   // Prepare chart data
   const chartData = useMemo(() => {

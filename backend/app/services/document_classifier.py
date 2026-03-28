@@ -885,6 +885,10 @@ class DocumentClassifier:
                 "arbeitgeberkündigung", "arbeitgeberkuendigung",
                 "arbeitszeugnis", "pflichten aus dem arbeitsvertrag",
             ],
+            DocumentType.SVS_NOTICE: [
+                "wirtschaftskammer", "kammerumlage", "wko",
+                "gewerkschaft", "arbeiterkammer",
+            ],
             DocumentType.RENTAL_CONTRACT: [
                 "übergabeprotokoll", "uebergabeprotokoll", "ubergabeprotokoll",
                 "wohnungsübergabe", "wohnungsuebergabe", "wohnungsubergabe",
@@ -1049,6 +1053,11 @@ class DocumentClassifier:
         for doc_type, pattern_info in self.patterns.items():
             score = 0.0
             keyword_matches = 0
+
+            # Check exclusion rules before scoring
+            if _is_excluded(doc_type, text_lower, text_normalized):
+                scores[doc_type] = 0.0
+                continue
 
             # Check required keywords first (ALL must match)
             required_keywords = pattern_info.get("required_keywords", [])

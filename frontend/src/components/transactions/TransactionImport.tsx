@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isAxiosError } from 'axios';
 import { FileSpreadsheet, Upload, X } from 'lucide-react';
 import { ImportResult, Transaction } from '../../types/transaction';
 import { pickNativeSingleFile, supportsNativeFileActions } from '../../mobile/files';
@@ -49,8 +50,8 @@ const TransactionImport = ({
     try {
       const selectedFile = await pickNativeSingleFile(['text/csv', '.csv']);
       applyFile(selectedFile);
-    } catch (err: any) {
-      const message = String(err?.message || '').toLowerCase();
+    } catch (err: unknown) {
+      const message = String(err instanceof Error ? err.message : '').toLowerCase();
       if (message.includes('cancel')) {
         return;
       }
@@ -67,8 +68,11 @@ const TransactionImport = ({
     try {
       const result = await onImport(file);
       setImportResult(result);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('transactions.import.error'));
+    } catch (err: unknown) {
+      const detail = isAxiosError(err)
+        ? (err.response?.data as { detail?: string } | undefined)?.detail
+        : undefined;
+      setError(detail || t('transactions.import.error'));
     } finally {
       setIsImporting(false);
     }

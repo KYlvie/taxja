@@ -3315,10 +3315,11 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
         return {"import_suggestion": None}
 
     # Check if VLM missed insurance-specific fields (common when insurance_rescue reclassified)
+    # Only check truly insurance-specific fields — NOT zahlungsfrequenz which may be a default
     _key_fields_present = any([
         ocr_data.get("polizze_nr"), ocr_data.get("polizze"),
         ocr_data.get("versicherungsnehmer"), ocr_data.get("vertragsbeginn"),
-        ocr_data.get("zahlungsfrequenz"),
+        ocr_data.get("praemie"),  # praemie (not amount) is insurance-specific
     ])
     if not _key_fields_present:
         # VLM originally classified as other/invoice — insurance fields missing.

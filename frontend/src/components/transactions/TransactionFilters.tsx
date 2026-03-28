@@ -51,7 +51,7 @@ const TransactionFilters = ({
     }
   };
 
-  const handleChange = (key: keyof Filters, value: any) => {
+  const handleChange = <K extends keyof Filters>(key: K, value: Filters[K] | undefined) => {
     const newFilters = { ...localFilters, [key]: value || undefined };
     setLocalFilters(newFilters);
   };

@@ -114,7 +114,7 @@ describe('PropertyDetail linked document actions', () => {
 
     expect(screen.getByRole('heading', { name: 'MacBook Pro' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '\u67e5\u770b\u8d2d\u7f6e\u6587\u4ef6' })).toHaveAttribute('href', '/documents/42');
-    expect(screen.getByRole('link', { name: '\u7ba1\u7406\u5173\u8054\u6587\u4ef6' })).toHaveAttribute('href', '/documents?property_id=asset-1');
+    expect(screen.getByRole('link', { name: '\u53bb\u4ea4\u6613\u8bb0\u5f55\u67e5\u770b' })).toHaveAttribute('href', '/transactions');
     expect(screen.queryByText('properties.rentalContracts.title')).not.toBeInTheDocument();
   });
 

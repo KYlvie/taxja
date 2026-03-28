@@ -581,25 +581,29 @@ class OCREngine:
 
         # SVS post-processing
         if doc_type == DocumentType.SVS_NOTICE:
-            data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
-            data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
-            if data.get("taxpayer_name"):
-                data.setdefault("recipient", data["taxpayer_name"])
-            if data.get("beitrag_gesamt") and not data.get("amount"):
-                data["amount"] = data["beitrag_gesamt"]
-            q = data.get("quarter", "")
-            yr = data.get("tax_year", "")
-            data.setdefault(
-                "description",
-                f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
-            )
-            # English aliases for frontend
-            if data.get("pensionsversicherung"):
-                data.setdefault("pension_insurance", data["pensionsversicherung"])
-            if data.get("krankenversicherung"):
-                data.setdefault("health_insurance", data["krankenversicherung"])
-            if data.get("unfallversicherung"):
-                data.setdefault("accident_insurance", data["unfallversicherung"])
+            if self._is_not_svs(data):
+                doc_type = DocumentType.INVOICE
+                logger.info("Reclassified non-SVS document as INVOICE (issuer/text mismatch)")
+            else:
+                data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
+                data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
+                if data.get("taxpayer_name"):
+                    data.setdefault("recipient", data["taxpayer_name"])
+                if data.get("beitrag_gesamt") and not data.get("amount"):
+                    data["amount"] = data["beitrag_gesamt"]
+                q = data.get("quarter", "")
+                yr = data.get("tax_year", "")
+                data.setdefault(
+                    "description",
+                    f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
+                )
+                # English aliases for frontend
+                if data.get("pensionsversicherung"):
+                    data.setdefault("pension_insurance", data["pensionsversicherung"])
+                if data.get("krankenversicherung"):
+                    data.setdefault("health_insurance", data["krankenversicherung"])
+                if data.get("unfallversicherung"):
+                    data.setdefault("accident_insurance", data["unfallversicherung"])
 
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
 
@@ -762,6 +766,9 @@ class OCREngine:
         "CRITICAL: All amounts must be plain numbers with DOT as decimal separator. "
         "German format 1.662,36 must be converted to 1662.36. "
         "German format 11,00 must be converted to 11.0. Never use comma as decimal separator in JSON.\n"
+        "IMPORTANT: svs_notice is ONLY for SVS (Sozialversicherung der Selbständigen). "
+        "Documents from Wirtschaftskammer (WKO), Kammerumlage, Gewerkschaft, or other "
+        "membership/trade body fees are NOT svs_notice — classify them as invoice.\n"
         "For SVS (svs_notice): beitrag_gesamt, beitragsgrundlage, pensionsversicherung, "
         "krankenversicherung, unfallversicherung, selbstaendigenvorsorge, nachzahlung, "
         "gutschrift, tax_year, quarter, date, versicherungsnummer, taxpayer_name, "
@@ -999,24 +1006,28 @@ class OCREngine:
 
         # -- SVS post-processing (same as _process_scanned_pdf_via_vision) --
         if doc_type == DocumentType.SVS_NOTICE:
-            data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
-            data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
-            if data.get("taxpayer_name"):
-                data.setdefault("recipient", data["taxpayer_name"])
-            if data.get("beitrag_gesamt") and not data.get("amount"):
-                data["amount"] = data["beitrag_gesamt"]
-            q = data.get("quarter", "")
-            yr = data.get("tax_year", "")
-            data.setdefault(
-                "description",
-                f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
-            )
-            if data.get("pensionsversicherung"):
-                data.setdefault("pension_insurance", data["pensionsversicherung"])
-            if data.get("krankenversicherung"):
-                data.setdefault("health_insurance", data["krankenversicherung"])
-            if data.get("unfallversicherung"):
-                data.setdefault("accident_insurance", data["unfallversicherung"])
+            if self._is_not_svs(data):
+                doc_type = DocumentType.INVOICE
+                logger.info("Reclassified non-SVS document as INVOICE (issuer/text mismatch)")
+            else:
+                data.setdefault("issuer", "SVS Sozialversicherung der Selbständigen")
+                data.setdefault("merchant", "SVS Sozialversicherung der Selbständigen")
+                if data.get("taxpayer_name"):
+                    data.setdefault("recipient", data["taxpayer_name"])
+                if data.get("beitrag_gesamt") and not data.get("amount"):
+                    data["amount"] = data["beitrag_gesamt"]
+                q = data.get("quarter", "")
+                yr = data.get("tax_year", "")
+                data.setdefault(
+                    "description",
+                    f"SVS Beitragsvorschreibung Q{q}/{yr}" if q and yr else "SVS Beitragsvorschreibung",
+                )
+                if data.get("pensionsversicherung"):
+                    data.setdefault("pension_insurance", data["pensionsversicherung"])
+                if data.get("krankenversicherung"):
+                    data.setdefault("health_insurance", data["krankenversicherung"])
+                if data.get("unfallversicherung"):
+                    data.setdefault("accident_insurance", data["unfallversicherung"])
 
         # Fix German number formats (1.662 → 1662, etc.)
         from app.services.field_normalization import fix_german_number_formats
@@ -1331,6 +1342,31 @@ class OCREngine:
             success_count=success_count,
             failure_count=failure_count,
         )
+
+    _NON_SVS_ISSUER_KEYWORDS = [
+        "wirtschaftskammer", "wko", "kammerumlage",
+        "gewerkschaft", "arbeiterkammer", "ärztekammer", "aerztekammer",
+        "rechtsanwaltskammer", "notariatskammer", "apothekerkammer",
+    ]
+
+    @staticmethod
+    def _is_not_svs(data: Dict[str, Any]) -> bool:
+        """Check if a document classified as SVS is actually from a non-SVS issuer."""
+        check_fields = [
+            str(data.get("issuer") or ""),
+            str(data.get("merchant") or ""),
+            str(data.get("description") or ""),
+            str(data.get("raw_text") or "")[:500],
+        ]
+        combined = " ".join(check_fields).lower()
+        if any(kw in combined for kw in OCREngine._NON_SVS_ISSUER_KEYWORDS):
+            return True
+        # Also reject if none of the SVS-specific markers are present
+        svs_markers = ["svs", "sozialversicherung der selbständigen",
+                        "sozialversicherung der selbstaendigen"]
+        if not any(m in combined for m in svs_markers):
+            return True
+        return False
 
     @staticmethod
     def _normalize_receipt_payload(receipt: Dict[str, Any]) -> Dict[str, Any]:
