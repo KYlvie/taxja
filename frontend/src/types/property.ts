@@ -162,7 +162,7 @@ export interface PropertyMetrics {
   total_expenses: number;
   net_rental_income: number;
   years_remaining?: number;
-  warnings?: any[]; // Tax validation warnings
+  warnings?: unknown[]; // Tax validation warnings
 }
 
 export interface PropertyListItem {

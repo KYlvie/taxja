@@ -3583,15 +3583,64 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
                 "(§ 18 Abs 3 Z 2 EStG)"
             )
 
-    # Extract policy number from various OCR field names
+    # Extract policy number from various OCR field names (use updated_ocr which has fixes)
     _polizze_val = (
-        ocr_data.get("polizze_nr")
-        or ocr_data.get("polizze")
-        or ocr_data.get("polizzennummer")
-        or ocr_data.get("versicherungsnummer")
-        or ocr_data.get("policy_number")
+        updated_ocr.get("polizze_nr")
+        or updated_ocr.get("polizze")
+        or updated_ocr.get("polizzennummer")
+        or updated_ocr.get("versicherungsnummer")
+        or updated_ocr.get("policy_number")
         or ""
     )
+
+    # Fallback: extract polizze from raw text if VLM didn't return it as a JSON field
+    if not _polizze_val:
+        _raw_text = str(updated_ocr.get("raw_text", "")) or str(getattr(document, 'raw_text', '') or "")
+        import re as _re
+        _polizze_match = _re.search(
+            r'(?:Polizz?e(?:[- ]?Nr\.?)?|Polizzennummer|Vertragsnummer|Policy)[:\s]+([A-Z0-9][\w\-/]+)',
+            _raw_text, _re.IGNORECASE
+        )
+        if _polizze_match:
+            _polizze_val = _polizze_match.group(1).strip()
+
+    # Extract policyholder name (Versicherungsnehmer)
+    _policy_holder = (
+        updated_ocr.get("versicherungsnehmer")
+        or updated_ocr.get("policy_holder_name")
+        or updated_ocr.get("policy_holder")
+        or ""
+    )
+    if not _policy_holder:
+        _raw_text = _raw_text if '_raw_text' in dir() else (
+            str(updated_ocr.get("raw_text", "")) or str(getattr(document, 'raw_text', '') or "")
+        )
+        _holder_match = _re.search(
+            r'(?:Versicherungsnehmer|Versicherte Person|Versicherter)[:\s]+([^\n,]+)',
+            _raw_text, _re.IGNORECASE
+        )
+        if _holder_match:
+            _policy_holder = _holder_match.group(1).strip()
+
+    # Extract contract start date (Vertragsbeginn)
+    _vertragsbeginn = updated_ocr.get("vertragsbeginn") or ""
+    if not _vertragsbeginn and not start_date:
+        _raw_text = _raw_text if '_raw_text' in dir() else (
+            str(updated_ocr.get("raw_text", "")) or str(getattr(document, 'raw_text', '') or "")
+        )
+        _vb_match = _re.search(
+            r'(?:Vertragsbeginn|Versicherungsbeginn)[:\s]+(\d{1,2}[./]\d{1,2}[./]\d{4})',
+            _raw_text, _re.IGNORECASE
+        )
+        if _vb_match:
+            _vertragsbeginn = _vb_match.group(1).strip()
+            # Parse to date
+            for _fmt in ("%d.%m.%Y", "%d/%m/%Y"):
+                try:
+                    start_date = dt.strptime(_vertragsbeginn, _fmt).date()
+                    break
+                except ValueError:
+                    continue
 
     suggestion = {
         "type": "create_insurance_recurring",
@@ -3632,6 +3681,10 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     updated_ocr["zahlungsfrequenz"] = frequency
     updated_ocr["is_deductible"] = is_deductible
     updated_ocr["deduction_reason"] = deduction_reason
+    if _policy_holder:
+        updated_ocr["policy_holder_name"] = _policy_holder
+    if start_date:
+        updated_ocr["start_date"] = start_date.isoformat()
     if _polizze_val:
         updated_ocr["polizze"] = _polizze_val
 
