@@ -5319,9 +5319,19 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
     # These override the regex-based subtype detection which can be wrong
     ai_subtype = ai_first.get("document_subtype")
     ai_purpose = ai_first.get("document_purpose")
+    ai_doc_type_full = ai_first.get("document_type", "")
     if ai_subtype:
         updated_ocr["insurance_subtype"] = ai_subtype
-    if ai_purpose:
+    # Map AI document_type to normalized document_subtype
+    if ai_doc_type_full == "versicherung_kuendigung":
+        updated_ocr["document_subtype"] = "kuendigung"
+    elif ai_doc_type_full == "versicherung_praemienaenderung":
+        updated_ocr["document_subtype"] = "praemienaenderung"
+    elif ai_doc_type_full == "versicherung_jahresbestaetigung":
+        updated_ocr["document_subtype"] = "jahresbestaetigung"
+    elif ai_doc_type_full == "versicherungspolizze":
+        updated_ocr["document_subtype"] = "polizze"
+    elif ai_purpose:
         updated_ocr["document_subtype"] = ai_purpose
     # AI amounts → insurance premium fields
     if not updated_ocr.get("praemie_jaehrlich") and ai_amounts.get("annual_amount"):
