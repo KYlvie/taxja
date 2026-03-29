@@ -4152,38 +4152,9 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
         recurring_day_of_month=start_date.day,
     )
 
-    # Create loan_interest recurring if interest_rate > 0
+    # Note: loan_interest recurring requires PropertyLoan (DB constraint).
+    # For unlinked loans, interest is handled via Zinsbescheinigung upload.
     interest_recurring_id = None
-    if interest_rate_pct > 0 and monthly_payment:
-        from app.models.recurring_transaction import RecurringTransaction, RecurringTransactionType
-        # Calculate first month's interest: loan_amount * annual_rate / 12
-        first_month_interest = (loan_amount * interest_rate_pct / Decimal("100") / Decimal("12")).quantize(Decimal("0.01"))
-        # Determine tax deductibility from AI data
-        ai_first = (document.ocr_result or {}).get("_ai_first") or {}
-        ai_tax = ai_first.get("tax_treatment") or {}
-        is_deductible = bool(ai_tax.get("is_deductible", True))
-        tax_form = ai_tax.get("tax_form", "")  # E1a or E1b
-
-        interest_recurring = RecurringTransaction(
-            user_id=document.user_id,
-            recurring_type=RecurringTransactionType.LOAN_INTEREST,
-            description=f"Zinsaufwand - {lender_name}",
-            amount=first_month_interest,
-            transaction_type="expense",
-            category="loan_interest",
-            frequency="monthly",
-            start_date=start_date,
-            end_date=end_date,
-            is_active=True,
-            liability_id=liability.id,
-        )
-        db.add(interest_recurring)
-        db.flush()
-        interest_recurring_id = interest_recurring.id
-        logger.info(
-            f"Created loan_interest recurring {interest_recurring_id} for doc {document.id}: "
-            f"EUR {first_month_interest}/month (rate={interest_rate_pct}%)"
-        )
 
     ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
     suggestion = ocr_result.get("import_suggestion")
