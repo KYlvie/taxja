@@ -107,10 +107,10 @@ describe('TaxToolsPage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: /Tax position/i })).toBeInTheDocument());
     expect(screen.getByRole('link', { name: /Back/i })).toHaveAttribute('href', '/advanced');
     expect(screen.getByTestId('refund-estimate')).toBeInTheDocument();
-    expect(screen.getByTestId('ai-tax-advisor')).toBeInTheDocument();
-    expect(screen.getByTestId('employer-workbench')).toBeInTheDocument();
-    expect(screen.getByTestId('what-if-simulator')).toBeInTheDocument();
-    expect(screen.getByTestId('flat-rate-comparison')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /AI Tax Optimization/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Employer Workbench/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /What-If Simulator/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Flat Rate Comparison/i })).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: /Asset overview & comparison/i }),
     ).not.toBeInTheDocument();

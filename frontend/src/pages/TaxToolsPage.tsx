@@ -161,7 +161,7 @@ const TaxToolsPage = () => {
           <SectionHeading
             icon={Sparkles}
             tone="violet"
-            title={t('taxTools.page.aiAdvisor', 'AI Tax Optimization')}
+            title={t('ai.taxAdvisorTitle', 'AI Tax Optimization')}
             collapsed={collapsedSections.has('aiAdvisor')}
             onToggle={() => toggleSection('aiAdvisor')}
           />

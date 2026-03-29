@@ -783,6 +783,57 @@ _DOC_COMPLETENESS_TEXTS: Dict[str, Dict[str, Dict[str, str]]] = {
     },
 }
 
+_MISSING_SVS_QUARTER_TEXTS: Dict[str, Dict[str, str]] = {
+    "de": {
+        "title": "SVS Quartal fehlt",
+        "desc": "SVS {year}: Vorschreibung Q{quarter} fehlt. Fälligkeitsdatum war {due_date}.",
+        "action": "SVS hochladen",
+    },
+    "en": {
+        "title": "SVS quarter missing",
+        "desc": "SVS {year}: contribution notice Q{quarter} is missing. Due date was {due_date}.",
+        "action": "Upload SVS",
+    },
+    "zh": {
+        "title": "缺少 SVS 季度文件",
+        "desc": "SVS {year}：缺少 Q{quarter} 的缴费通知，截止日为 {due_date}。",
+        "action": "上传 SVS",
+    },
+    "fr": {
+        "title": "Trimestre SVS manquant",
+        "desc": "SVS {year} : l'avis de cotisation T{quarter} manque. Échéance : {due_date}.",
+        "action": "Téléverser SVS",
+    },
+    "ru": {
+        "title": "Отсутствует квартал SVS",
+        "desc": "SVS {year}: отсутствует уведомление за Q{quarter}. Срок был {due_date}.",
+        "action": "Загрузить SVS",
+    },
+    "hu": {
+        "title": "Hiányzó SVS negyedév",
+        "desc": "SVS {year}: a Q{quarter} hozzájárulási értesítés hiányzik. Határidő: {due_date}.",
+        "action": "SVS feltöltése",
+    },
+    "pl": {
+        "title": "Brak kwartału SVS",
+        "desc": "SVS {year}: brak zawiadomienia za Q{quarter}. Termin upłynął {due_date}.",
+        "action": "Prześlij SVS",
+    },
+    "tr": {
+        "title": "Eksik SVS çeyreği",
+        "desc": "SVS {year}: Q{quarter} katkı bildirimi eksik. Son tarih {due_date}.",
+        "action": "SVS yükle",
+    },
+    "bs": {
+        "title": "Nedostaje SVS kvartal",
+        "desc": "SVS {year}: nedostaje obavijest za Q{quarter}. Rok je bio {due_date}.",
+        "action": "Otpremi SVS",
+    },
+}
+
+for _lang, _entry in _MISSING_SVS_QUARTER_TEXTS.items():
+    _DOC_COMPLETENESS_TEXTS.setdefault(_lang, {})["missing_svs_quarter"] = _entry
+
 # ---------------------------------------------------------------------------
 # Localized text tables for calendar deadlines (de / en / zh)
 # ---------------------------------------------------------------------------
@@ -1031,6 +1082,73 @@ class DashboardService:
         self.db = db
         self._redis_client = None
         self._init_redis()
+
+    @staticmethod
+    def _today() -> date:
+        return date.today()
+
+    @staticmethod
+    def _svs_due_date(beitragsjahr: int, quarter: int) -> date:
+        due_dates = {
+            1: (2, 28),
+            2: (5, 31),
+            3: (8, 31),
+            4: (11, 30),
+        }
+        month, day = due_dates[quarter]
+        return date(beitragsjahr, month, day)
+
+    @staticmethod
+    def _coerce_svs_year(value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _coerce_svs_quarter(value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        raw = str(value).strip().lower().replace("q", "")
+        try:
+            quarter = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return quarter if quarter in {1, 2, 3, 4} else None
+
+    def _uploaded_svs_vorschreibung_quarters(
+        self,
+        user_id: int,
+        beitragsjahr: int,
+    ) -> set[int]:
+        quarters: set[int] = set()
+        documents = (
+            self.db.query(Document)
+            .filter(
+                Document.user_id == user_id,
+                Document.document_type == DocumentType.SVS_NOTICE,
+                Document.ocr_result.isnot(None),
+            )
+            .all()
+        )
+        for document in documents:
+            payload = document.ocr_result or {}
+            if not isinstance(payload, dict):
+                continue
+            subtype = str(payload.get("svs_subtype") or payload.get("_svs_subtype") or "").strip().lower()
+            if subtype != "vorschreibung":
+                continue
+            payload_year = self._coerce_svs_year(
+                payload.get("beitragsjahr") or payload.get("_beitragsjahr") or payload.get("tax_year")
+            )
+            if payload_year != beitragsjahr:
+                continue
+            quarter = self._coerce_svs_quarter(payload.get("quarter") or payload.get("_quarter"))
+            if quarter is not None:
+                quarters.add(quarter)
+        return quarters
     
     def _init_redis(self):
         """Initialize synchronous Redis client for caching"""
@@ -1485,6 +1603,35 @@ class DashboardService:
                             "priority": priority,
                             "action_url": "/documents",
                             "action_label": entry.get("action", None),
+                        })
+
+            # --- SVS quarter completeness check (real due dates, not month heuristics) ---
+            if DocumentType.SVS_NOTICE in uploaded_types:
+                uploaded_svs_quarters = self._uploaded_svs_vorschreibung_quarters(user_id, tax_year)
+                quarter_text = doc_texts.get("missing_svs_quarter", {})
+                today = self._today()
+                for quarter in (1, 2, 3, 4):
+                    due_date = self._svs_due_date(tax_year, quarter)
+                    if today <= due_date:
+                        continue
+                    if quarter in uploaded_svs_quarters:
+                        continue
+                    if quarter_text:
+                        suggestions.append({
+                            "type": "missing_document",
+                            "title": quarter_text["title"],
+                            "description": quarter_text["desc"].format(
+                                year=tax_year,
+                                quarter=quarter,
+                                due_date=due_date.strftime("%d.%m.%Y"),
+                            ),
+                            "document_type": DocumentType.SVS_NOTICE.value,
+                            "potential_savings": 0,
+                            "priority": "high",
+                            "action_url": "/documents",
+                            "action_label": quarter_text.get("action"),
+                            "svs_beitragsjahr": tax_year,
+                            "svs_quarter": quarter,
                         })
 
             # --- Data conflict detection (Bescheid vs Lohnzettel transactions) ---

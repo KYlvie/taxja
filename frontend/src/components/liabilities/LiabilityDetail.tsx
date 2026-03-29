@@ -17,6 +17,7 @@ type LiabilityDetailProps = {
   loading?: boolean;
   onEdit: () => void;
   onDeactivate: () => void;
+  showActions?: boolean;
 };
 
 const formatCurrency = (value: number) =>
@@ -115,6 +116,7 @@ const LiabilityDetailPanel = ({
   loading = false,
   onEdit,
   onDeactivate,
+  showActions = true,
 }: LiabilityDetailProps) => {
   const { t } = useTranslation();
   const [showAllRows, setShowAllRows] = useState(false);
@@ -351,18 +353,20 @@ const LiabilityDetailPanel = ({
         </div>
       </div>
 
-      <div className="liability-inline-actions">
-        {liability.can_edit_directly && (
-          <button type="button" className="btn btn-primary" onClick={onEdit}>
-            {t('common.edit')}
-          </button>
-        )}
-        {liability.is_active && liability.can_deactivate_directly && (
-          <button type="button" className="btn btn-secondary" onClick={onDeactivate}>
-            {t('liabilities.actions.deactivate')}
-          </button>
-        )}
-      </div>
+      {showActions && (
+        <div className="liability-inline-actions">
+          {liability.can_edit_directly && (
+            <button type="button" className="btn btn-primary" onClick={onEdit}>
+              {t('common.edit')}
+            </button>
+          )}
+          {liability.is_active && liability.can_deactivate_directly && (
+            <button type="button" className="btn btn-secondary" onClick={onDeactivate}>
+              {t('liabilities.actions.deactivate')}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Amortization Schedule */}
       <div>

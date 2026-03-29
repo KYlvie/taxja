@@ -6,19 +6,6 @@ export enum PropertyType {
   MIXED_USE = 'mixed_use',
 }
 
-export enum AssetCategory {
-  REAL_ESTATE = 'real_estate',
-  VEHICLE = 'vehicle',
-  ELECTRIC_VEHICLE = 'electric_vehicle',
-  COMPUTER = 'computer',
-  PHONE = 'phone',
-  OFFICE_FURNITURE = 'office_furniture',
-  MACHINERY = 'machinery',
-  TOOLS = 'tools',
-  SOFTWARE = 'software',
-  OTHER_EQUIPMENT = 'other_equipment',
-}
-
 /** Default useful life in years per Austrian tax law */
 export const ASSET_USEFUL_LIFE: Record<string, number> = {
   vehicle: 8,
@@ -184,13 +171,6 @@ export interface PropertyListResponse {
   total: number;
   properties: PropertyListItem[];
   include_archived: boolean;
-}
-
-export interface PropertyFilters {
-  status?: PropertyStatus;
-  property_type?: PropertyType;
-  search?: string;
-  include_archived?: boolean;
 }
 
 export interface RentalContract {
