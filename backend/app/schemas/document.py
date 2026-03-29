@@ -300,3 +300,59 @@ class FollowUpAnswerResponse(BaseModel):
     remaining_questions: int
     remaining_question_list: list = Field(default_factory=list)
     applied_defaults: Dict[str, Any] = Field(default_factory=dict)
+
+
+class InsuranceRecurringConfirmationRequest(BaseModel):
+    """Request body for POST /documents/{id}/confirm-insurance-recurring."""
+
+    business_use_percentage: Optional[float] = None
+    beruflicher_anteil_pct: Optional[float] = None
+    property_rental_status: Optional[str] = None
+    dedup_resolution: Optional[str] = None
+    override_payment_amount: Optional[float] = None
+    override_payment_frequency: Optional[str] = None
+    archive_only: bool = False
+    archive_reason_code: Optional[str] = None
+    archive_reason_note: Optional[str] = None
+
+    @validator("property_rental_status")
+    def validate_property_rental_status(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        allowed = {"rented", "owner_occupied", "mixed"}
+        if value not in allowed:
+            raise ValueError(f"property_rental_status must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+    @validator("dedup_resolution")
+    def validate_dedup_resolution(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        allowed = {"link_existing", "ignore_existing", "cancel"}
+        if value not in allowed:
+            raise ValueError(f"dedup_resolution must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+    @validator("override_payment_frequency")
+    def validate_override_payment_frequency(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        allowed = {"monthly", "quarterly", "semi_annual", "annually"}
+        if value not in allowed:
+            raise ValueError(f"override_payment_frequency must be one of: {', '.join(sorted(allowed))}")
+        return value
+
+    @validator("archive_reason_code")
+    def validate_archive_reason_code(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return None
+        allowed = {
+            "already_covered",
+            "not_relevant",
+            "duplicate",
+            "reference_only",
+            "other",
+        }
+        if value not in allowed:
+            raise ValueError(f"archive_reason_code must be one of: {', '.join(sorted(allowed))}")
+        return value

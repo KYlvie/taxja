@@ -2,7 +2,7 @@
 from datetime import datetime, date
 from enum import Enum
 from decimal import Decimal
-from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, ForeignKey, Enum as SQLEnum, Boolean, CheckConstraint
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, ForeignKey, Enum as SQLEnum, Boolean, CheckConstraint, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -95,6 +95,7 @@ class RecurringTransaction(Base):
 
     # Metadata
     notes = Column(String(1000), nullable=True)
+    insurance_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

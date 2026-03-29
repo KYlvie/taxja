@@ -9,6 +9,7 @@ import type { SuggestionCardFactoryProps } from '../components/documents/Suggest
 
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
+  initReactI18next: { type: '3rdParty', init: () => {} },
   useTranslation: () => ({
     t: (key: string, fallback?: any) => (typeof fallback === 'string' ? fallback : key),
     i18n: { language: 'en', resolvedLanguage: 'en' },
@@ -54,6 +55,42 @@ describe('Legacy entity-creation types', () => {
       <SuggestionCardFactory {...makeProps('create_recurring_expense', { description: 'Versicherung' })} />,
     );
     expect(container.querySelector('.import-suggestion-card')).toBeTruthy();
+  });
+
+  it('renders InsuranceSuggestionCard for create_insurance_recurring', () => {
+    const { container } = render(
+      <SuggestionCardFactory
+        {...makeProps('create_insurance_recurring', {
+          insurer_name: 'Allianz',
+          insurance_type: 'Rechtsschutz',
+          payment_amount: 89.4,
+          payment_frequency: 'quarterly',
+        })}
+      />,
+    );
+    expect(container.querySelector('.import-suggestion-card')).toBeTruthy();
+    expect(screen.getByText(/Allianz/)).toBeTruthy();
+  });
+
+  it('submits archive_only for archive_insurance_document', () => {
+    const onConfirmInsuranceRecurring = vi.fn();
+    render(
+      <SuggestionCardFactory
+        {...makeProps('archive_insurance_document', {
+          insurer_name: 'UNIQA',
+          insurance_type: 'Versicherungsbedingungen',
+          document_subtype: 'bedingungen',
+        })}
+        onConfirmInsuranceRecurring={onConfirmInsuranceRecurring}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole('button')[0]);
+    expect(onConfirmInsuranceRecurring).toHaveBeenCalledWith(
+      expect.objectContaining({
+        archive_only: true,
+        archive_reason_code: 'reference_only',
+      }),
+    );
   });
 
   it('renders AssetSuggestionCard for create_asset', () => {
@@ -167,40 +204,30 @@ describe('Bank statement card (import_bank_statement)', () => {
     expect(screen.getByText('AT12 3456 7890 1234')).toBeTruthy();
   });
 
-  it('renders transaction checkboxes', () => {
+  it('shows aggregate transaction counts instead of inline selection', () => {
     render(<SuggestionCardFactory {...makeProps('import_bank_statement', bankData)} />);
-    const checkboxes = screen.getAllByRole('checkbox');
-    // 3 transaction checkboxes + 1 select-all = 4
-    expect(checkboxes.length).toBe(4);
+    expect(screen.getByText('3')).toBeTruthy();
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('1')).toBeTruthy();
   });
 
-  it('disables checkbox for duplicate transactions', () => {
+  it('shows the workbench call-to-action for duplicate handling', () => {
     render(<SuggestionCardFactory {...makeProps('import_bank_statement', bankData)} />);
-    const checkboxes = screen.getAllByRole('checkbox');
-    // The duplicate is the 4th checkbox (index 3, after select-all at 0)
-    // Actually: select-all is at bottom, so tx checkboxes are 0,1,2 and select-all is 3
-    const duplicateCheckbox = checkboxes[2]; // third transaction
-    expect(duplicateCheckbox).toBeDisabled();
+    expect(screen.getByText(/Open bank statement workbench/i)).toBeTruthy();
   });
 
-  it('calls onConfirmBankTransactions with selected indices', () => {
-    const onConfirmBankTransactions = vi.fn();
+  it('calls onOpenBankWorkbench when the user confirms', () => {
+    const onOpenBankWorkbench = vi.fn();
     render(
       <SuggestionCardFactory
         {...makeProps('import_bank_statement', bankData)}
-        onConfirmBankTransactions={onConfirmBankTransactions}
+        onOpenBankWorkbench={onOpenBankWorkbench}
       />,
     );
-    // Click the import button (first button)
     const buttons = screen.getAllByRole('button');
     const importBtn = buttons[0];
     fireEvent.click(importBtn);
-    expect(onConfirmBankTransactions).toHaveBeenCalled();
-    // Default: non-duplicate indices selected = [0, 1]
-    const calledWith = onConfirmBankTransactions.mock.calls[0][0];
-    expect(calledWith).toContain(0);
-    expect(calledWith).toContain(1);
-    expect(calledWith).not.toContain(2);
+    expect(onOpenBankWorkbench).toHaveBeenCalled();
   });
 });
 

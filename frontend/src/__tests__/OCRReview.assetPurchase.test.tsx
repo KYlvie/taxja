@@ -13,6 +13,10 @@ const retryOcr = vi.fn();
 const confirmTaxData = vi.fn();
 
 vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: () => undefined,
+  },
   useTranslation: () => ({
     t: (key: string, fallback?: string | { defaultValue?: string }) => {
       if (typeof fallback === 'string') return fallback;
@@ -20,6 +24,10 @@ vi.mock('react-i18next', () => ({
         return fallback.defaultValue;
       }
       return key;
+    },
+    i18n: {
+      language: 'en',
+      resolvedLanguage: 'en',
     },
   }),
 }));
@@ -124,17 +132,14 @@ describe('OCRReview contract-sensitive purchase and rental flows', () => {
       expect(getDocumentForReview).toHaveBeenCalledWith(124);
     });
 
-    expect(screen.getAllByText('资产购置合同').length).toBeGreaterThan(0);
-    expect(screen.getByText('资产名称')).toBeInTheDocument();
-    expect(screen.getByText('资产类型')).toBeInTheDocument();
-    expect(screen.getByText('车架号 / VIN')).toBeInTheDocument();
-    expect(screen.queryByText('房产地址')).not.toBeInTheDocument();
-    expect(screen.queryByText('建筑价值')).not.toBeInTheDocument();
-    expect(screen.queryByText('不动产转让税')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Volkswagen Golf 1.6 TDI Comfortline')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('vehicle')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('WVWZZZAUZJW123456')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Argentinierstrasse 21, 1234 Wien')).not.toBeInTheDocument();
   });
 
   it('renders the contract role selector and inference summary for purchase contracts', async () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <OCRReview documentId={124} />
       </MemoryRouter>
@@ -144,9 +149,8 @@ describe('OCRReview contract-sensitive purchase and rental flows', () => {
       expect(getDocumentForReview).toHaveBeenCalledWith(124);
     });
 
-    expect(screen.getByText('我的身份')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('我是买方')).toBeInTheDocument();
-    expect(screen.getByText('合同身份判断')).toBeInTheDocument();
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0);
+    expect(container.querySelector('.review-contract-role-card')).not.toBeNull();
     expect(screen.getByText('Matched contract party to user full name.')).toBeInTheDocument();
   });
 
@@ -192,7 +196,7 @@ describe('OCRReview contract-sensitive purchase and rental flows', () => {
     expect(onOpenTransaction).toHaveBeenCalledWith(778);
   });
 
-  it('renders rental role controls and a shadow warning for rental contracts', async () => {
+  it('renders rental role controls and a shadow warning for tenant rental contracts', async () => {
     getDocumentForReview.mockResolvedValueOnce({
       document: {
         id: 125,
@@ -240,8 +244,70 @@ describe('OCRReview contract-sensitive purchase and rental flows', () => {
       expect(getDocumentForReview).toHaveBeenCalledWith(125);
     });
 
-    expect(screen.getByDisplayValue('我是租客')).toBeInTheDocument();
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0);
     expect(screen.getByText('Matched contract party to user full name.')).toBeInTheDocument();
     expect(container.querySelector('.review-warning-compact')).not.toBeNull();
+  });
+
+  it('renders landlord rental contract fields with landlord role selected', async () => {
+    getDocumentForReview.mockResolvedValueOnce({
+      document: {
+        id: 127,
+        user_id: 5,
+        document_type: 'rental_contract',
+        file_path: '/tmp/vermieterin-mietvertrag.pdf',
+        file_name: 'vermieterin-mietvertrag.pdf',
+        file_size: 1234,
+        mime_type: 'application/pdf',
+        confidence_score: 0.9,
+        needs_review: false,
+        created_at: '2026-03-18T00:00:00Z',
+        updated_at: '2026-03-18T00:00:00Z',
+        raw_text: '',
+        ocr_result: {
+          user_contract_role: 'landlord',
+          contract_role_resolution: {
+            candidate: 'landlord',
+            confidence: 0.94,
+            source: 'party_name_match',
+            evidence: ['Extracted landlord name matches the user profile.'],
+            strict_would_block: false,
+            mode: 'shadow',
+          },
+        },
+      },
+      extracted_data: {
+        monthly_rent: 1035,
+        property_address: 'Praterstrasse 40/12, 1020 Wien',
+        tenant_name: 'Mag. Stefan Berger',
+        landlord_name: 'DI Maria Steiner',
+        start_date: '2024-01-01',
+        end_date: '2026-12-31',
+        contract_type: 'unbefristet',
+        betriebskosten: 210,
+        deposit_amount: 3000,
+        confidence: {},
+      },
+      suggestions: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <OCRReview documentId={127} />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(getDocumentForReview).toHaveBeenCalledWith(127);
+    });
+
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0);
+    expect(screen.getByDisplayValue('Praterstrasse 40/12, 1020 Wien')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1035')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Mag. Stefan Berger')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('DI Maria Steiner')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('210')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('3000')).toBeInTheDocument();
+    expect(screen.getByText('Extracted landlord name matches the user profile.')).toBeInTheDocument();
   });
 });

@@ -125,9 +125,12 @@ describe('DocumentList status', () => {
       fireEvent.click(yearToggle);
     }
 
-    await waitFor(() => {
-      expect(screen.getByText('Transaction created')).toBeInTheDocument();
+    const statusBadge = await waitFor(() => {
+      const element = container.querySelector<HTMLElement>('.document-status-badge[title="Transaction created"]');
+      expect(element).not.toBeNull();
+      return element!;
     });
+    expect(statusBadge).toHaveAttribute('aria-label', 'Transaction created');
 
     expect(screen.queryByText('Recognized')).not.toBeInTheDocument();
   });
@@ -172,9 +175,12 @@ describe('DocumentList status', () => {
       fireEvent.click(yearToggle);
     }
 
-    await waitFor(() => {
-      expect(screen.getByText('Transaction created')).toBeInTheDocument();
+    const statusBadge = await waitFor(() => {
+      const element = container.querySelector<HTMLElement>('.document-status-badge[title="Transaction created"]');
+      expect(element).not.toBeNull();
+      return element!;
     });
+    expect(statusBadge).toHaveAttribute('aria-label', 'Transaction created');
 
     expect(screen.queryByText('Pending review')).not.toBeInTheDocument();
   });
