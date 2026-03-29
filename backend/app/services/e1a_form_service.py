@@ -52,16 +52,29 @@ def _load_self_employed_config(db: Session, tax_year: int) -> dict:
     return _FALLBACK_SELF_EMPLOYED
 
 
-def _sum_income(transactions: list, cats: list) -> Decimal:
-    return sum(
-        (t.amount or Decimal("0"))
-        for t in transactions
-        if t.type == TransactionType.INCOME and t.income_category in cats
-    )
+def _sum_income(transactions: list, cats: list, netto: bool = False) -> Decimal:
+    """Sum income by category.
+
+    If netto=True (Regelbesteuert / Nettosystem), subtracts vat_amount
+    from each transaction to get the net figure for E1a.
+    """
+    total = Decimal("0")
+    for t in transactions:
+        if t.type == TransactionType.INCOME and t.income_category in cats:
+            amt = t.amount or Decimal("0")
+            if netto and t.vat_amount and t.vat_amount > 0:
+                amt = amt - t.vat_amount
+            total += amt
+    return total
 
 
-def _sum_expense(transactions: list, cats: list, deductible_only: bool = True) -> Decimal:
-    """Sum expenses by category, using line-item-level amounts when available."""
+def _sum_expense(transactions: list, cats: list, deductible_only: bool = True,
+                  netto: bool = False) -> Decimal:
+    """Sum expenses by category, using line-item-level amounts when available.
+
+    If netto=True (Regelbesteuert / Nettosystem), subtracts vat_amount
+    from each transaction to get the net figure for E1a.
+    """
     total = Decimal("0")
     cat_values = {c.value if hasattr(c, "value") else str(c) for c in cats}
     for t in transactions:
@@ -85,13 +98,19 @@ def _sum_expense(transactions: list, cats: list, deductible_only: bool = True) -
                     continue
                 if deductible_only and not li.is_deductible:
                     continue
-                total += li.amount * li.quantity
+                li_total = li.amount * li.quantity
+                if netto and hasattr(li, "vat_amount") and li.vat_amount:
+                    li_total -= li.vat_amount
+                total += li_total
         else:
             if t.expense_category not in cats:
                 continue
             if deductible_only and not t.is_deductible:
                 continue
-            total += t.amount or Decimal("0")
+            amt = t.amount or Decimal("0")
+            if netto and t.vat_amount and t.vat_amount > 0:
+                amt = amt - t.vat_amount
+            total += amt
     return total
 
 
@@ -149,25 +168,37 @@ def generate_e1a_form_data(
         .all()
     )
 
-    # Income
-    business_income = _sum_income(transactions, [IncomeCategory.BUSINESS, IncomeCategory.SELF_EMPLOYMENT])
+    # Determine if user is Regelbesteuert (USt-Nettosystem)
+    # KU (Kleinunternehmer) uses Bruttosystem — no USt on invoices
+    is_regelbesteuert = getattr(user, "vat_status", None)
+    if hasattr(is_regelbesteuert, "value"):
+        is_regelbesteuert = is_regelbesteuert.value
+    use_netto = is_regelbesteuert == "regelbesteuert"
 
-    # Expenses by EA-Rechnung category
-    material = _sum_expense(transactions, [ExpenseCategory.GROCERIES])
+    # Income — netto for Regelbesteuert (USt goes to U1, not E1a)
+    business_income = _sum_income(
+        transactions,
+        [IncomeCategory.BUSINESS, IncomeCategory.SELF_EMPLOYMENT],
+        netto=use_netto,
+    )
+
+    # Expenses by EA-Rechnung category — netto for Regelbesteuert
+    _n = use_netto  # shorthand
+    material = _sum_expense(transactions, [ExpenseCategory.GROCERIES], netto=_n)
     personnel = Decimal("0")  # Einzelunternehmer typically no employees; placeholder
-    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT])
-    rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE])
-    travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE])
-    telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM])
-    marketing = _sum_expense(transactions, [ExpenseCategory.MARKETING])
-    insurance = _sum_expense(transactions, [ExpenseCategory.INSURANCE])
-    professional = _sum_expense(transactions, [ExpenseCategory.PROFESSIONAL_SERVICES])
-    bank_fees = _sum_expense(transactions, [ExpenseCategory.BANK_FEES])
-    interest = _sum_expense(transactions, [ExpenseCategory.LOAN_INTEREST])
-    svs = _sum_expense(transactions, [ExpenseCategory.SVS_CONTRIBUTIONS])
-    utilities = _sum_expense(transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX])
-    maintenance = _sum_expense(transactions, [ExpenseCategory.MAINTENANCE])
-    other = _sum_expense(transactions, [ExpenseCategory.OTHER])
+    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT], netto=_n)
+    rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE], netto=_n)
+    travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE], netto=_n)
+    telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM], netto=_n)
+    marketing = _sum_expense(transactions, [ExpenseCategory.MARKETING], netto=_n)
+    insurance = _sum_expense(transactions, [ExpenseCategory.INSURANCE], netto=_n)
+    professional = _sum_expense(transactions, [ExpenseCategory.PROFESSIONAL_SERVICES], netto=_n)
+    bank_fees = _sum_expense(transactions, [ExpenseCategory.BANK_FEES], netto=_n)
+    interest = _sum_expense(transactions, [ExpenseCategory.LOAN_INTEREST], netto=_n)
+    svs = _sum_expense(transactions, [ExpenseCategory.SVS_CONTRIBUTIONS], netto=_n)
+    utilities = _sum_expense(transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX], netto=_n)
+    maintenance = _sum_expense(transactions, [ExpenseCategory.MAINTENANCE], netto=_n)
+    other = _sum_expense(transactions, [ExpenseCategory.OTHER], netto=_n)
 
     total_expenses = (
         material + personnel + afa + rent + travel + telecom + marketing
