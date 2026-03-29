@@ -321,11 +321,16 @@ class OCREngine:
                 processed_image = self.preprocessor.preprocess(image)
                 raw_text = self._extract_text(processed_image)
 
+            # Use the specialist type detected by unified_vision (if any),
+            # otherwise fall back to the original hint.  Without this,
+            # loan contracts / purchase contracts classified by the VLM
+            # would be extracted via the generic invoice path.
+            effective_hint = getattr(self, "_last_unified_vision_type", None) or normalized_hint
             return self._process_from_raw_text(
                 raw_text,
                 image_bytes,
                 start_time,
-                document_type_hint=normalized_hint,
+                document_type_hint=effective_hint,
             )
 
         except Exception as e:
@@ -4551,3 +4556,121 @@ OCR text:
             "fields_extracted": len(result.extracted_data),
             "text_length": len(result.raw_text),
         }
+
+
+def _ocr_engine_normalize_insurance_frequency(value: Any) -> Optional[str]:
+    token = str(value or "").strip().lower()
+    if not token:
+        return None
+    mapping = {
+        "monatlich": "monthly",
+        "monthly": "monthly",
+        "monat": "monthly",
+        "pro monat": "monthly",
+        "vierteljaehrlich": "quarterly",
+        "vierteljährlich": "quarterly",
+        "quarterly": "quarterly",
+        "quartalsweise": "quarterly",
+        "quartal": "quarterly",
+        "halbjaehrlich": "semi_annual",
+        "halbjährlich": "semi_annual",
+        "semi_annual": "semi_annual",
+        "semi-annual": "semi_annual",
+        "jaehrlich": "annually",
+        "jährlich": "annually",
+        "annually": "annually",
+        "annual": "annually",
+    }
+    return mapping.get(token, token if token in {"monthly", "quarterly", "semi_annual", "annually"} else None)
+
+
+def _ocr_engine_normalize_insurance_amount_fields(data: Dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        return
+
+    if data.get("versicherungsart") and not data.get("insurance_type"):
+        data["insurance_type"] = data["versicherungsart"]
+    if data.get("document_variant") and not data.get("document_subtype"):
+        variant_map = {
+            "payment_confirmation": "sepa_beleg",
+            "premium_notice": "praemienvorschreibung",
+            "annual_confirmation": "jahresbestaetigung",
+            "policy": "polizze",
+        }
+        data["document_subtype"] = variant_map.get(
+            str(data["document_variant"]).strip().lower(),
+            data["document_variant"],
+        )
+    if data.get("policy_holder_name") and not data.get("versicherungsnehmer"):
+        data["versicherungsnehmer"] = data["policy_holder_name"]
+    if data.get("policy_number") and not data.get("polizze_nr"):
+        data["polizze_nr"] = data["policy_number"]
+
+    if data.get("annual_total_amount") is not None and data.get("premium_annual_brutto") in (None, ""):
+        data["premium_annual_brutto"] = data["annual_total_amount"]
+    if data.get("payment_amount") is not None and data.get("praemie") in (None, ""):
+        data["praemie"] = data["payment_amount"]
+    if data.get("premium_annual_brutto") is not None and data.get("praemie_jaehrlich") in (None, ""):
+        data["praemie_jaehrlich"] = data["premium_annual_brutto"]
+    if data.get("annual_total_amount") is not None and data.get("praemie_jaehrlich") in (None, ""):
+        data["praemie_jaehrlich"] = data["annual_total_amount"]
+    if data.get("amount_paid_this_year") is not None and data.get("praemie_jaehrlich") in (None, ""):
+        data["praemie_jaehrlich"] = data["amount_paid_this_year"]
+
+    freq = _ocr_engine_normalize_insurance_frequency(
+        data.get("zahlungsfrequenz")
+        or data.get("payment_frequency")
+        or data.get("frequency")
+    )
+    if freq:
+        data["zahlungsfrequenz"] = freq
+        data["payment_frequency"] = freq
+
+    annual = _parse_amount(
+        data.get("praemie_jaehrlich")
+        or data.get("premium_annual_brutto")
+        or data.get("annual_premium")
+        or data.get("annual_total")
+        or data.get("annual_total_amount")
+        or data.get("amount_paid_this_year")
+    )
+    period = _parse_amount(
+        data.get("praemie")
+        or data.get("period_premium")
+        or data.get("premium_per_payment")
+        or data.get("installment_amount")
+        or data.get("payment_amount")
+    )
+
+    multiplier = {
+        "monthly": 12,
+        "quarterly": 4,
+        "semi_annual": 2,
+        "annually": 1,
+    }.get(freq)
+
+    if annual is not None and period is not None:
+        if multiplier == 1 and annual > 0 and period < annual * 0.5:
+            period = annual
+        elif multiplier and multiplier > 1:
+            normalized_period = round(annual / multiplier, 2)
+            if period >= annual * 0.9:
+                period = normalized_period
+
+    if annual is None and period is not None and multiplier:
+        annual = round(period * multiplier, 2)
+    if period is None and annual is not None and multiplier:
+        period = annual if multiplier == 1 else round(annual / multiplier, 2)
+
+    if annual is not None:
+        data["praemie_jaehrlich"] = annual
+        if data.get("premium_annual_brutto") in (None, ""):
+            data["premium_annual_brutto"] = annual
+    if period is not None:
+        data["praemie"] = period
+        if data.get("payment_amount") in (None, ""):
+            data["payment_amount"] = period
+
+
+OCREngine._normalize_insurance_frequency = staticmethod(_ocr_engine_normalize_insurance_frequency)
+OCREngine._normalize_insurance_amount_fields = staticmethod(_ocr_engine_normalize_insurance_amount_fields)

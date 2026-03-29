@@ -78,10 +78,18 @@ class KreditvertragExtractor:
         return result
 
     def _extract_contract_number(self, text: str, data: KreditvertragData) -> None:
-        match = re.search(r"Vertragsnummer\s*:?\s*([A-Z0-9\-\/]+)", text, re.IGNORECASE)
-        if match:
-            data.contract_number = match.group(1).strip()
-            data.field_confidence["contract_number"] = 0.95
+        patterns = (
+            r"Vertragsnummer\s*:?\s*([A-Z0-9\-\/]+)",
+            r"Kreditnummer\s*:?\s*([A-Z0-9\-\/]+)",
+            r"Darlehensnummer\s*:?\s*([A-Z0-9\-\/]+)",
+            r"Kontonummer\s*:?\s*([A-Z0-9\-\/]+)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                data.contract_number = match.group(1).strip()
+                data.field_confidence["contract_number"] = 0.95
+                return
 
     def _extract_parties(self, text: str, data: KreditvertragData) -> None:
         lender = self._extract_party_name(
@@ -134,7 +142,7 @@ class KreditvertragExtractor:
         return None
 
     def _extract_loan_amount(self, text: str, data: KreditvertragData) -> None:
-        for label in ("Kreditbetrag", "Darlehensbetrag"):
+        for label in ("Kreditbetrag", "Darlehensbetrag", "Darlehenssumme"):
             match = re.search(
                 rf"{label}\s*:?\s*(?:EUR)?\s*{_AMOUNT_PATTERN}",
                 text,
@@ -147,11 +155,32 @@ class KreditvertragExtractor:
                     data.field_confidence["loan_amount"] = 0.95
                     return
 
+        # Fallback: "Darlehen in Hoehe von EUR 15.000,00"
+        match = re.search(
+            rf"Darlehen\s+in\s+H.{{0,2}}he\s+von\s*(?:EUR)?\s*{_AMOUNT_PATTERN}",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            amount = self._parse_amount(match.group(1))
+            if amount is not None:
+                data.loan_amount = amount
+                data.field_confidence["loan_amount"] = 0.95
+                return
+
     def _extract_interest_rate(self, text: str, data: KreditvertragData) -> None:
+        # Check for explicit interest-free (ZINSFREI / zinslos) first
+        if re.search(r"\b(?:zinsfrei|zinslos|zinsenloses?\s+darlehen|keine\s+zinsen)\b", text, re.IGNORECASE):
+            data.interest_rate = Decimal("0")
+            data.field_confidence["interest_rate"] = 0.95
+            return
+
         patterns = (
             rf"Aktueller\s+Zinssatz\s*:?\s*{_PERCENT_PATTERN}\s*%",
             rf"Fixzinssatz\s*:?\s*{_PERCENT_PATTERN}\s*%",
             rf"Nominalzinssatz\s*:?\s*{_PERCENT_PATTERN}\s*%",
+            rf"Sollzinssatz\s*:?\s*{_PERCENT_PATTERN}\s*%",
+            rf"Zinssatz\s*:?\s*{_PERCENT_PATTERN}\s*%\s*p\.?\s*a",
         )
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -163,25 +192,29 @@ class KreditvertragExtractor:
                     return
 
     def _extract_monthly_payment(self, text: str, data: KreditvertragData) -> None:
-        match = re.search(
+        patterns = (
             rf"Monatliche\s+Rate\s*:?\s*(?:EUR)?\s*{_AMOUNT_PATTERN}",
-            text,
-            re.IGNORECASE,
+            rf"monatlichen\s+Raten\s+von\s*(?:EUR)?\s*{_AMOUNT_PATTERN}",
+            rf"Rate\s+pro\s+Monat\s*:?\s*(?:EUR)?\s*{_AMOUNT_PATTERN}",
         )
-        if match:
-            amount = self._parse_amount(match.group(1))
-            if amount is not None:
-                data.monthly_payment = amount
-                data.field_confidence["monthly_payment"] = 0.9
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                amount = self._parse_amount(match.group(1))
+                if amount is not None:
+                    data.monthly_payment = amount
+                    data.field_confidence["monthly_payment"] = 0.9
+                    return
 
     def _extract_dates(self, text: str, data: KreditvertragData) -> None:
         date_fields = {
-            "start_date": "Vertragsbeginn",
-            "end_date": "Vertragsende",
-            "first_rate_date": "Erste Rate",
+            "start_date": ("Vertragsbeginn", "Laufzeitbeginn", "Abgeschlossen am"),
+            "end_date": ("Vertragsende", "Laufzeitende", "Letzte Rate"),
+            "first_rate_date": ("Erste Rate", "erste Rate", "erstmals am"),
         }
-        for field, label in date_fields.items():
-            match = re.search(rf"{label}\s*:?\s*{_DATE_PATTERN}", text, re.IGNORECASE)
+        for field, labels in date_fields.items():
+            label_pattern = "|".join(re.escape(l) for l in labels)
+            match = re.search(rf"(?:{label_pattern})\s*:?\s*{_DATE_PATTERN}", text, re.IGNORECASE)
             if not match:
                 continue
             parsed = self._parse_date(match.group(1))

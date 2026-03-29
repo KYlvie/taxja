@@ -3,6 +3,7 @@ import { SuggestionCardProps } from './suggestion-cards/SuggestionCardBase';
 import PropertySuggestionCard from './suggestion-cards/PropertySuggestionCard';
 import RecurringIncomeSuggestionCard from './suggestion-cards/RecurringIncomeSuggestionCard';
 import RecurringExpenseSuggestionCard from './suggestion-cards/RecurringExpenseSuggestionCard';
+import InsuranceSuggestionCard from './suggestion-cards/InsuranceSuggestionCard';
 import AssetSuggestionCard from './suggestion-cards/AssetSuggestionCard';
 import LoanSuggestionCard from './suggestion-cards/LoanSuggestionCard';
 import LohnzettelSuggestionCard from './suggestion-cards/LohnzettelSuggestionCard';
@@ -25,6 +26,7 @@ export interface SuggestionCardFactoryProps extends SuggestionCardProps {
   onConfirmProperty?: () => void;
   onConfirmRecurring?: () => void;
   onConfirmRecurringExpense?: () => void;
+  onConfirmInsuranceRecurring?: (payload?: any) => void;
   onConfirmAsset?: (payload?: any) => void;
   onConfirmLoan?: () => void;
   onConfirmLoanRepayment?: () => void;
@@ -67,6 +69,11 @@ const SuggestionCardFactory: React.FC<SuggestionCardFactoryProps> = (props) => {
     return <RecurringExpenseSuggestionCard {...props}
       onConfirm={props.onConfirmRecurringExpense || props.onConfirm}
       confirmActionKey="recurring_expense" />;
+  }
+  if (type === 'create_insurance_recurring' || type === 'archive_insurance_document') {
+    return <InsuranceSuggestionCard {...props}
+      onConfirm={props.onConfirmInsuranceRecurring || props.onConfirm}
+      confirmActionKey="insurance_recurring" />;
   }
   if (type === 'create_asset') {
     return <AssetSuggestionCard {...props}

@@ -27,6 +27,7 @@ import {
   documentService,
   type AssetSuggestionConfirmationPayload,
   type DocumentExportYearOption,
+  type InsuranceRecurringConfirmationPayload,
 } from '../services/documentService';
 import { useDocumentStore } from '../stores/documentStore';
 import { transactionService } from '../services/transactionService';
@@ -1915,6 +1916,42 @@ const isReceiptOrInvoice = (doc: Document) =>
       aiToast(t('documents.suggestion.recurringExpenseCreated'), 'success');
       useRefreshStore.getState().refreshRecurring();
       useRefreshStore.getState().refreshTransactions();
+      useRefreshStore.getState().refreshDashboard();
+      const updated = await documentService.getDocument(viewingDocument.id);
+      setViewingDocument(updated);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Error';
+      setConfirmResult({ type: 'error', message: detail });
+    } finally {
+      setConfirmingAction(null);
+    }
+  }, [viewingDocument, t]);
+
+  const handleConfirmInsuranceRecurring = useCallback(async (
+    confirmation?: InsuranceRecurringConfirmationPayload,
+  ) => {
+    if (!viewingDocument) return;
+    setConfirmingAction('insurance_recurring');
+    setConfirmResult(null);
+    try {
+      const result = await documentService.confirmInsuranceRecurring(viewingDocument.id, confirmation);
+      const archivedOnly = Boolean(result?.archive_only || result?.resolution === 'archive_only');
+      setConfirmResult({
+        type: 'success',
+        message: archivedOnly
+          ? t('documents.suggestion.insuranceArchived', 'Insurance document archived without creating recurring')
+          : t('documents.suggestion.insuranceRecurringCreated', 'Insurance recurring created'),
+      });
+      aiToast(
+        archivedOnly
+          ? t('documents.suggestion.insuranceArchived', 'Insurance document archived without creating recurring')
+          : t('documents.suggestion.insuranceRecurringCreated', 'Insurance recurring created'),
+        'success',
+      );
+      if (!archivedOnly) {
+        useRefreshStore.getState().refreshRecurring();
+        useRefreshStore.getState().refreshTransactions();
+      }
       useRefreshStore.getState().refreshDashboard();
       const updated = await documentService.getDocument(viewingDocument.id);
       setViewingDocument(updated);
@@ -3939,6 +3976,10 @@ const isReceiptOrInvoice = (doc: Document) =>
           {(() => {
             const data = normalizeOcrDataForDisplay(viewingDocument.ocr_result);
             const suggestion = data?.import_suggestion;
+            const isArchiveOutcome =
+              suggestion
+              && suggestion.status === 'confirmed'
+              && suggestion.resolution === 'archive_only';
             const isLegacyLoanNeedsInput =
               suggestion?.status === 'needs_input'
               && (suggestion?.type === 'create_loan' || suggestion?.type === 'create_loan_repayment');
@@ -3947,7 +3988,7 @@ const isReceiptOrInvoice = (doc: Document) =>
               && (suggestion.status === 'pending'
                 || suggestion.status === 'ready_to_confirm'
                 || isLegacyLoanNeedsInput);
-            if (!isVisibleSuggestion) return null;
+            if (!isVisibleSuggestion && !isArchiveOutcome) return null;
 
             return (
               <DocumentActionGate
@@ -3956,24 +3997,34 @@ const isReceiptOrInvoice = (doc: Document) =>
                 helpers={(liveViewerDecision ?? resolveDocumentPresentation(viewingDocument)).helpers}
               >
                 {({ hidden, disabled, reason }) => !hidden ? (
-                  <SuggestionCardFactory
-                    suggestion={suggestion}
-                    confirmResult={confirmResult}
-                    confirmingAction={confirmingAction}
-                    onConfirm={() => {}}
-                    onDismiss={handleDismissSuggestion}
-                    onConfirmProperty={handleConfirmProperty}
-                    onConfirmRecurring={handleConfirmRecurring}
-                    onConfirmRecurringExpense={handleConfirmRecurringExpense}
-                    onConfirmAsset={handleConfirmAsset}
-                    onConfirmLoan={handleConfirmLoan}
-                    onConfirmLoanRepayment={handleConfirmLoanRepayment}
-                    onConfirmTaxData={handleConfirmTaxData}
-                    onOpenBankWorkbench={handleOpenBankWorkbench}
-                    confirmDisabled={disabled}
-                    confirmDisabledReason={reason}
-                    documentId={viewingDocument.id}
-                  />
+                  isArchiveOutcome ? (
+                    <div className="suggestion-result info">
+                      {t('documents.suggestion.insuranceArchivedWithReason', {
+                        defaultValue: 'This insurance document was archived without creating recurring. Reason: {{reason}}',
+                        reason: suggestion.archive_reason_code || 'archive_only',
+                      })}
+                    </div>
+                  ) : (
+                    <SuggestionCardFactory
+                      suggestion={suggestion}
+                      confirmResult={confirmResult}
+                      confirmingAction={confirmingAction}
+                      onConfirm={() => {}}
+                      onDismiss={handleDismissSuggestion}
+                      onConfirmProperty={handleConfirmProperty}
+                      onConfirmRecurring={handleConfirmRecurring}
+                      onConfirmRecurringExpense={handleConfirmRecurringExpense}
+                      onConfirmInsuranceRecurring={handleConfirmInsuranceRecurring}
+                      onConfirmAsset={handleConfirmAsset}
+                      onConfirmLoan={handleConfirmLoan}
+                      onConfirmLoanRepayment={handleConfirmLoanRepayment}
+                      onConfirmTaxData={handleConfirmTaxData}
+                      onOpenBankWorkbench={handleOpenBankWorkbench}
+                      confirmDisabled={disabled}
+                      confirmDisabledReason={reason}
+                      documentId={viewingDocument.id}
+                    />
+                  )
                 ) : null}
               </DocumentActionGate>
             );

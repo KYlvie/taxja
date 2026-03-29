@@ -59,6 +59,8 @@ from app.schemas.document import (
 
     FollowUpAnswerResponse,
 
+    InsuranceRecurringConfirmationRequest,
+
 )
 
 from app.schemas.ocr_review import (
@@ -5982,6 +5984,8 @@ def confirm_insurance_recurring_from_ocr(
 
     document_id: int,
 
+    confirmation: InsuranceRecurringConfirmationRequest | None = Body(default=None),
+
     current_user: User = Depends(get_current_user),
 
     db: Session = Depends(get_db),
@@ -6022,40 +6026,48 @@ def confirm_insurance_recurring_from_ocr(
 
     suggestion = ocr_result.get("import_suggestion")
 
-    if not suggestion or suggestion.get("type") != "create_insurance_recurring":
+    if not suggestion or suggestion.get("type") not in {"create_insurance_recurring", "archive_insurance_document"}:
 
         raise HTTPException(
 
             status_code=400,
 
-            detail=get_error_message("no_suggestion_found", _get_lang(request, current_user), suggestion_type="insurance recurring"),
+            detail=get_error_message("no_suggestion_found", _get_lang(request, current_user), suggestion_type="insurance"),
 
         )
 
     if suggestion.get("status") == "confirmed":
 
         return {
-
-            "message": get_error_message("insurance_recurring_already_created", _get_lang(request, current_user)),
-
+            "message": (
+                "Insurance document archived"
+                if suggestion.get("resolution") == "archive_only"
+                else get_error_message("insurance_recurring_already_created", _get_lang(request, current_user))
+            ),
             "recurring_id": suggestion.get("recurring_id"),
-
             "already_confirmed": True,
-
+            "resolution": suggestion.get("resolution"),
+            "archive_reason_code": suggestion.get("archive_reason_code"),
         }
 
     try:
 
         from app.tasks.ocr_tasks import create_insurance_recurring_from_suggestion
 
-        result = create_insurance_recurring_from_suggestion(db, document, suggestion["data"])
+        result = create_insurance_recurring_from_suggestion(
+            db,
+            document,
+            suggestion["data"],
+            confirmation.model_dump(exclude_none=True) if confirmation is not None else None,
+        )
 
         return {
-
-            "message": get_error_message("insurance_recurring_created_successfully", _get_lang(request, current_user)),
-
+            "message": (
+                "Insurance document archived"
+                if result.get("archive_only")
+                else get_error_message("insurance_recurring_created_successfully", _get_lang(request, current_user))
+            ),
             **result,
-
         }
 
     except ValueError as e:

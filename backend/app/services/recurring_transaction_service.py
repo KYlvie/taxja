@@ -1,6 +1,7 @@
 """Service for managing and generating recurring transactions"""
 from datetime import date, datetime
 from decimal import Decimal
+import json
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -14,7 +15,11 @@ from app.models.transaction import Transaction, TransactionType, IncomeCategory,
 from app.core.transaction_enum_coercion import coerce_expense_category, coerce_income_category
 from app.models.property import Property, PropertyStatus
 from app.models.property_loan import PropertyLoan
+from app.models.loan_installment import LoanInstallment
 from app.models.liability import Liability
+from app.models.transaction_line_item import LineItemAllocationSource
+from app.services.posting_line_utils import quantize_money, replace_transaction_line_items
+from app.services.transaction_rule_materializer import _build_split_line_items
 
 
 class RecurringTransactionService:
@@ -22,6 +27,45 @@ class RecurringTransactionService:
     
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _insurance_metadata(recurring: RecurringTransaction) -> Dict[str, Any]:
+        metadata = getattr(recurring, "insurance_metadata", None)
+        if isinstance(metadata, dict):
+            return dict(metadata)
+
+        notes = str(getattr(recurring, "notes", "") or "")
+        if notes.startswith("{") and notes.endswith("}"):
+            try:
+                payload = json.loads(notes)
+                if isinstance(payload, dict):
+                    return payload
+            except Exception:
+                pass
+
+        parsed: Dict[str, Any] = {}
+        for part in notes.split(";"):
+            if "=" not in part:
+                continue
+            key, value = part.split("=", 1)
+            parsed[key.strip()] = value.strip()
+        return parsed
+
+    @staticmethod
+    def _insurance_deductible_pct(recurring: RecurringTransaction) -> Decimal:
+        metadata = RecurringTransactionService._insurance_metadata(recurring)
+        raw = metadata.get("deductible_pct")
+        if raw in (None, ""):
+            return Decimal("1.00") if metadata.get("deductibility_status") == "deductible" else Decimal("0.00")
+        try:
+            pct = Decimal(str(raw))
+        except Exception:
+            return Decimal("0.00")
+        if pct < Decimal("0.00"):
+            return Decimal("0.00")
+        if pct > Decimal("1.00"):
+            pct = pct / Decimal("100")
+        return min(pct, Decimal("1.00"))
 
     @staticmethod
     def _build_generated_description(recurring: RecurringTransaction) -> str:
@@ -177,6 +221,7 @@ class RecurringTransactionService:
         end_date: Optional[date] = None,
         day_of_month: int = 1,
         source_document_id: Optional[int] = None,
+        insurance_metadata: Optional[Dict[str, Any]] = None,
     ) -> RecurringTransaction:
         """
         Create a recurring transaction for insurance premium payments.
@@ -208,6 +253,7 @@ class RecurringTransactionService:
             is_active=True,
             next_generation_date=start_date,
             source_document_id=source_document_id,
+            insurance_metadata=insurance_metadata,
         )
         
         self.db.add(recurring)
@@ -467,6 +513,25 @@ class RecurringTransactionService:
 
         return generated_transactions
     
+    def _get_installment_for_period(
+        self,
+        loan_id: int,
+        target_date: date,
+    ) -> Optional[LoanInstallment]:
+        """Find the LoanInstallment matching a given year+month."""
+        from sqlalchemy import extract
+
+        return (
+            self.db.query(LoanInstallment)
+            .filter(
+                LoanInstallment.loan_id == loan_id,
+                extract("year", LoanInstallment.due_date) == target_date.year,
+                extract("month", LoanInstallment.due_date) == target_date.month,
+            )
+            .order_by(LoanInstallment.due_date)
+            .first()
+        )
+
     def _generate_transaction_from_recurring(
         self,
         recurring: RecurringTransaction,
@@ -474,11 +539,11 @@ class RecurringTransactionService:
     ) -> Optional[Transaction]:
         """Generate a transaction from a recurring transaction."""
 
-        # Legacy standalone loan repayments were modeled as expenses, which
-        # distorted both bookkeeping and tax reports. Keep the template for
-        # reference, but stop generating expense transactions from it.
+        # --- LOAN_REPAYMENT: generate LIABILITY_REPAYMENT (not expense!) ---
+        # Previously returned None, which hid real cash outflows from the ledger.
+        # The fix uses LIABILITY_REPAYMENT so tax reports are unaffected.
         if recurring.recurring_type == RecurringTransactionType.LOAN_REPAYMENT:
-            return None
+            return self._generate_loan_repayment_transaction(recurring, transaction_date)
 
         # Determine transaction type and category
         if recurring.transaction_type == TransactionType.INCOME.value:
@@ -506,10 +571,35 @@ class RecurringTransactionService:
             expense_category = None
             is_deductible = False
         
+        if recurring.recurring_type == RecurringTransactionType.INSURANCE_PREMIUM:
+            insurance_metadata = self._insurance_metadata(recurring)
+            if insurance_metadata.get("insurance_subtype") == "gebaeudeversicherung":
+                expense_category = ExpenseCategory.PROPERTY_INSURANCE
+
+            deductible_pct = self._insurance_deductible_pct(recurring)
+            deductible_status = insurance_metadata.get("deductibility_status")
+            is_deductible = bool(
+                deductible_status == "deductible" and deductible_pct >= Decimal("0.9999")
+            )
+            deduction_reason = insurance_metadata.get("deductibility_hint")
+        else:
+            insurance_metadata = {}
+            deductible_pct = Decimal("1.00") if is_deductible else Decimal("0.00")
+            deduction_reason = None
+
+        # Fix 1: For loan interest, read precise amount from installment table
+        # instead of using the fixed recurring.amount (which doesn't reflect declining balance).
+        # Falls back to recurring.amount if no installment exists.
+        amount = recurring.amount
+        if recurring.recurring_type == RecurringTransactionType.LOAN_INTEREST and recurring.loan_id:
+            installment = self._get_installment_for_period(recurring.loan_id, transaction_date)
+            if installment and installment.interest_amount is not None:
+                amount = installment.interest_amount
+
         transaction = Transaction(
             user_id=recurring.user_id,
             type=txn_type,
-            amount=recurring.amount,
+            amount=amount,
             transaction_date=transaction_date,
             description=self._build_generated_description(recurring),
             income_category=income_category,
@@ -517,14 +607,108 @@ class RecurringTransactionService:
             property_id=recurring.property_id,
             liability_id=recurring.liability_id,
             is_deductible=is_deductible,
+            deduction_reason=deduction_reason,
             is_system_generated=True,
             source_recurring_id=recurring.id,
         )
         
         self.db.add(transaction)
+        self.db.flush()
+
+        if recurring.recurring_type == RecurringTransactionType.INSURANCE_PREMIUM:
+            total_amount = quantize_money(recurring.amount)
+            deductible_amount = quantize_money(total_amount * deductible_pct)
+            private_amount = total_amount - deductible_amount
+
+            if deductible_pct <= Decimal("0.00"):
+                deductible_amount = Decimal("0.00")
+                private_amount = total_amount
+
+            if deductible_pct >= Decimal("0.9999"):
+                private_amount = Decimal("0.00")
+                deductible_amount = total_amount
+
+            line_items = _build_split_line_items(
+                transaction,
+                deductible_amount=deductible_amount,
+                private_amount=private_amount,
+                allocation_source=LineItemAllocationSource.PERCENTAGE_RULE,
+                deduction_reason=deduction_reason,
+            )
+            replace_transaction_line_items(self.db, transaction, line_items)
         
         return transaction
     
+    def _generate_loan_repayment_transaction(
+        self,
+        recurring: RecurringTransaction,
+        transaction_date: date,
+    ) -> Optional[Transaction]:
+        """Generate a LIABILITY_REPAYMENT transaction for a loan repayment.
+
+        Previously this returned None which hid real bank debits from the ledger.
+        Now we record the full monthly payment as LIABILITY_REPAYMENT (never expense)
+        so it appears in the cash-flow ledger but does NOT affect tax reports.
+        """
+        amount = recurring.amount  # Full monthly payment (principal + interest)
+
+        # Try to get principal/interest split from installment table
+        installment = None
+        if recurring.loan_id:
+            installment = self._get_installment_for_period(
+                recurring.loan_id, transaction_date
+            )
+
+        interest_note = ""
+        if installment and installment.interest_amount is not None:
+            interest_note = (
+                f" (davon Zinsen {installment.interest_amount} EUR"
+                " \u2014 siehe Zinsaufwand)"
+            )
+
+        transaction = Transaction(
+            user_id=recurring.user_id,
+            type=TransactionType.LIABILITY_REPAYMENT,
+            amount=amount,
+            transaction_date=transaction_date,
+            description=f"Kreditrate {recurring.description}{interest_note}",
+            expense_category=None,
+            income_category=None,
+            property_id=recurring.property_id,
+            liability_id=recurring.liability_id,
+            is_deductible=False,
+            is_system_generated=True,
+            source_recurring_id=recurring.id,
+        )
+
+        # Hard assertion: LOAN_REPAYMENT must never produce an expense
+        assert transaction.type == TransactionType.LIABILITY_REPAYMENT, (
+            "LOAN_REPAYMENT must generate LIABILITY_REPAYMENT, never expense"
+        )
+
+        self.db.add(transaction)
+        self.db.flush()
+
+        # Update Liability outstanding_balance
+        if recurring.liability_id:
+            principal_repaid = amount
+            if installment and installment.principal_amount:
+                principal_repaid = installment.principal_amount
+            elif recurring.loan_id and installment and installment.interest_amount is not None:
+                # Approximate: payment minus interest = principal
+                principal_repaid = max(Decimal("0"), Decimal(str(amount)) - Decimal(str(installment.interest_amount)))
+
+            liability = self.db.query(Liability).filter(
+                Liability.id == recurring.liability_id
+            ).first()
+            if liability and liability.outstanding_balance is not None:
+                new_balance = Decimal(str(liability.outstanding_balance)) - Decimal(str(principal_repaid))
+                if new_balance < 0:
+                    new_balance = Decimal("0")
+                liability.outstanding_balance = new_balance
+
+        return transaction
+
     def auto_pause_for_sold_property(self, property_id: str) -> List[RecurringTransaction]:
         """
         Automatically pause all recurring transactions for a sold property.

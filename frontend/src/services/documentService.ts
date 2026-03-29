@@ -1,5 +1,5 @@
 import api from './api';
-import { Document, DocumentFilter, OCRReviewData } from '../types/document';
+import { Document, DocumentFilter, OCRReviewData, ExtractedData } from '../types/document';
 
 export interface AssetSuggestionConfirmationPayload {
   put_into_use_date?: string;
@@ -31,6 +31,18 @@ export interface ConfirmBankTransactionsResponse {
   suggestion_status: 'pending' | 'confirmed';
   skipped_duplicates: number;
   classified: number;
+}
+
+export interface InsuranceRecurringConfirmationPayload {
+  business_use_percentage?: number;
+  beruflicher_anteil_pct?: number;
+  property_rental_status?: 'rented' | 'owner_occupied' | 'mixed';
+  dedup_resolution?: 'link_existing' | 'ignore_existing' | 'cancel';
+  override_payment_amount?: number;
+  override_payment_frequency?: 'monthly' | 'quarterly' | 'semi_annual' | 'annually';
+  archive_only?: boolean;
+  archive_reason_code?: 'already_covered' | 'not_relevant' | 'duplicate' | 'reference_only' | 'other';
+  archive_reason_note?: string;
 }
 
 export interface DocumentExportYearOption {
@@ -349,8 +361,14 @@ export const documentService = {
   },
 
   // Confirm insurance recurring creation from Versicherungsbestätigung
-  confirmInsuranceRecurring: async (id: number): Promise<Record<string, unknown>> => {
-    const response = await api.post(`/documents/${id}/confirm-insurance-recurring`);
+  confirmInsuranceRecurring: async (
+    id: number,
+    confirmation?: InsuranceRecurringConfirmationPayload,
+  ): Promise<Record<string, unknown>> => {
+    const response = await api.post(
+      `/documents/${id}/confirm-insurance-recurring`,
+      confirmation || {},
+    );
     return response.data;
   },
 

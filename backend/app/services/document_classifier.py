@@ -934,6 +934,24 @@ class DocumentClassifier:
                     "_unsupported_type": "k1_form",
                     "_message": "K1 (Körperschaftsteuererklärung) — corporate tax not supported"}
 
+        # --- Priority 0.5: Kreditvertrag / Darlehensvertrag ---
+        # Must be checked BEFORE Kaufvertrag scoring because loan contracts
+        # about real estate contain many Kaufvertrag keywords (property address,
+        # Grundbuch, etc.) leading to misclassification when LLM is unavailable.
+        loan_contract_markers = [
+            "kreditvertrag", "darlehensvertrag",
+            "hypothekarkredit", "wohnbaukredit", "wohnbaufinanzierung",
+            "kreditnehmer", "darlehensnehmer",
+            "kreditgeber", "darlehensgeber",
+            "zinsbescheinigung",
+        ]
+        loan_hits = sum(
+            1 for m in loan_contract_markers
+            if _contains(first_page, first_page_norm, m)
+        )
+        if loan_hits >= 2:
+            return {"type": DocumentType.LOAN_CONTRACT, "confidence": 0.92}
+
         # --- Priority 1: Payslips (with exclusion check) ---
         payslip_markers = [
             "auszahlungsmonat",

@@ -2176,9 +2176,9 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     lender_name = ocr_data.get("lender_name")
 
     missing_fields = []
-    if not loan_amount:
+    if loan_amount is None:
         missing_fields.append("loan_amount")
-    if not interest_rate:
+    if interest_rate is None:
         missing_fields.append("interest_rate")
 
     sd_raw = ocr_data.get("start_date")
@@ -3109,7 +3109,7 @@ def create_loan_from_suggestion(
     loan_amount_raw = data.get("loan_amount")
     interest_rate_raw = data.get("interest_rate")
 
-    if not loan_amount_raw or not interest_rate_raw:
+    if loan_amount_raw is None or interest_rate_raw is None:
         raise ValueError(
             "Missing required fields: loan_amount and interest_rate are required"
         )
@@ -4049,7 +4049,7 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
     monthly_payment_raw = data.get("monthly_payment")
     lender_name = data.get("lender_name") or "Unknown Lender"
 
-    if not loan_amount_raw or not interest_rate_raw:
+    if loan_amount_raw is None or interest_rate_raw is None:
         raise ValueError("Missing required fields: loan_amount and interest_rate are required")
 
     loan_amount = Decimal(str(loan_amount_raw))
@@ -4321,6 +4321,20 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     monthly_rent = Decimal(str(data["monthly_rent"]))
     property_id = data.get("matched_property_id")
 
+    def _normalize_property_id(raw_value):
+        if raw_value in (None, ""):
+            return None
+        try:
+            from uuid import UUID
+
+            if isinstance(raw_value, UUID):
+                return raw_value
+            return UUID(str(raw_value))
+        except Exception:
+            return raw_value
+
+    property_id = _normalize_property_id(property_id)
+
     # Retry address matching if no property was matched at upload time
     # (property may have been created after the Mietvertrag was uploaded)
     if not property_id:
@@ -4331,7 +4345,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
                 matcher = AddressMatcher(db)
                 matches = matcher.match_address(address, document.user_id)
                 if matches and matches[0].confidence > 0.3:
-                    property_id = str(matches[0].property.id)
+                    property_id = matches[0].property.id
                     logger.info(
                         f"Retry match found property {property_id} for address '{address}'"
                     )
@@ -4350,7 +4364,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
                     for p in user_props:
                         p_street = (p.street or "").lower()
                         if p_street and p_street in addr_lower:
-                            property_id = str(p.id)
+                            property_id = p.id
                             logger.info(
                                 f"Retry street match found property {property_id} for '{address}'"
                             )
@@ -4409,7 +4423,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
             )
             db.add(new_prop)
             db.flush()
-            property_id = str(new_prop.id)
+            property_id = new_prop.id
             logger.info(
                 f"Auto-created property {property_id} from rental contract address '{address}'"
             )
@@ -4447,6 +4461,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
 
     # Link mietvertrag document to property
     from app.models.property import Property as PropertyModel
+    property_id = _normalize_property_id(property_id)
     prop = db.query(PropertyModel).filter(PropertyModel.id == property_id).first()
     if prop:
         prop.mietvertrag_document_id = document.id
@@ -4547,7 +4562,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     return {
         "recurring_created": True,
         "recurring_id": recurring.id,
-        "property_id": property_id,
+        "property_id": str(property_id) if property_id is not None else None,
         "monthly_rent": float(monthly_rent),
         "is_partial_match": is_partial_match,
         "unit_percentage": float(recurring.unit_percentage) if recurring.unit_percentage else None,
@@ -4751,6 +4766,903 @@ def reprocess_low_confidence_documents(self, threshold: float = 0.6) -> Dict[str
         raise
     finally:
         db.close()
+
+
+def _insurance_parse_decimal(value):
+    if value in (None, ""):
+        return None
+    from app.services.field_normalization import normalize_amount
+
+    if isinstance(value, Decimal):
+        return value
+    normalized = normalize_amount(value)
+    if normalized is not None:
+        return normalized
+    try:
+        return Decimal(str(value).replace(",", "."))
+    except Exception:
+        return None
+
+
+def _insurance_parse_date(value):
+    from app.services.field_normalization import normalize_date
+
+    return normalize_date(value)
+
+
+def _normalize_insurance_subtype(insurance_type: str | None, insurance_subtype: str | None) -> str:
+    subtype = str(insurance_subtype or "").strip().lower()
+    if subtype:
+        return subtype
+    token = str(insurance_type or "").strip().lower()
+    mapping = {
+        "berufshaftpflicht": "berufshaftpflicht",
+        "betriebshaftpflicht": "betriebshaftpflicht",
+        "betriebsunterbrechung": "betriebsunterbrechung",
+        "cyber": "cyberversicherung",
+        "d&o": "d_and_o",
+        "d and o": "d_and_o",
+        "rechtsschutz": "rechtsschutz",
+        "kfz": "kfz",
+        "fahrzeug": "kfz",
+        "auto": "kfz",
+        "gebaeude": "gebaeudeversicherung",
+        "gebäude": "gebaeudeversicherung",
+        "haushalt": "haushaltsversicherung",
+        "hausrat": "haushaltsversicherung",
+        "kranken": "private_krankenversicherung",
+        "unfall": "private_unfallversicherung",
+        "leben": "lebensversicherung",
+    }
+    for key, value in mapping.items():
+        if key in token:
+            return value
+    return "other"
+
+
+def _normalize_insurance_doc_subtype(raw_value: str | None, text: str = "") -> str:
+    token = str(raw_value or "").strip().lower()
+    mapping = {
+        "payment_confirmation": "sepa_beleg",
+        "premium_notice": "praemienvorschreibung",
+        "annual_confirmation": "jahresbestaetigung",
+        "policy": "polizze",
+        "sepa_beleg": "sepa_beleg",
+        "praemienvorschreibung": "praemienvorschreibung",
+        "jahresbestaetigung": "jahresbestaetigung",
+        "polizze": "polizze",
+        "kuendigung": "kuendigung",
+        "praemienaenderung": "praemienaenderung",
+        "schadensmeldung": "schadensmeldung",
+        "bedingungen": "bedingungen",
+        "other": "other",
+    }
+    if token in mapping:
+        return mapping[token]
+
+    content = f"{token} {text}".lower()
+    keyword_map = [
+        ("kündigung", "kuendigung"),
+        ("kuendigung", "kuendigung"),
+        ("prämienänderung", "praemienaenderung"),
+        ("praemienaenderung", "praemienaenderung"),
+        ("schadensmeldung", "schadensmeldung"),
+        ("schadenmeldung", "schadensmeldung"),
+        ("bedingungen", "bedingungen"),
+        ("versicherungsschein", "polizze"),
+        ("polizze", "polizze"),
+        ("jahresbestätigung", "jahresbestaetigung"),
+        ("jahresbestaetigung", "jahresbestaetigung"),
+        ("gesamt bezahlt", "jahresbestaetigung"),
+        ("prämienvorschreibung", "praemienvorschreibung"),
+        ("praemienvorschreibung", "praemienvorschreibung"),
+        ("zahlungsaufforderung", "praemienvorschreibung"),
+        ("lastschrift", "sepa_beleg"),
+        ("sepa", "sepa_beleg"),
+        ("abbuchung", "sepa_beleg"),
+        ("eingezogen", "sepa_beleg"),
+    ]
+    for keyword, subtype in keyword_map:
+        if keyword in content:
+            return subtype
+    return "other"
+
+
+def _insurance_float(value):
+    parsed = _insurance_parse_decimal(value)
+    return float(parsed) if parsed is not None else None
+
+
+def _default_archive_reason_code(data: dict, confirmation: dict | None = None) -> str:
+    confirmation = confirmation or {}
+    explicit = confirmation.get("archive_reason_code")
+    if explicit:
+        return str(explicit)
+
+    if data.get("document_subtype") in {"bedingungen", "schadensmeldung"}:
+        return "reference_only"
+
+    dedup_conflicts = data.get("dedup_conflicts")
+    if isinstance(dedup_conflicts, list) and dedup_conflicts:
+        return "already_covered"
+
+    if data.get("deductibility_status") == "not_deductible":
+        return "not_relevant"
+
+    return "other"
+
+
+def _insurance_extract_tax_year(document, ocr_data: dict) -> int:
+    for candidate in (
+        ocr_data.get("tax_year"),
+        ocr_data.get("document_year"),
+        getattr(document, "document_year", None),
+    ):
+        try:
+            if candidate:
+                return int(candidate)
+        except Exception:
+            continue
+    parsed_date = _insurance_parse_date(
+        ocr_data.get("date")
+        or ocr_data.get("document_date")
+        or ocr_data.get("vertragsbeginn")
+    )
+    if parsed_date:
+        return parsed_date.year
+    uploaded_at = getattr(document, "uploaded_at", None)
+    return uploaded_at.year if uploaded_at else date.today().year
+
+
+def _legacy_recurring_insurance_metadata(recurring) -> dict:
+    metadata = getattr(recurring, "insurance_metadata", None)
+    if isinstance(metadata, dict):
+        return dict(metadata)
+    notes = str(getattr(recurring, "notes", "") or "")
+    parsed: dict[str, str] = {}
+    if notes.startswith("{") and notes.endswith("}"):
+        try:
+            import json as _json
+            payload = _json.loads(notes)
+            if isinstance(payload, dict):
+                return payload
+        except Exception:
+            pass
+    for part in notes.split(";"):
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
+def _normalized_token(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _same_frequency_period(txn_date: date, target_date: date, frequency: str) -> bool:
+    if frequency == "monthly":
+        return txn_date.year == target_date.year and txn_date.month == target_date.month
+    if frequency == "quarterly":
+        return txn_date.year == target_date.year and ((txn_date.month - 1) // 3) == ((target_date.month - 1) // 3)
+    if frequency == "semi_annual":
+        return txn_date.year == target_date.year and ((txn_date.month - 1) // 6) == ((target_date.month - 1) // 6)
+    return txn_date.year == target_date.year
+
+
+def _find_matching_insurance_recurring(db, document, facts: dict, *, include_inactive: bool = False):
+    from app.models.recurring_transaction import RecurringTransaction, RecurringTransactionType
+
+    query = db.query(RecurringTransaction).filter(
+        RecurringTransaction.user_id == document.user_id,
+        RecurringTransaction.recurring_type == RecurringTransactionType.INSURANCE_PREMIUM,
+    )
+    if not include_inactive:
+        query = query.filter(RecurringTransaction.is_active == True)  # noqa: E712
+
+    polizze_nr = _normalized_token(facts.get("polizze_nr"))
+    insurer_name = _normalized_token(facts.get("insurer_name"))
+    insurance_type = _normalized_token(facts.get("insurance_type"))
+    tax_year = int(facts.get("tax_year") or _insurance_extract_tax_year(document, facts))
+
+    fallback_matches = []
+    for recurring in query.all():
+        metadata = _legacy_recurring_insurance_metadata(recurring)
+        recurring_polizze = _normalized_token(metadata.get("polizze_nr"))
+        if polizze_nr and recurring_polizze and recurring_polizze == polizze_nr:
+            return recurring, False
+
+        recurring_insurer = _normalized_token(metadata.get("insurer_name") or recurring.description)
+        recurring_type = _normalized_token(
+            metadata.get("insurance_type")
+            or metadata.get("insurance_subtype")
+            or recurring.description
+        )
+        recurring_year = getattr(getattr(recurring, "start_date", None), "year", None) or tax_year
+        if recurring_year == tax_year and insurer_name and insurance_type:
+            if insurer_name in recurring_insurer and insurance_type in recurring_type:
+                fallback_matches.append(recurring)
+
+    if fallback_matches:
+        return fallback_matches[0], True
+    return None, False
+
+
+def _collect_insurance_dedup_conflicts(db, document, facts: dict, recurring_match=None, soft_match: bool = False) -> list[dict]:
+    from app.models.transaction import Transaction
+
+    conflicts: list[dict] = []
+    tax_year = int(facts.get("tax_year") or _insurance_extract_tax_year(document, facts))
+    insurer_name = _normalized_token(facts.get("insurer_name"))
+
+    if recurring_match is not None:
+        conflicts.append(
+            {
+                "conflict_type": "recurring_match",
+                "existing_recurring_id": recurring_match.id,
+                "date": recurring_match.start_date.isoformat() if recurring_match.start_date else None,
+                "amount": _insurance_float(getattr(recurring_match, "amount", None)),
+                "description": recurring_match.description,
+                "match_reason": "polizze_nr" if not soft_match else "insurer_name + insurance_type + tax_year",
+            }
+        )
+
+    txns = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == document.user_id,
+            Transaction.type == "expense",
+            Transaction.transaction_date >= date(tax_year, 1, 1),
+            Transaction.transaction_date <= date(tax_year, 12, 31),
+        )
+        .order_by(Transaction.transaction_date.asc())
+        .all()
+    )
+    for txn in txns:
+        description = str(getattr(txn, "description", "") or "")
+        if recurring_match is not None and getattr(txn, "source_recurring_id", None) == recurring_match.id:
+            conflicts.append(
+                {
+                    "conflict_type": "transaction_overlap",
+                    "existing_transaction_id": txn.id,
+                    "date": txn.transaction_date.isoformat() if txn.transaction_date else None,
+                    "amount": _insurance_float(txn.amount),
+                    "description": description,
+                    "match_reason": "generated from matching insurance recurring",
+                }
+            )
+            continue
+        if insurer_name and insurer_name in _normalized_token(description):
+            conflicts.append(
+                {
+                    "conflict_type": "transaction_overlap",
+                    "existing_transaction_id": txn.id,
+                    "date": txn.transaction_date.isoformat() if txn.transaction_date else None,
+                    "amount": _insurance_float(txn.amount),
+                    "description": description,
+                    "match_reason": "same insurer in same tax year",
+                }
+            )
+    return conflicts
+
+
+def _push_insurance_notification(db, *, user_id: int, title: str, message: str, data: dict | None = None) -> None:
+    try:
+        from app.models.notification import Notification, NotificationType
+
+        db.add(
+            Notification(
+                user_id=user_id,
+                type=NotificationType.SYSTEM_ANNOUNCEMENT,
+                title=title,
+                message=message,
+                message_en=message,
+                message_zh=message,
+                data=data or {},
+            )
+        )
+    except Exception as exc:
+        logger.warning("Failed to create insurance notification: %s", exc)
+
+
+def _build_versicherung_suggestion(db, document, result) -> dict:
+    """Specialized non-SVS insurance flow with suggestions or auto-actions."""
+    from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+    from app.models.recurring_transaction import RecurrenceFrequency
+    from app.services.field_normalization import fix_german_number_formats
+    from app.services.insurance_decision_service import evaluate_insurance_deductibility
+    from app.services.recurring_transaction_service import RecurringTransactionService
+
+    logger.info("insurance_v2: building insurance flow for doc %s", document.id)
+
+    updated_ocr = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+    updated_ocr = _clear_transaction_artifact_keys(updated_ocr)
+    fix_german_number_formats(updated_ocr)
+
+    role_resolution = _resolve_contract_role_for_document(
+        db,
+        document,
+        updated_ocr,
+        raw_text=getattr(result, "raw_text", None) or getattr(document, "raw_text", None),
+    )
+    _apply_contract_role_resolution(updated_ocr, role_resolution)
+
+    def _has_complete_data(data: dict) -> bool:
+        return bool(
+            (data.get("polizze_nr") or data.get("polizze"))
+            and data.get("versicherungsnehmer")
+            and data.get("vertragsbeginn")
+            and (
+                data.get("payment_amount")
+                or data.get("premium_annual_brutto")
+                or data.get("annual_total_amount")
+                or data.get("praemie")
+                or data.get("praemie_jaehrlich")
+            )
+        )
+
+    def _merge_extracted(target: dict, source: dict | None) -> None:
+        if not isinstance(source, dict):
+            return
+        for key, value in source.items():
+            if value not in (None, "", []):
+                target[key] = value
+
+    try:
+        engine = OCREngine()
+        _merge_extracted(updated_ocr, engine.extract_by_type(document, "versicherungsbestaetigung"))
+        if not _has_complete_data(updated_ocr):
+            _merge_extracted(updated_ocr, engine.re_extract_insurance_fields(document))
+        if not _has_complete_data(updated_ocr):
+            _merge_extracted(
+                updated_ocr,
+                engine.re_extract_insurance_fields(document, provider_preference="openai"),
+            )
+    except Exception as exc:
+        logger.warning("insurance_v2: AI extraction failed for doc %s: %s", document.id, exc)
+
+    OCREngine._normalize_insurance_amount_fields(updated_ocr)
+
+    if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
+        updated_ocr.pop("import_suggestion", None)
+        document.ocr_result = updated_ocr
+        db.commit()
+        return {"import_suggestion": None}
+
+    raw_text = f"{str(updated_ocr.get('raw_text') or '')} {str(getattr(document, 'raw_text', '') or '')}"
+
+    def _clean_name(value):
+        if not value or not isinstance(value, str):
+            return None
+        cleaned = re.sub(r"-{0,3}\s*PAGE\s*\d+\s*-{0,3}", "", value, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"\s*\n\s*", " ", cleaned).strip()
+        return cleaned or None
+
+    insurer_name = (
+        _clean_name(updated_ocr.get("insurer_name"))
+        or _clean_name(updated_ocr.get("versicherer"))
+        or _clean_name(updated_ocr.get("company_name"))
+        or _clean_name(updated_ocr.get("issuer"))
+        or _clean_name(updated_ocr.get("merchant"))
+    )
+    if not insurer_name:
+        insurer_lookup = {
+            "uniqa": "UNIQA Insurance Group AG",
+            "generali": "Generali Versicherung AG",
+            "allianz": "Allianz Elementar",
+            "grawe": "GRAWE (Grazer Wechselseitige)",
+            "zürich": "Zürich Versicherungs-AG",
+            "zuerich": "Zürich Versicherungs-AG",
+            "zurich": "Zürich Versicherungs-AG",
+            "wiener städtische": "Wiener Städtische",
+            "wiener staedtische": "Wiener Städtische",
+        }
+        lowered = raw_text.lower()
+        for keyword, label in insurer_lookup.items():
+            if keyword in lowered:
+                insurer_name = label
+                break
+    insurer_name = insurer_name or "Unknown insurer"
+
+    insurance_type = updated_ocr.get("insurance_type") or updated_ocr.get("versicherungsart") or "unknown"
+    insurance_subtype = _normalize_insurance_subtype(
+        insurance_type,
+        updated_ocr.get("insurance_subtype"),
+    )
+    document_subtype = _normalize_insurance_doc_subtype(
+        updated_ocr.get("document_subtype") or updated_ocr.get("document_variant"),
+        text=" ".join(
+            str(updated_ocr.get(key) or "")
+            for key in ("description", "payment_amount_label", "premium_annual_label", "role_evidence")
+        ) + " " + raw_text,
+    )
+
+    payment_frequency_raw = (
+        updated_ocr.get("payment_frequency")
+        or updated_ocr.get("zahlungsfrequenz")
+        or updated_ocr.get("frequency")
+        or updated_ocr.get("zahlungsweise")
+    )
+    payment_frequency = OCREngine._normalize_insurance_frequency(payment_frequency_raw)
+    if not payment_frequency:
+        lowered = raw_text.lower()
+        if any(token in lowered for token in ("monatlich", "monats", "pro monat")):
+            payment_frequency = "monthly"
+        elif any(token in lowered for token in ("vierteljährlich", "vierteljaehrlich", "quartalsweise", "quartal")):
+            payment_frequency = "quarterly"
+        elif any(token in lowered for token in ("halbjährlich", "halbjaehrlich", "halbjahres")):
+            payment_frequency = "semi_annual"
+        elif document_subtype in {"polizze", "jahresbestaetigung", "praemienvorschreibung"}:
+            payment_frequency = "annually"
+
+    payment_amount_explicit = _insurance_parse_decimal(
+        updated_ocr.get("payment_amount")
+        or updated_ocr.get("premium_per_payment")
+        or updated_ocr.get("installment_amount")
+    )
+    premium_annual_explicit = _insurance_parse_decimal(
+        updated_ocr.get("premium_annual_brutto")
+        or updated_ocr.get("annual_total_amount")
+        or updated_ocr.get("annual_premium")
+    )
+    amount_paid_this_year = _insurance_parse_decimal(updated_ocr.get("amount_paid_this_year"))
+
+    payment_amount = payment_amount_explicit or _insurance_parse_decimal(updated_ocr.get("praemie"))
+    premium_annual_brutto = (
+        premium_annual_explicit
+        or _insurance_parse_decimal(updated_ocr.get("praemie_jaehrlich"))
+        or amount_paid_this_year
+    )
+    payment_amount_source = "extracted" if payment_amount_explicit is not None else None
+    premium_annual_source = "extracted" if premium_annual_explicit is not None else None
+
+    multiplier = {"monthly": 12, "quarterly": 4, "semi_annual": 2, "annually": 1}.get(payment_frequency)
+    if premium_annual_brutto is None and payment_amount is not None and multiplier:
+        premium_annual_brutto = (payment_amount * Decimal(str(multiplier))).quantize(Decimal("0.01"))
+        premium_annual_source = "derived"
+    if payment_amount is None and premium_annual_brutto is not None and multiplier:
+        if document_subtype != "jahresbestaetigung" or payment_amount_explicit is not None or payment_frequency_raw:
+            payment_amount = (premium_annual_brutto / Decimal(str(multiplier))).quantize(Decimal("0.01"))
+            payment_amount_source = "derived" if multiplier > 1 else "extracted"
+
+    start_date = _insurance_parse_date(updated_ocr.get("vertragsbeginn") or updated_ocr.get("start_date"))
+    if not start_date:
+        start_date = _insurance_parse_date(updated_ocr.get("date") or updated_ocr.get("document_date"))
+    end_date = _insurance_parse_date(updated_ocr.get("vertragsende") or updated_ocr.get("end_date"))
+
+    polizze_nr = (
+        updated_ocr.get("polizze_nr")
+        or updated_ocr.get("polizze")
+        or updated_ocr.get("polizzennummer")
+        or updated_ocr.get("versicherungsnummer")
+        or updated_ocr.get("policy_number")
+        or updated_ocr.get("invoice_number")
+    )
+    if not polizze_nr:
+        match = re.search(
+            r"(?:Polizz?e(?:[- ]?Nr\.?)?|Polizzennummer|Vertragsnummer|Policy)[:\s]+([A-Z0-9][\w\-/]+)",
+            raw_text,
+            re.IGNORECASE,
+        )
+        if match:
+            polizze_nr = match.group(1).strip()
+
+    versicherungsnehmer = (
+        updated_ocr.get("versicherungsnehmer")
+        or updated_ocr.get("policy_holder_name")
+        or updated_ocr.get("policy_holder")
+        or _clean_name(updated_ocr.get("recipient"))
+    )
+    if not versicherungsnehmer:
+        match = re.search(
+            r"(?:Versicherungsnehmer|Versicherte Person|Versicherter)[:\s]+([^\n,]+)",
+            raw_text,
+            re.IGNORECASE,
+        )
+        if match:
+            versicherungsnehmer = match.group(1).strip()
+    if not versicherungsnehmer and getattr(document, "user", None):
+        versicherungsnehmer = getattr(document.user, "full_name", None) or None
+
+    upload_context = updated_ocr.get("_upload_context", {}) or {}
+    linked_property_id = (
+        upload_context.get("property_id")
+        or updated_ocr.get("linked_property_id")
+        or updated_ocr.get("matched_property_id")
+    )
+    linked_asset_id = upload_context.get("asset_id") or updated_ocr.get("linked_asset_id")
+    tax_year = _insurance_extract_tax_year(document, updated_ocr)
+
+    facts = {
+        "document_subtype": document_subtype,
+        "insurer_name": insurer_name,
+        "polizze_nr": polizze_nr,
+        "insurance_type": insurance_type,
+        "insurance_subtype": insurance_subtype,
+        "versicherungsnehmer": versicherungsnehmer,
+        "vertragsbeginn": start_date.isoformat() if start_date else None,
+        "vertragsende": end_date.isoformat() if end_date else None,
+        "payment_frequency": payment_frequency,
+        "payment_amount": _insurance_float(payment_amount),
+        "payment_amount_source": payment_amount_source,
+        "premium_annual_brutto": _insurance_float(premium_annual_brutto),
+        "premium_annual_brutto_source": premium_annual_source,
+        "premium_annual_netto": _insurance_float(updated_ocr.get("premium_annual_netto")),
+        "amount_paid_this_year": _insurance_float(amount_paid_this_year),
+        "versicherungssteuer_pct": _insurance_float(updated_ocr.get("versicherungssteuer_pct")),
+        "versichertes_objekt": updated_ocr.get("versichertes_objekt"),
+        "role_confidence": updated_ocr.get("role_confidence"),
+        "role_evidence": updated_ocr.get("role_evidence"),
+        "tax_year": tax_year,
+        "linked_property_id": linked_property_id,
+        "linked_asset_id": linked_asset_id,
+        "raw_text": raw_text,
+        "description": updated_ocr.get("description"),
+    }
+
+    user = getattr(document, "user", None)
+    if user is None:
+        from app.models.user import User as UserModel
+
+        user = db.query(UserModel).filter(UserModel.id == document.user_id).first()
+    if user is None:
+        raise ValueError(f"User {document.user_id} not found for insurance flow")
+
+    decision = evaluate_insurance_deductibility(db, user=user, facts=facts).as_dict()
+    recurring_match, soft_match = _find_matching_insurance_recurring(
+        db,
+        document,
+        facts,
+        include_inactive=(document_subtype in {"kuendigung", "praemienaenderung"}),
+    )
+    dedup_conflicts = _collect_insurance_dedup_conflicts(
+        db,
+        document,
+        facts,
+        recurring_match=recurring_match,
+        soft_match=soft_match,
+    )
+
+    updated_ocr.update(
+        {
+            "insurer_name": insurer_name,
+            "merchant": insurer_name,
+            "supplier": insurer_name,
+            "insurance_type": insurance_type,
+            "insurance_subtype": insurance_subtype,
+            "document_subtype": document_subtype,
+            "versicherungsnehmer": versicherungsnehmer,
+            "policy_holder_name": versicherungsnehmer,
+            "polizze_nr": polizze_nr,
+            "polizze": polizze_nr,
+            "payment_frequency": payment_frequency,
+            "zahlungsfrequenz": payment_frequency,
+            "payment_amount": _insurance_float(payment_amount),
+            "premium_annual_brutto": _insurance_float(premium_annual_brutto),
+            "praemie": _insurance_float(payment_amount) if payment_amount is not None else None,
+            "praemie_jaehrlich": _insurance_float(premium_annual_brutto) if premium_annual_brutto is not None else None,
+            "vertragsbeginn": start_date.isoformat() if start_date else None,
+            "start_date": start_date.isoformat() if start_date else None,
+            "vertragsende": end_date.isoformat() if end_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            **decision,
+        }
+    )
+
+    suggestion_payload = {
+        **facts,
+        **decision,
+        "needs_user_input": bool(decision.get("needs_user_input")),
+        "input_fields": decision.get("input_fields") or [],
+        "dedup_conflicts": dedup_conflicts,
+    }
+    _annotate_contract_role_gate(suggestion_payload, role_resolution)
+
+    def _mark_auto_action(action_type: str, **extra):
+        updated_ocr.pop("import_suggestion", None)
+        updated_ocr["insurance_auto_action"] = {
+            "type": action_type,
+            "document_subtype": document_subtype,
+            **extra,
+        }
+        document.ocr_result = updated_ocr
+
+    if document_subtype == "sepa_beleg":
+        if recurring_match is not None:
+            service = RecurringTransactionService(db)
+            payment_date = _insurance_parse_date(updated_ocr.get("date") or updated_ocr.get("document_date")) or document.uploaded_at.date()
+            try:
+                service.generate_due_transactions(target_date=payment_date, user_id=document.user_id)
+            except Exception as exc:
+                logger.warning("insurance_v2: failed to backfill recurring before link: %s", exc)
+
+            linked_txn = None
+            for candidate in (
+                db.query(Transaction)
+                .filter(
+                    Transaction.user_id == document.user_id,
+                    Transaction.source_recurring_id == recurring_match.id,
+                )
+                .order_by(Transaction.transaction_date.asc())
+                .all()
+            ):
+                if candidate.transaction_date and _same_frequency_period(
+                    candidate.transaction_date,
+                    payment_date,
+                    payment_frequency or "annually",
+                ):
+                    linked_txn = candidate
+                    break
+
+            if linked_txn is not None:
+                document.transaction_id = linked_txn.id
+                _mark_auto_action(
+                    "link_to_existing",
+                    recurring_id=recurring_match.id,
+                    transaction_id=linked_txn.id,
+                )
+                db.commit()
+                return {"import_suggestion": None}
+
+        amount = payment_amount or premium_annual_brutto
+        if amount is not None and amount > 0:
+            deductible_status = decision.get("deductibility_status")
+            txn = Transaction(
+                user_id=document.user_id,
+                type=TransactionType.EXPENSE,
+                amount=amount,
+                transaction_date=_insurance_parse_date(updated_ocr.get("date") or updated_ocr.get("document_date")) or document.uploaded_at.date(),
+                description=f"{insurer_name} - {insurance_type}",
+                expense_category=ExpenseCategory.INSURANCE,
+                property_id=linked_property_id,
+                is_deductible=bool(deductible_status == "deductible" and (decision.get("deductible_pct") or 0) >= 0.999),
+                deduction_reason=decision.get("deductibility_hint"),
+                document_id=document.id,
+                classification_confidence=_resolve_result_confidence(document, result),
+                classification_method="rule",
+                needs_review=bool(decision.get("needs_user_input")) or deductible_status in {"partially_deductible", "unknown"},
+                is_system_generated=False,
+                import_source="ocr",
+            )
+            db.add(txn)
+            db.flush()
+            document.transaction_id = txn.id
+            _mark_auto_action("created_single_expense", transaction_id=txn.id)
+            db.commit()
+            return {"import_suggestion": None}
+
+        _mark_auto_action("sepa_unresolved")
+        db.commit()
+        return {"import_suggestion": None}
+
+    if document_subtype == "kuendigung":
+        if recurring_match is not None:
+            service = RecurringTransactionService(db)
+            stop_date = _insurance_parse_date(updated_ocr.get("date") or updated_ocr.get("document_date")) or date.today()
+            service.stop_recurring_transaction(recurring_match.id, end_date=stop_date)
+            _push_insurance_notification(
+                db,
+                user_id=document.user_id,
+                title="Insurance recurring ended",
+                message=f"{insurer_name}: recurring ended as of {stop_date.isoformat()}",
+                data={"document_id": document.id, "recurring_id": recurring_match.id},
+            )
+            _mark_auto_action("ended_recurring", recurring_id=recurring_match.id, end_date=stop_date.isoformat())
+        else:
+            _mark_auto_action("no_matching_recurring")
+        db.commit()
+        return {"import_suggestion": None}
+
+    if document_subtype == "praemienaenderung":
+        if recurring_match is not None and payment_amount is not None and payment_amount > 0:
+            previous_amount = _insurance_float(recurring_match.amount)
+            recurring_match.amount = payment_amount
+            if payment_frequency:
+                recurring_match.frequency = RecurrenceFrequency(payment_frequency)
+            recurring_metadata = _legacy_recurring_insurance_metadata(recurring_match)
+            recurring_metadata.update(
+                {
+                    "payment_amount": _insurance_float(payment_amount),
+                    "payment_frequency": payment_frequency,
+                    "premium_annual_brutto": _insurance_float(premium_annual_brutto),
+                }
+            )
+            recurring_match.insurance_metadata = recurring_metadata
+            _push_insurance_notification(
+                db,
+                user_id=document.user_id,
+                title="Insurance recurring updated",
+                message=(
+                    f"{insurer_name}: premium updated from EUR {previous_amount:.2f} "
+                    f"to EUR {_insurance_float(payment_amount):.2f}"
+                ),
+                data={"document_id": document.id, "recurring_id": recurring_match.id},
+            )
+            _mark_auto_action(
+                "updated_recurring",
+                recurring_id=recurring_match.id,
+                previous_amount=previous_amount,
+                new_amount=_insurance_float(payment_amount),
+            )
+        else:
+            _mark_auto_action("no_matching_recurring")
+        db.commit()
+        return {"import_suggestion": None}
+
+    suggestion_type = (
+        "create_insurance_recurring"
+        if document_subtype in {"polizze", "jahresbestaetigung", "praemienvorschreibung"}
+        else "archive_insurance_document"
+    )
+    suggestion = {
+        "type": suggestion_type,
+        "status": "pending",
+        "data": suggestion_payload,
+    }
+    if suggestion_type == "archive_insurance_document":
+        suggestion["data"]["archive_reason"] = f"Insurance document subtype {document_subtype} is archive-only."
+
+    updated_ocr["import_suggestion"] = suggestion
+    document.ocr_result = updated_ocr
+    db.commit()
+    return {"import_suggestion": suggestion}
+
+
+def create_insurance_recurring_from_suggestion(
+    db,
+    document,
+    suggestion_data: dict,
+    confirmation_data: dict | None = None,
+) -> dict:
+    """Create or reuse an insurance recurring from the specialized suggestion payload."""
+    import json as _json
+
+    from app.models.recurring_transaction import RecurrenceFrequency, RecurringTransaction, RecurringTransactionType
+
+    confirmation = confirmation_data or {}
+    data = dict(suggestion_data or {})
+
+    _enforce_contract_role_gate(
+        db,
+        document,
+        expected_role="policy_holder",
+        flow_label="Insurance recurring creation",
+    )
+
+    if confirmation.get("archive_only"):
+        archive_reason_code = _default_archive_reason_code(data, confirmation)
+        if archive_reason_code == "other" and not confirmation.get("archive_reason_note"):
+            confirmation["archive_reason_note"] = "Archived without recurring creation"
+
+        ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+        if ocr_result.get("import_suggestion"):
+            ocr_result["import_suggestion"]["status"] = "confirmed"
+            ocr_result["import_suggestion"]["resolution"] = "archive_only"
+            ocr_result["import_suggestion"]["archive_reason_code"] = archive_reason_code
+            if confirmation.get("archive_reason_note"):
+                ocr_result["import_suggestion"]["archive_reason_note"] = confirmation["archive_reason_note"]
+            ocr_result["import_suggestion"]["resolved_input_fields"] = confirmation
+            document.ocr_result = ocr_result
+        db.commit()
+        return {
+            "archive_only": True,
+            "resolution": "archive_only",
+            "archive_reason_code": archive_reason_code,
+        }
+
+    required_fields = list(data.get("input_fields") or [])
+    missing_fields = [field for field in required_fields if confirmation.get(field) in (None, "")]
+    if missing_fields:
+        raise ValueError(f"Missing required field(s): {', '.join(missing_fields)}")
+
+    if confirmation.get("dedup_resolution") == "cancel":
+        raise ValueError("Recurring creation cancelled")
+
+    payment_amount = _insurance_parse_decimal(
+        confirmation.get("override_payment_amount", data.get("payment_amount"))
+    )
+    if payment_amount is None or payment_amount <= 0:
+        raise ValueError("Missing required field: payment_amount")
+
+    frequency_str = confirmation.get("override_payment_frequency", data.get("payment_frequency")) or "annually"
+    try:
+        frequency = RecurrenceFrequency(frequency_str)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported payment frequency: {frequency_str}") from exc
+
+    existing, soft_match = _find_matching_insurance_recurring(db, document, data, include_inactive=True)
+    dedup_resolution = confirmation.get("dedup_resolution") or ("link_existing" if existing else "ignore_existing")
+    if existing is not None and dedup_resolution == "link_existing":
+        ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+        if ocr_result.get("import_suggestion"):
+            ocr_result["import_suggestion"]["status"] = "confirmed"
+            ocr_result["import_suggestion"]["recurring_id"] = existing.id
+            ocr_result["import_suggestion"]["duplicate_of_recurring_id"] = existing.id
+            ocr_result["import_suggestion"]["resolved_input_fields"] = confirmation
+            document.ocr_result = ocr_result
+        db.commit()
+        return {
+            "recurring_id": existing.id,
+            "duplicate_reused": True,
+            "soft_match": soft_match,
+        }
+
+    start_date = _insurance_parse_date(data.get("vertragsbeginn")) or document.uploaded_at.date()
+    end_date = _insurance_parse_date(data.get("vertragsende"))
+    insurer_name = data.get("insurer_name") or "Unknown insurer"
+    insurance_type = data.get("insurance_type") or "Insurance"
+
+    deductible_pct = None
+    split_mode = data.get("split_mode") or "none"
+    if confirmation.get("business_use_percentage") is not None:
+        deductible_pct = float(confirmation["business_use_percentage"]) / 100.0
+    elif confirmation.get("beruflicher_anteil_pct") is not None:
+        deductible_pct = float(confirmation["beruflicher_anteil_pct"]) / 100.0
+    elif data.get("deductible_pct") is not None:
+        deductible_pct = float(data["deductible_pct"])
+
+    deductible_status = data.get("deductibility_status")
+    if deductible_pct is None:
+        deductible_pct = 1.0 if deductible_status == "deductible" else 0.0
+
+    metadata = {
+        "insurer_name": insurer_name,
+        "insurance_type": insurance_type,
+        "insurance_subtype": data.get("insurance_subtype"),
+        "polizze_nr": data.get("polizze_nr"),
+        "document_subtype": data.get("document_subtype"),
+        "payment_frequency": frequency.value,
+        "payment_amount": float(payment_amount),
+        "premium_annual_brutto": data.get("premium_annual_brutto"),
+        "deductibility_status": deductible_status,
+        "deductible_pct": deductible_pct,
+        "business_use_percentage": confirmation.get("business_use_percentage"),
+        "beruflicher_anteil_pct": confirmation.get("beruflicher_anteil_pct"),
+        "property_rental_status": confirmation.get("property_rental_status"),
+        "split_mode": split_mode,
+        "kz_hint": data.get("kz_hint"),
+        "deductibility_hint": data.get("deductibility_hint"),
+    }
+
+    recurring = RecurringTransaction(
+        user_id=document.user_id,
+        recurring_type=RecurringTransactionType.INSURANCE_PREMIUM,
+        property_id=data.get("linked_property_id"),
+        description=f"Insurance premium ({insurance_type}) - {insurer_name}",
+        amount=payment_amount,
+        transaction_type="expense",
+        category="insurance",
+        frequency=frequency,
+        start_date=start_date,
+        end_date=end_date,
+        day_of_month=start_date.day if start_date else 1,
+        is_active=True,
+        next_generation_date=start_date,
+        source_document_id=document.id,
+        notes=(
+            f"insurance_type={insurance_type}; insurer_name={insurer_name}; polizze_nr={data.get('polizze_nr') or ''}"
+        )[:1000],
+        insurance_metadata=metadata,
+    )
+    db.add(recurring)
+    db.flush()
+
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    if ocr_result.get("import_suggestion"):
+        ocr_result["import_suggestion"]["status"] = "confirmed"
+        ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+        ocr_result["import_suggestion"]["resolved_input_fields"] = confirmation
+        resolved = ocr_result["import_suggestion"].setdefault("resolved_data", {})
+        resolved["payment_amount"] = float(payment_amount)
+        resolved["payment_frequency"] = frequency.value
+        document.ocr_result = ocr_result
+
+    db.commit()
+    return {
+        "recurring_id": recurring.id,
+        "duplicate_reused": False,
+        "generated_count": 0,
+    }
 
 
 @celery_app.task(base=OCRTask, bind=True, max_retries=3, soft_time_limit=180, time_limit=240)

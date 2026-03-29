@@ -14,7 +14,7 @@ from app.models.loan_installment import (
 )
 from app.models.property_loan import PropertyLoan
 from app.models.property import Property
-from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+from app.models.transaction import Transaction, TransactionType, ExpenseCategory, IncomeCategory
 from app.services.liability_service import LiabilityService
 
 
@@ -477,12 +477,16 @@ class LoanService:
             )
             schedule.append(entry)
             
-            # Move to next month
+            # Move to next month (clamp day to avoid overflow, e.g. Jan 31 → Feb 28)
+            import calendar
             payment_number += 1
             if payment_date.month == 12:
-                payment_date = date(payment_date.year + 1, 1, payment_date.day)
+                next_year, next_month = payment_date.year + 1, 1
             else:
-                payment_date = date(payment_date.year, payment_date.month + 1, payment_date.day)
+                next_year, next_month = payment_date.year, payment_date.month + 1
+            original_day = loan.start_date.day
+            max_day = calendar.monthrange(next_year, next_month)[1]
+            payment_date = date(next_year, next_month, min(original_day, max_day))
         
         return schedule
     
@@ -785,11 +789,127 @@ class LoanService:
                 installment.source_document_id = source_document_id
                 installment.actual_payment_date = actual_payment_date
 
+        # Fix 2: Create adjustment transaction to reconcile existing monthly
+        # loan_interest expenses with the Zinsbescheinigung total.
+        self._reconcile_interest_expenses_with_certificate(
+            loan, user_id, tax_year, target_total
+        )
+
         self.db.commit()
 
         refreshed = self.list_installments(loan_id, user_id, tax_year=tax_year)
         return refreshed
-    
+
+    # Marker prefix used to identify Zinsbescheinigung adjustment transactions
+    _ZINS_ADJUSTMENT_DESC_PREFIX = "Zinsanpassung"
+
+    def _reconcile_interest_expenses_with_certificate(
+        self,
+        loan: PropertyLoan,
+        user_id: int,
+        tax_year: int,
+        bank_interest: Decimal,
+    ) -> Optional[Transaction]:
+        """Compare existing loan_interest expenses for the year against the
+        Zinsbescheinigung total and create an adjustment transaction if the
+        difference exceeds EUR 0.50.
+
+        Idempotent: deletes any prior adjustment for this loan/year before
+        recalculating, so repeated calls do not create duplicate entries.
+
+        Returns the adjustment Transaction or None if no adjustment needed.
+        """
+        from sqlalchemy import extract as sa_extract
+
+        adjustment_date = date(tax_year, 12, 31)
+        desc_marker = f"{self._ZINS_ADJUSTMENT_DESC_PREFIX} {tax_year}"
+
+        # --- Idempotency: remove prior adjustment for this loan+year ---
+        liability_id = loan.liability.id if loan.liability else None
+        prior_filters = [
+            Transaction.user_id == user_id,
+            Transaction.property_id == loan.property_id,
+            Transaction.is_system_generated == True,
+            Transaction.transaction_date == adjustment_date,
+            Transaction.description.ilike(f"{desc_marker}%"),
+        ]
+        if liability_id is not None:
+            prior_filters.append(Transaction.liability_id == liability_id)
+        else:
+            prior_filters.append(Transaction.liability_id.is_(None))
+        prior_adjustments = (
+            self.db.query(Transaction)
+            .filter(*prior_filters)
+            .all()
+        )
+        for prior in prior_adjustments:
+            self.db.delete(prior)
+        if prior_adjustments:
+            self.db.flush()
+
+        # --- Sum existing loan_interest expenses (excluding the deleted adjustments) ---
+        # Filter by liability_id to scope to this specific loan (not all loans on the property)
+        expense_filters = [
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.EXPENSE,
+            Transaction.expense_category == ExpenseCategory.LOAN_INTEREST,
+            Transaction.is_system_generated == True,
+            sa_extract("year", Transaction.transaction_date) == tax_year,
+        ]
+        if liability_id:
+            expense_filters.append(Transaction.liability_id == liability_id)
+        else:
+            expense_filters.append(Transaction.property_id == loan.property_id)
+
+        existing_expenses = self.db.query(Transaction).filter(*expense_filters).all()
+
+        existing_total = sum(
+            Decimal(str(e.amount)) for e in existing_expenses
+        )
+
+        # Skip if no existing expenses (certificate is primary record, not an adjustment)
+        if not existing_expenses:
+            return None
+
+        diff = bank_interest - existing_total
+        if abs(diff) <= Decimal("0.50"):
+            return None
+
+        if diff > 0:
+            txn_type = TransactionType.EXPENSE
+            txn_amount = diff
+        else:
+            txn_type = TransactionType.INCOME
+            txn_amount = abs(diff)
+
+        sign_str = "+" if diff > 0 else ""
+        adjustment = Transaction(
+            user_id=user_id,
+            type=txn_type,
+            amount=txn_amount,
+            transaction_date=adjustment_date,
+            description=(
+                f"{desc_marker}: "
+                f"Zinsbescheinigung {bank_interest} EUR vs "
+                f"Sch\u00e4tzung {existing_total} EUR "
+                f"(Differenz {sign_str}{diff} EUR)"
+            ),
+            expense_category=(
+                ExpenseCategory.LOAN_INTEREST if txn_type == TransactionType.EXPENSE else None
+            ),
+            income_category=(
+                IncomeCategory.RENTAL if txn_type == TransactionType.INCOME and loan.property_id else None
+            ),
+            property_id=loan.property_id,
+            liability_id=liability_id,
+            is_deductible=(txn_type == TransactionType.EXPENSE),
+            is_system_generated=True,
+        )
+
+        self.db.add(adjustment)
+        self.db.flush()
+        return adjustment
+
     def create_interest_payment_transaction(
         self,
         loan_id: int,
