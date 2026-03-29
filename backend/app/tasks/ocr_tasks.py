@@ -2242,9 +2242,9 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     status = "needs_input" if missing_fields else "pending"
     suggestion_type = "create_loan" if matched_property_id else "create_loan_repayment"
     suggestion_data = {
-        "loan_amount": float(Decimal(str(loan_amount))) if loan_amount else None,
-        "interest_rate": float(Decimal(str(interest_rate))) if interest_rate else None,
-        "monthly_payment": float(Decimal(str(monthly_payment))) if monthly_payment else None,
+        "loan_amount": float(Decimal(str(loan_amount))) if loan_amount is not None else None,
+        "interest_rate": float(Decimal(str(interest_rate))) if interest_rate is not None else None,
+        "monthly_payment": float(Decimal(str(monthly_payment))) if monthly_payment is not None else None,
         "annual_interest_amount": (
             float(Decimal(str(ocr_data.get("annual_interest_amount"))))
             if ocr_data.get("annual_interest_amount")
