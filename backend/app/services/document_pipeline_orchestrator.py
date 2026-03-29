@@ -2952,9 +2952,38 @@ class DocumentPipelineOrchestrator:
                 db_type.value if hasattr(db_type, "value") else str(db_type)
             )
 
+            # Resolve property context from AI data (once per document)
+            _resolved_property_id = None
+            if isinstance(document.ocr_result, dict):
+                try:
+                    from app.models.property import Property, PropertyStatus
+                    from app.services.ai_context_resolver import resolve_property_context
+                    user_props = self.db.query(Property).filter(
+                        Property.user_id == document.user_id,
+                        Property.status == PropertyStatus.ACTIVE,
+                    ).all()
+                    if user_props:
+                        prop_ctx = resolve_property_context(
+                            ocr_result=document.ocr_result,
+                            known_properties=[
+                                {"id": p.id, "address": p.address, "is_rental": getattr(p, "is_rental", False)}
+                                for p in user_props
+                            ],
+                        )
+                        if prop_ctx:
+                            _resolved_property_id = prop_ctx.get("property_id")
+                            logger.info(
+                                "Resolved property_id=%s for doc %s (source=%s)",
+                                _resolved_property_id, document.id, prop_ctx.get("match_source"),
+                            )
+                except Exception:
+                    logger.debug("Property context resolution failed for doc %s", document.id, exc_info=True)
+
             # Gate each suggestion individually
             for s in suggestions:
                 s["document_id"] = document.id
+                if _resolved_property_id:
+                    s["property_id"] = _resolved_property_id
 
                 # Extract direction resolution from the suggestion itself
                 # (set by _annotate_suggestion_with_direction in the service)

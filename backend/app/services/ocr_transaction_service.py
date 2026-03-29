@@ -293,6 +293,12 @@ class OCRTransactionService:
             "canonical_description": classification.get("canonical_description"),
             "extracted_fields": {k: (float(v) if isinstance(v, Decimal) else v.isoformat() if isinstance(v, (datetime,)) else v) for k, v in ocr_data.items()} if ocr_data else {},
         }
+        # Promote VAT fields from ocr_data to top-level so _create_transaction_record sees them
+        if ocr_data:
+            if ocr_data.get("vat_amount") is not None:
+                suggestion["vat_amount"] = ocr_data["vat_amount"]
+            if ocr_data.get("vat_rate") is not None:
+                suggestion["vat_rate"] = ocr_data["vat_rate"]
         return self._annotate_suggestion_with_direction(suggestion, direction_resolution)
 
     def _build_line_items_from_split(
@@ -785,6 +791,7 @@ class OCRTransactionService:
         """Persist a new OCR transaction after all validations have passed."""
         transaction = Transaction(
             user_id=user_id,
+            property_id=suggestion.get("property_id"),
             type=transaction_type,
             amount=amount,
             transaction_date=txn_date,
@@ -794,6 +801,8 @@ class OCRTransactionService:
             is_deductible=suggestion.get("is_deductible", False),
             deduction_reason=suggestion.get("deduction_reason"),
             document_id=suggestion["document_id"],
+            vat_amount=Decimal(str(suggestion["vat_amount"])) if suggestion.get("vat_amount") else None,
+            vat_rate=Decimal(str(suggestion["vat_rate"])) if suggestion.get("vat_rate") else None,
             import_source="ocr",
             classification_confidence=Decimal(str(suggestion.get("confidence", 0.5))),
             classification_method=suggestion.get("classification_method"),

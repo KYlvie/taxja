@@ -131,6 +131,11 @@ class User(Base):
     home_office_eligible = Column(Boolean, default=False)
     telearbeit_days = Column(Integer, nullable=True, default=None)  # None=legacy/unknown, 0=explicit zero
     employer_telearbeit_pauschale = Column(Numeric(10, 2), nullable=True, default=None)  # AG tax-free payment
+
+    # Arbeitszimmer (home-office room) — §20 Abs.1 Z 2 lit.d EStG
+    arbeitszimmer_m2 = Column(Numeric(6, 2), nullable=True)
+    nutzflaeche_m2 = Column(Numeric(6, 2), nullable=True)
+    arbeitszimmer_mittelpunkt = Column(Boolean, nullable=True)
     
     # Language setting
     language = Column(String(5), default="de")  # de, en, zh, fr, ru, hu, pl, tr, bs

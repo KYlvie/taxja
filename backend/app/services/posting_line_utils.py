@@ -524,6 +524,8 @@ def iter_transaction_posting_records(
             continue
 
         amount = quantize_money(getattr(line_item, "amount", None))
+        # quantity stores unit measurements (kWh, m³) from OCR, NOT item counts.
+        # amount already represents the total line amount, so we must NOT multiply.
         quantity = int(getattr(line_item, "quantity", 1) or 1)
         category = getattr(line_item, "category", None) or default_category_token(
             transaction_type=parent_type,
@@ -548,7 +550,7 @@ def iter_transaction_posting_records(
             posting_type=posting_type,
             amount=amount,
             quantity=quantity,
-            total_amount=amount * quantity,
+            total_amount=amount,
             income_category=income_category or getattr(transaction, "income_category", None),
             expense_category=expense_category or getattr(transaction, "expense_category", None),
             category=category_token,

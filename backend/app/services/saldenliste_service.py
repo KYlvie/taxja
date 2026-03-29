@@ -18,6 +18,9 @@ from app.services.posting_line_utils import iter_transaction_posting_records
 from app.services.report_transaction_filters import (
     should_include_in_saldenliste,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -656,13 +659,22 @@ def _compute_yearly_balances(
     """
     balances: Dict[str, Decimal] = {acct.konto: Decimal("0") for acct in account_plan}
     allowed_posting_types = _allowed_saldenliste_posting_types(user_type)
+    record_count = 0
+    skipped_posting_type = 0
     for txn in transactions:
         for record in iter_transaction_posting_records(txn, include_private_use=False):
             if record.posting_type not in allowed_posting_types:
+                skipped_posting_type += 1
                 continue
+            record_count += 1
             konto = _map_transaction_to_konto(record, account_plan)
             amount = _saldenliste_entry_amount(record)
             balances[konto] = balances.get(konto, Decimal("0")) + amount
+    non_zero = {k: v for k, v in balances.items() if v != Decimal("0")}
+    logger.info(
+        "Saldenliste balances: %d records included, %d skipped (posting_type), %d non-zero accounts",
+        record_count, skipped_posting_type, len(non_zero),
+    )
     return balances
 
 
@@ -825,10 +837,15 @@ def generate_saldenliste(
         )
         .all()
     )
+    pre_filter_count = len(current_txns)
     current_txns = [
         txn for txn in current_txns
         if should_include_in_saldenliste(txn, user.user_type)
     ]
+    logger.info(
+        "Saldenliste %d: %d txns queried, %d after filter (user_type=%s)",
+        tax_year, pre_filter_count, len(current_txns), user.user_type,
+    )
     prior_txns = (
         db.query(Transaction)
         .filter(
