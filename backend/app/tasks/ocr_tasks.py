@@ -5315,6 +5315,14 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
             for ok in ocr_keys:
                 if not updated_ocr.get(ok):
                     updated_ocr[ok] = ai_val
+    # Critical: inject AI document_subtype and document_purpose
+    # These override the regex-based subtype detection which can be wrong
+    ai_subtype = ai_first.get("document_subtype")
+    ai_purpose = ai_first.get("document_purpose")
+    if ai_subtype:
+        updated_ocr["insurance_subtype"] = ai_subtype
+    if ai_purpose:
+        updated_ocr["document_subtype"] = ai_purpose
     # AI amounts → insurance premium fields
     if not updated_ocr.get("praemie_jaehrlich") and ai_amounts.get("annual_amount"):
         updated_ocr["praemie_jaehrlich"] = ai_amounts["annual_amount"]
