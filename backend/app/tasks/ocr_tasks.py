@@ -4175,6 +4175,7 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
             start_date=start_date,
             end_date=end_date,
             is_active=True,
+            liability_id=liability.id,
         )
         db.add(interest_recurring)
         db.flush()
