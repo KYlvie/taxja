@@ -1052,6 +1052,21 @@ class OCRTransactionService:
                 or ai_amounts.get("settlement_amount")
                 or ai_amounts.get("monthly_amount")
             )
+            # Prefer VLM amount for invoices — VLM parses European numbers
+            # correctly (10.800,00 → 10800.0), while LLM may misparse (→ 10.8)
+            vlm_amount = ocr_data.get("amount")
+            if vlm_amount and float(vlm_amount) > 0:
+                if ai_amount and float(ai_amount) > 0:
+                    # If VLM and AI differ significantly, prefer VLM
+                    ratio = float(vlm_amount) / float(ai_amount) if float(ai_amount) > 0 else 999
+                    if ratio > 10 or ratio < 0.1:
+                        logger.info(
+                            "Amount discrepancy doc %s: VLM=%.2f vs AI=%.2f (ratio %.1f), using VLM",
+                            document.id, float(vlm_amount), float(ai_amount), ratio
+                        )
+                        ai_amount = float(vlm_amount)
+                else:
+                    ai_amount = float(vlm_amount)
             if ai_amount and float(ai_amount) > 0:
                 ai_doc_type = ai_first.get("document_type", "")
                 ai_role = (ai_first.get("role_detection") or {}).get("user_is", "")
@@ -1794,13 +1809,9 @@ class OCRTransactionService:
             is_deductible = ai_tax.get("is_deductible", True)
             deduction_reason = ai_ded_cat or ai_first.get("document_type", "")
 
-            # Override amount from AI if available — but respect
-            # BK settlement amounts and other special overrides
-            # already applied by _extract_transaction_data.
-            if not transaction_data.get("_ai_extracted"):
-                ai_amount = ai_amounts.get("total_amount") or ai_amounts.get("annual_amount")
-                if ai_amount and ai_amount > 0:
-                    transaction_data["amount"] = ai_amount
+            # Don't override amount here — _extract_transaction_data already
+            # selected the best amount (VLM preferred over AI for invoices,
+            # BK uses settlement amounts, etc.)
 
             return {
                 "transaction_type": txn_type,
