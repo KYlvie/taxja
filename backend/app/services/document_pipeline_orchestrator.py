@@ -824,10 +824,25 @@ class DocumentPipelineOrchestrator:
                     # Store AI result in ocr_result for downstream consumers
                     ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
                     ocr_json["_ai_first"] = ai_result
-                    document.ocr_result = ocr_json
+                    # Sanitize: convert UUID objects to strings for JSON serialization
+                    import uuid as _uuid_mod
+                    def _sanitize_json(obj):
+                        if isinstance(obj, dict):
+                            return {k: _sanitize_json(v) for k, v in obj.items()}
+                        elif isinstance(obj, list):
+                            return [_sanitize_json(v) for v in obj]
+                        elif isinstance(obj, _uuid_mod.UUID):
+                            return str(obj)
+                        elif isinstance(obj, Decimal):
+                            return float(obj)
+                        return obj
+                    document.ocr_result = _sanitize_json(ocr_json)
                     from sqlalchemy.orm.attributes import flag_modified
                     flag_modified(document, "ocr_result")
-                    self.db.flush()  # Ensure _ai_first is visible to downstream queries
+                    # Note: We don't flush here to avoid UUID serialization errors
+                    # from other dirty objects in the session. The _ai_first data
+                    # is available in-memory via the document object's identity map.
+                    # It will be committed at the end of the pipeline.
                     # Map AI document_type to DBDocumentType
                     ai_db_type = self._map_ai_type_to_db_type(ai_result.get("document_type", ""))
                     ai_confidence = float(ai_result.get("confidence", 0.7))
@@ -4054,6 +4069,7 @@ class DocumentPipelineOrchestrator:
     @staticmethod
     def _make_json_safe(obj):
         """Recursively convert non-JSON-safe types."""
+        import uuid as _uuid_mod
         if isinstance(obj, dict):
             return {k: DocumentPipelineOrchestrator._make_json_safe(v) for k, v in obj.items()}
         elif isinstance(obj, list):
@@ -4062,4 +4078,8 @@ class DocumentPipelineOrchestrator:
             return obj.isoformat()
         elif isinstance(obj, Decimal):
             return float(obj)
+        elif isinstance(obj, _uuid_mod.UUID):
+            return str(obj)
+        elif isinstance(obj, bytes):
+            return obj.decode("utf-8", errors="replace")
         return obj

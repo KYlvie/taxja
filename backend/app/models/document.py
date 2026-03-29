@@ -1,9 +1,36 @@
 """Document model for OCR storage"""
-from datetime import datetime
+import json as _json
+import uuid as _uuid
+from datetime import datetime, date as _date_type
+from decimal import Decimal as _Decimal
 from enum import Enum
-from sqlalchemy import Column, Integer, String, Text, Numeric, JSON, DateTime, Date, ForeignKey, Enum as SQLEnum, Boolean
+from sqlalchemy import Column, Integer, String, Text, Numeric, JSON, DateTime, Date, ForeignKey, Enum as SQLEnum, Boolean, TypeDecorator
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+
+
+class SafeJSON(TypeDecorator):
+    """JSON column that auto-serializes UUID, Decimal, datetime, bytes."""
+    impl = JSON
+    cache_ok = True
+
+    class _Encoder(_json.JSONEncoder):
+        def default(self, o):
+            if isinstance(o, _uuid.UUID):
+                return str(o)
+            if isinstance(o, _Decimal):
+                return float(o)
+            if isinstance(o, (datetime, _date_type)):
+                return o.isoformat()
+            if isinstance(o, bytes):
+                return o.decode("utf-8", errors="replace")
+            return super().default(o)
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            # Re-serialize through our safe encoder to handle UUIDs etc.
+            return _json.loads(_json.dumps(value, cls=self._Encoder))
+        return value
 
 
 class DocumentType(str, Enum):
@@ -63,7 +90,7 @@ class Document(Base):
     mime_type = Column(String(100), nullable=True)
     
     # OCR results
-    ocr_result = Column(JSON, nullable=True)  # Structured extracted data
+    ocr_result = Column(SafeJSON, nullable=True)  # Structured extracted data (auto-serializes UUID etc.)
     raw_text = Column(Text, nullable=True)  # Raw OCR text
     confidence_score = Column(Numeric(3, 2), nullable=True)  # 0.00 to 1.00
     
