@@ -798,7 +798,8 @@ class DocumentPipelineOrchestrator:
                     ai_amounts = ai_result.get("amounts") or {}
                     needs_round2 = (
                         ai_doc_type in ("zinsbescheinigung", "svs_vorschreibung", "svs_nachbemessung",
-                                        "betriebskostenabrechnung", "loan_contract")
+                                        "betriebskostenabrechnung", "loan_contract",
+                                        "versicherungspolizze", "versicherungsbestaetigung")
                         and not ai_amounts.get("total_amount") and not ai_amounts.get("annual_amount")
                     )
                     if needs_round2:
@@ -810,6 +811,10 @@ class DocumentPipelineOrchestrator:
                                 if r2.get("annual_interest_paid") and not ai_amounts.get("annual_amount"):
                                     ai_result["amounts"]["annual_amount"] = r2["annual_interest_paid"]
                                     ai_result["amounts"]["total_amount"] = r2["annual_interest_paid"]
+                                # Insurance premium promotion
+                                if r2.get("praemie_jaehrlich") and not ai_amounts.get("annual_amount"):
+                                    ai_result["amounts"]["annual_amount"] = r2["praemie_jaehrlich"]
+                                    ai_result["amounts"]["total_amount"] = r2["praemie_jaehrlich"]
                                 if r2.get("remaining_balance"):
                                     ai_result.setdefault("key_fields", {})["remaining_balance"] = r2["remaining_balance"]
                                 logger.info("AI Round 2 for %s: extracted %d fields", ai_doc_type, len(r2))

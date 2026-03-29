@@ -5297,6 +5297,39 @@ def _build_versicherung_suggestion(db, document, result) -> dict:
 
     OCREngine._normalize_insurance_amount_fields(updated_ocr)
 
+    # Inject AI-first data into insurance fields
+    ai_first = updated_ocr.get("_ai_first") or {}
+    ai_fields = ai_first.get("key_fields") or {}
+    ai_amounts = ai_first.get("amounts") or {}
+    ai_r2 = ai_first.get("_round2") or {}
+    # Map AI fields to insurance fields
+    _ai_ins_map = {
+        "insurer_name": ["insurer_name", "versicherer"],
+        "polizze_nr": ["polizze_nr", "polizze"],
+        "insured_object": ["versichertes_objekt"],
+        "property_address": ["property_address"],
+    }
+    for ai_key, ocr_keys in _ai_ins_map.items():
+        ai_val = ai_fields.get(ai_key) or ai_r2.get(ai_key)
+        if ai_val:
+            for ok in ocr_keys:
+                if not updated_ocr.get(ok):
+                    updated_ocr[ok] = ai_val
+    # AI amounts → insurance premium fields
+    if not updated_ocr.get("praemie_jaehrlich") and ai_amounts.get("annual_amount"):
+        updated_ocr["praemie_jaehrlich"] = ai_amounts["annual_amount"]
+    if not updated_ocr.get("premium_annual_brutto") and ai_amounts.get("annual_amount"):
+        updated_ocr["premium_annual_brutto"] = ai_amounts["annual_amount"]
+    if not updated_ocr.get("payment_amount") and ai_amounts.get("monthly_amount"):
+        updated_ocr["payment_amount"] = ai_amounts["monthly_amount"]
+    # AI Round 2 specific insurance fields
+    if ai_r2:
+        for r2_key in ("insurance_type", "insurance_subtype", "zahlungsfrequenz",
+                        "praemie_jaehrlich", "versicherungsnehmer", "vertragsbeginn",
+                        "vertragsende", "neue_praemie", "kuendigung_datum"):
+            if ai_r2.get(r2_key) and not updated_ocr.get(r2_key):
+                updated_ocr[r2_key] = ai_r2[r2_key]
+
     if role_resolution and role_resolution.strict_would_block and role_resolution.mode == "strict":
         updated_ocr.pop("import_suggestion", None)
         document.ocr_result = updated_ocr
