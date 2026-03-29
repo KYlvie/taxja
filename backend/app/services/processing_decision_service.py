@@ -60,13 +60,16 @@ class ProcessingDecisionService:
 
         if db_type == DBDocumentType.PURCHASE_CONTRACT:
             primary_actions = [ProcessingAction.PURCHASE_CONTRACT]
-            secondary_actions = [ProcessingAction.ASSET_SUGGESTION]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS, ProcessingAction.ASSET_SUGGESTION]
         elif db_type == DBDocumentType.RENTAL_CONTRACT:
             primary_actions = [ProcessingAction.RENTAL_CONTRACT]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         elif db_type == DBDocumentType.LOAN_CONTRACT:
             primary_actions = [ProcessingAction.LOAN_CONTRACT]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         elif db_type == DBDocumentType.VERSICHERUNGSBESTAETIGUNG:
             primary_actions = [ProcessingAction.INSURANCE_RECURRING]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         elif db_type == DBDocumentType.BANK_STATEMENT:
             primary_actions = [ProcessingAction.BANK_STATEMENT_IMPORT]
         elif db_type == DBDocumentType.SVS_NOTICE:
@@ -75,6 +78,7 @@ class ProcessingDecisionService:
             secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         elif db_type in tax_form_types:
             primary_actions = [ProcessingAction.TAX_FORM_IMPORT]
+            secondary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
         else:
             primary_actions = [ProcessingAction.TRANSACTION_SUGGESTIONS]
             secondary_actions = [ProcessingAction.ASSET_SUGGESTION]

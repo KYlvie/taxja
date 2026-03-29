@@ -1589,7 +1589,83 @@ class OCRTransactionService:
         *,
         direction_resolution: Optional[TransactionDirectionResolution] = None,
     ) -> Dict[str, Any]:
-        """Classify transaction based on document type and OCR data"""
+        """Classify transaction based on document type and OCR data.
+
+        AI-first path: when _ai_first data is present in ocr_result,
+        use AI's classification for direction, category, and deductibility.
+        """
+        # -- AI-first classification shortcut --
+        ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        ai_first = ocr_json.get("_ai_first")
+        if ai_first and ai_first.get("document_type", "unknown") != "unknown":
+            ai_tax = ai_first.get("tax_treatment") or {}
+            ai_amounts = ai_first.get("amounts") or {}
+            ai_role = (ai_first.get("role_detection") or {}).get("user_is")
+            ai_direction = ai_tax.get("expense_or_income", "expense")
+            ai_doc_type = ai_first.get("document_type", "")
+            ai_confidence = float(ai_first.get("confidence", 0.75))
+
+            # Determine transaction type from AI
+            if ai_direction == "income" or ai_doc_type in ("lohnzettel", "l16"):
+                txn_type = TransactionType.INCOME.value
+            elif ai_role == "landlord" and ai_doc_type in ("mietvorschreibung",):
+                txn_type = TransactionType.INCOME.value
+            else:
+                txn_type = TransactionType.EXPENSE.value
+
+            # Determine category from AI
+            ai_ded_cat = ai_tax.get("deduction_category", "")
+            if txn_type == TransactionType.INCOME.value:
+                if "Vermietung" in ai_ded_cat or ai_role == "landlord":
+                    category = IncomeCategory.RENTAL.value
+                elif "selbständig" in ai_ded_cat.lower() or ai_doc_type == "invoice":
+                    category = IncomeCategory.SELF_EMPLOYMENT.value
+                elif ai_doc_type in ("lohnzettel", "l16"):
+                    category = IncomeCategory.EMPLOYMENT.value
+                else:
+                    category = IncomeCategory.OTHER_INCOME.value
+            else:
+                # Map AI deduction_category to ExpenseCategory
+                cat_map = {
+                    "Betriebsausgabe": ExpenseCategory.OTHER.value,
+                    "Werbungskosten": ExpenseCategory.OTHER.value,
+                    "Sonderausgaben": ExpenseCategory.OTHER.value,
+                    "SVS": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                    "Versicherung": ExpenseCategory.INSURANCE.value,
+                    "Miete": ExpenseCategory.RENT.value,
+                    "Zinsen": ExpenseCategory.LOAN_INTEREST.value,
+                    "Reparatur": ExpenseCategory.MAINTENANCE.value,
+                    "Hausverwaltung": ExpenseCategory.PROFESSIONAL_SERVICES.value,
+                    "Grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
+                    "Büromaterial": ExpenseCategory.OFFICE_SUPPLIES.value,
+                    "Internet": ExpenseCategory.TELECOM.value,
+                    "Telefon": ExpenseCategory.TELECOM.value,
+                    "KFZ": ExpenseCategory.VEHICLE.value,
+                    "Reise": ExpenseCategory.TRAVEL.value,
+                }
+                category = ExpenseCategory.OTHER.value
+                for key, val in cat_map.items():
+                    if key.lower() in (ai_ded_cat or "").lower():
+                        category = val
+                        break
+
+            is_deductible = ai_tax.get("is_deductible", True)
+            deduction_reason = ai_ded_cat or ai_first.get("document_type", "")
+
+            # Override amount from AI if available
+            ai_amount = ai_amounts.get("total_amount") or ai_amounts.get("annual_amount")
+            if ai_amount and ai_amount > 0:
+                transaction_data["amount"] = ai_amount
+
+            return {
+                "transaction_type": txn_type,
+                "category": category,
+                "is_deductible": bool(is_deductible),
+                "deduction_reason": deduction_reason,
+                "confidence": ai_confidence,
+                "classification_method": "ai_first",
+            }
+
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
         
         if doc_type in [DocumentType.PAYSLIP.value, DocumentType.LOHNZETTEL.value]:

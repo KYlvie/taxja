@@ -770,7 +770,54 @@ class DocumentPipelineOrchestrator:
                 )
                 return db_type
 
-        # -- Standard multi-signal arbitration --
+        # -- AI-first classification (mega-prompt) --
+        # Run AIFirstClassifier on the raw text and store results in _ai_first
+        # for downstream use by ai_context_resolver and transaction creation.
+        try:
+            from app.services.ai_first_classifier import AIFirstClassifier
+            raw_text = ocr_result.raw_text or ""
+            if raw_text and len(raw_text.strip()) > 50:
+                # Inject user context if available
+                from app.models.user import User as _User
+                user = self.db.query(_User).filter(_User.id == document.user_id).first() if document.user_id else None
+                user_context = {}
+                if user:
+                    user_context["name"] = user.name or ""
+                    user_context["business_name"] = getattr(user, "business_name", "") or ""
+                    user_context["role_hints"] = []
+                    if getattr(user, "user_type", None):
+                        user_context["role_hints"].append(user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type))
+
+                ai_classifier = AIFirstClassifier()
+                ai_result = ai_classifier.classify_and_extract(raw_text, user_context=user_context)
+                if ai_result and ai_result.get("document_type", "unknown") != "unknown":
+                    # Store AI result in ocr_result for downstream consumers
+                    ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+                    ocr_json["_ai_first"] = ai_result
+                    document.ocr_result = ocr_json
+                    # Map AI document_type to DBDocumentType
+                    ai_db_type = self._map_ai_type_to_db_type(ai_result.get("document_type", ""))
+                    ai_confidence = float(ai_result.get("confidence", 0.7))
+                    if ai_db_type and ai_confidence >= 0.5:
+                        self._log_audit(
+                            result, "classify",
+                            f"AI-first classification: {ai_result.get('document_type')} → {ai_db_type.value} "
+                            f"(confidence {ai_confidence:.2f})"
+                        )
+                        db_type = ai_db_type
+                        classification = ClassificationResult(
+                            document_type=db_type.value,
+                            confidence=max(ai_confidence, 0.75),
+                            method="ai_first",
+                        )
+                        document.document_type = db_type
+                        result.classification = classification
+                        result.stage_reached = PipelineStage.CLASSIFY
+                        return db_type
+        except Exception as e:
+            logger.debug("AI-first classification failed, falling back: %s", e, exc_info=True)
+
+        # -- Standard multi-signal arbitration (fallback) --
         classification = ClassificationResult(
             document_type=ocr_type.value,
             confidence=ocr_confidence,
@@ -931,6 +978,48 @@ class DocumentPipelineOrchestrator:
         )
 
         return db_type
+
+    _AI_TYPE_TO_DB_TYPE = {
+        "invoice": DBDocumentType.INVOICE,
+        "receipt": DBDocumentType.RECEIPT,
+        "mietvertrag": DBDocumentType.RENTAL_CONTRACT,
+        "mietvorschreibung": DBDocumentType.INVOICE,
+        "betriebskostenabrechnung": DBDocumentType.INVOICE,
+        "grundsteuerbescheid": DBDocumentType.INVOICE,
+        "kaufvertrag": DBDocumentType.PURCHASE_CONTRACT,
+        "versicherungspolizze": DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+        "versicherungsbestaetigung": DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+        "loan_contract": DBDocumentType.LOAN_CONTRACT,
+        "kreditvertrag": DBDocumentType.LOAN_CONTRACT,
+        "zinsbescheinigung": DBDocumentType.LOAN_CONTRACT,
+        "tilgungsplan": DBDocumentType.LOAN_CONTRACT,
+        "svs_vorschreibung": DBDocumentType.SVS_NOTICE,
+        "svs_nachbemessung": DBDocumentType.SVS_NOTICE,
+        "svs_jahresbestaetigung": DBDocumentType.SVS_NOTICE,
+        "lohnzettel": DBDocumentType.LOHNZETTEL,
+        "l16": DBDocumentType.LOHNZETTEL,
+        "e1_form": DBDocumentType.E1_FORM,
+        "einkommensteuerbescheid": DBDocumentType.EINKOMMENSTEUERBESCHEID,
+        "bank_statement": DBDocumentType.BANK_STATEMENT,
+        "kontoauszug": DBDocumentType.BANK_STATEMENT,
+        "sepa_lastschrift": DBDocumentType.OTHER,
+        "spendenbestaetigung": DBDocumentType.INVOICE,
+        "kirchenbeitrag": DBDocumentType.INVOICE,
+    }
+
+    def _map_ai_type_to_db_type(self, ai_type: str) -> Optional[DBDocumentType]:
+        """Map AI-first classifier document_type string to DBDocumentType."""
+        if not ai_type:
+            return None
+        ai_type_lower = ai_type.lower().strip()
+        mapped = self._AI_TYPE_TO_DB_TYPE.get(ai_type_lower)
+        if mapped:
+            return mapped
+        # Try direct enum match
+        for member in DBDocumentType:
+            if member.value.lower() == ai_type_lower:
+                return member
+        return DBDocumentType.OTHER
 
     def _classify_by_filename(self, file_name: Optional[str]) -> Optional[DBDocumentType]:
         """Classify document type by filename hints."""
