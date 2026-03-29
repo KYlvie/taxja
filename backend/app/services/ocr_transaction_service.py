@@ -178,6 +178,20 @@ class OCRTransactionService:
             return None
         return suggestions[0]
 
+    @staticmethod
+    def _safe_vat_rate(raw_rate) -> Optional[Decimal]:
+        """Normalize VAT rate to fit NUMERIC(5,4): max 9.9999.
+        Converts percentage (20) to decimal (0.20)."""
+        if raw_rate is None:
+            return None
+        try:
+            val = Decimal(str(raw_rate))
+            if val > Decimal("1"):
+                val = val / Decimal("100")
+            return val
+        except Exception:
+            return None
+
     def create_split_suggestions(
         self, document_id: int, user_id: int
     ) -> List[Dict[str, Any]]:
@@ -298,7 +312,14 @@ class OCRTransactionService:
             if ocr_data.get("vat_amount") is not None:
                 suggestion["vat_amount"] = ocr_data["vat_amount"]
             if ocr_data.get("vat_rate") is not None:
-                suggestion["vat_rate"] = ocr_data["vat_rate"]
+                raw_rate = ocr_data["vat_rate"]
+                # Normalize: DB column is NUMERIC(5,4), max 9.9999
+                # Convert percentage (20) to decimal (0.20)
+                vr = normalize_vat_rate(raw_rate)
+                if vr is not None:
+                    suggestion["vat_rate"] = vr / 100 if vr > 1 else vr
+                else:
+                    suggestion["vat_rate"] = raw_rate
         return self._annotate_suggestion_with_direction(suggestion, direction_resolution)
 
     def _build_line_items_from_split(
@@ -802,7 +823,7 @@ class OCRTransactionService:
             deduction_reason=suggestion.get("deduction_reason"),
             document_id=suggestion["document_id"],
             vat_amount=Decimal(str(suggestion["vat_amount"])) if suggestion.get("vat_amount") else None,
-            vat_rate=Decimal(str(suggestion["vat_rate"])) if suggestion.get("vat_rate") else None,
+            vat_rate=self._safe_vat_rate(suggestion.get("vat_rate")),
             import_source="ocr",
             classification_confidence=Decimal(str(suggestion.get("confidence", 0.5))),
             classification_method=suggestion.get("classification_method"),
@@ -1012,10 +1033,107 @@ class OCRTransactionService:
     def _extract_transaction_data(
         self, document: Document, ocr_data: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Extract transaction data from OCR results based on document type"""
+        """Extract transaction data from OCR results based on document type.
+
+        AI-FIRST PATH: If _ai_first data is present with valid amounts,
+        use it directly instead of relying on legacy field extraction.
+        This handles mietvorschreibung, grundsteuerbescheid, betriebskostenabrechnung,
+        hausverwaltung invoices, and other AI-classified document types that
+        don't map cleanly to the legacy extraction fields.
+        """
+        # ── AI-FIRST EXTRACTION ──────────────────────────────────────
+        ai_first = ocr_data.get("_ai_first")
+        if ai_first and ai_first.get("document_type", "unknown") != "unknown":
+            ai_amounts = ai_first.get("amounts") or {}
+            ai_amount = (
+                ai_amounts.get("total_amount")
+                or ai_amounts.get("netto_amount")
+                or ai_amounts.get("annual_amount")
+                or ai_amounts.get("settlement_amount")
+                or ai_amounts.get("monthly_amount")
+            )
+            if ai_amount and float(ai_amount) > 0:
+                ai_doc_type = ai_first.get("document_type", "")
+                ai_role = (ai_first.get("role_detection") or {}).get("user_is", "")
+                ai_key_fields = ai_first.get("key_fields") or {}
+
+                # Build description from AI context
+                desc_parts = []
+                if ai_key_fields.get("insurer"):
+                    desc_parts.append(ai_key_fields["insurer"])
+                if ai_key_fields.get("supplier") or ai_key_fields.get("vendor"):
+                    desc_parts.append(ai_key_fields.get("supplier") or ai_key_fields.get("vendor"))
+                if ai_doc_type == "mietvorschreibung":
+                    landlord = (ai_first.get("role_detection") or {}).get("landlord_name", "")
+                    tenant = (ai_first.get("role_detection") or {}).get("tenant_name", "")
+                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
+                    period = ai_key_fields.get("period") or ai_key_fields.get("month") or ""
+                    if ai_role == "landlord":
+                        desc_parts.append(f"Mieteinnahme {addr} {period}".strip())
+                    else:
+                        desc_parts.append(f"Miete {addr} {period}".strip())
+                elif ai_doc_type == "grundsteuerbescheid":
+                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
+                    desc_parts.append(f"Grundsteuer {addr}".strip())
+                elif ai_doc_type == "betriebskostenabrechnung":
+                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
+                    # Use nachforderung or gutschrift amount, not total BK
+                    nachforderung = ai_key_fields.get("nachforderung_amount")
+                    gutschrift = ai_key_fields.get("gutschrift_amount")
+                    settlement = ai_amounts.get("settlement_amount")
+                    if nachforderung and float(nachforderung) > 0:
+                        ai_amount = float(nachforderung)
+                        desc_parts.append(f"BK-Nachforderung {addr}".strip())
+                    elif gutschrift and float(gutschrift) > 0:
+                        ai_amount = float(gutschrift)
+                        desc_parts.append(f"BK-Guthaben {addr}".strip())
+                    elif settlement and float(settlement) > 0:
+                        ai_amount = float(settlement)
+                        desc_parts.append(f"Betriebskostenabrechnung {addr}".strip())
+                    else:
+                        desc_parts.append(f"Betriebskostenabrechnung {addr}".strip())
+                    logger.info(
+                        "BK extraction doc %s: NF=%s, GS=%s, settlement=%s -> amount=%.2f",
+                        document.id, nachforderung, gutschrift, settlement, ai_amount
+                    )
+                elif ai_doc_type in ("hausverwaltung_honorarnote", "invoice"):
+                    supplier = ai_key_fields.get("supplier") or ai_key_fields.get("vendor") or ""
+                    desc_parts.append(supplier)
+                elif ai_doc_type in ("indexanpassung", "kautionsbestaetigung", "uebergabeprotokoll"):
+                    # Archive-only documents — no transaction created
+                    logger.info("AI-first: skipping archive-only doc type %s (doc %s)", ai_doc_type, document.id)
+                    return None
+
+                description = " — ".join(desc_parts) if desc_parts else ai_doc_type
+
+                # Extract date
+                date_str = (
+                    ai_key_fields.get("date")
+                    or ai_key_fields.get("invoice_date")
+                    or ai_key_fields.get("period_start")
+                    or ocr_data.get("date")
+                    or ocr_data.get("invoice_date")
+                )
+
+                logger.info(
+                    "AI-first extraction for doc %s: type=%s, amount=%.2f, desc=%s",
+                    document.id, ai_doc_type, float(ai_amount), description[:60]
+                )
+
+                return {
+                    "amount": float(ai_amount),
+                    "date": date_str,
+                    "description": description,
+                    "merchant": desc_parts[0] if desc_parts else ai_doc_type,
+                    "_ai_extracted": True,
+                    "_ai_doc_type": ai_doc_type,
+                    "_ai_role": ai_role,
+                }
+
+        # ── LEGACY EXTRACTION (fallback) ─────────────────────────────
         # document_type may be enum or string
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
-        
+
         if doc_type == DocumentType.RECEIPT.value:
             return self._extract_from_receipt(ocr_data)
         elif doc_type == DocumentType.INVOICE.value:
@@ -1610,6 +1728,18 @@ class OCRTransactionService:
                 txn_type = TransactionType.INCOME.value
             elif ai_role == "landlord" and ai_doc_type in ("mietvorschreibung",):
                 txn_type = TransactionType.INCOME.value
+            elif ai_doc_type == "betriebskostenabrechnung":
+                # BK direction: AI already tells us via expense_or_income
+                # based on role + nachforderung/gutschrift analysis
+                if ai_direction == "income":
+                    txn_type = TransactionType.INCOME.value
+                else:
+                    txn_type = TransactionType.EXPENSE.value
+            elif ai_doc_type == "grundsteuerbescheid":
+                txn_type = TransactionType.EXPENSE.value
+            elif ai_doc_type in ("kautionsbestaetigung", "uebergabeprotokoll", "indexanpassung"):
+                # Archive-only documents — no transaction
+                txn_type = TransactionType.EXPENSE.value  # Will be handled differently
             else:
                 txn_type = TransactionType.EXPENSE.value
 
@@ -1649,13 +1779,28 @@ class OCRTransactionService:
                         category = val
                         break
 
+                # AI doc_type-specific category overrides
+                if ai_doc_type == "grundsteuerbescheid":
+                    category = ExpenseCategory.PROPERTY_TAX.value
+                elif ai_doc_type in ("hausverwaltung_honorarnote",):
+                    category = ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value
+                elif ai_doc_type == "betriebskostenabrechnung":
+                    category = ExpenseCategory.UTILITIES.value
+                elif ai_doc_type in ("invoice",) and ai_role == "landlord":
+                    # Landlord invoices default to maintenance unless AI says otherwise
+                    if category == ExpenseCategory.OTHER.value:
+                        category = ExpenseCategory.MAINTENANCE.value
+
             is_deductible = ai_tax.get("is_deductible", True)
             deduction_reason = ai_ded_cat or ai_first.get("document_type", "")
 
-            # Override amount from AI if available
-            ai_amount = ai_amounts.get("total_amount") or ai_amounts.get("annual_amount")
-            if ai_amount and ai_amount > 0:
-                transaction_data["amount"] = ai_amount
+            # Override amount from AI if available — but respect
+            # BK settlement amounts and other special overrides
+            # already applied by _extract_transaction_data.
+            if not transaction_data.get("_ai_extracted"):
+                ai_amount = ai_amounts.get("total_amount") or ai_amounts.get("annual_amount")
+                if ai_amount and ai_amount > 0:
+                    transaction_data["amount"] = ai_amount
 
             return {
                 "transaction_type": txn_type,

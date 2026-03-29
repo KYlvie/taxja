@@ -825,6 +825,9 @@ class DocumentPipelineOrchestrator:
                     ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
                     ocr_json["_ai_first"] = ai_result
                     document.ocr_result = ocr_json
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(document, "ocr_result")
+                    self.db.flush()  # Ensure _ai_first is visible to downstream queries
                     # Map AI document_type to DBDocumentType
                     ai_db_type = self._map_ai_type_to_db_type(ai_result.get("document_type", ""))
                     ai_confidence = float(ai_result.get("confidence", 0.7))
@@ -2995,6 +2998,12 @@ class DocumentPipelineOrchestrator:
                     document, service, primary_receipt, additional_receipts
                 )
             else:
+                # Flush session to ensure _ai_first data written by Phase 1
+                # is visible when create_split_suggestions re-queries the document.
+                try:
+                    self.db.flush()
+                except Exception:
+                    pass
                 suggestions = service.create_split_suggestions(
                     document.id, document.user_id
                 )
