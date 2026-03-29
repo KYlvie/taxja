@@ -118,6 +118,10 @@ WICHTIG:
 - Bei Mietvorschreibungen für Vermieter: monthly_amount = Gesamt inkl. BK+USt, settlement_amount = nur Hauptmietzins (ohne BK, ohne USt).
 - Bei Hausverwaltung-Rechnungen: Prüfen ob ein verwaltetes Objekt/Immobilie erwähnt wird (auch indirekt, z.B. über Immo-Treuhand, Hausverwaltung GmbH).
 - RICHTUNG (expense_or_income) — Aus Sicht des BENUTZERS bestimmen:
+  * **Ausgangsrechnung / Honorarnote / AR** (vom Benutzer AUSGESTELLT): **INCOME** (Benutzer stellt Rechnung = Einnahme)
+  * Eingangsrechnung / Rechnung (an Benutzer GERICHTET): EXPENSE (Benutzer bezahlt = Ausgabe)
+  * WICHTIG: Wenn der Benutzer-Name als Rechnungssteller/Aussteller/Lieferant erscheint → INCOME
+  * WICHTIG: Wenn der Benutzer-Name als Empfänger/Kunde erscheint → EXPENSE
   * Mietvorschreibung, wenn Benutzer=Vermieter: INCOME (er bekommt Geld vom Mieter)
   * BK-Nachforderung, wenn Benutzer=Vermieter: INCOME (Mieter zahlt nach)
   * BK-Guthaben, wenn Benutzer=Mieter: INCOME (teilweise Rückerstattung = Betriebseinnahme)

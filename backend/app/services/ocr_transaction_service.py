@@ -1748,7 +1748,7 @@ class OCRTransactionService:
             if txn_type == TransactionType.INCOME.value:
                 if "Vermietung" in ai_ded_cat or ai_role == "landlord":
                     category = IncomeCategory.RENTAL.value
-                elif "selbständig" in ai_ded_cat.lower() or ai_doc_type == "invoice":
+                elif "selbständig" in ai_ded_cat.lower() or ai_doc_type in ("invoice", "ausgangsrechnung", "honorarnote"):
                     category = IncomeCategory.SELF_EMPLOYMENT.value
                 elif ai_doc_type in ("lohnzettel", "l16"):
                     category = IncomeCategory.EMPLOYMENT.value
