@@ -2170,6 +2170,21 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
     if not isinstance(ocr_data, dict):
         return {"import_suggestion": None}
 
+    # Inject AI-first extracted data into top-level ocr_data
+    ai_first = ocr_data.get("_ai_first") or {}
+    ai_fields = ai_first.get("key_fields") or {}
+    ai_amounts = ai_first.get("amounts") or {}
+    for key in ("loan_amount", "interest_rate", "monthly_payment", "lender_name",
+                "contract_number", "property_address", "start_date"):
+        if ocr_data.get(key) is None and ai_fields.get(key) is not None:
+            ocr_data[key] = ai_fields[key]
+    if ocr_data.get("loan_amount") is None and ai_amounts.get("total_amount"):
+        ocr_data["loan_amount"] = ai_amounts["total_amount"]
+    if ocr_data.get("monthly_payment") is None and ai_amounts.get("monthly_amount"):
+        ocr_data["monthly_payment"] = ai_amounts["monthly_amount"]
+    if ocr_data.get("start_date") is None and ai_fields.get("date"):
+        ocr_data["start_date"] = ai_fields["date"]
+
     loan_amount = ocr_data.get("loan_amount")
     interest_rate = ocr_data.get("interest_rate")
     monthly_payment = ocr_data.get("monthly_payment")

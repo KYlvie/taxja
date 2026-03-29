@@ -776,6 +776,8 @@ class DocumentPipelineOrchestrator:
         try:
             from app.services.ai_first_classifier import AIFirstClassifier
             raw_text = ocr_result.raw_text or ""
+            print(f"[AI-FIRST] raw_text length={len(raw_text)} for doc {document.id}", flush=True)
+            logger.info("AI-first: raw_text length=%d for doc %s", len(raw_text), document.id)
             if raw_text and len(raw_text.strip()) > 50:
                 # Inject user context if available
                 from app.models.user import User as _User
@@ -815,7 +817,7 @@ class DocumentPipelineOrchestrator:
                         result.stage_reached = PipelineStage.CLASSIFY
                         return db_type
         except Exception as e:
-            logger.debug("AI-first classification failed, falling back: %s", e, exc_info=True)
+            logger.error("AI-first classification failed, falling back: %s", e, exc_info=True)
 
         # -- Standard multi-signal arbitration (fallback) --
         classification = ClassificationResult(
@@ -2900,6 +2902,21 @@ class DocumentPipelineOrchestrator:
         - MEDIUM confidence -> auto-create transaction (needs_review=True)
         - LOW confidence   -> store suggestion only, no transaction created
         """
+        # Skip transaction suggestions for document types that have dedicated handlers.
+        # These types create loans/properties/recurring, not regular transactions.
+        _SKIP_TRANSACTION_TYPES = {
+            DBDocumentType.LOAN_CONTRACT,
+            DBDocumentType.RENTAL_CONTRACT,
+            DBDocumentType.PURCHASE_CONTRACT,
+            DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
+        }
+        if db_type in _SKIP_TRANSACTION_TYPES:
+            logger.info(
+                "Skipping transaction suggestions for %s doc %s (has dedicated handler)",
+                db_type.value, document.id,
+            )
+            return []
+
         try:
             from app.services.ocr_transaction_service import OCRTransactionService
             from app.services.transaction_gate_service import evaluate_transaction_gate
