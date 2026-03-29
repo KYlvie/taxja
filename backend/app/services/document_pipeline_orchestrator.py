@@ -793,6 +793,29 @@ class DocumentPipelineOrchestrator:
                 ai_classifier = AIFirstClassifier()
                 ai_result = ai_classifier.classify_and_extract(raw_text, user_context=user_context)
                 if ai_result and ai_result.get("document_type", "unknown") != "unknown":
+                    # Round 2: deep extraction for types that need it
+                    ai_doc_type = ai_result.get("document_type", "")
+                    ai_amounts = ai_result.get("amounts") or {}
+                    needs_round2 = (
+                        ai_doc_type in ("zinsbescheinigung", "svs_vorschreibung", "svs_nachbemessung",
+                                        "betriebskostenabrechnung", "loan_contract")
+                        and not ai_amounts.get("total_amount") and not ai_amounts.get("annual_amount")
+                    )
+                    if needs_round2:
+                        try:
+                            r2 = ai_classifier.deep_extract(raw_text, ai_doc_type)
+                            if r2:
+                                ai_result["_round2"] = r2
+                                # Promote round2 amounts to top-level
+                                if r2.get("annual_interest_paid") and not ai_amounts.get("annual_amount"):
+                                    ai_result["amounts"]["annual_amount"] = r2["annual_interest_paid"]
+                                    ai_result["amounts"]["total_amount"] = r2["annual_interest_paid"]
+                                if r2.get("remaining_balance"):
+                                    ai_result.setdefault("key_fields", {})["remaining_balance"] = r2["remaining_balance"]
+                                logger.info("AI Round 2 for %s: extracted %d fields", ai_doc_type, len(r2))
+                        except Exception as e2:
+                            logger.debug("AI Round 2 failed for %s: %s", ai_doc_type, e2)
+
                     # Store AI result in ocr_result for downstream consumers
                     ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
                     ocr_json["_ai_first"] = ai_result
@@ -2914,6 +2937,18 @@ class DocumentPipelineOrchestrator:
             logger.info(
                 "Skipping transaction suggestions for %s doc %s (has dedicated handler)",
                 db_type.value, document.id,
+            )
+            return []
+
+        # Also skip AI-detected types that shouldn't create transactions
+        _ai_data = (document.ocr_result or {}).get("_ai_first") or {}
+        _ai_type = _ai_data.get("document_type", "")
+        _SKIP_AI_TYPES = {"sepa_lastschrift", "tilgungsplan", "kontoauszug", "mietvertrag",
+                          "kreditvertrag", "loan_contract", "kaufvertrag"}
+        if _ai_type in _SKIP_AI_TYPES:
+            logger.info(
+                "Skipping transaction suggestions for AI type %s doc %s",
+                _ai_type, document.id,
             )
             return []
 

@@ -2194,6 +2194,30 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
         annual_interest = ocr_data.get("annual_interest_amount")
         contract_nr = ocr_data.get("contract_number")
         tax_year = ai_fields.get("year") or ai_fields.get("beitragsjahr")
+
+        # Duplicate check: look for existing confirmed Zinsbescheinigung for same lender+year
+        from app.models.transaction import Transaction, TransactionType
+        existing_zinsbesch = db.query(Transaction).filter(
+            Transaction.user_id == document.user_id,
+            Transaction.classification_method == "zinsbescheinigung",
+            Transaction.type == TransactionType.EXPENSE,
+        ).all()
+        for et in existing_zinsbesch:
+            if et.description and str(tax_year or "") in et.description:
+                lender = ocr_data.get("lender_name", "")
+                if lender and lender[:20].lower() in (et.description or "").lower():
+                    logger.info(f"Zinsbescheinigung duplicate detected: doc {document.id} matches txn {et.id}")
+                    suggestion = {
+                        "type": "apply_zinsbescheinigung",
+                        "status": "duplicate",
+                        "data": {"duplicate_of_transaction_id": et.id, "reason": f"Zinsbescheinigung {tax_year} for {lender} already applied"},
+                    }
+                    updated_ocr["import_suggestion"] = suggestion
+                    document.ocr_result = updated_ocr
+                    flag_modified(document, "ocr_result")
+                    db.flush()
+                    return {"import_suggestion": suggestion}
+
         suggestion = {
             "type": "apply_zinsbescheinigung",
             "status": "pending",

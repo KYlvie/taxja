@@ -274,6 +274,25 @@ Extrahiere diesen Kreditvertrag. NUR JSON:
   "property_address": "Sicherheit-Immobilie Adresse oder null",
   "is_tax_relevant": true_oder_false
 }""",
+
+    "zinsbescheinigung": """\
+Extrahiere diese Zinsbescheinigung / Zinsbestätigung. NUR JSON:
+{
+  "contract_number": "Kreditnummer / Vertragsnummer / Kontonummer",
+  "lender_name": "Bank / Kreditgeber",
+  "borrower_name": "Kreditnehmer",
+  "tax_year": Steuerjahr_als_Zahl,
+  "annual_interest_paid": Gezahlte_Zinsen_im_Jahr_als_Zahl,
+  "annual_principal_paid": Gezahlte_Tilgung_im_Jahr_als_Zahl,
+  "remaining_balance": Kapitalstand_am_Jahresende_als_Zahl,
+  "original_loan_amount": Urspruenglicher_Kreditbetrag_als_Zahl,
+  "interest_rate": Zinssatz_in_Prozent,
+  "monthly_payment": Monatsrate_als_Zahl,
+  "loan_type": "hypothekarkredit|betriebsmittelkredit|familiendarlehen|other",
+  "property_address": "Immobilie Adresse oder null",
+  "tax_deductible_category": "E1b Finanzierungskosten|E1a Betriebsausgabe|Sonderausgabe|null"
+}
+Betraege als Dezimalzahlen (1029.03). null wenn nicht gefunden.""",
 }
 
 
