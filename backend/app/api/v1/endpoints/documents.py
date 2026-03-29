@@ -5928,7 +5928,7 @@ def confirm_loan_from_ocr(
 
     suggestion = ocr_result.get("import_suggestion")
 
-    if not suggestion or suggestion.get("type") != "create_loan":
+    if not suggestion or suggestion.get("type") not in ("create_loan", "create_loan_repayment"):
 
         raise HTTPException(
 
