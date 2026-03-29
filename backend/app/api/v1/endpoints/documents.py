@@ -5928,7 +5928,7 @@ def confirm_loan_from_ocr(
 
     suggestion = ocr_result.get("import_suggestion")
 
-    if not suggestion or suggestion.get("type") not in ("create_loan", "create_loan_repayment"):
+    if not suggestion or suggestion.get("type") not in ("create_loan", "create_loan_repayment", "apply_zinsbescheinigung"):
 
         raise HTTPException(
 
@@ -5937,6 +5937,18 @@ def confirm_loan_from_ocr(
             detail=get_error_message("no_suggestion_found", _get_lang(request, current_user), suggestion_type="loan creation"),
 
         )
+
+    # Handle Zinsbescheinigung: create interest expense transaction
+    if suggestion.get("type") == "apply_zinsbescheinigung":
+        try:
+            from app.tasks.ocr_tasks import apply_zinsbescheinigung
+            result = apply_zinsbescheinigung(db, document, suggestion["data"])
+            return {"message": "Zinsbescheinigung applied successfully", **result}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.exception(f"Failed to apply Zinsbescheinigung for doc {document_id}")
+            raise HTTPException(status_code=500, detail="document_processing_error")
 
     if suggestion.get("status") == "confirmed":
 

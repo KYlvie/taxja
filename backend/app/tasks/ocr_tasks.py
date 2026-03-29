@@ -2184,6 +2184,38 @@ def _build_kreditvertrag_suggestion(db, document, result) -> dict:
         ocr_data["monthly_payment"] = ai_amounts["monthly_amount"]
     if ocr_data.get("start_date") is None and ai_fields.get("date"):
         ocr_data["start_date"] = ai_fields["date"]
+    if ocr_data.get("annual_interest_amount") is None and ai_amounts.get("annual_amount"):
+        ocr_data["annual_interest_amount"] = ai_amounts["annual_amount"]
+
+    # --- Zinsbescheinigung: create interest expense, not a new loan ---
+    from sqlalchemy.orm.attributes import flag_modified
+    ai_doc_type = ai_first.get("document_type", "")
+    if ai_doc_type == "zinsbescheinigung":
+        annual_interest = ocr_data.get("annual_interest_amount")
+        contract_nr = ocr_data.get("contract_number")
+        tax_year = ai_fields.get("year") or ai_fields.get("beitragsjahr")
+        suggestion = {
+            "type": "apply_zinsbescheinigung",
+            "status": "pending",
+            "data": {
+                "annual_interest_amount": float(Decimal(str(annual_interest))) if annual_interest else None,
+                "contract_number": contract_nr,
+                "tax_year": tax_year,
+                "loan_amount": float(Decimal(str(ocr_data.get("loan_amount")))) if ocr_data.get("loan_amount") else None,
+                "interest_rate": float(Decimal(str(ocr_data.get("interest_rate")))) if ocr_data.get("interest_rate") is not None else None,
+                "lender_name": ocr_data.get("lender_name"),
+                "property_address": ocr_data.get("property_address"),
+            },
+        }
+        updated_ocr["import_suggestion"] = suggestion
+        document.ocr_result = updated_ocr
+        flag_modified(document, "ocr_result")
+        db.flush()
+        logger.info(
+            f"Zinsbescheinigung doc {document.id}: annual_interest={annual_interest}, "
+            f"contract_nr={contract_nr}, tax_year={tax_year}"
+        )
+        return {"import_suggestion": suggestion}
 
     loan_amount = ocr_data.get("loan_amount")
     interest_rate = ocr_data.get("interest_rate")
@@ -4120,6 +4152,37 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
         recurring_day_of_month=start_date.day,
     )
 
+    # Create loan_interest recurring if interest_rate > 0
+    interest_recurring_id = None
+    if interest_rate_pct > 0 and monthly_payment:
+        from app.models.recurring_transaction import RecurringTransaction, RecurringTransactionType
+        # Calculate first month's interest: loan_amount * annual_rate / 12
+        first_month_interest = (loan_amount * interest_rate_pct / Decimal("100") / Decimal("12")).quantize(Decimal("0.01"))
+        # Determine tax deductibility from AI data
+        ai_first = (document.ocr_result or {}).get("_ai_first") or {}
+        ai_tax = ai_first.get("tax_treatment") or {}
+        is_deductible = bool(ai_tax.get("is_deductible", True))
+        tax_form = ai_tax.get("tax_form", "")  # E1a or E1b
+
+        interest_recurring = RecurringTransaction(
+            user_id=document.user_id,
+            recurring_type=RecurringTransactionType.LOAN_INTEREST,
+            description=f"Zinsaufwand - {lender_name}",
+            amount=first_month_interest,
+            frequency="monthly",
+            start_date=start_date,
+            end_date=end_date,
+            is_active=True,
+            document_id=document.id,
+        )
+        db.add(interest_recurring)
+        db.flush()
+        interest_recurring_id = interest_recurring.id
+        logger.info(
+            f"Created loan_interest recurring {interest_recurring_id} for doc {document.id}: "
+            f"EUR {first_month_interest}/month (rate={interest_rate_pct}%)"
+        )
+
     ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
     suggestion = ocr_result.get("import_suggestion")
     recurring_id = None
@@ -4137,22 +4200,29 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
             suggestion_data_payload["created_liability_id"] = liability.id
             suggestion_data_payload["no_property_match"] = True
             suggestion_data_payload["source_type"] = "document_confirmed"
+            if interest_recurring_id:
+                suggestion_data_payload["interest_recurring_id"] = interest_recurring_id
         if recurring_id:
             suggestion["recurring_id"] = recurring_id
+        if interest_recurring_id:
+            suggestion["interest_recurring_id"] = interest_recurring_id
         document.ocr_result = ocr_result
         db.commit()
 
     logger.info(
-        f"Confirmed standalone loan contract for doc {document.id} and created liability {liability.id}"
+        f"Confirmed standalone loan contract for doc {document.id}: "
+        f"liability={liability.id}, repayment_recurring={recurring_id}, interest_recurring={interest_recurring_id}"
     )
 
     return {
         "liability_id": liability.id,
         "recurring_id": recurring_id,
+        "interest_recurring_id": interest_recurring_id,
         "property_id": None,
         "generated_count": 0,
         "acknowledged_only": False,
         "created_recurring": bool(recurring_id),
+        "created_interest_recurring": bool(interest_recurring_id),
         "created_transaction": True,
     }
 
@@ -4166,6 +4236,98 @@ def create_standalone_loan_repayment(db, document, suggestion_data: dict) -> dic
     still promotes the contract into the property-loan interest flow.
     """
     return confirm_unlinked_loan_contract(db, document, suggestion_data)
+
+
+def apply_zinsbescheinigung(db, document, suggestion_data: dict) -> dict:
+    """
+    Apply a Zinsbescheinigung (annual interest certificate) to the system.
+
+    Creates an interest expense transaction for the tax year with the bank-confirmed
+    annual interest amount. If a matching liability exists (by contract_number),
+    links the transaction.
+
+    Args:
+        db: Database session
+        document: Document ORM instance
+        suggestion_data: Dict with annual_interest_amount, contract_number, tax_year, etc.
+
+    Returns:
+        Dict with created transaction details
+    """
+    import json as _json
+    from decimal import Decimal
+    from datetime import date as date_cls
+    from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+    from app.models.liability import Liability
+
+    data = suggestion_data
+    annual_interest = data.get("annual_interest_amount")
+    contract_nr = data.get("contract_number")
+    tax_year = data.get("tax_year") or 2024
+    lender_name = data.get("lender_name") or "Unknown"
+
+    if annual_interest is None:
+        raise ValueError("Missing annual_interest_amount in Zinsbescheinigung")
+
+    annual_interest = Decimal(str(annual_interest))
+
+    # Try to match to existing liability by lender name
+    matched_liability = None
+    if lender_name:
+        liabilities = db.query(Liability).filter(
+            Liability.user_id == document.user_id,
+        ).all()
+        for lib in liabilities:
+            if lender_name.lower()[:20] in (lib.display_name or "").lower():
+                matched_liability = lib
+                break
+            if lender_name.lower()[:20] in (lib.lender_name or "").lower():
+                matched_liability = lib
+                break
+
+    # Create interest expense transaction for the full year
+    txn = Transaction(
+        user_id=document.user_id,
+        type=TransactionType.EXPENSE,
+        amount=annual_interest,
+        transaction_date=date_cls(int(tax_year), 12, 31),
+        description=f"Zinsen {tax_year} - {lender_name} (Zinsbescheinigung)",
+        expense_category=ExpenseCategory.LOAN_INTEREST,
+        is_deductible=True,
+        deduction_reason=f"Zinsen lt. Zinsbescheinigung {tax_year}, Kreditgeber: {lender_name}",
+        document_id=document.id,
+        import_source="ocr",
+        classification_confidence=Decimal("0.95"),
+        classification_method="zinsbescheinigung",
+        needs_review=False,
+        reviewed=True,
+    )
+    db.add(txn)
+    db.flush()
+
+    # Update suggestion status
+    ocr_result = _json.loads(_json.dumps(document.ocr_result)) if document.ocr_result else {}
+    suggestion = ocr_result.get("import_suggestion")
+    if suggestion:
+        suggestion["status"] = "confirmed"
+        suggestion["transaction_id"] = txn.id
+        suggestion["matched_liability_id"] = matched_liability.id if matched_liability else None
+        document.ocr_result = ocr_result
+    db.commit()
+
+    logger.info(
+        f"Zinsbescheinigung applied for doc {document.id}: "
+        f"EUR {annual_interest} interest for {tax_year}, txn={txn.id}, "
+        f"matched_liability={matched_liability.id if matched_liability else None}"
+    )
+
+    return {
+        "transaction_id": txn.id,
+        "annual_interest": float(annual_interest),
+        "tax_year": tax_year,
+        "matched_liability_id": matched_liability.id if matched_liability else None,
+        "lender_name": lender_name,
+    }
 
 
 def _detect_recurring_expense(db, document, suggestion: dict) -> dict | None:
