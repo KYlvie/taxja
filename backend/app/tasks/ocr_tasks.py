@@ -4169,6 +4169,8 @@ def confirm_unlinked_loan_contract(db, document, suggestion_data: dict) -> dict:
             recurring_type=RecurringTransactionType.LOAN_INTEREST,
             description=f"Zinsaufwand - {lender_name}",
             amount=first_month_interest,
+            transaction_type="expense",
+            category="loan_interest",
             frequency="monthly",
             start_date=start_date,
             end_date=end_date,
