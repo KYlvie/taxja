@@ -1772,21 +1772,52 @@ class OCRTransactionService:
             else:
                 # Map AI deduction_category to ExpenseCategory
                 cat_map = {
-                    "Betriebsausgabe": ExpenseCategory.OTHER.value,
-                    "Werbungskosten": ExpenseCategory.OTHER.value,
-                    "Sonderausgaben": ExpenseCategory.OTHER.value,
-                    "SVS": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                    # Insurance
                     "Versicherung": ExpenseCategory.INSURANCE.value,
+                    "insurance": ExpenseCategory.INSURANCE.value,
+                    # SVS / Social security
+                    "SVS": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                    "Sozialversicherung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                    # Rent
                     "Miete": ExpenseCategory.RENT.value,
+                    "Pacht": ExpenseCategory.RENT.value,
+                    "Coworking": ExpenseCategory.RENT.value,
+                    "Werkstattmiete": ExpenseCategory.RENT.value,
+                    # Loan interest
                     "Zinsen": ExpenseCategory.LOAN_INTEREST.value,
+                    "Bankspesen": ExpenseCategory.BANK_FEES.value,
+                    # Maintenance / repair
                     "Reparatur": ExpenseCategory.MAINTENANCE.value,
-                    "Hausverwaltung": ExpenseCategory.PROFESSIONAL_SERVICES.value,
+                    "Instandhaltung": ExpenseCategory.MAINTENANCE.value,
+                    "Wartung": ExpenseCategory.MAINTENANCE.value,
+                    # Property
+                    "Hausverwaltung": ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value,
                     "Grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
+                    # Office / supplies
                     "Büromaterial": ExpenseCategory.OFFICE_SUPPLIES.value,
+                    "Bueromaterial": ExpenseCategory.OFFICE_SUPPLIES.value,
+                    "Arbeitsmittel": ExpenseCategory.OFFICE_SUPPLIES.value,
+                    "Fachliteratur": ExpenseCategory.EDUCATION.value,
+                    "Fachbuch": ExpenseCategory.EDUCATION.value,
+                    "Fortbildung": ExpenseCategory.EDUCATION.value,
+                    # Telecom
                     "Internet": ExpenseCategory.TELECOM.value,
                     "Telefon": ExpenseCategory.TELECOM.value,
+                    "Software": ExpenseCategory.SOFTWARE.value,
+                    # Vehicle
                     "KFZ": ExpenseCategory.VEHICLE.value,
+                    "Fahrzeug": ExpenseCategory.VEHICLE.value,
+                    "Tankbeleg": ExpenseCategory.FUEL.value,
+                    "Treibstoff": ExpenseCategory.FUEL.value,
+                    # Travel
                     "Reise": ExpenseCategory.TRAVEL.value,
+                    "Dienstreise": ExpenseCategory.TRAVEL.value,
+                    # Material / goods
+                    "Material": ExpenseCategory.OTHER.value,
+                    "Wareneinsatz": ExpenseCategory.OTHER.value,
+                    # Sonderausgaben
+                    "Kirchenbeitrag": ExpenseCategory.OTHER.value,
+                    "Spende": ExpenseCategory.OTHER.value,
                 }
                 category = ExpenseCategory.OTHER.value
                 for key, val in cat_map.items():
