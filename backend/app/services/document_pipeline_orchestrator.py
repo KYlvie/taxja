@@ -2951,7 +2951,7 @@ class DocumentPipelineOrchestrator:
         # Also skip AI-detected types that shouldn't create transactions
         _ai_data = (document.ocr_result or {}).get("_ai_first") or {}
         _ai_type = _ai_data.get("document_type", "")
-        _SKIP_AI_TYPES = {"sepa_lastschrift", "tilgungsplan", "kontoauszug", "mietvertrag",
+        _SKIP_AI_TYPES = {"tilgungsplan", "kontoauszug", "mietvertrag",
                           "kreditvertrag", "loan_contract", "kaufvertrag"}
         if _ai_type in _SKIP_AI_TYPES:
             logger.info(
