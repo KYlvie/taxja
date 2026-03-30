@@ -446,7 +446,13 @@ class AIFirstClassifier:
                     content = resp.choices[0].message.content
                     if content and content.strip():
                         return content
-                    logger.warning("Groq gpt-oss-120b returned empty (retry %d)", _retry)
+                    # Log the full response for debugging
+                    finish = resp.choices[0].finish_reason if resp.choices else "no_choices"
+                    usage = getattr(resp, "usage", None)
+                    logger.warning(
+                        "Groq gpt-oss-120b empty response: finish=%s, usage=%s, content=%r",
+                        finish, usage, content,
+                    )
                 except ImportError:
                     break
                 except Exception as e:
@@ -538,7 +544,7 @@ class AIFirstClassifier:
             response = self._generate(
                 STEP1_SYSTEM,
                 STEP1_USER.format(text=text) + context_str,
-                max_tokens=200,
+                max_tokens=1024,
             )
             result = self._parse_json(response)
             if not result.get("document_type"):
