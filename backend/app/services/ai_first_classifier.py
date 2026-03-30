@@ -62,16 +62,38 @@ Typen:
   "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"]
 }
 
-"creates" bestimmt, was im österreichischen Steuersystem angelegt werden soll:
-- "transaction": Einmalige Einnahme oder Ausgabe buchen
-- "asset": Anlagegut im Anlageverzeichnis anlegen (AfA-pflichtig)
-- "recurring": Wiederkehrende Buchung anlegen (z.B. monatliche Miete, Versicherungsprämie)
-- "loan": Kredit/Darlehen anlegen
-- "property": Immobilie anlegen
-- "archive_only": Nur ablegen, keine Buchung (z.B. Kontoauszug, Tilgungsplan, alte Verträge)
+"creates" bestimmt, was in unserem Steuerverwaltungssystem angelegt werden soll:
 
-Mehrfach möglich, z.B. Kreditvertrag = ["loan"] + Zinsbescheinigung = ["transaction"].
-Mietvertrag Vermieter = ["property", "recurring"]. Fahrzeugkauf = ["asset", "transaction"]."""
+- "transaction": Eine einmalige Buchung (Einnahme oder Ausgabe) in der Einnahmen-Ausgaben-Rechnung.
+  Erscheint in E1a (§22/§23), E1b (§28 V+V) oder E1 (§25 AN). Beeinflusst Gewinn/Verlust direkt.
+  Beispiele: Rechnung bezahlt, SVS-Beitrag, Kirchenbeitrag, Spende, Zinszahlung laut Bescheinigung.
+
+- "asset": Ein Anlagegut wird im Anlageverzeichnis (AV) angelegt und über die Nutzungsdauer
+  abgeschrieben (AfA). Erscheint in der Bilanz und als jährliche AfA in E1a.
+  WICHTIG: Nur für Wirtschaftsgüter >EUR 1.000 netto mit Nutzungsdauer >1 Jahr.
+  Beispiele: Fahrzeuge (PKW, E-Auto, LKW), Maschinen, IT-Hardware >1000 EUR.
+  NICHT für GWG ≤1.000 EUR (die sind sofort absetzbar = nur "transaction").
+  NICHT für Verbrauchsmaterial (Holz, Büromaterial = nur "transaction").
+
+- "recurring": Eine wiederkehrende Buchung (monatlich/quartalsweise/jährlich) wird angelegt.
+  Das System generiert automatisch Einzelbuchungen für jeden Zeitraum.
+  Beispiele: Monatliche Miete (Vermieter=Einnahme, Mieter=Ausgabe),
+  Versicherungsprämie (jährlich), Werkstattmiete (monatlich).
+
+- "loan": Ein Kredit/Darlehen wird als Verbindlichkeit angelegt.
+  Verwaltet Zinsen, Tilgung, Restschuld. Zinsen erscheinen als WK in E1b (Hypothek)
+  oder BA in E1a (Betriebsmittelkredit).
+  Beispiele: Hypothekarkredit, Betriebsmittelkredit, Familiendarlehen.
+
+- "property": Eine Immobilie wird angelegt mit Kaufpreis, Gebäudewert, AfA-Satz.
+  Generiert automatisch die Gebäude-AfA (1,5% p.a.) für E1b.
+  Beispiele: Kaufvertrag einer Mietimmobilie, Mietvertrag als Vermieter.
+
+- "archive_only": Dokument wird nur gespeichert, keine Buchung/Anlage.
+  Beispiele: Kontoauszug (zur Abstimmung), Tilgungsplan, Übergabeprotokoll,
+  Fahrtenbuch (korrigiert nur %), Halbjahresregel-Nachweis.
+
+Mehrfach möglich: Fahrzeugkauf = ["asset", "transaction"]. Mietvertrag VM = ["property", "recurring"]."""
 
 STEP1_USER = "Dokumenttyp bestimmen:\n\n{text}"
 
