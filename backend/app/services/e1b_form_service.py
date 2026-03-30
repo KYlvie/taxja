@@ -21,26 +21,59 @@ from app.services.posting_line_utils import sum_postings
 
 
 def _sum_property_income(transactions: list, property_id) -> Decimal:
-    """Sum rental income for a specific property."""
-    return sum_postings(
-        transactions,
-        posting_types={LineItemPostingType.INCOME},
-        categories={IncomeCategory.RENTAL.value},
-        property_id=property_id,
-        include_private_use=False,
-    )
+    """Sum rental income for a specific property (NETTO — excluding USt).
+
+    E1b reports rental income in netto amounts. For Regelbesteuert landlords
+    who opted into USt, the 10% VAT on rent is NOT included in E1b income
+    (it goes to U1 instead).
+    """
+    total = Decimal("0")
+    for t in transactions:
+        if t.type != TransactionType.INCOME:
+            continue
+        cat = getattr(t, "income_category", None)
+        if hasattr(cat, "value"):
+            cat = cat.value
+        if cat != IncomeCategory.RENTAL.value:
+            continue
+        if property_id is not None and getattr(t, "property_id", None) != property_id:
+            continue
+        amt = t.amount or Decimal("0")
+        vat = t.vat_amount or Decimal("0")
+        # Subtract VAT to get netto for E1b
+        if vat > 0:
+            amt = amt - vat
+        total += amt
+    return total
 
 
 def _sum_property_expense(transactions: list, property_id, categories: list) -> Decimal:
-    """Sum deductible property expenses using canonical line items."""
-    return sum_postings(
-        transactions,
-        posting_types={LineItemPostingType.EXPENSE},
-        categories={c.value if hasattr(c, "value") else str(c) for c in categories},
-        property_id=property_id,
-        deductible_only=True,
-        include_private_use=False,
-    )
+    """Sum deductible property expenses (NETTO — excluding VAT).
+
+    E1b Werbungskosten are reported netto. For Regelbesteuert landlords,
+    the input VAT (Vorsteuer) goes to U1, not E1b.
+    """
+    cat_values = {c.value if hasattr(c, "value") else str(c) for c in categories}
+    total = Decimal("0")
+    for t in transactions:
+        if t.type != TransactionType.EXPENSE:
+            continue
+        if property_id is not None and getattr(t, "property_id", None) != property_id:
+            continue
+        if not getattr(t, "is_deductible", False):
+            continue
+        cat = getattr(t, "expense_category", None)
+        if hasattr(cat, "value"):
+            cat = cat.value
+        if cat not in cat_values:
+            continue
+        amt = t.amount or Decimal("0")
+        vat = t.vat_amount or Decimal("0")
+        # Subtract VAT to get netto for E1b
+        if vat > 0:
+            amt = amt - vat
+        total += amt
+    return total
 
 
 def generate_e1b_form_data(
