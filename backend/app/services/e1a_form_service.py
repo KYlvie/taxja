@@ -53,7 +53,10 @@ def _load_self_employed_config(db: Session, tax_year: int) -> dict:
 
 
 def _sum_income(transactions: list, cats: list, netto: bool = False) -> Decimal:
-    """Sum income by category.
+    """Sum income by category, EXCLUDING property-linked transactions.
+
+    E1a only covers §22/§23 business income. Rental income (§28) with
+    property_id goes to E1b instead.
 
     If netto=True (Regelbesteuert / Nettosystem), subtracts vat_amount
     from each transaction to get the net figure for E1a.
@@ -61,6 +64,9 @@ def _sum_income(transactions: list, cats: list, netto: bool = False) -> Decimal:
     total = Decimal("0")
     for t in transactions:
         if t.type == TransactionType.INCOME and t.income_category in cats:
+            # Exclude property-linked income (belongs to E1b)
+            if getattr(t, "property_id", None):
+                continue
             amt = t.amount or Decimal("0")
             if netto and t.vat_amount and t.vat_amount > 0:
                 amt = amt - t.vat_amount
@@ -70,7 +76,10 @@ def _sum_income(transactions: list, cats: list, netto: bool = False) -> Decimal:
 
 def _sum_expense(transactions: list, cats: list, deductible_only: bool = True,
                   netto: bool = False) -> Decimal:
-    """Sum expenses by category, using line-item-level amounts when available.
+    """Sum expenses by category, EXCLUDING property-linked transactions.
+
+    E1a only covers §22/§23 business expenses. Property expenses (§28)
+    with property_id go to E1b instead.
 
     If netto=True (Regelbesteuert / Nettosystem), subtracts vat_amount
     from each transaction to get the net figure for E1a.
@@ -79,6 +88,9 @@ def _sum_expense(transactions: list, cats: list, deductible_only: bool = True,
     cat_values = {c.value if hasattr(c, "value") else str(c) for c in cats}
     for t in transactions:
         if t.type != TransactionType.EXPENSE:
+            continue
+        # Exclude property-linked expenses (belongs to E1b)
+        if getattr(t, "property_id", None):
             continue
         has_line_items = bool(getattr(t, "has_line_items", False))
         line_items = getattr(t, "line_items", None)
@@ -205,6 +217,7 @@ def generate_e1a_form_data(
         t for t in transactions
         if t.type.value == "expense"
         and t.expense_category == ExpenseCategory.OTHER
+        and not getattr(t, "property_id", None)  # Exclude property-linked
         and not any(kw in (t.description or "").lower() for kw in _sonderausgabe_keywords)
     ]
     other = sum(

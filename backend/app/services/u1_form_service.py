@@ -94,6 +94,15 @@ def generate_u1_form_data(
         vat = t.vat_amount or Decimal("0")
 
         if t.type == TransactionType.INCOME:
+            # U1 covers business revenue (§22/§23) only.
+            # Rental income (§28 V+V) has separate VAT treatment (10%)
+            # and is NOT reported on U1.
+            income_cat = getattr(t, "income_category", None)
+            if income_cat and hasattr(income_cat, "value"):
+                income_cat = income_cat.value
+            if income_cat == "rental":
+                continue
+
             net = amount - vat if vat > 0 else amount
             rate_bucket = _classify_vat_rate(vat, net) if vat > 0 else "exempt"
 
@@ -110,6 +119,10 @@ def generate_u1_form_data(
                 revenue_exempt += amount
 
         elif t.type in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
+            # Exclude property-linked expenses from U1 Vorsteuer
+            # (property expenses have their own VAT treatment)
+            if getattr(t, "property_id", None):
+                continue
             vorsteuer += recoverable_input_vat_for_transaction(t)
 
     total_vat = vat_20 + vat_10 + vat_13
