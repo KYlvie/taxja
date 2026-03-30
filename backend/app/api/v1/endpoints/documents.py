@@ -189,6 +189,16 @@ def _create_transactions_from_stored_suggestions(
     if not refs:
         return [], []
 
+    # ── AI direction override ──────────────────────────────────────
+    # When AI-first clearly says direction is income (e.g. Ausgangsrechnung),
+    # override any stored suggestion that lacks transaction_type or has "expense".
+    ai_first = ocr_result.get("_ai_first") or {}
+    ai_direction = (ai_first.get("tax_treatment") or {}).get("expense_or_income")
+    fname = (document.file_name or "").lower()
+    is_ar = any(k in fname for k in ("ausgangsrechnung", "_ar_", "honorarnote", "honorar_"))
+    if is_ar and ai_direction != "income":
+        ai_direction = "income"
+
     created_ids: list[int] = []
     reused_ids: list[int] = []
 
@@ -197,6 +207,10 @@ def _create_transactions_from_stored_suggestions(
         suggestion["document_id"] = document.id
         suggestion["needs_review"] = False
         suggestion["reviewed"] = True
+        # Apply AI direction override if ref has no or wrong transaction_type
+        if ai_direction == "income" and suggestion.get("transaction_type") in (None, "expense"):
+            suggestion["transaction_type"] = "income"
+            suggestion["category"] = suggestion.get("category") or "self_employment"
         creation_result = ocr_service.create_transaction_from_suggestion_with_result(
             suggestion,
             user_id,
@@ -4032,7 +4046,29 @@ def confirm_ocr_results(
             # stored suggestion is stale and must be regenerated.
             stored_refs = _get_actionable_transaction_suggestion_refs(document.ocr_result or {})
             suggestion = None
-            if stored_refs:
+            # Check if transactions already exist for this document (from pipeline auto-create)
+            from app.models.transaction import Transaction as TxnModel
+            existing_txns = db.query(TxnModel).filter(
+                TxnModel.document_id == document_id,
+                TxnModel.user_id == current_user.id
+            ).all()
+            if existing_txns:
+                # Transactions already exist — don't create duplicates
+                created_ids = []
+                reused_ids = [t.id for t in existing_txns]
+                transaction_id = existing_txns[0].id
+                transaction_created = False
+                # Mark refs as consumed
+                for ref in stored_refs:
+                    ref["status"] = "confirmed"
+                    ref["transaction_id"] = existing_txns[0].id
+                    ref["needs_review"] = False
+                    ref.pop("_stale", None)
+                if stored_refs:
+                    document.ocr_result = document.ocr_result  # trigger change detection
+                    flag_modified(document, "ocr_result")
+                    db.commit()
+            elif stored_refs:
                 created_ids, reused_ids = _create_transactions_from_stored_suggestions(
                     document=document,
                     user_id=current_user.id,

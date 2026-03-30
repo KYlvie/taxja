@@ -198,7 +198,19 @@ def generate_e1a_form_data(
     svs = _sum_expense(transactions, [ExpenseCategory.SVS_CONTRIBUTIONS], netto=_n)
     utilities = _sum_expense(transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX], netto=_n)
     maintenance = _sum_expense(transactions, [ExpenseCategory.MAINTENANCE], netto=_n)
-    other = _sum_expense(transactions, [ExpenseCategory.OTHER], netto=_n)
+    # Filter out Sonderausgaben from "other" — Kirchenbeitrag and Spende
+    # belong on E1 (KZ 455/456), not E1a Betriebsausgaben
+    _sonderausgabe_keywords = ("kirchenbeitrag", "spende", "donation", "church")
+    other_txns = [
+        t for t in transactions
+        if t.type.value == "expense"
+        and t.expense_category == ExpenseCategory.OTHER
+        and not any(kw in (t.description or "").lower() for kw in _sonderausgabe_keywords)
+    ]
+    other = sum(
+        (Decimal(str(t.amount)) - Decimal(str(t.vat_amount or 0))) if _n and t.vat_amount else Decimal(str(t.amount))
+        for t in other_txns
+    )
 
     total_expenses = (
         material + personnel + afa + rent + travel + telecom + marketing

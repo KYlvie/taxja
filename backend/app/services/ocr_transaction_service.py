@@ -1067,6 +1067,41 @@ class OCRTransactionService:
                         ai_amount = float(vlm_amount)
                 else:
                     ai_amount = float(vlm_amount)
+            # Fallback for docs where AI classified but no amount found:
+            # Re-invoke AI with specific amount extraction prompt
+            if not ai_amount or float(ai_amount) <= 0:
+                fname = (document.file_name or "").lower()
+                is_vorschreibung = any(k in fname for k in ("vorschr", "mietvorschreibung"))
+                if is_vorschreibung or ai_first.get("document_type") in ("mietvorschreibung", "hausverwaltung"):
+                    try:
+                        from app.services.ai_first_classifier import AIFirstClassifier
+                        classifier = AIFirstClassifier()
+                        # Get raw text from document OCR
+                        raw_text = ocr_data.get("raw_text") or ocr_data.get("text") or ""
+                        if not raw_text:
+                            # Try to get from pages
+                            pages = ocr_data.get("pages", [])
+                            if pages:
+                                raw_text = " ".join(p.get("text", "") for p in pages if isinstance(p, dict))
+                        if raw_text and len(raw_text) > 20:
+                            amount_prompt = f"Extract the total monthly rent amount (Miete/Vorschreibung) from this document. Return ONLY a JSON: {{\"amount\": <number>}}. Text: {raw_text[:2000]}"
+                            response = classifier._default_groq_generate(
+                                "You extract amounts from Austrian rental documents. Return only valid JSON.",
+                                amount_prompt,
+                                max_tokens=100
+                            )
+                            import json as _json
+                            try:
+                                parsed = _json.loads(response.strip())
+                                extracted_amount = parsed.get("amount")
+                                if extracted_amount and float(extracted_amount) > 0:
+                                    ai_amount = float(extracted_amount)
+                                    logger.info("AI amount extraction for Vorschreibung doc %s: EUR %.2f", document.id, ai_amount)
+                            except (ValueError, _json.JSONDecodeError):
+                                pass
+                    except Exception as e:
+                        logger.debug("AI amount extraction failed for doc %s: %s", document.id, e)
+
             if ai_amount and float(ai_amount) > 0:
                 ai_doc_type = ai_first.get("document_type", "")
                 ai_role = (ai_first.get("role_detection") or {}).get("user_is", "")
@@ -1111,15 +1146,26 @@ class OCRTransactionService:
                         "BK extraction doc %s: NF=%s, GS=%s, settlement=%s -> amount=%.2f",
                         document.id, nachforderung, gutschrift, settlement, ai_amount
                     )
-                elif ai_doc_type in ("hausverwaltung_honorarnote", "invoice"):
-                    supplier = ai_key_fields.get("supplier") or ai_key_fields.get("vendor") or ""
-                    desc_parts.append(supplier)
                 elif ai_doc_type in ("indexanpassung", "kautionsbestaetigung", "uebergabeprotokoll"):
                     # Archive-only documents — no transaction created
                     logger.info("AI-first: skipping archive-only doc type %s (doc %s)", ai_doc_type, document.id)
                     return None
+                else:
+                    # Generic: use VLM description, merchant, or AI doc type
+                    supplier = (
+                        ai_key_fields.get("supplier") or ai_key_fields.get("vendor")
+                        or ocr_data.get("merchant") or ocr_data.get("company")
+                        or ""
+                    )
+                    vlm_desc = ocr_data.get("description") or ""
+                    if supplier:
+                        desc_parts.append(supplier)
+                    if vlm_desc and vlm_desc not in desc_parts:
+                        desc_parts.append(vlm_desc[:80])
 
-                description = " — ".join(desc_parts) if desc_parts else ai_doc_type
+                description = " — ".join(desc_parts) if desc_parts else (
+                    ocr_data.get("description") or ocr_data.get("merchant") or ai_doc_type
+                )
 
                 # Extract date
                 date_str = (
@@ -1146,7 +1192,12 @@ class OCRTransactionService:
                 }
 
         # ── LEGACY EXTRACTION (fallback) ─────────────────────────────
-        # document_type may be enum or string
+        # Only reached when AI-first data is missing or has no valid amount.
+        # This path will be deprecated — AI-first should handle all types.
+        logger.warning(
+            "AI-first extraction failed for doc %s (ai_first=%s), falling back to legacy",
+            document.id, bool(ai_first) if 'ai_first' in dir() else "N/A"
+        )
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
 
         if doc_type == DocumentType.RECEIPT.value:
@@ -1738,6 +1789,20 @@ class OCRTransactionService:
             ai_doc_type = ai_first.get("document_type", "")
             ai_confidence = float(ai_first.get("confidence", 0.75))
 
+            # ── Filename-based direction override for Ausgangsrechnungen ──
+            fname = (document.file_name or "").lower()
+            is_ar = any(k in fname for k in ("ausgangsrechnung", "_ar_", "honorarnote", "honorar_"))
+            if is_ar and ai_direction != "income":
+                logger.info(
+                    "Overriding AI direction for doc %s: %s -> income (filename indicates AR/Honorarnote)",
+                    document.id, ai_direction
+                )
+                ai_direction = "income"
+
+            # ── Sonderausgaben: Kirchenbeitrag and Spende are NOT Betriebsausgaben ──
+            # They go on E1 (KZ 455/456), not E1a. Tag them specially.
+            is_sonderausgabe = ai_doc_type in ("kirchenbeitrag", "spendenbestaetigung", "spende")
+
             # Determine transaction type from AI
             if ai_direction == "income" or ai_doc_type in ("lohnzettel", "l16"):
                 txn_type = TransactionType.INCOME.value
@@ -1759,7 +1824,7 @@ class OCRTransactionService:
                 txn_type = TransactionType.EXPENSE.value
 
             # Determine category from AI
-            ai_ded_cat = ai_tax.get("deduction_category", "")
+            ai_ded_cat = ai_tax.get("deduction_category") or ""
             if txn_type == TransactionType.INCOME.value:
                 if "Vermietung" in ai_ded_cat or ai_role == "landlord":
                     category = IncomeCategory.RENTAL.value
@@ -1851,6 +1916,8 @@ class OCRTransactionService:
                 "deduction_reason": deduction_reason,
                 "confidence": ai_confidence,
                 "classification_method": "ai_first",
+                # Tag Sonderausgaben for E1 form (not E1a Betriebsausgaben)
+                **({"is_sonderausgabe": True, "sonderausgabe_type": ai_doc_type} if is_sonderausgabe else {}),
             }
 
         doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)

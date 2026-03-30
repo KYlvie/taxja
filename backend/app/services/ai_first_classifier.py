@@ -328,18 +328,23 @@ class AIFirstClassifier:
         from dotenv import load_dotenv
         load_dotenv()
 
-        # Try Groq first (faster, cheaper)
-        groq_key = os.getenv("GROQ_API_KEY")
-        if groq_key and self._groq_client is None:
+        # Try Groq first (faster, cheaper) — with key rotation for rate limits
+        groq_keys = [k for k in [
+            os.getenv("GROQ_API_KEY"),
+            os.getenv("GROQ_API_KEY_2"),
+        ] if k]
+        if not hasattr(self, "_groq_key_index"):
+            self._groq_key_index = 0
+
+        for _key_attempt in range(len(groq_keys) or 1):
+            if not groq_keys:
+                break
+            key_idx = (self._groq_key_index + _key_attempt) % len(groq_keys)
+            groq_key = groq_keys[key_idx]
             try:
                 from groq import Groq
-                self._groq_client = Groq(api_key=groq_key)
-            except ImportError:
-                pass
-
-        if self._groq_client is not None:
-            try:
-                resp = self._groq_client.chat.completions.create(
+                client = Groq(api_key=groq_key, timeout=60.0)
+                resp = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -348,28 +353,55 @@ class AIFirstClassifier:
                     max_tokens=max_tokens,
                     temperature=0,
                 )
+                # Rotate key for next call to spread load
+                self._groq_key_index = (key_idx + 1) % len(groq_keys)
                 return resp.choices[0].message.content
+            except ImportError:
+                break
             except Exception as e:
-                logger.info("Groq failed (%s), falling back to OpenAI", e)
-                self._groq_client = None  # Don't retry
+                logger.info("Groq key %d failed (%s), trying next key", key_idx, e)
+                continue
+
+        # All Groq keys failed or none available
 
         # Fallback to OpenAI
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key:
-            import openai
-            client = openai.OpenAI(api_key=openai_key)
-            resp = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                max_tokens=max_tokens,
-                temperature=0,
-            )
-            return resp.choices[0].message.content
+            try:
+                import openai
+                client = openai.OpenAI(api_key=openai_key)
+                logger.info("Falling back to OpenAI (gpt-4o-mini) after Groq failure")
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0,
+                )
+                return resp.choices[0].message.content
+            except Exception as openai_err:
+                logger.error("OpenAI fallback also failed: %s", openai_err)
 
-        raise RuntimeError("No LLM API available (GROQ_API_KEY and OPENAI_API_KEY both missing/failed)")
+        # Fallback to Anthropic
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                logger.info("Falling back to Anthropic (claude-sonnet) after Groq+OpenAI failure")
+                resp = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=max_tokens,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                return resp.content[0].text
+            except Exception as anthropic_err:
+                logger.error("Anthropic fallback also failed: %s", anthropic_err)
+
+        raise RuntimeError("No LLM API available (all Groq keys + OpenAI + Anthropic failed)")
 
     def _parse_json(self, text: str) -> Dict[str, Any]:
         """Extract JSON from LLM response (handles markdown code blocks)."""

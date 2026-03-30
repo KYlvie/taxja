@@ -49,7 +49,25 @@ def generate_u1_form_data(
 
     Aggregates all income/expense transactions for the full year,
     classifies by VAT rate, and maps to official Kennzahlen.
+
+    Note: Kleinunternehmer (KU) are exempt from USt (§6 Abs.1 Z27 UStG).
+    They do NOT file U1/UVA. Return empty form with KU notice.
     """
+    # Check if user is Kleinunternehmer — exempt from USt
+    vat_status = getattr(user, "vat_status", None)
+    if vat_status:
+        vs_val = vat_status.value if hasattr(vat_status, "value") else str(vat_status)
+        if vs_val == "kleinunternehmer":
+            return {
+                "form_type": "U1",
+                "tax_year": tax_year,
+                "fields": [],
+                "summary": {
+                    "kleinunternehmer": True,
+                    "notice": "Kleinunternehmerregelung (§6 Abs.1 Z27 UStG) — keine USt-Pflicht, kein U1 erforderlich.",
+                },
+            }
+
     transactions = (
         db.query(Transaction)
         .filter(

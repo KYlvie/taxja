@@ -791,7 +791,20 @@ class DocumentPipelineOrchestrator:
                         user_context["role_hints"].append(user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type))
 
                 ai_classifier = AIFirstClassifier()
-                ai_result = ai_classifier.classify_and_extract(raw_text, user_context=user_context)
+                # Retry up to 3 times on timeout/failure
+                ai_result = None
+                for _ai_attempt in range(3):
+                    try:
+                        ai_result = ai_classifier.classify_and_extract(raw_text, user_context=user_context)
+                        if ai_result and ai_result.get("document_type", "unknown") != "unknown":
+                            break
+                    except Exception as _ai_err:
+                        logger.warning(
+                            "AI classify attempt %d failed for doc %s: %s",
+                            _ai_attempt + 1, document.id, _ai_err
+                        )
+                        import time as _time
+                        _time.sleep(5 * (_ai_attempt + 1))  # exponential backoff: 5, 10, 15s
                 if ai_result and ai_result.get("document_type", "unknown") != "unknown":
                     # Round 2: deep extraction for types that need it
                     ai_doc_type = ai_result.get("document_type", "")

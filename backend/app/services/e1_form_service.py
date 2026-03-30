@@ -110,9 +110,27 @@ def _generate_l1_form(
     ]
     werbungskosten = _sum_by_expense_cat(transactions, werbungskosten_cats, deductible_only=True)
 
-    # Sonderausgaben (special deductions) - insurance, etc.
+    # Sonderausgaben (special deductions)
+    # Insurance (private, not already claimed as BA)
     sonderausgaben = _sum_by_expense_cat(
         transactions, [ExpenseCategory.INSURANCE], deductible_only=True
+    )
+    # Kirchenbeitrag (KZ 455) — max EUR 600 (2024+)
+    _sa_kb_keywords = ("kirchenbeitrag", "church")
+    kirchenbeitrag = sum(
+        Decimal(str(t.amount))
+        for t in transactions
+        if t.type.value == "expense"
+        and any(kw in (t.description or "").lower() for kw in _sa_kb_keywords)
+    )
+    kirchenbeitrag = min(kirchenbeitrag, Decimal("600"))  # Obergrenze 2024+
+    # Spende (KZ 456) — max 10% of Einkommen
+    _sa_sp_keywords = ("spende", "donation", "wwf", "caritas", "rotes kreuz")
+    spenden = sum(
+        Decimal(str(t.amount))
+        for t in transactions
+        if t.type.value == "expense"
+        and any(kw in (t.description or "").lower() for kw in _sa_sp_keywords)
     )
 
     # Pendlerpauschale from user profile
@@ -199,7 +217,16 @@ def _generate_l1_form(
             "label_de": "Kirchenbeitrag (max. EUR 600)",
             "label_en": "Church tax (max EUR 600)",
             "label_zh": "\u6559\u4f1a\u7a0e\uff08\u6700\u9ad8600\u6b27\u5143\uff09",
-            "value": 0.0,
+            "value": float(kirchenbeitrag),
+            "section": "sonderausgaben",
+            "editable": True,
+        },
+        {
+            "kz": "455",
+            "label_de": "Spenden an begünstigte Empfänger",
+            "label_en": "Donations to eligible recipients",
+            "label_zh": "\u5411\u7b26\u5408\u8d44\u683c\u7684\u63a5\u6536\u8005\u6350\u6b3e",
+            "value": float(spenden),
             "section": "sonderausgaben",
             "editable": True,
         },
