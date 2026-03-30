@@ -215,7 +215,13 @@ class OCRTransactionService:
             return []
 
         ocr_data = document.ocr_result
-        direction_resolution = self._resolve_direction(document, user_id)
+        # Skip legacy direction resolution when AI two-step classifier already determined direction
+        _ai = ocr_data.get("_ai_first", {}) if isinstance(ocr_data, dict) else {}
+        _ai_dir = (_ai.get("tax_treatment") or {}).get("expense_or_income")
+        if _ai_dir and _ai_dir in ("income", "expense", "archive_only"):
+            direction_resolution = None  # AI is authoritative
+        else:
+            direction_resolution = self._resolve_direction(document, user_id)
         if (
             direction_resolution
             and get_sensitive_document_mode() == "strict"
