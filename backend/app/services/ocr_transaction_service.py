@@ -1054,7 +1054,10 @@ class OCRTransactionService:
     def _extract_transaction_data(
         self, document: Document, ocr_data: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Extract transaction data from OCR results based on document type.
+        """Extract transaction data from _ai_first.
+
+        Simple and clean: reads AI two-step classification result directly.
+        No legacy fallback, no regex, no VLM override.
 
         AI-FIRST PATH: If _ai_first data is present with valid amounts,
         use it directly instead of relying on legacy field extraction.

@@ -3022,7 +3022,9 @@ class DocumentPipelineOrchestrator:
 
         if _creates:
             # AI told us what to create — respect it
-            if "transaction" not in _creates and "asset" not in _creates:
+            # "recurring" also needs a one-time transaction for the uploaded document
+            _needs_txn = any(c in _creates for c in ("transaction", "asset", "recurring"))
+            if not _needs_txn:
                 logger.info(
                     "Skipping transaction suggestions for doc %s (creates=%s)",
                     document.id, _creates,
