@@ -1052,232 +1052,68 @@ class OCRTransactionService:
             self.db.rollback()
 
     def _extract_transaction_data(
-        self, document: Document, ocr_data: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, document, ocr_data
+    ):
         """Extract transaction data from _ai_first.
 
-        Simple and clean: reads AI two-step classification result directly.
-        No legacy fallback, no regex, no VLM override.
-
-        AI-FIRST PATH: If _ai_first data is present with valid amounts,
-        use it directly instead of relying on legacy field extraction.
-        This handles mietvorschreibung, grundsteuerbescheid, betriebskostenabrechnung,
-        hausverwaltung invoices, and other AI-classified document types that
-        don't map cleanly to the legacy extraction fields.
+        Clean pipeline: reads AI two-step classifier result directly.
+        No legacy fallback. No VLM override. AI is the single source of truth.
         """
-        # ── AI-FIRST EXTRACTION ──────────────────────────────────────
         ai_first = ocr_data.get("_ai_first")
-        if ai_first and ai_first.get("document_type", "unknown") != "unknown":
-            ai_amounts = ai_first.get("amounts") or {}
-            ai_key_fields = ai_first.get("key_fields") or {}
+        if not ai_first or ai_first.get("document_type") in (None, "unknown", "?", ""):
+            logger.warning("No AI classification for doc %s, skipping", document.id)
+            return None
 
-            # For periodic documents (SVS quarterly, monthly rent, etc.),
-            # prefer the per-period amount over the annual total.
-            ai_doc_type = (ai_first.get("document_type") or "").lower()
-            is_periodic_svs = "svs" in ai_doc_type and ai_key_fields.get("quarterly_amount")
-            is_periodic_monthly = ai_key_fields.get("monthly_amount") and ai_amounts.get("monthly_amount")
+        ai_type = ai_first.get("document_type", "")
+        amounts = ai_first.get("amounts") or {}
+        key_fields = ai_first.get("key_fields") or {}
+        tax = ai_first.get("tax_treatment") or {}
 
-            if is_periodic_svs:
-                ai_amount = float(ai_key_fields["quarterly_amount"])
-            elif ai_amounts.get("total_amount"):
-                ai_amount = ai_amounts["total_amount"]
-            else:
-                ai_amount = (
-                    ai_amounts.get("netto_amount")
-                    or ai_amounts.get("settlement_amount")
-                    or ai_amounts.get("annual_amount")
-                    or ai_amounts.get("monthly_amount")
-                )
-            # Compare VLM amount vs AI amount — use the more plausible one.
-            # European number formats can cause either parser to misread
-            # (e.g. 6.234,56 → VLM reads 6.23, AI reads 6234.56).
-            # When they differ significantly, prefer the LARGER amount
-            # (truncation is far more common than inflation in OCR parsing).
-            vlm_amount = ocr_data.get("amount")
-            if vlm_amount and float(vlm_amount) > 0:
-                if ai_amount and float(ai_amount) > 0:
-                    ratio = float(vlm_amount) / float(ai_amount) if float(ai_amount) > 0 else 999
-                    if ratio > 10 or ratio < 0.1:
-                        # Significant discrepancy: prefer the larger amount
-                        chosen = max(float(vlm_amount), float(ai_amount))
-                        logger.info(
-                            "Amount discrepancy doc %s: VLM=%.2f vs AI=%.2f (ratio %.1f), using larger=%.2f",
-                            document.id, float(vlm_amount), float(ai_amount), ratio, chosen
-                        )
-                        ai_amount = chosen
-                    # else: amounts are similar, keep ai_amount (already calculated
-                    # with periodic/SVS/doc-type-specific logic above)
-                elif not ai_amount:
-                    ai_amount = float(vlm_amount)
-            # Fallback for docs where AI classified but no amount found:
-            # Re-invoke AI with specific amount extraction prompt
-            if not ai_amount or float(ai_amount) <= 0:
-                fname = (document.file_name or "").lower()
-                is_vorschreibung = any(k in fname for k in ("vorschr", "mietvorschreibung"))
-                if is_vorschreibung or ai_first.get("document_type") in ("mietvorschreibung", "hausverwaltung"):
-                    try:
-                        from app.services.ai_first_classifier import AIFirstClassifier
-                        classifier = AIFirstClassifier()
-                        # Get raw text from document OCR
-                        raw_text = ocr_data.get("raw_text") or ocr_data.get("text") or ""
-                        if not raw_text:
-                            # Try to get from pages
-                            pages = ocr_data.get("pages", [])
-                            if pages:
-                                raw_text = " ".join(p.get("text", "") for p in pages if isinstance(p, dict))
-                        if raw_text and len(raw_text) > 20:
-                            amount_prompt = f"Extract the total monthly rent amount (Miete/Vorschreibung) from this document. Return ONLY a JSON: {{\"amount\": <number>}}. Text: {raw_text[:2000]}"
-                            response = classifier._default_groq_generate(
-                                "You extract amounts from Austrian rental documents. Return only valid JSON.",
-                                amount_prompt,
-                                max_tokens=100
-                            )
-                            import json as _json
-                            try:
-                                parsed = _json.loads(response.strip())
-                                extracted_amount = parsed.get("amount")
-                                if extracted_amount and float(extracted_amount) > 0:
-                                    ai_amount = float(extracted_amount)
-                                    logger.info("AI amount extraction for Vorschreibung doc %s: EUR %.2f", document.id, ai_amount)
-                            except (ValueError, _json.JSONDecodeError):
-                                pass
-                    except Exception as e:
-                        logger.debug("AI amount extraction failed for doc %s: %s", document.id, e)
-
-            if ai_amount and float(ai_amount) > 0:
-                ai_doc_type = ai_first.get("document_type", "")
-                ai_role = (ai_first.get("role_detection") or {}).get("user_is", "")
-                ai_key_fields = ai_first.get("key_fields") or {}
-
-                # Build description from AI context
-                desc_parts = []
-                if ai_key_fields.get("insurer"):
-                    desc_parts.append(ai_key_fields["insurer"])
-                if ai_key_fields.get("supplier") or ai_key_fields.get("vendor"):
-                    desc_parts.append(ai_key_fields.get("supplier") or ai_key_fields.get("vendor"))
-                if ai_doc_type == "mietvorschreibung":
-                    landlord = (ai_first.get("role_detection") or {}).get("landlord_name", "")
-                    tenant = (ai_first.get("role_detection") or {}).get("tenant_name", "")
-                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
-                    period = ai_key_fields.get("period") or ai_key_fields.get("month") or ""
-                    if ai_role == "landlord":
-                        desc_parts.append(f"Mieteinnahme {addr} {period}".strip())
-                    else:
-                        desc_parts.append(f"Miete {addr} {period}".strip())
-                elif ai_doc_type == "grundsteuerbescheid":
-                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
-                    desc_parts.append(f"Grundsteuer {addr}".strip())
-                elif ai_doc_type == "betriebskostenabrechnung":
-                    addr = ai_key_fields.get("property_address") or ai_key_fields.get("address") or ""
-                    # Use nachforderung or gutschrift amount, not total BK
-                    nachforderung = ai_key_fields.get("nachforderung_amount")
-                    gutschrift = ai_key_fields.get("gutschrift_amount")
-                    settlement = ai_amounts.get("settlement_amount")
-                    if nachforderung and float(nachforderung) > 0:
-                        ai_amount = float(nachforderung)
-                        desc_parts.append(f"BK-Nachforderung {addr}".strip())
-                    elif gutschrift and float(gutschrift) > 0:
-                        ai_amount = float(gutschrift)
-                        desc_parts.append(f"BK-Guthaben {addr}".strip())
-                    elif settlement and float(settlement) > 0:
-                        ai_amount = float(settlement)
-                        desc_parts.append(f"Betriebskostenabrechnung {addr}".strip())
-                    else:
-                        desc_parts.append(f"Betriebskostenabrechnung {addr}".strip())
-                    logger.info(
-                        "BK extraction doc %s: NF=%s, GS=%s, settlement=%s -> amount=%.2f",
-                        document.id, nachforderung, gutschrift, settlement, ai_amount
-                    )
-                elif ai_doc_type == "zinsbescheinigung":
-                    # Interest certificate → annual loan interest expense
-                    lender = ai_key_fields.get("lender_name") or ai_key_fields.get("supplier") or ""
-                    addr = ai_key_fields.get("property_address") or ""
-                    if lender:
-                        desc_parts.append(lender)
-                    desc_parts.append(f"Zinsen {addr}".strip() if addr else "Kreditzinsen")
-                elif ai_doc_type in ("indexanpassung", "kautionsbestaetigung", "uebergabeprotokoll"):
-                    # Archive-only documents — no transaction created
-                    logger.info("AI-first: skipping archive-only doc type %s (doc %s)", ai_doc_type, document.id)
-                    return None
-                elif ai_doc_type == "versicherungspolizze":
-                    # Insurance policy → annual premium expense
-                    insurer = ai_key_fields.get("insurer_name") or ai_key_fields.get("insurer") or ""
-                    if insurer:
-                        desc_parts.append(insurer)
-                    desc_parts.append("Versicherungsprämie")
-                else:
-                    # Generic: use VLM description, merchant, or AI doc type
-                    supplier = (
-                        ai_key_fields.get("supplier") or ai_key_fields.get("vendor")
-                        or ocr_data.get("merchant") or ocr_data.get("company")
-                        or ""
-                    )
-                    vlm_desc = ocr_data.get("description") or ""
-                    if supplier:
-                        desc_parts.append(supplier)
-                    if vlm_desc and vlm_desc not in desc_parts:
-                        desc_parts.append(vlm_desc[:80])
-
-                description = " — ".join(desc_parts) if desc_parts else (
-                    ocr_data.get("description") or ocr_data.get("merchant") or ai_doc_type
-                )
-
-                # Extract date
-                date_str = (
-                    ai_key_fields.get("date")
-                    or ai_key_fields.get("invoice_date")
-                    or ai_key_fields.get("period_start")
-                    or ocr_data.get("date")
-                    or ocr_data.get("invoice_date")
-                )
-
-                logger.info(
-                    "AI-first extraction for doc %s: type=%s, amount=%.2f, desc=%s",
-                    document.id, ai_doc_type, float(ai_amount), description[:60]
-                )
-
-                return {
-                    "amount": float(ai_amount),
-                    "date": date_str,
-                    "description": description,
-                    "merchant": desc_parts[0] if desc_parts else ai_doc_type,
-                    "_ai_extracted": True,
-                    "_ai_doc_type": ai_doc_type,
-                    "_ai_role": ai_role,
-                }
-
-        # ── LEGACY EXTRACTION (fallback) ─────────────────────────────
-        # Only reached when AI-first data is missing or has no valid amount.
-        # This path will be deprecated — AI-first should handle all types.
-        logger.warning(
-            "AI-first extraction failed for doc %s (ai_first=%s), falling back to legacy",
-            document.id, bool(ai_first) if 'ai_first' in dir() else "N/A"
+        # Determine amount
+        amount = (
+            amounts.get("total_amount")
+            or amounts.get("annual_amount")
+            or amounts.get("monthly_amount")
+            or amounts.get("settlement_amount")
         )
-        doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
 
-        if doc_type == DocumentType.RECEIPT.value:
-            return self._extract_from_receipt(ocr_data)
-        elif doc_type == DocumentType.INVOICE.value:
-            return self._extract_from_invoice(ocr_data)
-        elif doc_type == DocumentType.PAYSLIP.value:
-            return self._extract_from_payslip(ocr_data)
-        elif doc_type == DocumentType.LOHNZETTEL.value:
-            return self._extract_from_lohnzettel(ocr_data)
-        elif doc_type == DocumentType.SVS_NOTICE.value:
-            ocr_data["_file_name"] = document.file_name or ""
-            ocr_data["_user_id"] = document.user_id
-            return self._extract_from_svs_notice(ocr_data)
-        elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:
-            return self._extract_from_bescheid(ocr_data)
-        elif doc_type == DocumentType.KIRCHENBEITRAG.value:
-            return self._extract_from_kirchenbeitrag(ocr_data)
-        elif doc_type == DocumentType.SPENDENBESTAETIGUNG.value:
-            return self._extract_from_spendenbestaetigung(ocr_data)
-        elif doc_type == DocumentType.FORTBILDUNGSKOSTEN.value:
-            # Fortbildungskosten is essentially a receipt/invoice for training
-            return self._extract_from_receipt(ocr_data)
-        else:
-            return self._extract_generic(ocr_data)
+        # SVS: prefer quarterly_amount from key_fields
+        if ai_type in ("svs_vorschreibung",) and key_fields.get("quarterly_amount"):
+            amount = key_fields["quarterly_amount"]
+
+        if not amount or float(amount) <= 0:
+            logger.info("No amount for doc %s (type=%s)", document.id, ai_type)
+            return None
+
+        # Date
+        date_str = key_fields.get("date") or key_fields.get("purchase_date") or ocr_data.get("date")
+
+        # Description
+        desc_parts = []
+        for field in ["issuer", "employer_name", "lender_name", "insurer_name",
+                       "recipient_org", "parish", "supplier"]:
+            val = key_fields.get(field)
+            if val:
+                desc_parts.append(str(val))
+                break
+        desc_ai = key_fields.get("description") or ""
+        if desc_ai and desc_ai not in desc_parts:
+            desc_parts.append(desc_ai[:80])
+        if not desc_parts:
+            desc_parts.append(ocr_data.get("description") or ocr_data.get("merchant") or ai_type)
+
+        description = " \u2014 ".join(desc_parts)
+
+        logger.info("AI extraction doc %s: type=%s amt=%.2f desc=%s",
+                     document.id, ai_type, float(amount), description[:60])
+
+        return {
+            "amount": float(amount),
+            "date": date_str,
+            "description": description,
+            "_ai_extracted": True,
+            "_ai_doc_type": ai_type,
+        }
 
     def _extract_from_receipt(self, ocr_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Extract transaction data from receipt OCR"""
@@ -1821,464 +1657,87 @@ class OCRTransactionService:
         }
 
     def _classify_from_ocr(
-        self,
-        document: Document,
-        transaction_data: Dict[str, Any],
-        user_id: int,
-        *,
-        direction_resolution: Optional[TransactionDirectionResolution] = None,
-    ) -> Dict[str, Any]:
-        """Classify transaction based on document type and OCR data.
+        self, document, transaction_data, user_id,
+        *, direction_resolution=None,
+    ):
+        """Classify transaction from _ai_first.
 
-        AI-first path: when _ai_first data is present in ocr_result,
-        use AI's classification for direction, category, and deductibility.
+        Clean pipeline: reads AI results directly for transaction_type,
+        category, and deductibility. No legacy fallback.
         """
-        # -- AI-first classification shortcut --
         ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
-        ai_first = ocr_json.get("_ai_first")
-        if ai_first and ai_first.get("document_type", "unknown") != "unknown":
-            ai_tax = ai_first.get("tax_treatment") or {}
-            ai_amounts = ai_first.get("amounts") or {}
-            ai_role = (ai_first.get("role_detection") or {}).get("user_is")
-            ai_direction = ai_tax.get("expense_or_income", "expense")
-            ai_doc_type = ai_first.get("document_type", "")
-            ai_confidence = float(ai_first.get("confidence", 0.75))
+        ai_first = ocr_json.get("_ai_first", {})
+        ai_type = ai_first.get("document_type", "unknown")
+        tax = ai_first.get("tax_treatment") or {}
+        creates = ai_first.get("creates", [])
+        key_fields = ai_first.get("key_fields") or {}
 
-            # ── Filename-based direction override for Ausgangsrechnungen ──
-            fname = (document.file_name or "").lower()
-            # HV_Honorar = Hausverwaltung (property mgmt expense), NOT Ausgangsrechnung
-            is_hv = any(k in fname for k in ("hv_honorar", "hausverwaltung", "verwaltungshonorar"))
-            is_ar = (
-                not is_hv
-                and any(k in fname for k in ("ausgangsrechnung", "_ar_", "honorarnote", "honorar_"))
-            )
-            if is_ar and ai_direction != "income":
-                logger.info(
-                    "Overriding AI direction for doc %s: %s -> income (filename indicates AR/Honorarnote)",
-                    document.id, ai_direction
-                )
-                ai_direction = "income"
+        if isinstance(creates, str):
+            creates = [creates]
 
-            # ── Sonderausgaben: Kirchenbeitrag and Spende are NOT Betriebsausgaben ──
-            # They go on E1 (KZ 455/456), not E1a. Tag them specially.
-            is_sonderausgabe = ai_doc_type in ("kirchenbeitrag", "spendenbestaetigung", "spende")
+        ai_direction = tax.get("expense_or_income", "expense")
+        is_asset = "asset" in creates or ai_type == "asset_purchase"
+        is_gwg = key_fields.get("is_gwg")
 
-            # Check if AI says this is an asset purchase
-            _creates = ai_first.get("creates", [])
-            if isinstance(_creates, str):
-                _creates = [_creates]
-            _is_asset = "asset" in _creates or ai_doc_type == "asset_purchase"
-            _kf = ai_first.get("key_fields") or {}
-            _is_gwg = _kf.get("is_gwg")
-
-            # Determine transaction type from AI
-            if _is_asset and not _is_gwg:
-                # Asset purchase → ASSET_ACQUISITION (not regular expense)
-                # GWG (≤1000 netto) stays as EXPENSE (sofort absetzbar)
-                txn_type = TransactionType.ASSET_ACQUISITION.value
-            elif ai_direction == "income" or ai_doc_type in ("lohnzettel", "l16"):
-                txn_type = TransactionType.INCOME.value
-            elif ai_role == "landlord" and ai_doc_type in ("mietvorschreibung",):
-                txn_type = TransactionType.INCOME.value
-            elif ai_doc_type == "betriebskostenabrechnung":
-                # BK direction: AI already tells us via expense_or_income
-                # based on role + nachforderung/gutschrift analysis
-                if ai_direction == "income":
-                    txn_type = TransactionType.INCOME.value
-                else:
-                    txn_type = TransactionType.EXPENSE.value
-            elif ai_doc_type in ("grundsteuerbescheid", "zinsbescheinigung", "versicherungspolizze"):
-                # These are ALWAYS expenses regardless of AI direction
-                txn_type = TransactionType.EXPENSE.value
-            elif ai_doc_type in ("kautionsbestaetigung", "uebergabeprotokoll", "indexanpassung"):
-                # Archive-only documents — no transaction
-                txn_type = TransactionType.EXPENSE.value  # Will be handled differently
-            else:
-                txn_type = TransactionType.EXPENSE.value
-
-            # Determine category from AI
-            ai_ded_cat = ai_tax.get("deduction_category") or ""
-            if txn_type == TransactionType.INCOME.value:
-                if "Vermietung" in ai_ded_cat or ai_role == "landlord":
-                    category = IncomeCategory.RENTAL.value
-                elif "selbständig" in ai_ded_cat.lower() or ai_doc_type in ("invoice", "ausgangsrechnung", "honorarnote"):
-                    category = IncomeCategory.SELF_EMPLOYMENT.value
-                elif ai_doc_type in ("lohnzettel", "l16"):
-                    category = IncomeCategory.EMPLOYMENT.value
-                else:
-                    category = IncomeCategory.OTHER_INCOME.value
-            else:
-                # Map AI deduction_category to ExpenseCategory
-                cat_map = {
-                    # Insurance
-                    "Versicherung": ExpenseCategory.INSURANCE.value,
-                    "insurance": ExpenseCategory.INSURANCE.value,
-                    # SVS / Social security
-                    "SVS": ExpenseCategory.SVS_CONTRIBUTIONS.value,
-                    "Sozialversicherung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
-                    # Rent
-                    "Miete": ExpenseCategory.RENT.value,
-                    "Pacht": ExpenseCategory.RENT.value,
-                    "Coworking": ExpenseCategory.RENT.value,
-                    "Werkstattmiete": ExpenseCategory.RENT.value,
-                    # Loan interest
-                    "Zinsen": ExpenseCategory.LOAN_INTEREST.value,
-                    "Bankspesen": ExpenseCategory.BANK_FEES.value,
-                    # Maintenance / repair
-                    "Reparatur": ExpenseCategory.MAINTENANCE.value,
-                    "Instandhaltung": ExpenseCategory.MAINTENANCE.value,
-                    "Wartung": ExpenseCategory.MAINTENANCE.value,
-                    # Property
-                    "Hausverwaltung": ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value,
-                    "Grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
-                    # Office / supplies
-                    "Büromaterial": ExpenseCategory.OFFICE_SUPPLIES.value,
-                    "Bueromaterial": ExpenseCategory.OFFICE_SUPPLIES.value,
-                    "Arbeitsmittel": ExpenseCategory.OFFICE_SUPPLIES.value,
-                    "Fachliteratur": ExpenseCategory.EDUCATION.value,
-                    "Fachbuch": ExpenseCategory.EDUCATION.value,
-                    "Fortbildung": ExpenseCategory.EDUCATION.value,
-                    # Telecom
-                    "Internet": ExpenseCategory.TELECOM.value,
-                    "Telefon": ExpenseCategory.TELECOM.value,
-                    "Software": ExpenseCategory.SOFTWARE.value,
-                    # Vehicle
-                    "KFZ": ExpenseCategory.VEHICLE.value,
-                    "Fahrzeug": ExpenseCategory.VEHICLE.value,
-                    "Tankbeleg": ExpenseCategory.FUEL.value,
-                    "Treibstoff": ExpenseCategory.FUEL.value,
-                    # Travel
-                    "Reise": ExpenseCategory.TRAVEL.value,
-                    "Dienstreise": ExpenseCategory.TRAVEL.value,
-                    # Material / goods
-                    "Material": ExpenseCategory.OTHER.value,
-                    "Wareneinsatz": ExpenseCategory.OTHER.value,
-                    # Sonderausgaben
-                    "Kirchenbeitrag": ExpenseCategory.OTHER.value,
-                    "Spende": ExpenseCategory.OTHER.value,
-                }
-                category = ExpenseCategory.OTHER.value
-                for key, val in cat_map.items():
-                    if key.lower() in (ai_ded_cat or "").lower():
-                        category = val
-                        break
-
-                # AI doc_type-specific category overrides
-                if ai_doc_type == "grundsteuerbescheid":
-                    category = ExpenseCategory.PROPERTY_TAX.value
-                elif ai_doc_type == "zinsbescheinigung":
-                    category = ExpenseCategory.LOAN_INTEREST.value
-                elif ai_doc_type == "versicherungspolizze":
-                    category = ExpenseCategory.INSURANCE.value
-                elif ai_doc_type in ("hausverwaltung_honorarnote",):
-                    category = ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value
-                elif ai_doc_type == "betriebskostenabrechnung":
-                    category = ExpenseCategory.UTILITIES.value
-                elif ai_doc_type in ("invoice",) and ai_role == "landlord":
-                    # Landlord invoices default to maintenance unless AI says otherwise
-                    if category == ExpenseCategory.OTHER.value:
-                        category = ExpenseCategory.MAINTENANCE.value
-
-            is_deductible = ai_tax.get("is_deductible", True)
-            deduction_reason = ai_ded_cat or ai_first.get("document_type", "")
-
-            # Don't override amount here — _extract_transaction_data already
-            # selected the best amount (VLM preferred over AI for invoices,
-            # BK uses settlement amounts, etc.)
-
-            return {
-                "transaction_type": txn_type,
-                "category": category,
-                "is_deductible": bool(is_deductible),
-                "deduction_reason": deduction_reason,
-                "confidence": ai_confidence,
-                "classification_method": "ai_first",
-                # Tag Sonderausgaben for E1 form (not E1a Betriebsausgaben)
-                **({"is_sonderausgabe": True, "sonderausgabe_type": ai_doc_type} if is_sonderausgabe else {}),
-            }
-
-        doc_type = str(document.document_type.value) if hasattr(document.document_type, 'value') else str(document.document_type)
-        
-        if doc_type in [DocumentType.PAYSLIP.value, DocumentType.LOHNZETTEL.value]:
-            return {
-                "transaction_type": TransactionType.INCOME.value,
-                "category": IncomeCategory.EMPLOYMENT.value,
-                "is_deductible": False,
-                "deduction_reason": "Income is not deductible",
-                "confidence": 0.95,
-            }
-
-        elif doc_type == DocumentType.RENTAL_CONTRACT.value:
-            return {
-                "transaction_type": TransactionType.INCOME.value,
-                "category": IncomeCategory.RENTAL.value,
-                "is_deductible": False,
-                "deduction_reason": "Rental income is not deductible",
-                "confidence": 0.90,
-            }
-            
-        elif doc_type == DocumentType.SVS_NOTICE.value:
-            # SVS sub-type aware classification
-            svs_sub = transaction_data.get("_svs_subtype", "vorschreibung")
-            beitragsjahr = transaction_data.get("_beitragsjahr", "")
-
-            if svs_sub == "gutschrift":
-                reason = "SVS Gutschrift — Betriebseinnahme im Zufluss-Jahr (Zufluss-Abfluss-Prinzip)"
-                if beitragsjahr:
-                    reason += f" | Beitragsjahr: {beitragsjahr}"
-                return {
-                    "transaction_type": TransactionType.INCOME.value,
-                    "category": ExpenseCategory.INSURANCE.value,  # Offsets SVS expense line
-                    "is_deductible": False,
-                    "deduction_reason": reason,
-                    "confidence": 0.95,
-                }
-
-            if svs_sub == "saeumniszuschlag":
-                return {
-                    "transaction_type": TransactionType.EXPENSE.value,
-                    "category": ExpenseCategory.OTHER.value,
-                    "is_deductible": False,
-                    "deduction_reason": "SVS Säumniszuschlag — NICHT als Betriebsausgabe absetzbar",
-                    "confidence": 0.95,
-                }
-
-            if svs_sub == "nachforderung":
-                reason = "SVS Nachbemessung Nachforderung — Betriebsausgabe im Zahlungsjahr (Zufluss-Abfluss-Prinzip, E1a KZ 9225)"
-                if beitragsjahr:
-                    reason += f" | Beitragsjahr: {beitragsjahr}"
-                return {
-                    "transaction_type": TransactionType.EXPENSE.value,
-                    "category": ExpenseCategory.INSURANCE.value,
-                    "is_deductible": True,
-                    "deduction_reason": reason,
-                    "confidence": 0.95,
-                }
-
-            # Default: vorschreibung (regular quarterly)
-            return {
-                "transaction_type": TransactionType.EXPENSE.value,
-                "category": ExpenseCategory.INSURANCE.value,
-                "is_deductible": True,
-                "deduction_reason": "SVS Pflichtbeiträge — Betriebsausgabe (E1a KZ 9225)",
-                "confidence": 0.95,
-            }
-
-        elif doc_type == DocumentType.KIRCHENBEITRAG.value:
-            return {
-                "transaction_type": TransactionType.EXPENSE.value,
-                "category": ExpenseCategory.OTHER.value,
-                "is_deductible": True,
-                "deduction_reason": "Kirchenbeitrag — Sonderausgaben gem. §18 Abs.1 Z5 EStG (E1 KZ 458, max €600 ab 2024)",
-                "confidence": 0.95,
-            }
-
-        elif doc_type == DocumentType.SPENDENBESTAETIGUNG.value:
-            so_nummer = transaction_data.get("_so_nummer")
-            reason = "Spende — Sonderausgaben gem. §4a EStG (E1 KZ 451, max 10% der Einkünfte)"
-            if so_nummer:
-                reason += f" | SO-Nr: {so_nummer}"
-            else:
-                reason += " | Hinweis: Ab 2024 werden die meisten Spenden automatisch ans Finanzamt gemeldet."
-            return {
-                "transaction_type": TransactionType.EXPENSE.value,
-                "category": ExpenseCategory.OTHER.value,
-                "is_deductible": True,
-                "deduction_reason": reason,
-                "confidence": 0.95,
-            }
-
-        elif doc_type == DocumentType.FORTBILDUNGSKOSTEN.value:
-            return {
-                "transaction_type": TransactionType.EXPENSE.value,
-                "category": ExpenseCategory.EDUCATION.value,
-                "is_deductible": True,
-                "deduction_reason": "Fortbildungskosten — Werbungskosten (L1 KZ 720) oder Betriebsausgaben (E1a KZ 9230)",
-                "confidence": 0.90,
-            }
-
-        elif doc_type == DocumentType.EINKOMMENSTEUERBESCHEID.value:
-            return {
-                "transaction_type": TransactionType.INCOME.value,
-                "category": IncomeCategory.EMPLOYMENT.value,
-                "is_deductible": False,
-                "deduction_reason": "Einkommensteuerbescheid - total income from tax assessment",
-                "confidence": 0.90,
-            }
-            
-        elif doc_type in [DocumentType.RECEIPT.value, DocumentType.INVOICE.value]:
-            resolved_direction = direction_resolution.candidate if direction_resolution else "unknown"
-            transaction_type = (
-                TransactionType.INCOME
-                if resolved_direction == "income"
-                else TransactionType.EXPENSE
-            )
-
-            user = load_sensitive_user_context(self.db, user_id)
-            method = "unknown"
-            deduct_requires_review = True
-            ocr_data = document.ocr_result if isinstance(document.ocr_result, dict) else {}
-            canonical_description = build_ocr_parent_description(
-                merchant=ocr_data.get("merchant") or ocr_data.get("supplier"),
-                ocr_description=ocr_data.get("description") or ocr_data.get("product_summary"),
-                fallback_description=transaction_data.get("description"),
-            )
-            line_items = ocr_data.get("line_items") or ocr_data.get("items") or []
-            rule_resolver = getattr(self, "rule_resolver", None)
-            if rule_resolver is None and self.db is not None:
-                rule_resolver = TransactionRuleResolver(self.db)
-                self.rule_resolver = rule_resolver
-
-            if user:
-                description = transaction_data.get("description", "")
-                resolved_rules = (
-                    rule_resolver.resolve(
-                        user_id=user_id,
-                        context="ocr_receipt",
-                        txn_type=transaction_type.value,
-                        canonical_description=canonical_description,
-                        line_items=line_items,
-                        ocr_category=None,
-                    )
-                    if rule_resolver is not None
-                    else None
-                )
-
-                temp_transaction = Transaction(
-                    user_id=user_id,
-                    type=transaction_type,
-                    amount=transaction_data["amount"],
-                    transaction_date=transaction_data["date"] or datetime.utcnow().date(),
-                    description=canonical_description or description,
-                )
-
-                classification = self.classifier.classify_transaction(
-                    temp_transaction,
-                    user,
-                    allow_user_override=False,
-                )
-                category = (
-                    resolved_rules.resolved_category
-                    if resolved_rules and resolved_rules.resolved_category
-                    else classification.category if classification.category else None
-                )
-                # Override transaction_type if rule says different direction
-                if resolved_rules and resolved_rules.resolved_txn_type:
-                    rule_txn_type = resolved_rules.resolved_txn_type
-                    if rule_txn_type == "income":
-                        transaction_type = TransactionType.INCOME
-                    elif rule_txn_type == "expense":
-                        transaction_type = TransactionType.EXPENSE
-                method = (
-                    resolved_rules.classification_method
-                    if resolved_rules and resolved_rules.classification_method
-                    else classification.method if hasattr(classification, 'method') else 'unknown'
-                )
-                semantics = direction_resolution.semantics if direction_resolution else "unknown"
-
-                if transaction_type == TransactionType.INCOME:
-                    is_deductible = False
-                    deduction_reason = "Income is not deductible"
-                    deduct_requires_review = False
-                    if semantics == "credit_note":
-                        deduction_reason = "Credit note / reversal of prior income"
-                    elif semantics == "proforma":
-                        deduction_reason = "Proforma document requires manual confirmation"
-                        deduct_requires_review = True
-                    elif semantics == "delivery_note":
-                        deduction_reason = "Delivery note requires manual confirmation"
-                        deduct_requires_review = True
-                elif category:
-                    if (
-                        resolved_rules is not None
-                        and resolved_rules.resolved_is_deductible is not None
-                    ):
-                        is_deductible = resolved_rules.resolved_is_deductible
-                        deduction_reason = (
-                            resolved_rules.resolved_deduction_reason
-                            or "Learned from your previous correction"
-                        )
-                        deduct_requires_review = False
-                    # If LLM already provided deductibility, use it directly
-                    elif method == 'llm' and hasattr(classification, 'is_deductible') and classification.is_deductible is not None:
-                        is_deductible = classification.is_deductible
-                        deduction_reason = getattr(classification, 'deduction_reason', '') or ''
-                        deduct_requires_review = False
-                    else:
-                        user_type_val = user.user_type.value if hasattr(user.user_type, 'value') else str(user.user_type or "employee")
-                        deduct_result = self.deductibility_checker.check(
-                            category, user_type_val,
-                            ocr_data=ocr_data,
-                            description=canonical_description or description,
-                            business_type=getattr(user, 'business_type', None),
-                            business_industry=getattr(user, 'business_industry', None),
-                            user_id=user_id,
-                            allow_user_override=False,
-                        )
-                        is_deductible = deduct_result.is_deductible
-                        deduction_reason = deduct_result.reason
-                        if deduct_result.tax_tip:
-                            deduction_reason = f"{deduct_result.reason} | {deduct_result.tax_tip}"
-                        deduct_requires_review = deduct_result.requires_review
-                    if semantics == "credit_note":
-                        deduction_reason = f"Credit note / reversal of prior expense | {deduction_reason}"
-                    elif semantics == "proforma":
-                        deduction_reason = "Proforma document requires manual confirmation"
-                        deduct_requires_review = True
-                    elif semantics == "delivery_note":
-                        deduction_reason = "Delivery note requires manual confirmation"
-                        deduct_requires_review = True
-                else:
-                    is_deductible = False
-                    deduction_reason = "Unable to determine deductibility"
-                    deduct_requires_review = True
-                confidence = (
-                    resolved_rules.classification_confidence
-                    if resolved_rules and resolved_rules.classification_confidence is not None
-                    else classification.confidence
-                )
-            else:
-                category = None
-                is_deductible = False
-                deduction_reason = "Unable to determine deductibility"
-                confidence = 0.5
-                method = "unknown"
-                deduct_requires_review = True
-                resolved_rules = None
-                
-            return {
-                "transaction_type": transaction_type.value,
-                "category": category,
-                "is_deductible": is_deductible,
-                "deduction_reason": deduction_reason,
-                "confidence": confidence,
-                "classification_method": method,
-                "requires_review": deduct_requires_review,
-                "classification_rule_id": (
-                    resolved_rules.classification_rule_id
-                    if resolved_rules is not None
-                    else None
-                ),
-                "deductibility_rule_id": (
-                    resolved_rules.deductibility_rule_id
-                    if resolved_rules is not None
-                    else None
-                ),
-                "applied_rule_sources": (
-                    list(resolved_rules.applied_sources)
-                    if resolved_rules is not None
-                    else []
-                ),
-                "canonical_description": canonical_description,
-            }
+        # Transaction type
+        if is_asset and not is_gwg:
+            txn_type = TransactionType.ASSET_ACQUISITION.value
+        elif ai_direction == "income":
+            txn_type = TransactionType.INCOME.value
         else:
-            return {
-                "transaction_type": TransactionType.EXPENSE.value,
-                "category": None,
-                "is_deductible": False,
-                "deduction_reason": "Unable to determine deductibility",
-                "confidence": 0.3,
+            txn_type = TransactionType.EXPENSE.value
+
+        # Category
+        ai_ded_cat = tax.get("deduction_category") or ""
+        ai_form = tax.get("tax_form") or ""
+
+        if txn_type == TransactionType.INCOME.value:
+            if ai_type == "lohnzettel":
+                category = IncomeCategory.EMPLOYMENT.value
+            elif ai_type == "mietvorschreibung" or ai_form.upper() == "E1B":
+                category = IncomeCategory.RENTAL.value
+            else:
+                category = IncomeCategory.SELF_EMPLOYMENT.value
+        elif txn_type == TransactionType.ASSET_ACQUISITION.value:
+            category = ExpenseCategory.EQUIPMENT.value
+        else:
+            cat_map = {
+                "miete": ExpenseCategory.RENT.value,
+                "versicherung": ExpenseCategory.INSURANCE.value,
+                "zinsen": ExpenseCategory.LOAN_INTEREST.value,
+                "svs": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                "grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
+                "hausverwaltung": ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value,
+                "reparatur": ExpenseCategory.MAINTENANCE.value,
+                "buero": ExpenseCategory.OFFICE_SUPPLIES.value,
+                "reise": ExpenseCategory.TRAVEL.value,
             }
+            category = ExpenseCategory.OTHER.value
+            for key, val in cat_map.items():
+                if key in ai_ded_cat.lower():
+                    category = val
+                    break
 
+            # Type-specific overrides
+            type_cat_map = {
+                "grundsteuerbescheid": ExpenseCategory.PROPERTY_TAX.value,
+                "zinsbescheinigung": ExpenseCategory.LOAN_INTEREST.value,
+                "versicherungspolizze": ExpenseCategory.INSURANCE.value,
+                "svs_vorschreibung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                "svs_nachbemessung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+            }
+            if ai_type in type_cat_map:
+                category = type_cat_map[ai_type]
 
+        is_deductible = tax.get("is_deductible", True) if txn_type != TransactionType.INCOME.value else False
+        confidence = ai_first.get("confidence", 0.75)
 
+        return {
+            "transaction_type": txn_type,
+            "category": category,
+            "is_deductible": bool(is_deductible),
+            "deduction_reason": ai_ded_cat or None,
+            "confidence": confidence,
+            "classification_method": "ai_two_step",
+            "requires_review": confidence < 0.7,
+        }
