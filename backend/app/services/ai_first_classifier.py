@@ -102,36 +102,39 @@ ANTWORT NUR als JSON (kein anderer Text):
   }
 }
 
-WICHTIG:
-- Bei Betriebskostenabrechnung: settlement_amount ist die DIFFERENZ (Nachforderung oder Guthaben), NICHT die Gesamt-BK. document_subtype MUSS 'nachzahlung' oder 'guthaben' sein — Nachforderung wenn Mieter nachzahlen muss, Guthaben wenn Mieter Geld zurückbekommt.
-- Bei Grundsteuerbescheid: annual_amount ist der JAHRESBETRAG, nicht der Quartalsbetrag.
-- Bei Versicherungspolizzen: annual_amount ist die JAHRESPRÄMIE (bei Monatsbeträgen ×12, Quartal ×4, Halbjahr ×2).
-- Bei Mietvertrag: Wenn DI Maria Steiner als Vermieter/in erscheint → user_is=landlord. Als Mieter/in → user_is=tenant.
-- Ein Mietvertrag der das Wort "Übergabe" in einer Klausel erwähnt ist KEIN Übergabeprotokoll.
-- Eine Polizze die "Kündigung" in den AGB erwähnt ist KEINE Kündigung.
-- Eine Polizze mit SEPA-Zahlungsweg ist KEIN SEPA-Beleg.
-- Eine Zinsbescheinigung ist KEIN Kreditvertrag — sie bescheinigt nur die im Jahr gezahlten Zinsen.
-- Ein Tilgungsplan ist KEIN Kreditvertrag — er zeigt nur die geplanten Raten.
-- Ein Kreditkonto-Auszug ist KEIN normaler Kontoauszug und KEIN Kreditvertrag.
-- Beträge als Dezimalzahlen mit Punkt (1662.36 statt 1.662,36). Daten als YYYY-MM-DD.
-- Bei Rechnungen: total_amount = BRUTTO, annual_amount = NETTO (ohne USt). Immer beide angeben wenn USt vorhanden.
-- Bei Mietvorschreibungen für Vermieter: monthly_amount = Gesamt inkl. BK+USt, settlement_amount = nur Hauptmietzins (ohne BK, ohne USt).
-- Bei Hausverwaltung-Rechnungen: Prüfen ob ein verwaltetes Objekt/Immobilie erwähnt wird (auch indirekt, z.B. über Immo-Treuhand, Hausverwaltung GmbH).
-- RICHTUNG (expense_or_income) — Aus Sicht des BENUTZERS bestimmen:
-  * **Ausgangsrechnung / Honorarnote / AR** (vom Benutzer AUSGESTELLT): **INCOME** (Benutzer stellt Rechnung = Einnahme)
-  * Eingangsrechnung / Rechnung (an Benutzer GERICHTET): EXPENSE (Benutzer bezahlt = Ausgabe)
-  * WICHTIG: Wenn der Benutzer-Name als Rechnungssteller/Aussteller/Lieferant erscheint → INCOME
-  * WICHTIG: Wenn der Benutzer-Name als Empfänger/Kunde erscheint → EXPENSE
-  * Mietvorschreibung, wenn Benutzer=Vermieter: INCOME (er bekommt Geld vom Mieter)
-  * BK-Nachforderung, wenn Benutzer=Vermieter: INCOME (Mieter zahlt nach)
-  * BK-Guthaben, wenn Benutzer=Mieter: INCOME (teilweise Rückerstattung = Betriebseinnahme)
-  * BK-Guthaben, wenn Benutzer=Vermieter: EXPENSE (er zahlt dem Mieter zurück)
-  * BK-Nachforderung, wenn Benutzer=Mieter: EXPENSE
-  * Lohnzettel/Gehalt: INCOME
-  * SVS-Gutschrift: INCOME
-  * Kaution: archive_only (weder Einnahme noch Ausgabe)
-- V+V-Dokumente (Vermietung) gehen auf E1b, NICHT E1a.
-- BK bei Vermietung = durchlaufende Posten (is_deductible kann true sein, Kategorie=Werbungskosten)."""
+WICHTIGE REGELN:
+
+ZAHLENFORMAT: Europäische Dezimalzahlen (Punkt = Tausender, Komma = Dezimal).
+  Beispiel: "10.800,00" = 10800.00 EUR, "1.234,56" = 1234.56 EUR.
+  Gib Beträge IMMER mit Punkt als Dezimaltrenner aus (1234.56, NICHT 1.234,56).
+  Daten als YYYY-MM-DD.
+
+RICHTUNG (expense_or_income) — Bestimme aus Sicht des BENUTZERS:
+  * Ausgangsrechnung / Honorarnote / AR (Benutzer hat AUSGESTELLT): income
+  * Eingangsrechnung (Benutzer hat ERHALTEN und muss bezahlen): expense
+  * Lohnzettel / Gehalt / L16: income
+  * Mietvorschreibung, Benutzer=Vermieter: income
+  * Mietvorschreibung / Miete, Benutzer=Mieter: expense
+  * Zinsbescheinigung: IMMER expense (bescheinigt die VOM BENUTZER GEZAHLTEN Zinsen)
+  * Versicherungspolizze / Prämie: IMMER expense (Benutzer zahlt Prämie)
+  * Grundsteuer: expense
+  * SVS-Vorschreibung / SVS-Nachbemessung: expense
+  * SVS-Gutschrift: income
+  * BK-Nachforderung, Benutzer=Vermieter: income (Mieter zahlt nach)
+  * BK-Guthaben, Benutzer=Vermieter: expense (Rückzahlung an Mieter)
+
+STEUERFORMULARE:
+  * V+V-Dokumente (Mietvertrag, Vorschreibung, Grundsteuer als Vermieter) → tax_form = E1b
+  * Selbständige Einnahmen/Ausgaben → tax_form = E1a
+  * Lohn/Gehalt → tax_form = E1 oder L1
+
+BK-ABRECHNUNG: settlement_amount = nur der DIFFERENZBETRAG (Nachforderung/Guthaben), NICHT die Gesamt-BK.
+RECHNUNGEN: total_amount = BRUTTO, annual_amount = NETTO (ohne USt).
+SVS: quarterly_amount = Quartalsbeitrag, annual_amount = Jahresbeitrag.
+VERSICHERUNG: annual_amount = JAHRESPRÄMIE.
+ZINSBESCHEINIGUNG ≠ Kreditvertrag. Zinsbescheinigung = Jahresbeleg über gezahlte Zinsen.
+TILGUNGSPLAN ≠ Kreditvertrag. Nur geplante Raten.
+KONTOAUSZUG eines Kredits ≠ normaler Kontoauszug."""
 
 ROUND1_USER_TEMPLATE = "Analysiere dieses Dokument:\n\n{text}"
 
@@ -345,7 +348,7 @@ class AIFirstClassifier:
                 from groq import Groq
                 client = Groq(api_key=groq_key, timeout=60.0)
                 resp = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="openai/gpt-oss-120b",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
