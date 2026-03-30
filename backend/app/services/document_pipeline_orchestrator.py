@@ -2445,22 +2445,22 @@ class DocumentPipelineOrchestrator:
                 ed = result.extracted_data or {}
                 svs_sub = doc_ocr.get("_svs_subtype") or ed.get("_svs_subtype") or ed.get("svs_subtype", "")
 
-                # Infer subtype from file_name/description if VLM didn't provide it
+                # Infer subtype from AI classification if VLM didn't provide it
                 if not svs_sub:
-                    from app.services.ocr_transaction_service import OCRTransactionService
-                    _svc = OCRTransactionService(self.db)
-                    _infer_data = dict(doc_ocr)
-                    if ed:
-                        _infer_data.update({k: v for k, v in ed.items() if k not in _infer_data or not _infer_data[k]})
-                    svs_sub = _svc._infer_svs_subtype_legacy(_infer_data)
+                    ai_first = doc_ocr.get("_ai_first", {})
+                    ai_type = ai_first.get("document_type", "")
+                    if ai_type == "svs_vorschreibung":
+                        svs_sub = "vorschreibung"
+                    elif ai_type == "svs_nachbemessung":
+                        svs_sub = "nachforderung"
+                    elif ai_type == "svs_jahresbestaetigung":
+                        svs_sub = "jahresbestaetigung"
                     if svs_sub:
-                        # Persist so downstream code can read it
                         doc_ocr["_svs_subtype"] = svs_sub
                         document.ocr_result = doc_ocr
                         from sqlalchemy.orm.attributes import flag_modified
                         flag_modified(document, "ocr_result")
                         self.db.flush()
-                        logger.info("SVS subtype inferred in TAX_FORM_IMPORT: %s for doc %d", svs_sub, document.id)
 
                 # Reference-only subtypes: mark as dismissed, no review needed
                 _SVS_DISMISSED_SUBTYPES = {
