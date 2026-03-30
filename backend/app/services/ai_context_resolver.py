@@ -118,6 +118,32 @@ def resolve_property_context(
         except Exception as e:
             logger.debug("Property context LLM failed: %s", e)
 
+    # Strategy 3: Single-property shortcut for property-related document types
+    ai_form = ai.get("tax_form") or ""
+    ai_doc_type = ai.get("document_type") or ""
+    _property_doc_types = {
+        "grundsteuerbescheid", "versicherungspolizze", "zinsbescheinigung",
+        "hausverwaltung_honorarnote", "hausverwaltung", "reparatur",
+        "mietvorschreibung", "betriebskostenabrechnung",
+    }
+    is_property_related = (
+        ai_form.upper() in ("E1B", "E1B_BEILAGE")
+        or ai_doc_type in _property_doc_types
+    )
+    if is_property_related and len(known_properties) == 1:
+        prop = known_properties[0]
+        logger.info(
+            "Single-property shortcut: AI says E1b, assigning to %s",
+            prop.get("address", "?"),
+        )
+        return {
+            "property_id": prop.get("id"),
+            "address": prop.get("address"),
+            "is_rental": prop.get("is_rental", False),
+            "tax_form": "E1b",
+            "match_source": "single_property_e1b",
+        }
+
     return None
 
 
@@ -225,17 +251,44 @@ def resolve_recurring_params(ocr_result: dict) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _normalize_street_name(word: str) -> str:
+    """Normalize Austrian street name abbreviations for matching."""
+    # Common Austrian abbreviations: str. → strasse, g. → gasse, pl. → platz
+    w = word.rstrip(".")
+    suffixes = {
+        "str": "strasse", "strasse": "strasse",
+        "g": "gasse", "gasse": "gasse",
+        "pl": "platz", "platz": "platz",
+        "weg": "weg", "ring": "ring",
+    }
+    for abbr, full in suffixes.items():
+        if w.endswith(abbr) and len(w) > len(abbr):
+            return w[: len(w) - len(abbr)] + full
+    return w
+
+
 def _address_match(addr1: str, addr2: str) -> bool:
     """Fuzzy address matching — checks if core street name overlaps."""
     if not addr1 or not addr2:
         return False
-    # Normalize
+    # Normalize punctuation
     for char in ".,/":
         addr1 = addr1.replace(char, " ")
         addr2 = addr2.replace(char, " ")
-    words1 = set(addr1.split())
-    words2 = set(addr2.split())
-    # Check if main street name overlaps (at least 2 significant words)
+    # Normalize street abbreviations
+    words1 = {_normalize_street_name(w) for w in addr1.split()}
+    words2 = {_normalize_street_name(w) for w in addr2.split()}
+    # Check if main street name overlaps (at least 1 significant word)
     common = words1 & words2
     significant = {w for w in common if len(w) > 3 and not w.isdigit()}
+    # Also check if any word from addr1 is a prefix of any word in addr2 (or vice versa)
+    if not significant:
+        for w1 in words1:
+            if len(w1) <= 3:
+                continue
+            for w2 in words2:
+                if len(w2) <= 3:
+                    continue
+                if w1.startswith(w2) or w2.startswith(w1):
+                    significant.add(w1)
     return len(significant) >= 1

@@ -1822,7 +1822,12 @@ class OCRTransactionService:
 
             # ── Filename-based direction override for Ausgangsrechnungen ──
             fname = (document.file_name or "").lower()
-            is_ar = any(k in fname for k in ("ausgangsrechnung", "_ar_", "honorarnote", "honorar_"))
+            # HV_Honorar = Hausverwaltung (property mgmt expense), NOT Ausgangsrechnung
+            is_hv = any(k in fname for k in ("hv_honorar", "hausverwaltung", "verwaltungshonorar"))
+            is_ar = (
+                not is_hv
+                and any(k in fname for k in ("ausgangsrechnung", "_ar_", "honorarnote", "honorar_"))
+            )
             if is_ar and ai_direction != "income":
                 logger.info(
                     "Overriding AI direction for doc %s: %s -> income (filename indicates AR/Honorarnote)",
@@ -1846,7 +1851,8 @@ class OCRTransactionService:
                     txn_type = TransactionType.INCOME.value
                 else:
                     txn_type = TransactionType.EXPENSE.value
-            elif ai_doc_type == "grundsteuerbescheid":
+            elif ai_doc_type in ("grundsteuerbescheid", "zinsbescheinigung", "versicherungspolizze"):
+                # These are ALWAYS expenses regardless of AI direction
                 txn_type = TransactionType.EXPENSE.value
             elif ai_doc_type in ("kautionsbestaetigung", "uebergabeprotokoll", "indexanpassung"):
                 # Archive-only documents — no transaction
