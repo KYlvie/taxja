@@ -767,6 +767,27 @@ class OCRTransactionService:
         else:
             txn_date = datetime.utcnow().date()
 
+        # For annual summary documents (L16, Zinsbescheinigung, Kirchenbeitrag),
+        # the document date may be in January/February of the NEXT year.
+        # Use the AI-extracted tax_year to set transaction_date within the
+        # correct year so reports query by year correctly.
+        # Look for tax_year in AI key_fields (nested in _ai_first)
+        _ef = suggestion.get("extracted_fields", {})
+        _ai = _ef.get("_ai_first", {}) if isinstance(_ef, dict) else {}
+        _kf = _ai.get("key_fields", {}) if isinstance(_ai, dict) else {}
+        ai_tax_year = (
+            _kf.get("year") or _kf.get("beitragsjahr") or _kf.get("tax_year")
+            or _ef.get("tax_year") or _ef.get("beitragsjahr")
+        )
+        if ai_tax_year:
+            try:
+                ty = int(ai_tax_year)
+                if hasattr(txn_date, 'year') and txn_date.year != ty:
+                    from datetime import date as _date
+                    txn_date = _date(ty, 12, 31)
+            except (ValueError, TypeError):
+                pass
+
         return transaction_type, category, txn_date
 
     def _coerce_category(
@@ -1839,8 +1860,20 @@ class OCRTransactionService:
             # They go on E1 (KZ 455/456), not E1a. Tag them specially.
             is_sonderausgabe = ai_doc_type in ("kirchenbeitrag", "spendenbestaetigung", "spende")
 
+            # Check if AI says this is an asset purchase
+            _creates = ai_first.get("creates", [])
+            if isinstance(_creates, str):
+                _creates = [_creates]
+            _is_asset = "asset" in _creates or ai_doc_type == "asset_purchase"
+            _kf = ai_first.get("key_fields") or {}
+            _is_gwg = _kf.get("is_gwg")
+
             # Determine transaction type from AI
-            if ai_direction == "income" or ai_doc_type in ("lohnzettel", "l16"):
+            if _is_asset and not _is_gwg:
+                # Asset purchase → ASSET_ACQUISITION (not regular expense)
+                # GWG (≤1000 netto) stays as EXPENSE (sofort absetzbar)
+                txn_type = TransactionType.ASSET_ACQUISITION.value
+            elif ai_direction == "income" or ai_doc_type in ("lohnzettel", "l16"):
                 txn_type = TransactionType.INCOME.value
             elif ai_role == "landlord" and ai_doc_type in ("mietvorschreibung",):
                 txn_type = TransactionType.INCOME.value

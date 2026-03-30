@@ -3013,29 +3013,33 @@ class DocumentPipelineOrchestrator:
         - MEDIUM confidence -> auto-create transaction (needs_review=True)
         - LOW confidence   -> store suggestion only, no transaction created
         """
-        # Skip transaction suggestions for document types that have dedicated handlers.
-        # These types create loans/properties/recurring, not regular transactions.
-        _SKIP_TRANSACTION_TYPES = {
-            DBDocumentType.RENTAL_CONTRACT,
-            DBDocumentType.PURCHASE_CONTRACT,
-        }
-        # Loan contracts: skip if actual loan contract, but allow if AI says
-        # it's a Zinsbescheinigung (interest certificate) which should create
-        # an annual interest expense transaction.
-        if db_type == DBDocumentType.LOAN_CONTRACT:
-            _ai_doc = (document.ocr_result or {}).get("_ai_first", {}).get("document_type", "")
-            if _ai_doc not in ("zinsbescheinigung",):
+        # Use AI's "creates" field to decide whether to create transactions.
+        # If AI says archive_only or only loan/property/recurring, skip transactions.
+        _ai_first = (document.ocr_result or {}).get("_ai_first", {})
+        _creates = _ai_first.get("creates", [])
+        if isinstance(_creates, str):
+            _creates = [_creates]
+
+        if _creates:
+            # AI told us what to create — respect it
+            if "transaction" not in _creates and "asset" not in _creates:
                 logger.info(
-                    "Skipping transaction suggestions for loan contract doc %s (ai_type=%s)",
-                    document.id, _ai_doc,
+                    "Skipping transaction suggestions for doc %s (creates=%s)",
+                    document.id, _creates,
                 )
                 return []
-        if db_type in _SKIP_TRANSACTION_TYPES:
-            logger.info(
-                "Skipping transaction suggestions for %s doc %s (has dedicated handler)",
-                db_type.value, document.id,
-            )
-            return []
+        else:
+            # No creates field — fall back to DB type skip list
+            _SKIP_TRANSACTION_TYPES = {
+                DBDocumentType.RENTAL_CONTRACT,
+                DBDocumentType.PURCHASE_CONTRACT,
+            }
+            if db_type == DBDocumentType.LOAN_CONTRACT:
+                _ai_doc = _ai_first.get("document_type", "")
+                if _ai_doc not in ("zinsbescheinigung",):
+                    return []
+            if db_type in _SKIP_TRANSACTION_TYPES:
+                return []
 
         # Also skip AI-detected types that shouldn't create transactions
         _ai_data = (document.ocr_result or {}).get("_ai_first") or {}

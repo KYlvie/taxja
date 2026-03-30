@@ -97,9 +97,14 @@ def generate_e1b_form_data(
         query = query.filter(Property.id == property_id)
     properties = query.all()
 
-    # Query all transactions for the tax year (includes docs dated in next year)
-    from app.services.report_transaction_query import get_transactions_for_tax_year
-    transactions = get_transactions_for_tax_year(db, user.id, tax_year)
+    transactions = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            extract("year", Transaction.transaction_date) == tax_year,
+        )
+        .all()
+    )
 
     property_forms: List[Dict[str, Any]] = []
 

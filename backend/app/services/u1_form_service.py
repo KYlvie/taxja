@@ -68,8 +68,14 @@ def generate_u1_form_data(
                 },
             }
 
-    from app.services.report_transaction_query import get_transactions_for_tax_year
-    transactions = get_transactions_for_tax_year(db, user.id, tax_year)
+    transactions = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            extract("year", Transaction.transaction_date) == tax_year,
+        )
+        .all()
+    )
 
     # Revenue classification by VAT rate
     revenue_20 = Decimal("0")
