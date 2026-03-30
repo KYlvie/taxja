@@ -2791,6 +2791,24 @@ class DocumentPipelineOrchestrator:
             if not suggestion:
                 return None
 
+            # Force-create asset when AI is confident (creates=["asset"])
+            _ai_creates = (document.ocr_result or {}).get("_ai_first", {}).get("creates", [])
+            if isinstance(_ai_creates, str):
+                _ai_creates = [_ai_creates]
+            if "asset" in _ai_creates and suggestion.get("data"):
+                try:
+                    from app.tasks.ocr_tasks import create_asset_from_suggestion
+                    create_result = create_asset_from_suggestion(
+                        self.db, document,
+                        suggestion["data"],
+                        trigger_source="ai_auto",
+                    )
+                    suggestion["status"] = "auto-created"
+                    suggestion["asset_id"] = create_result.get("asset_id")
+                    logger.info("AI auto-created asset for doc %s: %s", document.id, create_result.get("asset_id"))
+                except Exception as e:
+                    logger.warning("AI auto-create asset failed for doc %s: %s", document.id, e)
+
             return suggestion
         except Exception as e:
             logger.warning(f"Asset suggestion failed: {e}")
