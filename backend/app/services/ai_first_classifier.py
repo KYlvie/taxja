@@ -534,7 +534,7 @@ class AIFirstClassifier:
             response = self._generate(
                 STEP1_SYSTEM,
                 STEP1_USER.format(text=text) + context_str,
-                max_tokens=100,
+                max_tokens=200,
             )
             result = self._parse_json(response)
             if not result.get("document_type"):
@@ -593,9 +593,14 @@ class AIFirstClassifier:
                                     user_context=user_context)
 
         # Merge into unified format (backward compatible with old _ai_first)
+        creates = step1.get("creates", [])
+        if isinstance(creates, str):
+            creates = [creates]
+
         result = {
             "document_type": doc_type,
             "confidence": confidence,
+            "creates": creates,
             "document_subtype": step2.get("insurance_subtype") or step2.get("settlement_type")
                                or step2.get("loan_type") or step2.get("asset_type"),
             "document_purpose": step2.get("document_purpose"),
