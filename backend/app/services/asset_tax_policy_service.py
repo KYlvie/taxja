@@ -336,13 +336,18 @@ class AssetTaxPolicyService:
         rule_ids: list[str],
     ) -> tuple[Decimal | None, Decimal]:
         subtype = candidate.asset_subtype
-        if subtype in {"pkw", "electric_pkw"}:
-            rule_ids.extend(["VEH-001", "VEH-002"] if subtype == "pkw" else ["VEH-002", "VEH-003"])
-            if subtype == "pkw":
-                reason_codes.append(AssetReasonCode.PKW_DETECTED)
-            else:
-                reason_codes.append(AssetReasonCode.ELECTRIC_VEHICLE_DETECTED)
+        if subtype == "pkw":
+            # Ordinary PKW: Angemessenheitsgrenze €40,000 applies
+            rule_ids.extend(["VEH-001", "VEH-002"])
+            reason_codes.append(AssetReasonCode.PKW_DETECTED)
             return self.INCOME_TAX_COST_CAP_PKW, min(comparison_amount, self.INCOME_TAX_COST_CAP_PKW)
+        if subtype == "electric_pkw":
+            # E-Auto: Angemessenheitsgrenze does NOT apply to AfA base.
+            # The €40k cap only affects VSt calculation (partial recovery).
+            # AfA-Basis = purchase_price - recoverable_VSt (no cap).
+            rule_ids.extend(["VEH-002", "VEH-003"])
+            reason_codes.append(AssetReasonCode.ELECTRIC_VEHICLE_DETECTED)
+            return None, comparison_amount  # No cap for E-Auto AfA
         if subtype == "fiscal_truck":
             rule_ids.append("VEH-004")
         return None, comparison_amount
