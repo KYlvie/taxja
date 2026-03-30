@@ -124,8 +124,20 @@ class AnnualDepreciationService:
                     )
                     continue
                 
-                # Calculate depreciation
-                amount = self.afa_calculator.calculate_annual_depreciation(property, year)
+                # Calculate depreciation — use AfACalculator for real estate,
+                # AssetLifecycleService for movable assets (vehicles, equipment)
+                asset_type = getattr(property, "asset_type", "real_estate")
+                if hasattr(asset_type, "value"):
+                    asset_type = asset_type.value
+                if asset_type and asset_type != "real_estate":
+                    try:
+                        from app.services.asset_lifecycle_service import AssetLifecycleService
+                        amount = AssetLifecycleService(self.db).calculate_annual_depreciation(property, year)
+                    except Exception as e:
+                        logger.warning("Movable asset depreciation failed for %s: %s", property.id, e)
+                        amount = Decimal("0")
+                else:
+                    amount = self.afa_calculator.calculate_annual_depreciation(property, year)
                 
                 if amount == Decimal("0"):
                     skipped_properties.append({
