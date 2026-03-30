@@ -3174,8 +3174,13 @@ class DocumentPipelineOrchestrator:
                                 override_source = "recipient_name_match"
                                 break
 
-            # Apply override to all suggestions (skip SVS — has its own logic)
-            if confirmed_direction and not _skip_direction_override:
+            # Skip direction override when AI two-step classifier already determined direction
+            _ai_has_direction = bool(
+                _ai_first.get("tax_treatment", {}).get("expense_or_income")
+            ) if _ai_first else False
+
+            # Apply override to all suggestions (skip SVS and AI-classified docs)
+            if confirmed_direction and not _skip_direction_override and not _ai_has_direction:
                 for s in suggestions:
                     old_type = s.get("transaction_type")
                     if old_type != confirmed_direction:
