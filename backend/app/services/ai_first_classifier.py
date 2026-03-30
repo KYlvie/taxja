@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 STEP1_SYSTEM = """\
 Du bist ein Experte für österreichische Steuer- und Finanzdokumente.
-Bestimme den Dokumenttyp. Antworte NUR als JSON.
+Bestimme den Dokumenttyp und was im Steuersystem angelegt werden soll.
+Antworte NUR als JSON.
 
 Typen:
 - mietvertrag: Mietvertrag
@@ -52,13 +53,25 @@ Typen:
 - pensionsbescheid: Pensionsbescheid / Pensionsmitteilung
 - crypto_report: Kryptowährungs-Report / Broker-Jahresbericht
 - kest_bescheinigung: KESt-Bescheinigung / Kapitalertragsteuer
-- asset_purchase: Anlagegut-Kauf (Fahrzeug, Maschine, IT-Hardware)
+- asset_purchase: Anlagegut-Kauf (Fahrzeug, Maschine, IT-Hardware >1000 EUR netto)
 - other: Keiner der obigen Typen
 
 {
   "document_type": "typ",
-  "confidence": 0.0-1.0
-}"""
+  "confidence": 0.0-1.0,
+  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"]
+}
+
+"creates" bestimmt, was im österreichischen Steuersystem angelegt werden soll:
+- "transaction": Einmalige Einnahme oder Ausgabe buchen
+- "asset": Anlagegut im Anlageverzeichnis anlegen (AfA-pflichtig)
+- "recurring": Wiederkehrende Buchung anlegen (z.B. monatliche Miete, Versicherungsprämie)
+- "loan": Kredit/Darlehen anlegen
+- "property": Immobilie anlegen
+- "archive_only": Nur ablegen, keine Buchung (z.B. Kontoauszug, Tilgungsplan, alte Verträge)
+
+Mehrfach möglich, z.B. Kreditvertrag = ["loan"] + Zinsbescheinigung = ["transaction"].
+Mietvertrag Vermieter = ["property", "recurring"]. Fahrzeugkauf = ["asset", "transaction"]."""
 
 STEP1_USER = "Dokumenttyp bestimmen:\n\n{text}"
 
