@@ -568,9 +568,23 @@ class AIFirstClassifier:
         context_str = self._build_context_str(user_context)
 
         try:
-            response = self._generate(
+            step2_system = (
                 "Du bist ein Experte für österreichische Steuer- und Finanzdokumente. "
-                "Extrahiere die Felder exakt aus dem Dokument.",
+                "Extrahiere die Felder exakt aus dem Dokument.\n\n"
+                "ZAHLENFORMAT: Europäisch! '10.800,00' = 10800.00, '1.234,56' = 1234.56. "
+                "Gib Beträge mit Punkt als Dezimaltrenner aus.\n\n"
+                "STEUERLICHE EINORDNUNG anhand des BENUTZER-KONTEXT:\n"
+                "- Selbständig (§22/§23): Ausgaben sind 'Betriebsausgabe', tax_form='E1a'\n"
+                "- Arbeitnehmer (§25): Ausgaben sind 'Werbungskosten', tax_form='E1'\n"
+                "- Vermieter (§28): Immobilien-bezogene Ausgaben sind 'Werbungskosten', tax_form='E1b'\n"
+                "- expense_or_income: Bestimme aus Sicht des BENUTZERS "
+                "(Ausgangsrechnung = income, Eingangsrechnung = expense, "
+                "Zinsbescheinigung = expense, Versicherung = expense)\n"
+                "- Wenn der Benutzer-Name als Aussteller/Lieferant im Dokument steht → income\n"
+                "- Wenn der Benutzer-Name als Empfänger/Kunde steht → expense"
+            )
+            response = self._generate(
+                step2_system,
                 prompt + "\n\nDokument:\n" + text + context_str,
                 max_tokens=800,
             )
