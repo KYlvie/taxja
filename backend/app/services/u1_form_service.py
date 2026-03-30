@@ -119,10 +119,9 @@ def generate_u1_form_data(
                 revenue_exempt += amount
 
         elif t.type in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
-            # Exclude property-linked expenses from U1 Vorsteuer
-            # (property expenses have their own VAT treatment)
-            if getattr(t, "property_id", None):
-                continue
+            # For Regelbesteuert users, ALL business-related input VAT is
+            # recoverable in U1 — including property expenses (if the user
+            # opted into USt for V+V). Include all deductible expenses.
             vorsteuer += recoverable_input_vat_for_transaction(t)
 
     total_vat = vat_20 + vat_10 + vat_13
