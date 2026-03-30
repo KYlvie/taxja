@@ -89,9 +89,24 @@ def _sum_expense(transactions: list, cats: list, deductible_only: bool = True,
     for t in transactions:
         if t.type != TransactionType.EXPENSE:
             continue
-        # Exclude property-linked expenses (belongs to E1b)
-        if getattr(t, "property_id", None):
-            continue
+        # Exclude real-estate property expenses (belongs to E1b).
+        # But INCLUDE movable asset depreciation (vehicles, equipment) — that's E1a.
+        _prop_id = getattr(t, "property_id", None)
+        if _prop_id:
+            # Check if this is a real estate property (→ E1b) or movable asset (→ E1a)
+            _prop = getattr(t, "_cached_property", None)
+            if _prop is None:
+                try:
+                    from app.models.property import Property as _PropModel
+                    _prop = db.query(_PropModel).filter(_PropModel.id == _prop_id).first()
+                except Exception:
+                    _prop = None
+            if _prop:
+                _at = getattr(_prop, "asset_type", "real_estate")
+                if hasattr(_at, "value"):
+                    _at = _at.value
+                if _at == "real_estate":
+                    continue  # Skip E1b expenses
         has_line_items = bool(getattr(t, "has_line_items", False))
         line_items = getattr(t, "line_items", None)
         use_line_items = False
