@@ -122,6 +122,27 @@ class AssetTaxPolicyService:
             reason_codes=reason_codes,
             rule_ids=rule_ids,
         )
+        # Recalculate depreciable base based on VSt recoverability.
+        # When VSt is not recoverable (e.g. PKW), the non-recoverable VAT
+        # is part of the asset cost, so AfA base should use brutto.
+        if vat_recoverable_status == VatRecoverableStatus.LIKELY_NO:
+            # No VSt recovery → brutto is the cost → recalculate with brutto
+            brutto = data.extracted_amount
+            income_tax_cost_cap_new, income_tax_depreciable_base = self._resolve_income_tax_cap(
+                candidate=candidate,
+                comparison_amount=brutto,
+                reason_codes=[],  # Don't double-add
+                rule_ids=[],
+            )
+            if income_tax_cost_cap_new is not None:
+                income_tax_cost_cap = income_tax_cost_cap_new
+        elif vat_recoverable_status == VatRecoverableStatus.PARTIAL and vat_recoverable_ratio:
+            # Partial VSt recovery (E-Auto) → base = brutto - recovered VSt
+            brutto = data.extracted_amount
+            vst_recovered = brutto * Decimal("0.20") * vat_recoverable_ratio
+            base_after_vst = brutto - vst_recovered
+            income_tax_depreciable_base = base_after_vst.quantize(Decimal("0.01"))
+
         (
             ifb_candidate,
             ifb_rate,
