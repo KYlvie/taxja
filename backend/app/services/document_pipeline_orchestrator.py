@@ -2991,11 +2991,20 @@ class DocumentPipelineOrchestrator:
         # Skip transaction suggestions for document types that have dedicated handlers.
         # These types create loans/properties/recurring, not regular transactions.
         _SKIP_TRANSACTION_TYPES = {
-            DBDocumentType.LOAN_CONTRACT,
             DBDocumentType.RENTAL_CONTRACT,
             DBDocumentType.PURCHASE_CONTRACT,
-            DBDocumentType.VERSICHERUNGSBESTAETIGUNG,
         }
+        # Loan contracts: skip if actual loan contract, but allow if AI says
+        # it's a Zinsbescheinigung (interest certificate) which should create
+        # an annual interest expense transaction.
+        if db_type == DBDocumentType.LOAN_CONTRACT:
+            _ai_doc = (document.ocr_result or {}).get("_ai_first", {}).get("document_type", "")
+            if _ai_doc not in ("zinsbescheinigung",):
+                logger.info(
+                    "Skipping transaction suggestions for loan contract doc %s (ai_type=%s)",
+                    document.id, _ai_doc,
+                )
+                return []
         if db_type in _SKIP_TRANSACTION_TYPES:
             logger.info(
                 "Skipping transaction suggestions for %s doc %s (has dedicated handler)",

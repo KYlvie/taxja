@@ -1064,20 +1064,26 @@ class OCRTransactionService:
                     or ai_amounts.get("annual_amount")
                     or ai_amounts.get("monthly_amount")
                 )
-            # Prefer VLM amount for invoices — VLM parses European numbers
-            # correctly (10.800,00 → 10800.0), while LLM may misparse (→ 10.8)
+            # Compare VLM amount vs AI amount — use the more plausible one.
+            # European number formats can cause either parser to misread
+            # (e.g. 6.234,56 → VLM reads 6.23, AI reads 6234.56).
+            # When they differ significantly, prefer the LARGER amount
+            # (truncation is far more common than inflation in OCR parsing).
             vlm_amount = ocr_data.get("amount")
             if vlm_amount and float(vlm_amount) > 0:
                 if ai_amount and float(ai_amount) > 0:
-                    # If VLM and AI differ significantly, prefer VLM
                     ratio = float(vlm_amount) / float(ai_amount) if float(ai_amount) > 0 else 999
                     if ratio > 10 or ratio < 0.1:
+                        # Significant discrepancy: prefer the larger amount
+                        chosen = max(float(vlm_amount), float(ai_amount))
                         logger.info(
-                            "Amount discrepancy doc %s: VLM=%.2f vs AI=%.2f (ratio %.1f), using VLM",
-                            document.id, float(vlm_amount), float(ai_amount), ratio
+                            "Amount discrepancy doc %s: VLM=%.2f vs AI=%.2f (ratio %.1f), using larger=%.2f",
+                            document.id, float(vlm_amount), float(ai_amount), ratio, chosen
                         )
-                        ai_amount = float(vlm_amount)
-                else:
+                        ai_amount = chosen
+                    # else: amounts are similar, keep ai_amount (already calculated
+                    # with periodic/SVS/doc-type-specific logic above)
+                elif not ai_amount:
                     ai_amount = float(vlm_amount)
             # Fallback for docs where AI classified but no amount found:
             # Re-invoke AI with specific amount extraction prompt
@@ -1158,10 +1164,23 @@ class OCRTransactionService:
                         "BK extraction doc %s: NF=%s, GS=%s, settlement=%s -> amount=%.2f",
                         document.id, nachforderung, gutschrift, settlement, ai_amount
                     )
+                elif ai_doc_type == "zinsbescheinigung":
+                    # Interest certificate → annual loan interest expense
+                    lender = ai_key_fields.get("lender_name") or ai_key_fields.get("supplier") or ""
+                    addr = ai_key_fields.get("property_address") or ""
+                    if lender:
+                        desc_parts.append(lender)
+                    desc_parts.append(f"Zinsen {addr}".strip() if addr else "Kreditzinsen")
                 elif ai_doc_type in ("indexanpassung", "kautionsbestaetigung", "uebergabeprotokoll"):
                     # Archive-only documents — no transaction created
                     logger.info("AI-first: skipping archive-only doc type %s (doc %s)", ai_doc_type, document.id)
                     return None
+                elif ai_doc_type == "versicherungspolizze":
+                    # Insurance policy → annual premium expense
+                    insurer = ai_key_fields.get("insurer_name") or ai_key_fields.get("insurer") or ""
+                    if insurer:
+                        desc_parts.append(insurer)
+                    desc_parts.append("Versicherungsprämie")
                 else:
                     # Generic: use VLM description, merchant, or AI doc type
                     supplier = (
@@ -1905,6 +1924,10 @@ class OCRTransactionService:
                 # AI doc_type-specific category overrides
                 if ai_doc_type == "grundsteuerbescheid":
                     category = ExpenseCategory.PROPERTY_TAX.value
+                elif ai_doc_type == "zinsbescheinigung":
+                    category = ExpenseCategory.LOAN_INTEREST.value
+                elif ai_doc_type == "versicherungspolizze":
+                    category = ExpenseCategory.INSURANCE.value
                 elif ai_doc_type in ("hausverwaltung_honorarnote",):
                     category = ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value
                 elif ai_doc_type == "betriebskostenabrechnung":
