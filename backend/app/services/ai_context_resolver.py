@@ -121,14 +121,19 @@ def resolve_property_context(
     # Strategy 3: Single-property shortcut for property-related document types
     ai_form = ai.get("tax_form") or ""
     ai_doc_type = ai.get("document_type") or ""
-    _property_doc_types = {
-        "grundsteuerbescheid", "versicherungspolizze", "zinsbescheinigung",
-        "hausverwaltung_honorarnote", "hausverwaltung", "reparatur",
+    # Doc types that are ALWAYS property-related (regardless of tax_form)
+    _always_property_types = {
+        "grundsteuerbescheid", "hausverwaltung_honorarnote", "hausverwaltung",
         "mietvorschreibung", "betriebskostenabrechnung",
+    }
+    # Doc types that are property-related ONLY if tax_form=E1b
+    _e1b_only_types = {
+        "versicherungspolizze", "zinsbescheinigung", "reparatur",
     }
     is_property_related = (
         ai_form.upper() in ("E1B", "E1B_BEILAGE")
-        or ai_doc_type in _property_doc_types
+        or ai_doc_type in _always_property_types
+        or (ai_doc_type in _e1b_only_types and ai_form.upper() in ("E1B", "E1B_BEILAGE"))
     )
     if is_property_related and len(known_properties) == 1:
         prop = known_properties[0]
