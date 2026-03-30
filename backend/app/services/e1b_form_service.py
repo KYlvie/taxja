@@ -139,9 +139,47 @@ def generate_e1b_form_data(
             ExpenseCategory.BANK_FEES, ExpenseCategory.TELECOM,
         ])
 
+        # BK-Weitergabe: operating costs the landlord passes through to building mgmt.
+        # In V+V accounting, BK collected from tenant is INCOME, and
+        # BK paid to building management is a deductible WK (pass-through).
+        # Derive BK from Mietvertrag document or recurring template.
+        bk_weitergabe = Decimal("0")
+        try:
+            mv_doc_id = getattr(prop, "mietvertrag_document_id", None)
+            if mv_doc_id:
+                from app.models.document import Document
+                mv_doc = db.query(Document).filter(Document.id == mv_doc_id).first()
+                if mv_doc and mv_doc.ocr_result:
+                    bk_monthly = mv_doc.ocr_result.get("betriebskosten") or 0
+                    if bk_monthly:
+                        bk_weitergabe = Decimal(str(bk_monthly)) * 12
+            if bk_weitergabe == 0:
+                # Fallback: check recurring transactions for this property
+                from app.models.recurring_transaction import RecurringTransaction
+                rec = db.query(RecurringTransaction).filter(
+                    RecurringTransaction.property_id == pid,
+                    RecurringTransaction.recurring_type.has_property("rental_income"),
+                ).first()
+                if not rec:
+                    rec = db.query(RecurringTransaction).filter(
+                        RecurringTransaction.property_id == pid,
+                    ).first()
+                if rec:
+                    # Check source document for BK
+                    src_doc_id = getattr(rec, "source_document_id", None)
+                    if src_doc_id:
+                        src_doc = db.query(Document).filter(Document.id == src_doc_id).first()
+                        if src_doc and src_doc.ocr_result:
+                            bk_monthly = src_doc.ocr_result.get("betriebskosten") or 0
+                            if bk_monthly:
+                                bk_weitergabe = Decimal(str(bk_monthly)) * 12
+        except Exception:
+            pass
+
         total_expenses = (
             instandsetzung + instandhaltung + afa_building + afa_equipment
             + loan_interest + mgmt_fees + insurance + grundsteuer + other_vv
+            + bk_weitergabe
         )
         surplus = rental_income - total_expenses
 
@@ -248,6 +286,16 @@ def generate_e1b_form_data(
                 "value": float(other_vv),
                 "section": "werbungskosten",
                 "editable": True,
+            },
+            {
+                "kz": "9465",
+                "label_de": "BK-Weitergabe (Betriebskosten-Akonto)",
+                "label_en": "Operating cost pass-through",
+                "label_zh": "运营费用转嫁",
+                "value": float(bk_weitergabe),
+                "section": "werbungskosten",
+                "editable": True,
+                "note_de": "Weiterverrechnete Betriebskosten an die Hausverwaltung",
             },
             {
                 "kz": "9470",
