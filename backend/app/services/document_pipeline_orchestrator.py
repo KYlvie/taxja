@@ -2603,6 +2603,34 @@ class DocumentPipelineOrchestrator:
             asset_suggestion = self._build_asset_suggestion(document, result)
             if asset_suggestion:
                 result.suggestions.append(asset_suggestion)
+
+                # Auto-confirm asset creation when AI classified as asset
+                _ai_creates = (document.ocr_result or {}).get("_ai_first", {}).get("creates", [])
+                if isinstance(_ai_creates, str):
+                    _ai_creates = [_ai_creates]
+                _ai_says_asset = "asset" in _ai_creates
+
+                _payload = (
+                    asset_suggestion.get("auto_create_payload")
+                    or (asset_suggestion.get("import_suggestion") or {}).get("data")
+                )
+                if _ai_says_asset and _payload:
+                    try:
+                        from app.tasks.ocr_tasks import create_asset_from_suggestion
+                        create_result = create_asset_from_suggestion(
+                            self.db, document,
+                            _payload,
+                            trigger_source="ai_auto",
+                        )
+                        asset_suggestion["status"] = "auto-created"
+                        asset_suggestion["asset_id"] = create_result.get("asset_id")
+                        logger.info(
+                            "Auto-created asset for doc %s: %s",
+                            document.id, create_result.get("asset_id"),
+                        )
+                    except Exception as e:
+                        logger.warning("Auto-create asset failed for doc %s: %s", document.id, e)
+
                 message = (
                     "Built asset suggestion from Kaufvertrag"
                     if db_type == DBDocumentType.PURCHASE_CONTRACT

@@ -166,6 +166,17 @@ def generate_e1a_form_data(
     # Load year-specific config
     se_config = _load_self_employed_config(db, tax_year)
 
+    # Ensure depreciation transactions exist for this year
+    # (AnnualDepreciationService normally runs at year-end, but reports may
+    # be generated before that. Generate on-demand if missing.)
+    try:
+        from app.services.annual_depreciation_service import AnnualDepreciationService
+        AnnualDepreciationService(db).generate_annual_depreciation(
+            year=tax_year, user_id=user.id
+        )
+    except Exception as _afa_err:
+        logger.debug("On-demand depreciation generation: %s", _afa_err)
+
     pauschalierung_rate = Decimal(str(se_config.get("flat_rate_general", 0.12)))
     pauschalierung_reduced = Decimal(str(se_config.get("flat_rate_consulting", 0.06)))
     pauschalierung_max = Decimal(str(se_config.get("flat_rate_turnover_limit", 220000)))
