@@ -52,6 +52,7 @@ class AssetTaxPolicyService:
         comparison_amount = self._resolve_comparison_amount(
             data=data,
             basis=comparison_basis,
+            candidate=candidate,
         )
 
         depreciable = bool(candidate.asset_subtype)
@@ -122,26 +123,13 @@ class AssetTaxPolicyService:
             reason_codes=reason_codes,
             rule_ids=rule_ids,
         )
-        # Recalculate depreciable base based on VSt recoverability.
-        # When VSt is not recoverable (e.g. PKW), the non-recoverable VAT
-        # is part of the asset cost, so AfA base should use brutto.
-        if vat_recoverable_status == VatRecoverableStatus.LIKELY_NO:
-            # No VSt recovery → brutto is the cost → recalculate with brutto
-            brutto = data.extracted_amount
-            income_tax_cost_cap_new, income_tax_depreciable_base = self._resolve_income_tax_cap(
-                candidate=candidate,
-                comparison_amount=brutto,
-                reason_codes=[],  # Don't double-add
-                rule_ids=[],
-            )
-            if income_tax_cost_cap_new is not None:
-                income_tax_cost_cap = income_tax_cost_cap_new
-        elif vat_recoverable_status == VatRecoverableStatus.PARTIAL and vat_recoverable_ratio:
-            # Partial VSt recovery (E-Auto) → base = brutto - recovered VSt
+        # For E-Auto (partial VSt): adjust depreciable_base after VSt resolution.
+        # comparison_amount is brutto (set by _resolve_comparison_amount), but
+        # the actual AfA base = brutto - recovered VSt portion.
+        if vat_recoverable_status == VatRecoverableStatus.PARTIAL and vat_recoverable_ratio:
             brutto = data.extracted_amount
             vst_recovered = brutto * Decimal("0.20") * vat_recoverable_ratio
-            base_after_vst = brutto - vst_recovered
-            income_tax_depreciable_base = base_after_vst.quantize(Decimal("0.01"))
+            income_tax_depreciable_base = (brutto - vst_recovered).quantize(Decimal("0.01"))
 
         (
             ifb_candidate,
@@ -225,12 +213,37 @@ class AssetTaxPolicyService:
         *,
         data: AssetRecognitionInput,
         basis: ComparisonBasis,
+        candidate: "AssetCandidate | None" = None,
     ) -> Decimal:
+        """Determine the amount used for tax comparisons (GWG, cap, AfA base).
+
+        For Regelbesteuert (basis=NET), the comparison uses netto ONLY when
+        the VAT is actually recoverable. For assets where VAT is NOT
+        recoverable (e.g. PKW), the gross amount is the true cost.
+
+        Austrian tax rules:
+        - PKW (ordinary car): VSt = 0 → brutto IS the cost → use brutto
+        - LKW (truck): VSt = full → netto is the cost → use netto
+        - E-Auto: VSt = partial → brutto - partial VSt → handle in depreciable_base
+        - Equipment/Machinery: VSt = full → netto → use netto
+        """
+        subtype = candidate.asset_subtype if candidate else None
+
+        # PKW: VAT is NOT recoverable → brutto is the true cost
+        if subtype == "pkw" and basis == ComparisonBasis.NET:
+            return data.extracted_amount  # Use brutto
+
+        # E-Auto: partial VSt → use brutto here, adjust in depreciable_base later
+        if subtype == "electric_pkw" and basis == ComparisonBasis.NET:
+            return data.extracted_amount  # Use brutto
+
+        # All other assets with basis=NET: use netto (VAT is recoverable)
         if basis == ComparisonBasis.NET:
             if data.extracted_net_amount is not None:
                 return data.extracted_net_amount
             if data.extracted_vat_amount is not None:
                 return data.extracted_amount - data.extracted_vat_amount
+
         return data.extracted_amount
 
     def _resolve_gwg_threshold(
