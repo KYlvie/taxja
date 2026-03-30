@@ -63,7 +63,7 @@ ANTWORT NUR als JSON (kein anderer Text):
   "role_detection": {
     "landlord_name": "Name des Vermieters oder null",
     "tenant_name": "Name des Mieters oder null",
-    "user_is": "landlord oder tenant oder null (wenn DI Maria Steiner im Dokument vorkommt)"
+    "user_is": "landlord oder tenant oder null (prüfe anhand BENUTZER-KONTEXT ob der Benutzer im Dokument als Vermieter oder Mieter erscheint)"
   },
   "amounts": {
     "total_amount": Hauptbetrag als Zahl oder null,

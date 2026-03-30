@@ -813,6 +813,31 @@ class DocumentPipelineOrchestrator:
                     user_context["role_hints"] = []
                     if getattr(user, "user_type", None):
                         user_context["role_hints"].append(user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type))
+                    user_roles = getattr(user, "user_roles", None)
+                    if user_roles:
+                        for role in user_roles:
+                            r = role.value if hasattr(role, "value") else str(role)
+                            if r not in user_context["role_hints"]:
+                                user_context["role_hints"].append(r)
+                    vat = getattr(user, "vat_status", None)
+                    if vat:
+                        user_context["role_hints"].append(
+                            f"USt: {vat.value if hasattr(vat, 'value') else str(vat)}"
+                        )
+                    # Add known properties so AI can route documents correctly
+                    try:
+                        from app.models.property import Property as _Prop, PropertyStatus as _PS
+                        _props = self.db.query(_Prop).filter(
+                            _Prop.user_id == document.user_id,
+                            _Prop.status == _PS.ACTIVE,
+                        ).all()
+                        if _props:
+                            user_context["known_properties"] = [
+                                {"address": p.address or "", "is_rental": True}
+                                for p in _props
+                            ]
+                    except Exception:
+                        pass
 
                 ai_classifier = AIFirstClassifier()
                 # Retry up to 3 times on timeout/failure
