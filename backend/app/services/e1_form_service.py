@@ -388,10 +388,24 @@ def _generate_e1_form(
     vat_paid = _sum_vat(transactions, TransactionType.EXPENSE)
 
     # ── Calculated fields ──
-    # Combine self_employment + business into Gewerbebetrieb
+    # Delegate to E1a/E1b for accurate §22/§28 figures
+    # (they handle Nettosystem, property filtering, etc. correctly)
     combined_self_emp = self_employment_income + business_income
-    gewerbebetrieb_gewinn = combined_self_emp - business_expenses - travel_expenses - svs_contributions
-    vermietung_einkuenfte = rental_income - rental_expenses
+    try:
+        from app.services.e1a_form_service import generate_e1a_form_data
+        e1a_data = generate_e1a_form_data(db, user, tax_year)
+        e1a_summary = e1a_data.get("summary", {})
+        gewerbebetrieb_gewinn = Decimal(str(e1a_summary.get("profit", 0)))
+    except Exception:
+        gewerbebetrieb_gewinn = combined_self_emp - business_expenses - travel_expenses - svs_contributions
+
+    try:
+        from app.services.e1b_form_service import generate_e1b_form_data
+        e1b_data = generate_e1b_form_data(db, user, tax_year)
+        e1b_agg = e1b_data.get("aggregate_summary", {})
+        vermietung_einkuenfte = Decimal(str(e1b_agg.get("total_surplus", 0)))
+    except Exception:
+        vermietung_einkuenfte = rental_income - rental_expenses
 
     # ── Family info ──
     family_info = user.family_info or {}
@@ -750,11 +764,15 @@ def _generate_e1_form(
         },
     ]
 
+    # Gesamtbetrag der Einkünfte: sum of all income types (§2 EStG)
+    # Use E1a profit (not raw income) for §22/§23 and E1b result for §28
     total_income = (
-        agriculture_income + employment_income + combined_self_emp
-        + rental_income + capital_gains + other_income
+        agriculture_income + employment_income
+        + gewerbebetrieb_gewinn  # E1a profit (netto, after BA)
+        + vermietung_einkuenfte  # E1b surplus (netto, after WK)
+        + capital_gains + other_income
     )
-    gesamtbetrag = total_income - total_deductible
+    gesamtbetrag = total_income
 
     return {
         "form_type": "E1",
