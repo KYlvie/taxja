@@ -30,15 +30,8 @@ def generate_tax_form_data(
     Employee -> L1 Arbeitnehmerveranlagung
     Self-employed/Landlord/Mixed -> E1 Einkommensteuererklaerung
     """
-    transactions = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == user.id,
-            extract("year", Transaction.transaction_date) == tax_year,
-        )
-        .order_by(Transaction.transaction_date)
-        .all()
-    )
+    from app.services.report_transaction_query import get_transactions_for_tax_year
+    transactions = get_transactions_for_tax_year(db, user.id, tax_year)
 
     user_type = user.user_type.value if user.user_type else "mixed"
 

@@ -170,15 +170,8 @@ def generate_e1a_form_data(
     pauschalierung_reduced = Decimal(str(se_config.get("flat_rate_consulting", 0.06)))
     pauschalierung_max = Decimal(str(se_config.get("flat_rate_turnover_limit", 220000)))
 
-    transactions = (
-        db.query(Transaction)
-        .filter(
-            Transaction.user_id == user.id,
-            extract("year", Transaction.transaction_date) == tax_year,
-        )
-        .order_by(Transaction.transaction_date)
-        .all()
-    )
+    from app.services.report_transaction_query import get_transactions_for_tax_year
+    transactions = get_transactions_for_tax_year(db, user.id, tax_year)
 
     # Determine if user is Regelbesteuert (USt-Nettosystem)
     # KU (Kleinunternehmer) uses Bruttosystem — no USt on invoices
