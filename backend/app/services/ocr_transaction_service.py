@@ -1045,13 +1045,25 @@ class OCRTransactionService:
         ai_first = ocr_data.get("_ai_first")
         if ai_first and ai_first.get("document_type", "unknown") != "unknown":
             ai_amounts = ai_first.get("amounts") or {}
-            ai_amount = (
-                ai_amounts.get("total_amount")
-                or ai_amounts.get("netto_amount")
-                or ai_amounts.get("annual_amount")
-                or ai_amounts.get("settlement_amount")
-                or ai_amounts.get("monthly_amount")
-            )
+            ai_key_fields = ai_first.get("key_fields") or {}
+
+            # For periodic documents (SVS quarterly, monthly rent, etc.),
+            # prefer the per-period amount over the annual total.
+            ai_doc_type = (ai_first.get("document_type") or "").lower()
+            is_periodic_svs = "svs" in ai_doc_type and ai_key_fields.get("quarterly_amount")
+            is_periodic_monthly = ai_key_fields.get("monthly_amount") and ai_amounts.get("monthly_amount")
+
+            if is_periodic_svs:
+                ai_amount = float(ai_key_fields["quarterly_amount"])
+            elif ai_amounts.get("total_amount"):
+                ai_amount = ai_amounts["total_amount"]
+            else:
+                ai_amount = (
+                    ai_amounts.get("netto_amount")
+                    or ai_amounts.get("settlement_amount")
+                    or ai_amounts.get("annual_amount")
+                    or ai_amounts.get("monthly_amount")
+                )
             # Prefer VLM amount for invoices — VLM parses European numbers
             # correctly (10.800,00 → 10800.0), while LLM may misparse (→ 10.8)
             vlm_amount = ocr_data.get("amount")

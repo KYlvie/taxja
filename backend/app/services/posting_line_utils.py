@@ -222,7 +222,13 @@ def build_mirror_line_item_payload(
         "deduction_reason": deduction_reason if posting_type == LineItemPostingType.EXPENSE else None,
         "vat_rate": _normalize_line_vat_rate(vat_rate),
         "vat_amount": quantize_money(vat_amount) if vat_amount is not None else None,
-        "vat_recoverable_amount": Decimal("0.00"),
+        "vat_recoverable_amount": (
+            quantize_money(vat_amount)
+            if vat_amount is not None
+            and bool(is_deductible)
+            and posting_type == LineItemPostingType.EXPENSE
+            else Decimal("0.00")
+        ),
         "rule_bucket": rule_bucket,
         "sort_order": 0,
     }
@@ -315,7 +321,17 @@ def normalize_line_item_payloads(
                     if raw.get("vat_amount") is not None
                     else None
                 ),
-                "vat_recoverable_amount": quantize_money(raw.get("vat_recoverable_amount")),
+                "vat_recoverable_amount": (
+                    quantize_money(raw.get("vat_recoverable_amount"))
+                    if raw.get("vat_recoverable_amount")
+                    else (
+                        quantize_money(raw.get("vat_amount"))
+                        if raw.get("vat_amount") is not None
+                        and deductible
+                        and posting_type == LineItemPostingType.EXPENSE
+                        else Decimal("0.00")
+                    )
+                ),
                 "rule_bucket": raw.get("rule_bucket"),
                 "currency": (
                     normalize_currency(raw.get("currency"))
@@ -345,8 +361,10 @@ def validate_reconciliation(
     parent_amount = quantize_money(transaction_amount)
     reconstructed = Decimal("0.00")
     for line in line_items:
+        # amount already represents the total line amount; do NOT multiply by quantity
+        # (quantity stores unit measurements like kWh/m³ from OCR, not item counts)
         reconstructed += (
-            quantize_money(line.get("amount")) * _normalize_line_quantity(line.get("quantity", 1))
+            quantize_money(line.get("amount"))
         ) + quantize_money(line.get("vat_recoverable_amount"))
     if abs(parent_amount - reconstructed) > RECONCILIATION_TOLERANCE:
         raise ValueError(
@@ -438,10 +456,10 @@ def transaction_has_deductible_expense(transaction: Any) -> bool:
 def recoverable_input_vat_for_transaction(transaction: Any) -> Decimal:
     """Resolve deductible input VAT for VAT reports and summaries.
 
-    Canonical line items can carry partial or zero recoverable VAT even when the
-    parent cash event still stores the gross invoice VAT. For legacy expense
-    rows without explicit recoverable VAT, we keep the historical parent-level
-    fallback so existing U1/UVA numbers do not suddenly drop to zero.
+    Priority order:
+    1. Pre-computed vat_recoverable_amount_total on the transaction
+    2. Sum of vat_recoverable_amount from canonical line items
+    3. Fallback to transaction-level vat_amount for simple expenses
     """
 
     def _safe_money(value: Any) -> Decimal:
@@ -451,17 +469,30 @@ def recoverable_input_vat_for_transaction(transaction: Any) -> Decimal:
             return Decimal("0.00")
 
     transaction_type = getattr(transaction, "type", None)
+
+    # 1. Check pre-computed total on transaction
     canonical_total = _safe_money(
         getattr(transaction, "vat_recoverable_amount_total", None),
     )
-
-    if transaction_type == TransactionType.ASSET_ACQUISITION:
-        return canonical_total
-
     if canonical_total > Decimal("0.00"):
         return canonical_total
 
-    if transaction_type == TransactionType.EXPENSE:
+    # 2. Sum from canonical line items
+    raw_line_items = getattr(transaction, "line_items", None)
+    try:
+        line_items = list(raw_line_items or [])
+    except TypeError:
+        line_items = []
+
+    if line_items:
+        li_total = Decimal("0.00")
+        for li in line_items:
+            li_total += _safe_money(getattr(li, "vat_recoverable_amount", None))
+        if li_total > Decimal("0.00"):
+            return li_total
+
+    # 3. Fallback to parent-level vat_amount for simple expenses
+    if transaction_type in {TransactionType.EXPENSE, TransactionType.ASSET_ACQUISITION}:
         return _safe_money(getattr(transaction, "vat_amount", None))
 
     return Decimal("0.00")
