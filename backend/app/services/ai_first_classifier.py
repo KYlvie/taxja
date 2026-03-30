@@ -422,34 +422,38 @@ class AIFirstClassifier:
         if not hasattr(self, "_groq_key_index"):
             self._groq_key_index = 0
 
-        for _key_attempt in range(len(groq_keys) or 1):
-            if not groq_keys:
-                break
-            key_idx = (self._groq_key_index + _key_attempt) % len(groq_keys)
-            groq_key = groq_keys[key_idx]
-            try:
-                from groq import Groq
-                client = Groq(api_key=groq_key, timeout=60.0)
-                resp = client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    max_tokens=max_tokens,
-                    temperature=0,
-                )
-                self._groq_key_index = (key_idx + 1) % len(groq_keys)
-                content = resp.choices[0].message.content
-                if content and content.strip():
-                    return content
-                logger.warning("Groq gpt-oss-120b returned empty, trying next")
-                continue
-            except ImportError:
-                break
-            except Exception as e:
-                logger.info("Groq key %d failed (%s), trying next", key_idx, e)
-                continue
+        import time as _time
+        # Retry with backoff — Groq rate limits cause empty responses under concurrency
+        for _retry in range(3):
+            for _key_attempt in range(len(groq_keys) or 1):
+                if not groq_keys:
+                    break
+                key_idx = (self._groq_key_index + _key_attempt) % len(groq_keys)
+                groq_key = groq_keys[key_idx]
+                try:
+                    from groq import Groq
+                    client = Groq(api_key=groq_key, timeout=60.0)
+                    resp = client.chat.completions.create(
+                        model="openai/gpt-oss-120b",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        max_tokens=max_tokens,
+                        temperature=0,
+                    )
+                    self._groq_key_index = (key_idx + 1) % len(groq_keys)
+                    content = resp.choices[0].message.content
+                    if content and content.strip():
+                        return content
+                    logger.warning("Groq gpt-oss-120b returned empty (retry %d)", _retry)
+                except ImportError:
+                    break
+                except Exception as e:
+                    logger.info("Groq key %d failed (%s)", key_idx, e)
+            # Wait before retry (rate limit backoff)
+            if _retry < 2:
+                _time.sleep(2 * (_retry + 1))
 
         # Fallback to OpenAI
         openai_key = os.getenv("OPENAI_API_KEY")
