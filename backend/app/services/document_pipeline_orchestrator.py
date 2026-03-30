@@ -2795,6 +2795,8 @@ class DocumentPipelineOrchestrator:
             _ai_creates = (document.ocr_result or {}).get("_ai_first", {}).get("creates", [])
             if isinstance(_ai_creates, str):
                 _ai_creates = [_ai_creates]
+            logger.info("Asset suggestion for doc %s: creates=%s, has_data=%s, status=%s",
+                        document.id, _ai_creates, bool(suggestion.get("data")), suggestion.get("status"))
             if "asset" in _ai_creates and suggestion.get("data"):
                 try:
                     from app.tasks.ocr_tasks import create_asset_from_suggestion
