@@ -209,7 +209,7 @@ def generate_e1a_form_data(
     _n = use_netto  # shorthand
     material = _sum_expense(transactions, [ExpenseCategory.GROCERIES], netto=_n)
     personnel = Decimal("0")  # Einzelunternehmer typically no employees; placeholder
-    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT], netto=_n)
+    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT, ExpenseCategory.DEPRECIATION_AFA], netto=_n)
     rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE], netto=_n)
     travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE], netto=_n)
     telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM], netto=_n)
