@@ -776,9 +776,33 @@ class DocumentPipelineOrchestrator:
         try:
             from app.services.ai_first_classifier import AIFirstClassifier
             raw_text = ocr_result.raw_text or ""
+            # If raw_text is empty but VLM extracted structured data, rebuild pseudo raw_text
+            if not raw_text or len(raw_text.strip()) < 50:
+                vlm_fields = []
+                for _fld in ["issuer", "recipient", "merchant", "description", "taxpayer_name",
+                             "invoice_number", "date", "amount", "vat_amount", "vat_rate"]:
+                    _val = getattr(ocr_result, _fld, None) or (
+                        ocr_result.result.get(_fld) if hasattr(ocr_result, "result") and isinstance(ocr_result.result, dict) else None
+                    )
+                    if _val:
+                        vlm_fields.append(f"{_fld}: {_val}")
+                # Also try line_items
+                _items = getattr(ocr_result, "line_items", None) or (
+                    ocr_result.result.get("line_items") if hasattr(ocr_result, "result") and isinstance(ocr_result.result, dict) else None
+                )
+                if _items and isinstance(_items, list):
+                    for _it in _items[:5]:
+                        if isinstance(_it, dict):
+                            vlm_fields.append(f"item: {_it.get('name','')} {_it.get('total','')}")
+                # Use filename as context too
+                if document.file_name:
+                    vlm_fields.insert(0, f"filename: {document.file_name}")
+                if vlm_fields:
+                    raw_text = "\n".join(vlm_fields)
+                    logger.info("AI-first: rebuilt raw_text from VLM fields (%d chars) for doc %s", len(raw_text), document.id)
             print(f"[AI-FIRST] raw_text length={len(raw_text)} for doc {document.id}", flush=True)
             logger.info("AI-first: raw_text length=%d for doc %s", len(raw_text), document.id)
-            if raw_text and len(raw_text.strip()) > 50:
+            if raw_text and len(raw_text.strip()) > 20:
                 # Inject user context if available
                 from app.models.user import User as _User
                 user = self.db.query(_User).filter(_User.id == document.user_id).first() if document.user_id else None
