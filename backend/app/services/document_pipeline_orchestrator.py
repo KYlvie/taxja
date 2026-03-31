@@ -4359,8 +4359,13 @@ class DocumentPipelineOrchestrator:
             if isinstance(document.ocr_result, dict)
             else {}
         )
+        # Preserve _ai_first with rule engine data — it was enriched during classification
+        _preserved_ai_first = ocr_result.get("_ai_first")
         if result.extracted_data:
             ocr_result.update(self._make_json_safe(result.extracted_data))
+        # Restore enriched _ai_first (with rule engine) over the raw one from extracted_data
+        if _preserved_ai_first and _preserved_ai_first.get("_rule_engine"):
+            ocr_result["_ai_first"] = _preserved_ai_first
 
         validation_payload = self._build_validation_payload(result)
         if validation_payload:
