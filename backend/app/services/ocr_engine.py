@@ -281,15 +281,15 @@ class OCREngine:
             "spendenbestaetigung": DocumentType.SPENDENBESTAETIGUNG,
             "kirchenbeitrag": DocumentType.KIRCHENBEITRAG,
             "bank_statement": DocumentType.BANK_STATEMENT,
-            "fahrtenbuch": DocumentType.OTHER,
-            "homeoffice_nachweis": DocumentType.OTHER,
+            "fahrtenbuch": DocumentType.UNKNOWN,
+            "homeoffice_nachweis": DocumentType.UNKNOWN,
             "e1_form": DocumentType.E1_FORM,
         }
-        return mapping.get(ai_type, DocumentType.OTHER)
+        return mapping.get(ai_type, DocumentType.UNKNOWN)
 
     def _empty_result(self, processing_time: float) -> OCRResult:
         return OCRResult(
-            document_type=DocumentType.OTHER,
+            document_type=DocumentType.UNKNOWN,
             extracted_data={},
             raw_text="",
             confidence_score=0.0,
