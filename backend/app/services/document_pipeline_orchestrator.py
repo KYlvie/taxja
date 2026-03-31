@@ -796,11 +796,16 @@ class DocumentPipelineOrchestrator:
             self.db.flush()
             logger.info("Vision AI classified doc %s: type=%s creates=%s",
                         document.id, _existing_ai.get("document_type"), _existing_ai.get("creates"))
-            # Map AI type to DB type and return — skip text classifier
+            # Map AI type to DB type
             ai_type_str = _existing_ai.get("document_type", "other")
             db_type = self._map_ai_type_to_db_type(ai_type_str)
             document.document_type = db_type
             self.db.flush()
+
+            # Handle Fahrtenbuch: update PKW business_use_percentage
+            if ai_type_str == "fahrtenbuch":
+                self._handle_fahrtenbuch(document, _existing_ai)
+
             return db_type
 
         # Legacy path: text-based AIFirstClassifier (when vision not available)
@@ -2963,6 +2968,51 @@ class DocumentPipelineOrchestrator:
             logger.info("Fixed asset %s depreciable_base: sub=%s base=%s", asset_id, sub, asset.income_tax_depreciable_base)
         except Exception as e:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
+
+    def _handle_fahrtenbuch(self, document, ai_first):
+        """Update PKW business_use_percentage from Fahrtenbuch data."""
+        try:
+            from app.models.property import Property
+            from decimal import Decimal
+
+            kf = ai_first.get("key_fields", {})
+            biz_pct = kf.get("business_use_percentage")
+            if not biz_pct:
+                return
+
+            biz_pct = Decimal(str(biz_pct))
+            if biz_pct <= 0 or biz_pct > 100:
+                return
+
+            # Find PKW asset for this user
+            pkw = self.db.query(Property).filter(
+                Property.user_id == document.user_id,
+                Property.sub_category == "pkw",
+            ).first()
+
+            if pkw and pkw.business_use_percentage != biz_pct:
+                pkw.business_use_percentage = biz_pct
+                self.db.flush()
+                logger.info("Fahrtenbuch updated PKW %s business_use to %s%%",
+                            pkw.id, biz_pct)
+
+                # Recalculate AfA if exists
+                from app.models.transaction import Transaction, ExpenseCategory
+                from app.services.asset_lifecycle_service import AssetLifecycleService
+                afa_txn = self.db.query(Transaction).filter(
+                    Transaction.property_id == pkw.id,
+                    Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA,
+                ).first()
+                if afa_txn:
+                    new_afa = AssetLifecycleService(self.db).calculate_annual_depreciation(
+                        pkw, afa_txn.transaction_date.year
+                    )
+                    if new_afa > 0:
+                        afa_txn.amount = new_afa
+                        self.db.flush()
+                        logger.info("Recalculated PKW AfA to %s", new_afa)
+        except Exception as e:
+            logger.warning("Fahrtenbuch handling failed: %s", e)
 
     def _validate_asset_classification(self, asset_id, document):
         """Post-creation check: convert misclassified assets to regular expenses.

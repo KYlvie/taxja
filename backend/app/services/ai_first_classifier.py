@@ -396,7 +396,19 @@ ZAHLENFORMAT: "1.234,56" = 1234.56.
 }
 
 # Fallback for types without specific prompt
-for _t in ["fahrtenbuch", "homeoffice_nachweis", "studienbescheinigung",
+STEP2_PROMPTS["fahrtenbuch"] = """\
+Analysiere dieses Fahrtenbuch. Antworte NUR als JSON.
+{
+  "total_km": Gesamt-Kilometer als Zahl,
+  "business_km": Geschaeftliche Kilometer als Zahl,
+  "private_km": Private Kilometer als Zahl,
+  "business_use_percentage": Betrieblicher Nutzungsanteil in Prozent (0-100),
+  "year": Jahr als Zahl,
+  "vehicle_description": "Fahrzeug-Beschreibung oder null",
+  "expense_or_income": "archive_only"
+}"""
+
+for _t in ["homeoffice_nachweis", "studienbescheinigung",
            "pendlerrechner", "pensionsbescheid", "crypto_report",
            "kest_bescheinigung", "bank_statement", "tilgungsplan", "receipt"]:
     if _t not in STEP2_PROMPTS:
