@@ -95,7 +95,7 @@ def main():
     assets = cur.fetchall()
     print(f"\n=== ASSETS ({len(assets)}) ===")
     for a in assets:
-        print(f"  {a[0]:15s} price={a[1]:>10} base={a[2]:>10} life={a[3]}")
+        print(f"  {str(a[0] or '?'):15s} price={a[1] or 0:>10} base={a[2] or 0:>10} life={a[3] or '?'}")
 
     # Check transactions summary
     cur.execute("""

@@ -75,7 +75,7 @@ def _sum_income(transactions: list, cats: list, netto: bool = False) -> Decimal:
 
 
 def _sum_expense(transactions: list, cats: list, deductible_only: bool = True,
-                  netto: bool = False) -> Decimal:
+                  netto: bool = False, db=None) -> Decimal:
     """Sum expenses by category, EXCLUDING property-linked transactions.
 
     E1a only covers §22/§23 business expenses. Property expenses (§28)
@@ -222,20 +222,20 @@ def generate_e1a_form_data(
 
     # Expenses by EA-Rechnung category — netto for Regelbesteuert
     _n = use_netto  # shorthand
-    material = _sum_expense(transactions, [ExpenseCategory.GROCERIES], netto=_n)
+    material = _sum_expense(transactions, [ExpenseCategory.GROCERIES], netto=_n, db=db)
     personnel = Decimal("0")  # Einzelunternehmer typically no employees; placeholder
-    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT, ExpenseCategory.DEPRECIATION_AFA], netto=_n)
-    rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE], netto=_n)
-    travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE], netto=_n)
-    telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM], netto=_n)
-    marketing = _sum_expense(transactions, [ExpenseCategory.MARKETING], netto=_n)
-    insurance = _sum_expense(transactions, [ExpenseCategory.INSURANCE], netto=_n)
-    professional = _sum_expense(transactions, [ExpenseCategory.PROFESSIONAL_SERVICES], netto=_n)
-    bank_fees = _sum_expense(transactions, [ExpenseCategory.BANK_FEES], netto=_n)
-    interest = _sum_expense(transactions, [ExpenseCategory.LOAN_INTEREST], netto=_n)
-    svs = _sum_expense(transactions, [ExpenseCategory.SVS_CONTRIBUTIONS], netto=_n)
-    utilities = _sum_expense(transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX], netto=_n)
-    maintenance = _sum_expense(transactions, [ExpenseCategory.MAINTENANCE], netto=_n)
+    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT, ExpenseCategory.DEPRECIATION_AFA], netto=_n, db=db)
+    rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE], netto=_n, db=db)
+    travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE], netto=_n, db=db)
+    telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM], netto=_n, db=db)
+    marketing = _sum_expense(transactions, [ExpenseCategory.MARKETING], netto=_n, db=db)
+    insurance = _sum_expense(transactions, [ExpenseCategory.INSURANCE], netto=_n, db=db)
+    professional = _sum_expense(transactions, [ExpenseCategory.PROFESSIONAL_SERVICES], netto=_n, db=db)
+    bank_fees = _sum_expense(transactions, [ExpenseCategory.BANK_FEES], netto=_n, db=db)
+    interest = _sum_expense(transactions, [ExpenseCategory.LOAN_INTEREST], netto=_n, db=db)
+    svs = _sum_expense(transactions, [ExpenseCategory.SVS_CONTRIBUTIONS], netto=_n, db=db)
+    utilities = _sum_expense(transactions, [ExpenseCategory.UTILITIES, ExpenseCategory.PROPERTY_TAX], netto=_n, db=db)
+    maintenance = _sum_expense(transactions, [ExpenseCategory.MAINTENANCE], netto=_n, db=db)
     # Filter out Sonderausgaben from "other" — Kirchenbeitrag and Spende
     # belong on E1 (KZ 455/456), not E1a Betriebsausgaben
     _sonderausgabe_keywords = ("kirchenbeitrag", "spende", "donation", "church")
