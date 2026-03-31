@@ -3128,7 +3128,7 @@ class DocumentPipelineOrchestrator:
             netto = float(asset.income_tax_depreciable_base or 0)
             if netto > 0 and netto <= 1000:
                 should_convert = True
-                new_category = ExpenseCategory.EQUIPMENT
+                new_category = ExpenseCategory.DEPRECIATION_AFA  # GWG goes into AfA line
 
             if not should_convert:
                 return

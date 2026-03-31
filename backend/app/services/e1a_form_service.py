@@ -267,10 +267,9 @@ def generate_e1a_form_data(
                 sub = p.sub_category
                 if hasattr(sub, "value"):
                     sub = sub.value
-                if sub in ("electric_pkw",):
-                    ifb_type = "eco_vehicle"
-                elif sub in ("pkw", "fiscal_truck", "truck", "motorcycle"):
-                    continue  # KFZ excluded from IFB (§11 Abs.3)
+                # §11 Abs.3: ALL KFZ excluded from IFB (including E-Auto)
+                if sub in ("pkw", "electric_pkw", "fiscal_truck", "truck", "motorcycle"):
+                    continue
                 else:
                     ifb_type = "standard"
                 ifb_investments.append({
