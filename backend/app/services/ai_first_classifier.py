@@ -120,8 +120,7 @@ Hinweise: "AR", "Ausgangsrechnung", "Honorarnote" im Titel → immer income.
   "issuer": "Rechnungssteller / Lieferant",
   "recipient": "Rechnungsempfänger / Kunde",
   "invoice_number": "Rechnungsnummer oder null",
-  "amount_brutto": Bruttobetrag als Zahl,
-  "amount_netto": Nettobetrag ohne USt als Zahl,
+  "gross_amount": Rechnungsbetrag brutto inkl. USt als Zahl,
   "vat_amount": USt-Betrag oder null,
   "vat_rate": USt-Satz in Prozent oder null,
   "date": "YYYY-MM-DD",
@@ -360,8 +359,7 @@ ZAHLENFORMAT: "1.234,56" = 1234.56.
 {
   "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|moebel|other",
   "description": "Beschreibung des Wirtschaftsguts",
-  "purchase_price_brutto": Bruttokaufpreis als Zahl,
-  "purchase_price_netto": Nettokaufpreis als Zahl,
+  "gross_amount": Rechnungsbetrag brutto inkl. USt als Zahl (der grosse Endbetrag auf der Rechnung),
   "vat_amount": USt-Betrag oder null,
   "vat_rate": USt-Satz oder null,
   "purchase_date": "YYYY-MM-DD",
@@ -659,7 +657,8 @@ class AIFirstClassifier:
                 "user_is": step2.get("user_is"),
             },
             "amounts": {
-                "total_amount": step2.get("amount_brutto") or step2.get("purchase_price_brutto")
+                "total_amount": step2.get("gross_amount") or step2.get("amount_brutto")
+                               or step2.get("purchase_price_brutto")
                                or step2.get("gesamtbetrag") or step2.get("amount")
                                or step2.get("brutto_jahresgehalt") or step2.get("settlement_amount"),
                 "annual_amount": step2.get("amount_netto") or step2.get("praemie_jaehrlich")

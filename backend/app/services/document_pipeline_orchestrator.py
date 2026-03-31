@@ -2911,34 +2911,37 @@ class DocumentPipelineOrchestrator:
             ai = ocr.get("_ai_first", {})
             ai_amounts = ai.get("amounts", {}) or {}
 
-            # Determine brutto and netto from all available sources
+            # AK (Anschaffungskosten) = gross_amount = Rechnungsbetrag brutto
+            # Strategy: if we have both amount and vat, brutto = amount + vat
+            # (because AI may return netto in the amount field)
+            # If amount > vat and amount + vat is reasonable, use amount + vat
             ai_total = Decimal(str(ai_amounts.get("total_amount") or 0))
-            ai_annual = Decimal(str(ai_amounts.get("annual_amount") or 0))
-            ocr_brutto = Decimal(str(ocr.get("amount_brutto") or 0))
-            ocr_netto = Decimal(str(ocr.get("amount_netto") or 0))
             ocr_amount = Decimal(str(ocr.get("amount") or 0))
             vat = Decimal(str(ocr.get("vat_amount") or 0))
 
-            # Brutto = the LARGEST of all amount fields (brutto > netto always)
-            # AI total_amount is ALWAYS brutto (the total on the invoice)
-            brutto = max(ai_total, ocr_brutto, ocr_amount)
+            amount = max(ai_total, ocr_amount)  # Best available amount
 
             sub = asset.sub_category
             if hasattr(sub, "value"):
                 sub = sub.value
 
+            # Reconstruct brutto: if vat exists, check if amount is netto or brutto
+            # For 20% VAT: netto/vat = 5.0, brutto/vat = 6.0
+            # Threshold at 5.5: below = netto (add vat), above = brutto (keep)
+            if vat > 0 and amount > 0:
+                ratio = amount / vat
+                if ratio < Decimal("5.5"):
+                    brutto = amount + vat  # amount was netto
+                else:
+                    brutto = amount  # amount was already brutto
+            else:
+                brutto = amount
+
             if brutto <= 0:
                 return
 
-            # Netto = brutto / 1.20 for 20% VAT items (or brutto - explicit vat)
-            if vat > 0:
-                netto = brutto - vat
-            else:
-                # No explicit VAT: for VAT-liable items, compute netto from brutto
-                if sub not in ("pkw",):  # PKW has no VSt, so brutto=base
-                    netto = (brutto / Decimal("1.20")).quantize(Decimal("0.01"))
-                else:
-                    netto = brutto
+            # Netto = brutto - vat
+            netto = brutto - vat if vat > 0 else brutto
 
             if sub == "pkw":
                 # PKW: no VSt recovery → base = min(brutto, 40k)
