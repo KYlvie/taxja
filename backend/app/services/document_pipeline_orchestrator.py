@@ -2407,16 +2407,11 @@ class DocumentPipelineOrchestrator:
             _ai_creates = [_ai_creates]
         _ai_type = _ai_first.get("document_type", "")
 
+        # AI creates is authoritative. If AI says "asset" → skip old kaufvertrag/property
+        # handler and let ASSET_SUGGESTION handle it correctly (vehicle vs real estate).
         if action == ProcessingAction.PURCHASE_CONTRACT and "asset" in _ai_creates:
-            # AI says asset purchase (vehicle/equipment), not real estate Kaufvertrag.
-            # Skip kaufvertrag handler, let ASSET_SUGGESTION (secondary action) handle it.
-            if _ai_type not in ("kaufvertrag",) or \
-               (_ai_first.get("key_fields") or {}).get("asset_type") is not None:
-                logger.info(
-                    "Skipping PURCHASE_CONTRACT for doc %s — AI says asset, not real estate (type=%s)",
-                    document.id, _ai_type,
-                )
-                return
+            logger.info("Skipping PURCHASE_CONTRACT for doc %s — AI creates=%s", document.id, _ai_creates)
+            return
 
         if action == ProcessingAction.PURCHASE_CONTRACT:
             # TODO(v1.4-followup): property persistence still bypasses the asset-path
