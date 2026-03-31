@@ -2808,6 +2808,12 @@ class DocumentPipelineOrchestrator:
                     suggestion["status"] = "auto-created"
                     suggestion["asset_id"] = create_result.get("asset_id")
                     logger.info("AI auto-created asset for doc %s: %s", document.id, create_result.get("asset_id"))
+                    # Post-creation fix: correct depreciable_base using VLM brutto amount.
+                    # The asset creation pipeline sometimes double-deducts VAT from amounts
+                    # that are already netto. Fix by recalculating from original VLM data.
+                    self._fix_asset_depreciable_base(
+                        create_result.get("asset_id"), document
+                    )
                 except Exception as e:
                     logger.warning("AI auto-create asset failed for doc %s: %s", document.id, e)
 
@@ -2815,6 +2821,70 @@ class DocumentPipelineOrchestrator:
         except Exception as e:
             logger.warning(f"Asset suggestion failed: {e}")
             return None
+
+    def _fix_asset_depreciable_base(self, asset_id, document):
+        """Post-creation fix: ensure depreciable_base matches Austrian tax rules.
+
+        Uses original VLM brutto amount + AI asset_type to calculate correct base:
+        - PKW (VSt=0): base = min(brutto, 40,000)
+        - E-Auto (VSt=partial): base = brutto - (netto × 20% × 40k/brutto)
+        - LKW (VSt=full): base = netto (brutto - VSt)
+        - Equipment (VSt=full): base = netto
+        """
+        if not asset_id:
+            return
+        try:
+            from app.models.property import Property
+            from decimal import Decimal
+
+            asset = self.db.query(Property).filter(Property.id == asset_id).first()
+            if not asset:
+                return
+
+            ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+            brutto = Decimal(str(ocr.get("amount", 0)))
+            vat = Decimal(str(ocr.get("vat_amount", 0)))
+            if brutto <= 0:
+                return
+
+            netto = brutto - vat if vat > 0 else brutto
+            sub = asset.sub_category
+            if hasattr(sub, "value"):
+                sub = sub.value
+
+            if sub == "pkw":
+                # PKW: no VSt recovery → base = min(brutto, 40k)
+                cap = Decimal("40000")
+                base = min(brutto, cap)
+                asset.purchase_price = brutto
+                asset.income_tax_cost_cap = cap
+                asset.income_tax_depreciable_base = base
+                asset.comparison_amount = brutto
+            elif sub == "electric_pkw":
+                # E-Auto: partial VSt → base = brutto - anteilig VSt
+                cap = Decimal("40000")
+                ratio = min(cap / brutto, Decimal("1")) if brutto > 0 else Decimal("0")
+                vst_recovered = (netto * Decimal("0.20") * ratio).quantize(Decimal("0.01"))
+                base = brutto - vst_recovered
+                asset.purchase_price = brutto
+                asset.income_tax_cost_cap = None
+                asset.income_tax_depreciable_base = base
+                asset.comparison_amount = brutto
+            elif sub in ("fiscal_truck", "truck"):
+                # LKW: full VSt → base = netto
+                asset.purchase_price = brutto
+                asset.income_tax_depreciable_base = netto
+                asset.comparison_amount = netto
+            else:
+                # Equipment, machinery: full VSt → base = netto
+                asset.purchase_price = brutto if vat > 0 else netto
+                asset.income_tax_depreciable_base = netto
+                asset.comparison_amount = netto
+
+            self.db.flush()
+            logger.info("Fixed asset %s depreciable_base: sub=%s base=%s", asset_id, sub, asset.income_tax_depreciable_base)
+        except Exception as e:
+            logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
 
     def _extract_structured_import_data(self, ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         """Collect persisted structured fields for import suggestions."""
