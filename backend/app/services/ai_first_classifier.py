@@ -414,8 +414,8 @@ class AIFirstClassifier:
         self._generate = llm_generate_fn or self._default_groq_generate
         self._groq_client = None
 
-    def _default_groq_generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
-        """LLM backend — Groq (gpt-oss-120b) → OpenAI fallback → Anthropic fallback."""
+    def _default_groq_generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048, model: str = "openai/gpt-oss-120b") -> str:
+        """LLM backend — Groq → OpenAI fallback → Anthropic fallback."""
         load_dotenv()
 
         # Try Groq with key rotation
@@ -438,7 +438,7 @@ class AIFirstClassifier:
                     from groq import Groq
                     client = Groq(api_key=groq_key, timeout=60.0)
                     resp = client.chat.completions.create(
-                        model="openai/gpt-oss-20b",
+                        model=model,
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
@@ -520,7 +520,15 @@ class AIFirstClassifier:
             return ""
         parts = []
         if user_context.get("name"):
-            parts.append(f"Benutzer: {user_context['name']}")
+            parts.append(f"Name: {user_context['name']}")
+        if user_context.get("business_name"):
+            parts.append(f"Firmenname: {user_context['business_name']}")
+        if user_context.get("address"):
+            parts.append(f"Adresse: {user_context['address']}")
+        if user_context.get("tax_number"):
+            parts.append(f"Steuernummer: {user_context['tax_number']}")
+        if user_context.get("vat_number"):
+            parts.append(f"UID: {user_context['vat_number']}")
         if user_context.get("role_hints"):
             parts.append("Rollen: " + ", ".join(user_context["role_hints"]))
         if user_context.get("known_properties"):
@@ -530,7 +538,7 @@ class AIFirstClassifier:
                 for p in props
             ))
         if parts:
-            return "\n\nBENUTZER-KONTEXT:\n" + "\n".join(parts) + "\n"
+            return "\n\nBENUTZER-KONTEXT (Steuerprofil des Benutzers):\n" + "\n".join(parts) + "\n"
         return ""
 
     # ── Step 1: Classify type ──────────────────────────────────────
@@ -549,6 +557,7 @@ class AIFirstClassifier:
                 STEP1_SYSTEM,
                 STEP1_USER.format(text=text) + context_str,
                 max_tokens=1024,
+                model="openai/gpt-oss-20b",  # Step 1: cheap+fast for classification
             )
             result = self._parse_json(response)
             if not result.get("document_type"):

@@ -810,7 +810,15 @@ class DocumentPipelineOrchestrator:
                 if user:
                     user_context["name"] = user.name or ""
                     user_context["business_name"] = getattr(user, "business_name", "") or ""
+                    user_context["address"] = getattr(user, "address", "") or ""
+                    user_context["tax_number"] = getattr(user, "tax_number", "") or ""
+                    user_context["vat_number"] = getattr(user, "vat_number", "") or ""
                     user_context["role_hints"] = []
+                    bt = getattr(user, "business_type", None)
+                    if bt:
+                        user_context["role_hints"].append(
+                            bt.value if hasattr(bt, "value") else str(bt)
+                        )
                     if getattr(user, "user_type", None):
                         user_context["role_hints"].append(user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type))
                     user_roles = getattr(user, "user_roles", None)
