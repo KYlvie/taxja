@@ -1198,6 +1198,16 @@ class OCRTransactionService:
                 category = type_cat_map[ai_type]
 
         is_deductible = tax.get("is_deductible", True) if txn_type != TransactionType.INCOME.value else False
+        # Override: these types are ALWAYS deductible regardless of AI
+        _always_deductible = {
+            ExpenseCategory.SVS_CONTRIBUTIONS.value,
+            ExpenseCategory.RENT.value,
+            ExpenseCategory.LOAN_INTEREST.value,
+            ExpenseCategory.DEPRECIATION.value,
+            ExpenseCategory.DEPRECIATION_AFA.value,
+        }
+        if category in _always_deductible and txn_type == TransactionType.EXPENSE.value:
+            is_deductible = True
         confidence = ai_first.get("confidence", 0.75)
 
         return {
