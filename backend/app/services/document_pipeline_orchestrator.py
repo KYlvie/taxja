@@ -4413,8 +4413,13 @@ class DocumentPipelineOrchestrator:
                 if isinstance(document.ocr_result, dict)
                 else {}
             )
+            # Preserve _ai_first with rule engine data — enriched during classification
+            _preserved_ai_first_final = ocr_result.get("_ai_first")
             if result.extracted_data:
                 ocr_result.update(self._make_json_safe(result.extracted_data))
+            # Restore enriched _ai_first (with rule engine) over raw one from extracted_data
+            if _preserved_ai_first_final and _preserved_ai_first_final.get("_rule_engine"):
+                ocr_result["_ai_first"] = _preserved_ai_first_final
             if result.raw_text:
                 document.raw_text = result.raw_text
             if result.classification:

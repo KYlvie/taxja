@@ -662,7 +662,7 @@ class PropertyService:
                 "user_id": user_id,
                 "asset_id": str(asset.id),
                 "asset_type": asset_data.asset_type,
-                "name": asset_data.name,
+                "asset_name": asset_data.name,
                 "purchase_price": float(asset_data.purchase_price),
                 "useful_life": useful_life,
                 "depreciation_rate": float(dep_rate),
