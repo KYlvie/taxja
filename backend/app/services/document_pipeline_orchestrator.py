@@ -790,10 +790,7 @@ class DocumentPipelineOrchestrator:
             # Vision AI result is authoritative — persist to ocr_result
             ocr_json = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
             ocr_json["_ai_first"] = _existing_ai
-            document.ocr_result = ocr_json
             from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(document, "ocr_result")
-            self.db.flush()
             ai_type_str = _existing_ai.get("document_type", "other")
 
             # ── Step 3: Rule engine — populate creates from deterministic rules ──
@@ -822,7 +819,7 @@ class DocumentPipelineOrchestrator:
             logger.info("Vision AI + Rule Engine doc %s: type=%s creates=%s rule=%s",
                         document.id, ai_type_str, _rule_result["creates"], _rule_result["rule_applied"])
 
-            # Persist updated _ai_first with rule engine results
+            # Persist updated _ai_first with rule engine results — single flush point
             ocr_json["_ai_first"] = _existing_ai
             document.ocr_result = ocr_json
             flag_modified(document, "ocr_result")
