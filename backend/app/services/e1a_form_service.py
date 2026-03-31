@@ -224,7 +224,8 @@ def generate_e1a_form_data(
     _n = use_netto  # shorthand
     material = _sum_expense(transactions, [ExpenseCategory.GROCERIES], netto=_n, db=db)
     personnel = Decimal("0")  # Einzelunternehmer typically no employees; placeholder
-    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.EQUIPMENT, ExpenseCategory.DEPRECIATION_AFA], netto=_n, db=db)
+    afa = _sum_expense(transactions, [ExpenseCategory.DEPRECIATION, ExpenseCategory.DEPRECIATION_AFA], netto=_n, db=db)
+    gwg = _sum_expense(transactions, [ExpenseCategory.EQUIPMENT], netto=_n, db=db)
     rent = _sum_expense(transactions, [ExpenseCategory.RENT, ExpenseCategory.HOME_OFFICE], netto=_n, db=db)
     travel = _sum_expense(transactions, [ExpenseCategory.TRAVEL, ExpenseCategory.COMMUTING, ExpenseCategory.VEHICLE], netto=_n, db=db)
     telecom = _sum_expense(transactions, [ExpenseCategory.TELECOM], netto=_n, db=db)
@@ -279,13 +280,13 @@ def generate_e1a_form_data(
                     "acquisition_date": str(p.purchase_date) if p.purchase_date else None,
                 })
         if ifb_investments:
-            ifb_result = calculate_ifb(ifb_investments, tax_year=year)
+            ifb_result = calculate_ifb(ifb_investments, tax_year=tax_year)
             ifb_total = ifb_result.total_ifb
     except Exception as e:
         logger.warning("IFB calculation failed: %s", e)
 
     total_expenses = (
-        material + personnel + afa + rent + travel + telecom + marketing
+        material + personnel + afa + gwg + rent + travel + telecom + marketing
         + insurance + professional + bank_fees + interest + svs + utilities
         + maintenance + other + ifb_total
     )
@@ -339,11 +340,20 @@ def generate_e1a_form_data(
             "editable": True,
         },
         {
-            "kz": "9070",
-            "label_de": "Abschreibungen (AfA)",
+            "kz": "9240",
+            "label_de": "Abschreibung fuer Abnutzung (AfA)",
             "label_en": "Depreciation (AfA)",
             "label_zh": "折旧 (AfA)",
             "value": float(afa),
+            "section": "ausgaben",
+            "editable": True,
+        },
+        {
+            "kz": "9130",
+            "label_de": "Geringwertige Wirtschaftsgueter (GWG)",
+            "label_en": "Low-value assets (GWG)",
+            "label_zh": "低值资产 (GWG)",
+            "value": float(gwg),
             "section": "ausgaben",
             "editable": True,
         },
@@ -499,6 +509,7 @@ def generate_e1a_form_data(
             "business_income": float(business_income),
             "total_expenses": float(total_expenses),
             "afa": float(afa),
+            "gwg": float(gwg),
             "ifb": float(ifb_total),
             "profit": float(profit),
             "grundfreibetrag": float(gfb["grundfreibetrag"]),

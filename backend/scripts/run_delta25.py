@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.chdir(os.path.join(os.path.dirname(__file__), ".."))
 
 BASE = "http://localhost:8000/api/v1"
-PDF_DIR = r"C:\Users\yk1e25\Downloads\2025_test_suite (9)\DELTA25"
+PDF_DIR = r"C:\Users\yk1e25\Downloads\2025_test_suite (11)\DELTA25"
 
 EMAIL = "markus.hofer.delta25@test.com"
 PASSWORD = "TestPass123!"
