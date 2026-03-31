@@ -4359,13 +4359,11 @@ class DocumentPipelineOrchestrator:
             if isinstance(document.ocr_result, dict)
             else {}
         )
-        # Preserve _ai_first with rule engine data — it was enriched during classification
-        _preserved_ai_first = ocr_result.get("_ai_first")
         if result.extracted_data:
-            ocr_result.update(self._make_json_safe(result.extracted_data))
-        # Restore enriched _ai_first (with rule engine) over the raw one from extracted_data
-        if _preserved_ai_first and _preserved_ai_first.get("_rule_engine"):
-            ocr_result["_ai_first"] = _preserved_ai_first
+            safe_data = self._make_json_safe(result.extracted_data)
+            # Never overwrite _ai_first — it was enriched with rule engine during classification
+            safe_data.pop("_ai_first", None)
+            ocr_result.update(safe_data)
 
         validation_payload = self._build_validation_payload(result)
         if validation_payload:
@@ -4413,13 +4411,11 @@ class DocumentPipelineOrchestrator:
                 if isinstance(document.ocr_result, dict)
                 else {}
             )
-            # Preserve _ai_first with rule engine data — enriched during classification
-            _preserved_ai_first_final = ocr_result.get("_ai_first")
             if result.extracted_data:
-                ocr_result.update(self._make_json_safe(result.extracted_data))
-            # Restore enriched _ai_first (with rule engine) over raw one from extracted_data
-            if _preserved_ai_first_final and _preserved_ai_first_final.get("_rule_engine"):
-                ocr_result["_ai_first"] = _preserved_ai_first_final
+                safe_data = self._make_json_safe(result.extracted_data)
+                # Never overwrite _ai_first — it was enriched with rule engine during classification
+                safe_data.pop("_ai_first", None)
+                ocr_result.update(safe_data)
             if result.raw_text:
                 document.raw_text = result.raw_text
             if result.classification:
