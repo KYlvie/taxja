@@ -269,23 +269,45 @@ def _resolve_direction(
     user_context: Optional[Dict[str, Any]],
     doc_type: str,
 ) -> str:
-    """Determine income vs expense from AI + user context."""
-    # Step 2 AI judgment takes priority
-    ai_direction = step2.get("expense_or_income")
-    if ai_direction in ("income", "expense"):
-        return ai_direction
+    """Determine income vs expense from AI + user context.
 
-    # Fallback: check issuer/recipient vs user name
+    Cross-validates AI judgment against issuer/recipient for invoices.
+    If the user is the issuer (Aussteller), it's always income regardless
+    of what the AI says — this corrects frequent AI mistakes on ARs.
+    """
+    ai_direction = step2.get("expense_or_income")
+
+    # For invoices/receipts: cross-validate AI direction against issuer/recipient
+    issuer = (step1.get("issuer") or step2.get("issuer") or "").lower()
+    recipient = (step1.get("recipient") or step2.get("recipient") or "").lower()
+    user_is_issuer = False
+    user_is_recipient = False
+
     if user_context and user_context.get("name"):
         user_name = user_context["name"].lower()
         tokens = [t for t in user_name.split() if len(t) > 2]
         if tokens:
-            issuer = (step1.get("issuer") or step2.get("issuer") or "").lower()
-            recipient = (step1.get("recipient") or step2.get("recipient") or "").lower()
-            if issuer and any(t in issuer for t in tokens):
-                return "income"
-            if recipient and any(t in recipient for t in tokens):
-                return "expense"
+            user_is_issuer = issuer and any(t in issuer for t in tokens)
+            user_is_recipient = recipient and any(t in recipient for t in tokens)
+
+    # Rule: if user is the issuer of an invoice, it's ALWAYS income
+    # (Ausgangsrechnung — the user is selling/billing someone)
+    if doc_type in ("invoice", "receipt") and user_is_issuer and not user_is_recipient:
+        return "income"
+
+    # Rule: if user is the recipient of an invoice, it's ALWAYS expense
+    if doc_type in ("invoice", "receipt") and user_is_recipient and not user_is_issuer:
+        return "expense"
+
+    # AI judgment
+    if ai_direction in ("income", "expense"):
+        return ai_direction
+
+    # Fallback: check issuer/recipient vs user name (for non-invoice types)
+    if user_is_issuer:
+        return "income"
+    if user_is_recipient:
+        return "expense"
 
     # Default: expense (safer assumption for tax deduction)
     return "expense"
