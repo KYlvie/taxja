@@ -414,7 +414,7 @@ class AIFirstClassifier:
         self._generate = llm_generate_fn or self._default_groq_generate
         self._groq_client = None
 
-    def _default_groq_generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+    def _default_groq_generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
         """LLM backend — Groq (gpt-oss-120b) → OpenAI fallback → Anthropic fallback."""
         load_dotenv()
 
