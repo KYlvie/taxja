@@ -218,6 +218,7 @@ def classify_transaction(
 
     # Direction
     direction = _resolve_direction(step1, step2, user_context, doc_type)
+    print(f"[RULE] doc_type={doc_type} ai_dir={step2.get('expense_or_income')} resolved_dir={direction} ai_is_asset={ai_is_asset} asset_type={ai_asset_type}", flush=True)
 
     # ── Rule 6.5: Income direction → NEVER asset ──────────────────
     # An outgoing invoice (Ausgangsrechnung) is income — user is selling, not buying.

@@ -99,11 +99,36 @@ def main():
     print(f"  Expense: {expense_count} docs  |  Asset: {asset_count} docs")
 
     # Check assets
-    cur.execute("SELECT sub_category, purchase_price, income_tax_depreciable_base, useful_life_years FROM properties WHERE user_id=%s ORDER BY purchase_price DESC", (UID,))
+    cur.execute("SELECT id, sub_category, purchase_price, income_tax_depreciable_base, useful_life_years FROM properties WHERE user_id=%s ORDER BY purchase_price DESC", (UID,))
     assets = cur.fetchall()
     print(f"\n=== ASSETS ({len(assets)}) ===")
     for a in assets:
-        print(f"  {str(a[0] or '?'):15s} price={a[1] or 0:>10} base={a[2] or 0:>10} life={a[3] or '?'}")
+        print(f"  {str(a[1] or '?'):15s} price={a[2] or 0:>10} base={a[3] or 0:>10} life={a[4] or '?'}")
+
+    # Set PKW business_use_percentage = 70% (user action: from Fahrtenbuch)
+    h2 = {**h, "Content-Type": "application/json"}
+    pkw_id = None
+    for a in assets:
+        asset_id, sub_cat = a[0], a[1]
+        if sub_cat == "pkw":
+            pkw_id = asset_id
+            r = requests.put(f"{BASE}/properties/{asset_id}",
+                json={"business_use_percentage": 70}, headers=h2)
+            if r.status_code == 200:
+                print(f"  Set PKW business_use=70%")
+            else:
+                print(f"  WARN: Failed to set PKW business_use: {r.status_code} {r.text[:200]}")
+
+    # Delete old PKW AfA transaction so it gets regenerated with 70%
+    if pkw_id:
+        cur.execute("DELETE FROM transactions WHERE property_id=%s AND expense_category='DEPRECIATION_AFA'", (pkw_id,))
+        conn.commit()
+        print(f"  Deleted old PKW AfA (will regenerate with 70%)")
+    conn.close()
+
+    # Re-fetch after property update
+    conn = db()
+    cur = conn.cursor()
 
     # Check transactions summary
     cur.execute("""

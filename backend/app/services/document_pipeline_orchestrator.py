@@ -4375,6 +4375,26 @@ class DocumentPipelineOrchestrator:
             safe_data.pop("_ai_first", None)
             ocr_result.update(safe_data)
 
+        # Safety net: if _ai_first exists but rule engine never ran, run it now
+        _ai = ocr_result.get("_ai_first")
+        if _ai and _ai.get("document_type") and not _ai.get("_rule_engine"):
+            from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+            _s1 = {"document_type": _ai.get("document_type"),
+                    "gross_amount": ocr_result.get("gross_amount") or (_ai.get("amounts") or {}).get("total_amount"),
+                    "vat_amount": ocr_result.get("vat_amount"),
+                    "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+            _s2 = {"expense_or_income": (_ai.get("tax_treatment") or {}).get("expense_or_income"),
+                    "is_asset_purchase": (_ai.get("key_fields") or {}).get("is_asset_purchase"),
+                    "is_gwg": (_ai.get("key_fields") or {}).get("is_gwg"),
+                    "asset_type": (_ai.get("key_fields") or {}).get("asset_type") or _ai.get("document_subtype"),
+                    "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+            _uc = self._get_user_context_for_rules(document)
+            _rr = _classify_txn(_s1, _s2, _uc)
+            _ai["creates"] = _rr["creates"]
+            _ai["_rule_engine"] = _rr
+            ocr_result["_ai_first"] = _ai
+            logger.info("Rule engine safety net for doc %s: %s", document.id, _rr["rule_applied"])
+
         validation_payload = self._build_validation_payload(result)
         if validation_payload:
             ocr_result["_validation"] = validation_payload
@@ -4426,6 +4446,27 @@ class DocumentPipelineOrchestrator:
                 # Never overwrite _ai_first — it was enriched with rule engine during classification
                 safe_data.pop("_ai_first", None)
                 ocr_result.update(safe_data)
+
+            # Safety net: if _ai_first exists but rule engine never ran, run it now
+            _ai_f = ocr_result.get("_ai_first")
+            if _ai_f and _ai_f.get("document_type") and not _ai_f.get("_rule_engine"):
+                from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+                _s1f = {"document_type": _ai_f.get("document_type"),
+                        "gross_amount": ocr_result.get("gross_amount") or (_ai_f.get("amounts") or {}).get("total_amount"),
+                        "vat_amount": ocr_result.get("vat_amount"),
+                        "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+                _s2f = {"expense_or_income": (_ai_f.get("tax_treatment") or {}).get("expense_or_income"),
+                        "is_asset_purchase": (_ai_f.get("key_fields") or {}).get("is_asset_purchase"),
+                        "is_gwg": (_ai_f.get("key_fields") or {}).get("is_gwg"),
+                        "asset_type": (_ai_f.get("key_fields") or {}).get("asset_type") or _ai_f.get("document_subtype"),
+                        "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+                _ucf = self._get_user_context_for_rules(document)
+                _rrf = _classify_txn(_s1f, _s2f, _ucf)
+                _ai_f["creates"] = _rrf["creates"]
+                _ai_f["_rule_engine"] = _rrf
+                ocr_result["_ai_first"] = _ai_f
+                logger.info("Rule engine safety net (finalize) doc %s: %s", document.id, _rrf["rule_applied"])
+
             if result.raw_text:
                 document.raw_text = result.raw_text
             if result.classification:
