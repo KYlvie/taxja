@@ -320,6 +320,7 @@ class PropertyUpdate(BaseModel):
     grunderwerbsteuer: Optional[Decimal] = Field(None, ge=0)
     notary_fees: Optional[Decimal] = Field(None, ge=0)
     registry_fees: Optional[Decimal] = Field(None, ge=0)
+    business_use_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
     status: Optional[PropertyStatus] = None
     sale_date: Optional[date] = None
 

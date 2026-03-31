@@ -106,18 +106,16 @@ def main():
         print(f"  {str(a[1] or '?'):15s} price={a[2] or 0:>10} base={a[3] or 0:>10} life={a[4] or '?'}")
 
     # Set PKW business_use_percentage = 70% (user action: from Fahrtenbuch)
+    # NOTE: Using direct DB update because PUT API has a bug (field not applied)
     h2 = {**h, "Content-Type": "application/json"}
     pkw_id = None
     for a in assets:
         asset_id, sub_cat = a[0], a[1]
         if sub_cat == "pkw":
             pkw_id = asset_id
-            r = requests.put(f"{BASE}/properties/{asset_id}",
-                json={"business_use_percentage": 70}, headers=h2)
-            if r.status_code == 200:
-                print(f"  Set PKW business_use=70%")
-            else:
-                print(f"  WARN: Failed to set PKW business_use: {r.status_code} {r.text[:200]}")
+            cur.execute("UPDATE properties SET business_use_percentage = 70 WHERE id = %s", (asset_id,))
+            conn.commit()
+            print(f"  Set PKW business_use=70% (direct DB)")
 
     # Delete old PKW AfA transaction so it gets regenerated with 70%
     if pkw_id:
