@@ -39,7 +39,7 @@ Typen:
 - lohnzettel: Lohnzettel / L16 / Jahreslohnzettel
 - einkommensteuerbescheid: Einkommensteuerbescheid / ESt-Bescheid
 - bank_statement: Kontoauszug
-- kaufvertrag: Immobilien-Kaufvertrag
+- kaufvertrag: Immobilien-Kaufvertrag (NUR Grundstück/Wohnung/Haus, NICHT für Fahrzeuge/Maschinen!)
 - loan_contract: Kreditvertrag / Darlehensvertrag (neuer Vertrag)
 - zinsbescheinigung: Zinsbescheinigung (Jahresübersicht gezahlter Zinsen)
 - tilgungsplan: Tilgungsplan / Rückzahlungsplan
