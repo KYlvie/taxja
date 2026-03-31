@@ -1,7 +1,9 @@
-"""OCR Engine — Vision-first document processing via llama-4-scout.
+"""OCR Engine — Two-step AI document processing.
 
-Sends PDF/image directly to vision model for classification + extraction
-in a single API call. No Tesseract, no text extraction, no VLM layer.
+Step 1: llama-4-scout vision → document type + raw_text + basic fields
+Step 2: gpt-oss-120b text → type-specific detailed extraction + tax judgment
+
+Fallback chain: Groq → OpenAI → needs_review
 """
 import base64
 import json
@@ -12,12 +14,10 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-import fitz  # PyMuPDF for PDF→image conversion
+import fitz  # PyMuPDF for PDF→image
 
 logger = logging.getLogger(__name__)
 
-
-# Keep DocumentType for backward compatibility with pipeline
 from app.services.document_classifier import DocumentType
 
 
@@ -42,54 +42,29 @@ class OCRResult:
 
 @dataclass
 class BatchOCRResult:
-    """Result of batch processing"""
     results: List[OCRResult]
     total_processing_time_ms: float
     successful: int
     failed: int
 
 
-# Vision prompt for llama-4-scout — one call does everything
-VISION_SYSTEM = (
-    "Du bist ein Experte für österreichische Steuer- und Finanzdokumente. "
-    "Analysiere das Dokument-Bild und extrahiere alle relevanten Felder. "
-    "ZAHLENFORMAT: Europäisch! '10.800,00' = 10800.00. "
-    "Antworte NUR als JSON."
-)
-
-VISION_PROMPT = """\
-Analysiere dieses Dokument und extrahiere:
-
+# Step 1 prompt — lightweight, just classify + transcribe
+STEP1_VISION_PROMPT = """\
+Analysiere dieses Dokument-Bild. Antworte NUR als JSON:
 {
-  "document_type": "invoice|asset_purchase|svs_vorschreibung|versicherungspolizze|grundsteuerbescheid|lohnzettel|einkommensteuerbescheid|mietvertrag|mietvorschreibung|betriebskostenabrechnung|loan_contract|zinsbescheinigung|spendenbestaetigung|kirchenbeitrag|bank_statement|fahrtenbuch|homeoffice_nachweis|receipt|other",
+  "document_type": "invoice|asset_purchase|svs_vorschreibung|versicherungspolizze|grundsteuerbescheid|lohnzettel|einkommensteuerbescheid|mietvertrag|mietvorschreibung|betriebskostenabrechnung|loan_contract|zinsbescheinigung|spendenbestaetigung|kirchenbeitrag|bank_statement|fahrtenbuch|receipt|other",
   "confidence": 0.0-1.0,
   "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"],
-  "raw_text": "Vollständiger Text des Dokuments (so genau wie möglich abtippen)",
-  "expense_or_income": "income|expense|archive_only",
   "amount": Hauptbetrag als Zahl oder null,
-  "amount_brutto": Bruttobetrag oder null,
-  "amount_netto": Nettobetrag oder null,
-  "vat_amount": USt-Betrag oder null,
-  "vat_rate": USt-Satz in Prozent oder null,
-  "date": "YYYY-MM-DD",
-  "description": "Kurzbeschreibung",
-  "issuer": "Aussteller/Absender oder null",
-  "recipient": "Empfänger oder null",
-  "property_address": "Immobilienadresse oder null",
-  "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|null",
-  "is_deductible": true/false/null,
-  "deduction_category": "Betriebsausgabe|Werbungskosten|Sonderausgaben|null",
-  "tax_form": "E1a|E1b|E1|null",
-  "svs_quarter": "Q1|Q2|Q3|Q4|null",
-  "quarterly_amount": Quartalsbeitrag oder null,
-  "insurance_subtype": "berufshaftpflicht|gebaeudeversicherung|kfz|other|null",
-  "lender_name": "Bank/Kreditgeber oder null",
-  "annual_interest": Jahreszinsen oder null
+  "date": "YYYY-MM-DD oder null",
+  "issuer": "Aussteller/Absender",
+  "recipient": "Empfaenger",
+  "raw_text": "Vollstaendiger Text des Dokuments (alles abtippen was lesbar ist)"
 }"""
 
 
 class OCREngine:
-    """Vision-first document processor using llama-4-scout."""
+    """Two-step document processor: vision classification → text extraction."""
 
     def __init__(self, config=None):
         self._config = config
@@ -103,93 +78,115 @@ class OCREngine:
         document_type_hint: Optional[Any] = None,
         user_identity: Optional[str] = None,
     ) -> OCRResult:
-        """Process document by sending image directly to vision AI.
-
-        No OCR, no text extraction — vision model sees the document image
-        and returns classification + extracted fields in one call.
-        """
+        """Process document: Step 1 (vision) → Step 2 (text extraction)."""
         start_time = datetime.now()
 
         try:
-            # Convert PDF/image to PNG for vision model
+            # Step 1: Vision classification + raw_text
             img_b64 = self._to_base64_image(image_bytes, mime_type)
+            step1 = self._step1_vision(img_b64)
 
-            # Build user context string
-            context = ""
-            if user_identity:
-                context = f"\n\nBENUTZER-KONTEXT:\n{user_identity}"
+            if not step1 or not step1.get("document_type"):
+                # Vision failed entirely → needs_review
+                pt = (datetime.now() - start_time).total_seconds() * 1000
+                return self._empty_result(pt)
 
-            # Call vision model
-            result = self._call_vision_model(img_b64, context)
+            raw_text = step1.get("raw_text", "")
+            doc_type_str = step1.get("document_type", "other")
+            creates = self._normalize_creates(step1.get("creates", []))
 
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000
+            # Fix direction: if issuer matches user name → income
+            direction = step1.get("expense_or_income", "expense")
+            issuer = (step1.get("issuer") or "").lower()
+            if user_identity and direction != "income" and issuer:
+                for line in (user_identity or "").split("\n"):
+                    if line.startswith("Name:") or line.startswith("Firma:"):
+                        name = line.split(":", 1)[-1].strip().lower()
+                        if any(p in issuer for p in name.split() if len(p) > 2):
+                            direction = "income"
+                            break
 
-            if not result:
-                return self._empty_result(processing_time)
+            # Step 2: Detailed extraction via gpt-oss-120b
+            step2 = {}
+            if raw_text and len(raw_text.strip()) > 20:
+                from app.services.ai_first_classifier import AIFirstClassifier
+                classifier = AIFirstClassifier()
 
-            # Map AI document_type to DocumentType enum
-            doc_type = self._map_document_type(result.get("document_type", "other"))
-            confidence = float(result.get("confidence", 0.8))
+                # Build user context for Step 2
+                user_ctx = None
+                if user_identity:
+                    user_ctx = {"name": "", "role_hints": []}
+                    for line in user_identity.split("\n"):
+                        if line.startswith("Name:"):
+                            user_ctx["name"] = line.split(":", 1)[-1].strip()
+                        elif line.startswith("UID:"):
+                            user_ctx["vat_number"] = line.split(":", 1)[-1].strip()
+                        elif line.startswith("Steuernummer:"):
+                            user_ctx["tax_number"] = line.split(":", 1)[-1].strip()
+                        elif line.startswith("Typ:") or line.startswith("USt:"):
+                            user_ctx["role_hints"].append(line.split(":", 1)[-1].strip())
 
-            # Build extracted_data from vision result
-            extracted_data = {}
-            for key in ["amount", "amount_brutto", "amount_netto", "vat_amount",
-                        "vat_rate", "date", "description", "issuer", "recipient",
-                        "property_address", "asset_type", "svs_quarter",
-                        "quarterly_amount", "insurance_subtype", "lender_name",
-                        "annual_interest"]:
-                if result.get(key) is not None:
-                    extracted_data[key] = result[key]
+                step2 = classifier.extract_fields(
+                    raw_text, doc_type_str,
+                    user_context=user_ctx,
+                )
 
-            # Store full AI result for downstream pipeline
-            extracted_data["_ai_first"] = {
-                "document_type": result.get("document_type", "other"),
-                "confidence": confidence,
-                "creates": self._normalize_creates(result.get("creates", ["transaction"])),
-                "document_subtype": result.get("insurance_subtype") or result.get("asset_type"),
-                "role_detection": {
-                    "landlord_name": None,
-                    "tenant_name": None,
-                    "user_is": None,
-                },
-                "amounts": {
-                    "total_amount": result.get("amount_brutto") or result.get("amount"),
-                    "annual_amount": result.get("amount_netto") or result.get("annual_interest"),
-                    "monthly_amount": None,
-                    "settlement_amount": None,
-                    "new_amount": None,
-                },
-                "key_fields": {
-                    k: result.get(k) for k in [
-                        "date", "issuer", "recipient", "property_address",
-                        "asset_type", "svs_quarter", "quarterly_amount",
-                        "insurance_subtype", "lender_name", "description",
-                    ] if result.get(k) is not None
-                },
-                "tax_treatment": {
-                    "is_deductible": result.get("is_deductible"),
-                    "deduction_category": result.get("deduction_category"),
-                    "tax_form": result.get("tax_form"),
-                    "expense_or_income": result.get("expense_or_income"),
-                },
+            # Merge Step 1 + Step 2 into _ai_first
+            amounts = {
+                "total_amount": step2.get("amount_brutto") or step1.get("amount"),
+                "annual_amount": step2.get("amount_netto") or step2.get("praemie_jaehrlich")
+                                or step2.get("annual_interest_paid") or step2.get("annual_tax"),
+                "monthly_amount": step2.get("gesamtmiete") or step2.get("monthly_amount"),
+                "settlement_amount": step2.get("settlement_amount"),
+                "new_amount": None,
             }
 
-            # Fix direction: if vision said expense but issuer matches user → income
-            direction = result.get("expense_or_income", "expense")
-            issuer = (result.get("issuer") or "").lower()
-            if user_identity and direction != "income":
-                user_tokens = [t.lower() for t in (user_identity or "").split("\n")
-                               if t.startswith("Name:") or t.startswith("Firma:")]
-                for token_line in user_tokens:
-                    name = token_line.split(":", 1)[-1].strip().lower()
-                    name_parts = [p for p in name.split() if len(p) > 2]
-                    if name_parts and any(p in issuer for p in name_parts):
-                        direction = "income"
-                        break
-                extracted_data["_ai_first"]["tax_treatment"]["expense_or_income"] = direction
+            key_fields = {}
+            for k in ["date", "issuer", "recipient", "property_address", "asset_type",
+                       "svs_quarter", "quarterly_amount", "insurance_subtype",
+                       "lender_name", "description", "invoice_number", "employer_name",
+                       "brutto_jahresgehalt", "lohnsteuer", "tax_year", "beitragsjahr",
+                       "is_asset_purchase", "is_gwg", "useful_life_years",
+                       "business_use_percentage", "deductible_percentage",
+                       "purchase_date", "supplier"]:
+                val = step2.get(k) or step1.get(k)
+                if val is not None:
+                    key_fields[k] = val
 
-            # Use raw_text from vision model's transcription
-            raw_text = result.get("raw_text", "")
+            tax_treatment = {
+                "is_deductible": step2.get("is_deductible"),
+                "deduction_category": step2.get("deduction_category"),
+                "tax_form": step2.get("tax_form"),
+                "expense_or_income": step2.get("expense_or_income") or direction,
+            }
+
+            ai_first = {
+                "document_type": doc_type_str,
+                "confidence": float(step1.get("confidence", 0.8)),
+                "creates": creates,
+                "document_subtype": step2.get("insurance_subtype") or step2.get("asset_type")
+                                   or step2.get("settlement_type") or step2.get("loan_type"),
+                "role_detection": {
+                    "landlord_name": step2.get("landlord_name"),
+                    "tenant_name": step2.get("tenant_name"),
+                    "user_is": step2.get("user_is"),
+                },
+                "amounts": amounts,
+                "key_fields": key_fields,
+                "tax_treatment": tax_treatment,
+            }
+
+            extracted_data = {"_ai_first": ai_first}
+            # Promote top-level fields for backward compat
+            for k in ["amount", "date", "description", "issuer", "recipient",
+                       "vat_amount", "vat_rate"]:
+                val = step2.get(k) or step1.get(k)
+                if val is not None:
+                    extracted_data[k] = val
+
+            doc_type = self._map_document_type(doc_type_str)
+            confidence = float(step1.get("confidence", 0.8))
+            pt = (datetime.now() - start_time).total_seconds() * 1000
 
             return OCRResult(
                 document_type=doc_type,
@@ -197,45 +194,25 @@ class OCREngine:
                 raw_text=raw_text,
                 confidence_score=confidence,
                 needs_review=confidence < 0.7,
-                processing_time_ms=processing_time,
+                processing_time_ms=pt,
                 suggestions=[],
-                provider_used="llama-4-scout-vision",
-                classification_source="vision_ai",
+                provider_used="llama-4-scout+gpt-oss-120b",
+                classification_source="vision_ai_two_step",
             )
 
         except Exception as e:
-            logger.error("Vision processing failed: %s", e)
-            processing_time = (datetime.now() - start_time).total_seconds() * 1000
-            return self._empty_result(processing_time)
+            logger.error("Document processing failed: %s", e, exc_info=True)
+            pt = (datetime.now() - start_time).total_seconds() * 1000
+            return self._empty_result(pt)
 
-    def _to_base64_image(self, file_bytes: bytes, mime_type: str = None) -> str:
-        """Convert PDF or image to base64 PNG for vision model."""
-        is_pdf = file_bytes[:5] == b"%PDF-"
+    # ── Step 1: Vision ──────────────────────────────────────────────
 
-        if is_pdf:
-            # PDF → render first page as PNG
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            page = doc[0]
-            pix = page.get_pixmap(dpi=200)
-            img_bytes = pix.tobytes("png")
-            doc.close()
-        else:
-            # Already an image
-            img_bytes = file_bytes
-
-        return base64.b64encode(img_bytes).decode()
-
-    def _call_vision_model(self, img_b64: str, context: str = "") -> Optional[Dict]:
-        """Call llama-4-scout vision model via Groq."""
+    def _step1_vision(self, img_b64: str) -> Optional[Dict]:
+        """Call llama-4-scout vision for classification + raw_text."""
         from dotenv import load_dotenv
         load_dotenv()
 
-        groq_keys = [k for k in [
-            os.getenv("GROQ_API_KEY"),
-            os.getenv("GROQ_API_KEY_2"),
-        ] if k]
-
-        prompt = VISION_PROMPT + context
+        groq_keys = [k for k in [os.getenv("GROQ_API_KEY"), os.getenv("GROQ_API_KEY_2")] if k]
 
         for key in groq_keys:
             try:
@@ -246,7 +223,34 @@ class OCREngine:
                     messages=[{
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"{VISION_SYSTEM}\n\n{prompt}"},
+                            {"type": "text", "text": STEP1_VISION_PROMPT},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
+                        ]
+                    }],
+                    max_tokens=2048,
+                    temperature=0,
+                )
+                content = resp.choices[0].message.content
+                if content:
+                    result = self._parse_json(content)
+                    if result:
+                        return result
+            except Exception as e:
+                logger.warning("Vision step1 failed with Groq: %s", e)
+                continue
+
+        # Fallback: OpenAI gpt-4o-mini with vision
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                import openai
+                client = openai.OpenAI(api_key=openai_key)
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": STEP1_VISION_PROMPT},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
                         ]
                     }],
@@ -257,13 +261,25 @@ class OCREngine:
                 if content:
                     return self._parse_json(content)
             except Exception as e:
-                logger.warning("Vision call failed: %s", e)
-                continue
+                logger.warning("Vision step1 OpenAI fallback failed: %s", e)
 
         return None
 
+    # ── Helpers ──────────────────────────────────────────────────────
+
+    def _to_base64_image(self, file_bytes: bytes, mime_type: str = None) -> str:
+        is_pdf = file_bytes[:5] == b"%PDF-"
+        if is_pdf:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            page = doc[0]
+            pix = page.get_pixmap(dpi=200)
+            img_bytes = pix.tobytes("png")
+            doc.close()
+        else:
+            img_bytes = file_bytes
+        return base64.b64encode(img_bytes).decode()
+
     def _parse_json(self, text: str) -> Optional[Dict]:
-        """Extract JSON from model response."""
         if not text:
             return None
         m = re.search(r"\{[\s\S]*\}", text)
@@ -274,8 +290,22 @@ class OCREngine:
                 pass
         return None
 
+    @staticmethod
+    def _normalize_creates(creates):
+        if not creates:
+            return ["transaction"]
+        if isinstance(creates, str):
+            creates = [creates]
+        normalized = []
+        for c in creates:
+            if c in ("expense", "income"):
+                if "transaction" not in normalized:
+                    normalized.append("transaction")
+            else:
+                normalized.append(c)
+        return normalized or ["transaction"]
+
     def _map_document_type(self, ai_type: str) -> DocumentType:
-        """Map AI document type string to DocumentType enum."""
         mapping = {
             "invoice": DocumentType.INVOICE,
             "asset_purchase": DocumentType.INVOICE,
@@ -291,7 +321,7 @@ class OCREngine:
             "betriebskostenabrechnung": DocumentType.INVOICE,
             "loan_contract": DocumentType.LOAN_CONTRACT,
             "zinsbescheinigung": DocumentType.LOAN_CONTRACT,
-            "kaufvertrag": DocumentType.INVOICE,  # NOT PURCHASE_CONTRACT — let AI handle via creates
+            "kaufvertrag": DocumentType.INVOICE,
             "spendenbestaetigung": DocumentType.SPENDENBESTAETIGUNG,
             "kirchenbeitrag": DocumentType.KIRCHENBEITRAG,
             "bank_statement": DocumentType.BANK_STATEMENT,
@@ -300,22 +330,6 @@ class OCREngine:
             "e1_form": DocumentType.E1_FORM,
         }
         return mapping.get(ai_type, DocumentType.UNKNOWN)
-
-    @staticmethod
-    def _normalize_creates(creates):
-        """Normalize creates field — vision model sometimes returns 'expense'/'income' instead of 'transaction'."""
-        if not creates:
-            return ["transaction"]
-        if isinstance(creates, str):
-            creates = [creates]
-        normalized = []
-        for c in creates:
-            if c in ("expense", "income"):
-                if "transaction" not in normalized:
-                    normalized.append("transaction")
-            else:
-                normalized.append(c)
-        return normalized or ["transaction"]
 
     def _empty_result(self, processing_time: float) -> OCRResult:
         return OCRResult(
@@ -326,11 +340,10 @@ class OCREngine:
             needs_review=True,
             processing_time_ms=processing_time,
             suggestions=[],
-            provider_used="llama-4-scout-vision",
-            classification_source="vision_ai_failed",
+            provider_used="failed",
+            classification_source="needs_manual_review",
         )
 
-    # Batch processing
     def process_batch(self, documents: List[bytes], **kwargs) -> BatchOCRResult:
         start = datetime.now()
         results = []
@@ -338,13 +351,10 @@ class OCREngine:
         for doc_bytes in documents:
             r = self.process_document(doc_bytes, **kwargs)
             results.append(r)
-            if r.confidence_score > 0:
-                ok += 1
-            else:
-                fail += 1
+            if r.confidence_score > 0: ok += 1
+            else: fail += 1
         return BatchOCRResult(
             results=results,
             total_processing_time_ms=(datetime.now() - start).total_seconds() * 1000,
-            successful=ok,
-            failed=fail,
+            successful=ok, failed=fail,
         )
