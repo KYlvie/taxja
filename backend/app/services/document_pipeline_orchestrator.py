@@ -4375,25 +4375,8 @@ class DocumentPipelineOrchestrator:
             safe_data.pop("_ai_first", None)
             ocr_result.update(safe_data)
 
-        # Safety net: if _ai_first exists but rule engine never ran, run it now
-        _ai = ocr_result.get("_ai_first")
-        if _ai and _ai.get("document_type") and not _ai.get("_rule_engine"):
-            from app.services.classify_transaction_rules import classify_transaction as _classify_txn
-            _s1 = {"document_type": _ai.get("document_type"),
-                    "gross_amount": ocr_result.get("gross_amount") or (_ai.get("amounts") or {}).get("total_amount"),
-                    "vat_amount": ocr_result.get("vat_amount"),
-                    "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
-            _s2 = {"expense_or_income": (_ai.get("tax_treatment") or {}).get("expense_or_income"),
-                    "is_asset_purchase": (_ai.get("key_fields") or {}).get("is_asset_purchase"),
-                    "is_gwg": (_ai.get("key_fields") or {}).get("is_gwg"),
-                    "asset_type": (_ai.get("key_fields") or {}).get("asset_type") or _ai.get("document_subtype"),
-                    "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
-            _uc = self._get_user_context_for_rules(document)
-            _rr = _classify_txn(_s1, _s2, _uc)
-            _ai["creates"] = _rr["creates"]
-            _ai["_rule_engine"] = _rr
-            ocr_result["_ai_first"] = _ai
-            logger.info("Rule engine safety net for doc %s: %s", document.id, _rr["rule_applied"])
+        # NOTE: Rule engine safety net is in _finalize only (not here).
+        # _persist_checkpoint_state runs too early — _ai_first may not have Step 2 data yet.
 
         validation_payload = self._build_validation_payload(result)
         if validation_payload:
@@ -4447,9 +4430,10 @@ class DocumentPipelineOrchestrator:
                 safe_data.pop("_ai_first", None)
                 ocr_result.update(safe_data)
 
-            # Safety net: if _ai_first exists but rule engine never ran, run it now
+            # ALWAYS re-run rule engine in _finalize — this is the final authority.
+            # Earlier runs (Vision/Text path) may have stale data because Step 2 hadn't completed.
             _ai_f = ocr_result.get("_ai_first")
-            if _ai_f and _ai_f.get("document_type") and not _ai_f.get("_rule_engine"):
+            if _ai_f and _ai_f.get("document_type"):
                 from app.services.classify_transaction_rules import classify_transaction as _classify_txn
                 _s1f = {"document_type": _ai_f.get("document_type"),
                         "gross_amount": ocr_result.get("gross_amount") or (_ai_f.get("amounts") or {}).get("total_amount"),
