@@ -688,7 +688,7 @@ class AIFirstClassifier:
                 "tax_form": step2.get("tax_form"),
                 "expense_or_income": (
                     step2.get("expense_or_income")
-                    or self._infer_direction_from_context(step2, user_context)
+                    or self._infer_direction_from_context(step2, user_context, raw_text)
                     or step1.get("expense_or_income")
                 ),
             },
@@ -697,21 +697,43 @@ class AIFirstClassifier:
         return result
 
     @staticmethod
-    def _infer_direction_from_context(step2: Dict, user_context: Optional[Dict]) -> Optional[str]:
-        """Infer expense_or_income from issuer/recipient vs user name."""
+    def _infer_direction_from_context(
+        step2: Dict,
+        user_context: Optional[Dict],
+        raw_text: str = "",
+    ) -> Optional[str]:
+        """Infer expense_or_income from issuer/recipient vs user name.
+
+        Priority:
+        1. Step 2 issuer/recipient fields match user name
+        2. Raw text analysis: user name appears before first amount → issuer (income)
+        """
         if not user_context or not user_context.get("name"):
             return None
         user_name = user_context["name"].lower()
-        # Split into significant tokens (last name, first name)
         tokens = [t for t in user_name.split() if len(t) > 2]
+        if not tokens:
+            return None
 
+        # Method 1: Check Step 2 issuer/recipient
         issuer = (step2.get("issuer") or "").lower()
         recipient = (step2.get("recipient") or "").lower()
-
         if issuer and any(t in issuer for t in tokens):
-            return "income"  # User is the issuer → Ausgangsrechnung
+            return "income"
         if recipient and any(t in recipient for t in tokens):
-            return "expense"  # User is the recipient → Eingangsrechnung
+            return "expense"
+
+        # Method 2: Check raw text — if user name appears in the header/sender section
+        # of the document (typically first 500 chars), and keywords like AR/Rechnung
+        # also appear, it's likely an Ausgangsrechnung (income)
+        if raw_text:
+            text_lower = raw_text[:500].lower()
+            name_found = any(t in text_lower for t in tokens)
+            ar_keywords = ("ausgangsrechnung", "| ar", "ar (", "honorarnote", "rechnung\n")
+            has_ar_hint = any(kw in text_lower for kw in ar_keywords)
+            if name_found and has_ar_hint:
+                return "income"
+
         return None
 
     # ── Backward compatibility ─────────────────────────────────────
