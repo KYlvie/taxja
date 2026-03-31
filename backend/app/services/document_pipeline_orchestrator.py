@@ -2908,19 +2908,23 @@ class DocumentPipelineOrchestrator:
 
             # Brutto = the LARGEST of all amount fields (brutto > netto always)
             brutto = max(ai_total, ocr_brutto, ocr_amount)
-            if vat > 0 and brutto > 0:
-                # If brutto + vat makes sense as a bigger total, use that
-                if brutto + vat > brutto and (brutto + vat) / brutto < Decimal("1.25"):
-                    brutto = brutto + vat  # amount was netto, add VAT for brutto
+
+            # For PKW: VLM amount IS brutto (VSt=0, not recoverable)
+            # For others with VAT: if amount looks like netto, reconstruct brutto
+            sub = asset.sub_category
+            if hasattr(sub, "value"):
+                sub = sub.value
+            if sub != "pkw" and vat > 0 and brutto > 0:
+                # Check if amount is netto (amount + vat = reasonable brutto)
+                potential_brutto = brutto + vat
+                if potential_brutto / brutto < Decimal("1.25"):
+                    brutto = potential_brutto
 
             if brutto <= 0:
                 return
 
             # Netto = brutto - vat
             netto = brutto - vat if vat > 0 else brutto
-            sub = asset.sub_category
-            if hasattr(sub, "value"):
-                sub = sub.value
 
             if sub == "pkw":
                 # PKW: no VSt recovery → base = min(brutto, 40k)
