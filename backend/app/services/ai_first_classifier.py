@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 STEP1_SYSTEM = """\
 Du bist ein Experte für österreichische Steuer- und Finanzdokumente.
-Bestimme den Dokumenttyp und was im Steuersystem angelegt werden soll.
+Bestimme NUR den Dokumenttyp. Keine steuerliche Bewertung, keine Richtung.
 Antworte NUR als JSON.
 
 Typen:
@@ -58,42 +58,8 @@ Typen:
 
 {
   "document_type": "typ",
-  "confidence": 0.0-1.0,
-  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"]
-}
-
-"creates" bestimmt, was in unserem Steuerverwaltungssystem angelegt werden soll:
-
-- "transaction": Eine einmalige Buchung (Einnahme oder Ausgabe) in der Einnahmen-Ausgaben-Rechnung.
-  Erscheint in E1a (§22/§23), E1b (§28 V+V) oder E1 (§25 AN). Beeinflusst Gewinn/Verlust direkt.
-  Beispiele: Rechnung bezahlt, SVS-Beitrag, Kirchenbeitrag, Spende, Zinszahlung laut Bescheinigung.
-
-- "asset": Ein Anlagegut wird im Anlageverzeichnis (AV) angelegt und über die Nutzungsdauer
-  abgeschrieben (AfA). Erscheint in der Bilanz und als jährliche AfA in E1a.
-  WICHTIG: Nur für Wirtschaftsgüter >EUR 1.000 netto mit Nutzungsdauer >1 Jahr.
-  Beispiele: Fahrzeuge (PKW, E-Auto, LKW), Maschinen, IT-Hardware >1000 EUR.
-  NICHT für GWG ≤1.000 EUR (die sind sofort absetzbar = nur "transaction").
-  NICHT für Verbrauchsmaterial (Holz, Büromaterial = nur "transaction").
-
-- "recurring": Eine wiederkehrende Buchung (monatlich/quartalsweise/jährlich) wird angelegt.
-  Das System generiert automatisch Einzelbuchungen für jeden Zeitraum.
-  Beispiele: Monatliche Miete (Vermieter=Einnahme, Mieter=Ausgabe),
-  Versicherungsprämie (jährlich), Werkstattmiete (monatlich).
-
-- "loan": Ein Kredit/Darlehen wird als Verbindlichkeit angelegt.
-  Verwaltet Zinsen, Tilgung, Restschuld. Zinsen erscheinen als WK in E1b (Hypothek)
-  oder BA in E1a (Betriebsmittelkredit).
-  Beispiele: Hypothekarkredit, Betriebsmittelkredit, Familiendarlehen.
-
-- "property": Eine Immobilie wird angelegt mit Kaufpreis, Gebäudewert, AfA-Satz.
-  Generiert automatisch die Gebäude-AfA (1,5% p.a.) für E1b.
-  Beispiele: Kaufvertrag einer Mietimmobilie, Mietvertrag als Vermieter.
-
-- "archive_only": Dokument wird nur gespeichert, keine Buchung/Anlage.
-  Beispiele: Kontoauszug (zur Abstimmung), Tilgungsplan, Übergabeprotokoll,
-  Fahrtenbuch (korrigiert nur %), Halbjahresregel-Nachweis.
-
-Mehrfach möglich: Fahrzeugkauf = ["asset", "transaction"]. Mietvertrag VM = ["property", "recurring"]."""
+  "confidence": 0.0-1.0
+}"""
 
 STEP1_USER = "Dokumenttyp bestimmen:\n\n{text}"
 
@@ -127,7 +93,7 @@ Hinweise: "AR", "Ausgangsrechnung", "Honorarnote" im Titel → immer income.
   "description": "Kurzbeschreibung der Leistung/Ware",
   "property_address": "Immobilienadresse falls erwähnt, sonst null",
   "is_asset_purchase": true wenn Anlagegut (Fahrzeug/Maschine/IT >EUR 1000) gekauft wurde,
-  "asset_type": "pkw|e_auto|lkw|maschine|it_hardware|moebel|null",
+  "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|moebel|null — WICHTIG: pkw=Benzin/Diesel, e_auto=Elektro/BEV/PHEV/Hybrid (unterschiedliche VSt-Behandlung!), lkw/fiskal_lkw=Nutzfahrzeug",
   "is_deductible": true/false,
   "deduction_category": "Betriebsausgabe|Werbungskosten|Sonderausgaben|null",
   "tax_form": "E1a|E1b|E1|null"
@@ -357,7 +323,7 @@ Analysiere diesen Anlagegut-Kauf. Antworte NUR als JSON.
 ZAHLENFORMAT: "1.234,56" = 1234.56.
 
 {
-  "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|moebel|other",
+  "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|moebel|other — WICHTIG: pkw=Benzin/Diesel PKW, e_auto=Elektrofahrzeug/BEV/PHEV/Hybrid (unterschiedliche VSt!), lkw/fiskal_lkw=Nutzfahrzeug/Pritsche/Kasten",
   "description": "Beschreibung des Wirtschaftsguts",
   "gross_amount": Rechnungsbetrag brutto inkl. USt als Zahl (der grosse Endbetrag auf der Rechnung),
   "vat_amount": USt-Betrag oder null,
@@ -640,14 +606,11 @@ class AIFirstClassifier:
                                     user_context=user_context)
 
         # Merge into unified format (backward compatible with old _ai_first)
-        creates = step1.get("creates", [])
-        if isinstance(creates, str):
-            creates = [creates]
-
+        # NOTE: creates is NO LONGER from AI. Step 3 rule engine decides.
         result = {
             "document_type": doc_type,
             "confidence": confidence,
-            "creates": creates,
+            "creates": [],  # Populated by Step 3 rule engine in pipeline
             "document_subtype": step2.get("insurance_subtype") or step2.get("settlement_type")
                                or step2.get("loan_type") or step2.get("asset_type"),
             "document_purpose": step2.get("document_purpose"),

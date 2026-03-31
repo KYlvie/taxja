@@ -794,10 +794,39 @@ class DocumentPipelineOrchestrator:
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(document, "ocr_result")
             self.db.flush()
-            logger.info("Vision AI classified doc %s: type=%s creates=%s",
-                        document.id, _existing_ai.get("document_type"), _existing_ai.get("creates"))
-            # Map AI type to DB type
             ai_type_str = _existing_ai.get("document_type", "other")
+
+            # ── Step 3: Rule engine — populate creates from deterministic rules ──
+            from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+            _step1_data = {
+                "document_type": ai_type_str,
+                "gross_amount": (result.extracted_data or {}).get("gross_amount")
+                                or (_existing_ai.get("amounts") or {}).get("total_amount"),
+                "vat_amount": (result.extracted_data or {}).get("vat_amount"),
+                "issuer": (result.extracted_data or {}).get("issuer"),
+                "recipient": (result.extracted_data or {}).get("recipient"),
+            }
+            _step2_data = {
+                "expense_or_income": (_existing_ai.get("tax_treatment") or {}).get("expense_or_income"),
+                "is_asset_purchase": (_existing_ai.get("key_fields") or {}).get("is_asset_purchase"),
+                "is_gwg": (_existing_ai.get("key_fields") or {}).get("is_gwg"),
+                "asset_type": (_existing_ai.get("key_fields") or {}).get("asset_type")
+                              or _existing_ai.get("document_subtype"),
+                "issuer": (result.extracted_data or {}).get("issuer"),
+                "recipient": (result.extracted_data or {}).get("recipient"),
+            }
+            _user_ctx = self._get_user_context_for_rules(document)
+            _rule_result = _classify_txn(_step1_data, _step2_data, _user_ctx)
+            _existing_ai["creates"] = _rule_result["creates"]
+            _existing_ai["_rule_engine"] = _rule_result
+            logger.info("Vision AI + Rule Engine doc %s: type=%s creates=%s rule=%s",
+                        document.id, ai_type_str, _rule_result["creates"], _rule_result["rule_applied"])
+
+            # Persist updated _ai_first with rule engine results
+            ocr_json["_ai_first"] = _existing_ai
+            document.ocr_result = ocr_json
+            flag_modified(document, "ocr_result")
+
             db_type = self._map_ai_type_to_db_type(ai_type_str)
             document.document_type = db_type
             self.db.flush()
@@ -926,6 +955,33 @@ class DocumentPipelineOrchestrator:
                                 logger.info("AI Round 2 for %s: extracted %d fields", ai_doc_type, len(r2))
                         except Exception as e2:
                             logger.debug("AI Round 2 failed for %s: %s", ai_doc_type, e2)
+
+                    # ── Step 3: Rule engine — populate creates from deterministic rules ──
+                    from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+                    _step1_data = {
+                        "document_type": ai_doc_type,
+                        "gross_amount": (ai_result.get("amounts") or {}).get("total_amount"),
+                        "vat_amount": (result.extracted_data or {}).get("vat_amount"),
+                        "issuer": (ai_result.get("key_fields") or {}).get("issuer")
+                                  or (result.extracted_data or {}).get("issuer"),
+                        "recipient": (result.extracted_data or {}).get("recipient"),
+                    }
+                    _step2_data = {
+                        "expense_or_income": (ai_result.get("tax_treatment") or {}).get("expense_or_income"),
+                        "is_asset_purchase": (ai_result.get("key_fields") or {}).get("is_asset_purchase"),
+                        "is_gwg": (ai_result.get("key_fields") or {}).get("is_gwg"),
+                        "asset_type": (ai_result.get("key_fields") or {}).get("asset_type")
+                                      or ai_result.get("document_subtype"),
+                        "issuer": (ai_result.get("key_fields") or {}).get("issuer")
+                                  or (result.extracted_data or {}).get("issuer"),
+                        "recipient": (result.extracted_data or {}).get("recipient"),
+                    }
+                    _user_ctx_rules = self._get_user_context_for_rules(document)
+                    _rule_result = _classify_txn(_step1_data, _step2_data, _user_ctx_rules)
+                    ai_result["creates"] = _rule_result["creates"]
+                    ai_result["_rule_engine"] = _rule_result
+                    logger.info("AI Text + Rule Engine doc %s: type=%s creates=%s rule=%s",
+                                document.id, ai_doc_type, _rule_result["creates"], _rule_result["rule_applied"])
 
                     # Store AI result in ocr_result for downstream consumers
                     ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
@@ -2435,18 +2491,19 @@ class DocumentPipelineOrchestrator:
         """Run a single explicit Phase-2 action and append/log any outcomes."""
         del ocr_result  # Phase-2 actions consume persisted result state via helpers.
 
-        # AI creates override: when AI says this is an asset (not real estate),
+        # Rule engine override: when Step 3 classified as asset (not real estate),
         # skip the kaufvertrag/property path and let ASSET_SUGGESTION handle it.
         _ai_first = (document.ocr_result or {}).get("_ai_first", {})
+        _rule_engine = _ai_first.get("_rule_engine", {})
         _ai_creates = _ai_first.get("creates", [])
         if isinstance(_ai_creates, str):
             _ai_creates = [_ai_creates]
         _ai_type = _ai_first.get("document_type", "")
 
-        # AI creates is authoritative. If AI says "asset" → skip old kaufvertrag/property
+        # Rule engine is authoritative. If rules say "asset" → skip old kaufvertrag/property
         # handler and let ASSET_SUGGESTION handle it correctly (vehicle vs real estate).
         if action == ProcessingAction.PURCHASE_CONTRACT and "asset" in _ai_creates:
-            logger.info("Skipping PURCHASE_CONTRACT for doc %s — AI creates=%s", document.id, _ai_creates)
+            logger.info("Skipping PURCHASE_CONTRACT for doc %s — rule engine creates=%s", document.id, _ai_creates)
             return
 
         if action == ProcessingAction.PURCHASE_CONTRACT:
@@ -2849,12 +2906,13 @@ class DocumentPipelineOrchestrator:
             if not suggestion:
                 return None
 
-            # Force-create asset when AI is confident (creates=["asset"])
+            # Force-create asset when rule engine says creates=["asset"]
             _ai_creates = (document.ocr_result or {}).get("_ai_first", {}).get("creates", [])
             if isinstance(_ai_creates, str):
                 _ai_creates = [_ai_creates]
-            logger.info("Asset suggestion for doc %s: creates=%s, has_data=%s, status=%s",
-                        document.id, _ai_creates, bool(suggestion.get("data")), suggestion.get("status"))
+            _rule = (document.ocr_result or {}).get("_ai_first", {}).get("_rule_engine", {})
+            logger.info("Asset suggestion for doc %s: rule=%s, creates=%s, has_data=%s",
+                        document.id, _rule.get("rule_applied"), _ai_creates, bool(suggestion.get("data")))
             if "asset" in _ai_creates and suggestion.get("data"):
                 try:
                     from app.tasks.ocr_tasks import create_asset_from_suggestion
@@ -2981,6 +3039,17 @@ class DocumentPipelineOrchestrator:
             logger.info("Fixed asset %s depreciable_base: sub=%s base=%s", asset_id, sub, asset.income_tax_depreciable_base)
         except Exception as e:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
+
+    def _get_user_context_for_rules(self, document) -> dict:
+        """Build minimal user context for the Step 3 rule engine."""
+        try:
+            from app.models.user import User as _User
+            user = self.db.query(_User).filter(_User.id == document.user_id).first() if document.user_id else None
+            if user:
+                return {"name": user.name or ""}
+        except Exception:
+            pass
+        return {}
 
     def _handle_fahrtenbuch(self, document, ai_first):
         """Update PKW business_use_percentage from Fahrtenbuch data.
