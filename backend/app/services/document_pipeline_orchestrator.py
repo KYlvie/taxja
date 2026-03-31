@@ -4432,7 +4432,13 @@ class DocumentPipelineOrchestrator:
 
             # ALWAYS re-run rule engine in _finalize — this is the final authority.
             # Earlier runs (Vision/Text path) may have stale data because Step 2 hadn't completed.
+            # Also check result.extracted_data._ai_first as fallback (if ocr_result lost it)
             _ai_f = ocr_result.get("_ai_first")
+            if not _ai_f and result.extracted_data:
+                _ai_f = (result.extracted_data or {}).get("_ai_first")
+                if _ai_f:
+                    ocr_result["_ai_first"] = _ai_f
+                    logger.info("Recovered _ai_first from extracted_data for doc %s", document.id)
             if _ai_f and _ai_f.get("document_type"):
                 from app.services.classify_transaction_rules import classify_transaction as _classify_txn
                 _s1f = {"document_type": _ai_f.get("document_type"),
