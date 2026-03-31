@@ -174,6 +174,20 @@ class OCREngine:
                 },
             }
 
+            # Fix direction: if vision said expense but issuer matches user → income
+            direction = result.get("expense_or_income", "expense")
+            issuer = (result.get("issuer") or "").lower()
+            if user_identity and direction != "income":
+                user_tokens = [t.lower() for t in (user_identity or "").split("\n")
+                               if t.startswith("Name:") or t.startswith("Firma:")]
+                for token_line in user_tokens:
+                    name = token_line.split(":", 1)[-1].strip().lower()
+                    name_parts = [p for p in name.split() if len(p) > 2]
+                    if name_parts and any(p in issuer for p in name_parts):
+                        direction = "income"
+                        break
+                extracted_data["_ai_first"]["tax_treatment"]["expense_or_income"] = direction
+
             # Use raw_text from vision model's transcription
             raw_text = result.get("raw_text", "")
 
