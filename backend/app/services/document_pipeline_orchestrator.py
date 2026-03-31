@@ -2916,24 +2916,25 @@ class DocumentPipelineOrchestrator:
             vat = Decimal(str(ocr.get("vat_amount") or 0))
 
             # Brutto = the LARGEST of all amount fields (brutto > netto always)
+            # AI total_amount is ALWAYS brutto (the total on the invoice)
             brutto = max(ai_total, ocr_brutto, ocr_amount)
 
-            # For PKW: VLM amount IS brutto (VSt=0, not recoverable)
-            # For others with VAT: if amount looks like netto, reconstruct brutto
             sub = asset.sub_category
             if hasattr(sub, "value"):
                 sub = sub.value
-            if sub != "pkw" and vat > 0 and brutto > 0:
-                # Check if amount is netto (amount + vat = reasonable brutto)
-                potential_brutto = brutto + vat
-                if potential_brutto / brutto < Decimal("1.25"):
-                    brutto = potential_brutto
 
             if brutto <= 0:
                 return
 
-            # Netto = brutto - vat
-            netto = brutto - vat if vat > 0 else brutto
+            # Netto = brutto / 1.20 for 20% VAT items (or brutto - explicit vat)
+            if vat > 0:
+                netto = brutto - vat
+            else:
+                # No explicit VAT: for VAT-liable items, compute netto from brutto
+                if sub not in ("pkw",):  # PKW has no VSt, so brutto=base
+                    netto = (brutto / Decimal("1.20")).quantize(Decimal("0.01"))
+                else:
+                    netto = brutto
 
             if sub == "pkw":
                 # PKW: no VSt recovery → base = min(brutto, 40k)
@@ -2944,10 +2945,15 @@ class DocumentPipelineOrchestrator:
                 asset.income_tax_depreciable_base = base
                 asset.comparison_amount = brutto
             elif sub == "electric_pkw":
-                # E-Auto: partial VSt → base = brutto - anteilig VSt
+                # E-Auto: partial VSt recovery capped at brutto EUR 40,000
+                # Total VSt = brutto / 6 (for 20% rate)
+                # Recoverable ratio = min(40k / brutto, 1)
+                # Recoverable VSt = total_vst × ratio
+                # Base = brutto - recoverable VSt
                 cap = Decimal("40000")
+                total_vst = (brutto / Decimal("6")).quantize(Decimal("0.01"))
                 ratio = min(cap / brutto, Decimal("1")) if brutto > 0 else Decimal("0")
-                vst_recovered = (netto * Decimal("0.20") * ratio).quantize(Decimal("0.01"))
+                vst_recovered = (total_vst * ratio).quantize(Decimal("0.01"))
                 base = brutto - vst_recovered
                 asset.purchase_price = brutto
                 asset.income_tax_cost_cap = None
