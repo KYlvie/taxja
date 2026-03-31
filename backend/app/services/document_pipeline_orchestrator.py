@@ -672,7 +672,7 @@ class DocumentPipelineOrchestrator:
         )
         doc_type_hint = None if _skip_hint else document.document_type
 
-        # Build user identity string for VLM direction detection
+        # Build user identity string for vision model direction detection
         user_identity = None
         try:
             from app.models.user import User as _User
@@ -680,11 +680,23 @@ class DocumentPipelineOrchestrator:
             if _user:
                 parts = []
                 if _user.name:
-                    parts.append(_user.name)
+                    parts.append(f"Name: {_user.name}")
                 if getattr(_user, "business_name", None):
-                    parts.append(_user.business_name)
+                    parts.append(f"Firma: {_user.business_name}")
+                if getattr(_user, "address", None):
+                    parts.append(f"Adresse: {_user.address}")
+                if getattr(_user, "tax_number", None):
+                    parts.append(f"Steuernummer: {_user.tax_number}")
+                if getattr(_user, "vat_number", None):
+                    parts.append(f"UID: {_user.vat_number}")
+                bt = getattr(_user, "business_type", None)
+                if bt:
+                    parts.append(f"Typ: {bt.value if hasattr(bt, 'value') else str(bt)}")
+                vat = getattr(_user, "vat_status", None)
+                if vat:
+                    parts.append(f"USt: {vat.value if hasattr(vat, 'value') else str(vat)}")
                 if parts:
-                    user_identity = " / ".join(parts)
+                    user_identity = "\n".join(parts)
         except Exception:
             pass
 
