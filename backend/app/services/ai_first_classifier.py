@@ -59,7 +59,8 @@ Typen:
 {
   "document_type": "typ",
   "confidence": 0.0-1.0,
-  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"]
+  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"],
+  "expense_or_income": "income wenn Benutzer=Aussteller/Lieferant, expense wenn Benutzer=Empfänger/Kunde, archive_only wenn kein Geldfluss"
 }
 
 "creates" bestimmt, was in unserem Steuerverwaltungssystem angelegt werden soll:
@@ -686,7 +687,7 @@ class AIFirstClassifier:
                 "is_deductible": step2.get("is_deductible"),
                 "deduction_category": step2.get("deduction_category"),
                 "tax_form": step2.get("tax_form"),
-                "expense_or_income": step2.get("expense_or_income"),
+                "expense_or_income": step2.get("expense_or_income") or step1.get("expense_or_income"),
             },
         }
 
