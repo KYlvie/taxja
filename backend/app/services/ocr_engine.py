@@ -145,7 +145,7 @@ class OCREngine:
             extracted_data["_ai_first"] = {
                 "document_type": result.get("document_type", "other"),
                 "confidence": confidence,
-                "creates": result.get("creates", ["transaction"]),
+                "creates": self._normalize_creates(result.get("creates", ["transaction"])),
                 "document_subtype": result.get("insurance_subtype") or result.get("asset_type"),
                 "role_detection": {
                     "landlord_name": None,
@@ -300,6 +300,22 @@ class OCREngine:
             "e1_form": DocumentType.E1_FORM,
         }
         return mapping.get(ai_type, DocumentType.UNKNOWN)
+
+    @staticmethod
+    def _normalize_creates(creates):
+        """Normalize creates field — vision model sometimes returns 'expense'/'income' instead of 'transaction'."""
+        if not creates:
+            return ["transaction"]
+        if isinstance(creates, str):
+            creates = [creates]
+        normalized = []
+        for c in creates:
+            if c in ("expense", "income"):
+                if "transaction" not in normalized:
+                    normalized.append("transaction")
+            else:
+                normalized.append(c)
+        return normalized or ["transaction"]
 
     def _empty_result(self, processing_time: float) -> OCRResult:
         return OCRResult(
