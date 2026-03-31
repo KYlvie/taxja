@@ -1197,7 +1197,8 @@ class OCRTransactionService:
             if ai_type in type_cat_map:
                 category = type_cat_map[ai_type]
 
-        is_deductible = tax.get("is_deductible", True) if txn_type != TransactionType.INCOME.value else False
+        _ai_ded = tax.get("is_deductible")
+        is_deductible = bool(_ai_ded) if _ai_ded is not None else (txn_type != TransactionType.INCOME.value)
         # Override: these types are ALWAYS deductible regardless of AI
         _always_deductible = {
             ExpenseCategory.SVS_CONTRIBUTIONS.value,
