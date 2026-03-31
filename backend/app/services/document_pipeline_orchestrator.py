@@ -2898,26 +2898,26 @@ class DocumentPipelineOrchestrator:
             ai = ocr.get("_ai_first", {})
             ai_amounts = ai.get("amounts", {}) or {}
 
-            # Get brutto from AI (most reliable), fallback to top-level
-            brutto = Decimal(str(
-                ai_amounts.get("total_amount")
-                or ocr.get("amount_brutto")
-                or ocr.get("amount")
-                or 0
-            ))
-            netto_from_ai = ai_amounts.get("annual_amount")
-            vat_from_ocr = Decimal(str(ocr.get("vat_amount", 0) or 0))
+            # Determine brutto and netto from all available sources
+            ai_total = Decimal(str(ai_amounts.get("total_amount") or 0))
+            ai_annual = Decimal(str(ai_amounts.get("annual_amount") or 0))
+            ocr_brutto = Decimal(str(ocr.get("amount_brutto") or 0))
+            ocr_netto = Decimal(str(ocr.get("amount_netto") or 0))
+            ocr_amount = Decimal(str(ocr.get("amount") or 0))
+            vat = Decimal(str(ocr.get("vat_amount") or 0))
+
+            # Brutto = the LARGEST of all amount fields (brutto > netto always)
+            brutto = max(ai_total, ocr_brutto, ocr_amount)
+            if vat > 0 and brutto > 0:
+                # If brutto + vat makes sense as a bigger total, use that
+                if brutto + vat > brutto and (brutto + vat) / brutto < Decimal("1.25"):
+                    brutto = brutto + vat  # amount was netto, add VAT for brutto
 
             if brutto <= 0:
                 return
 
-            # Calculate netto: prefer AI netto, fallback to brutto-vat
-            if netto_from_ai and float(netto_from_ai) > 0:
-                netto = Decimal(str(netto_from_ai))
-            elif vat_from_ocr > 0:
-                netto = brutto - vat_from_ocr
-            else:
-                netto = brutto
+            # Netto = brutto - vat
+            netto = brutto - vat if vat > 0 else brutto
             sub = asset.sub_category
             if hasattr(sub, "value"):
                 sub = sub.value
