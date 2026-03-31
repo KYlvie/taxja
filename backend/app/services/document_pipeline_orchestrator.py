@@ -2895,12 +2895,29 @@ class DocumentPipelineOrchestrator:
                 return
 
             ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
-            brutto = Decimal(str(ocr.get("amount", 0)))
-            vat = Decimal(str(ocr.get("vat_amount", 0)))
+            ai = ocr.get("_ai_first", {})
+            ai_amounts = ai.get("amounts", {}) or {}
+
+            # Get brutto from AI (most reliable), fallback to top-level
+            brutto = Decimal(str(
+                ai_amounts.get("total_amount")
+                or ocr.get("amount_brutto")
+                or ocr.get("amount")
+                or 0
+            ))
+            netto_from_ai = ai_amounts.get("annual_amount")
+            vat_from_ocr = Decimal(str(ocr.get("vat_amount", 0) or 0))
+
             if brutto <= 0:
                 return
 
-            netto = brutto - vat if vat > 0 else brutto
+            # Calculate netto: prefer AI netto, fallback to brutto-vat
+            if netto_from_ai and float(netto_from_ai) > 0:
+                netto = Decimal(str(netto_from_ai))
+            elif vat_from_ocr > 0:
+                netto = brutto - vat_from_ocr
+            else:
+                netto = brutto
             sub = asset.sub_category
             if hasattr(sub, "value"):
                 sub = sub.value
