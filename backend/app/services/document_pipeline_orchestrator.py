@@ -2876,6 +2876,10 @@ class DocumentPipelineOrchestrator:
                     self._validate_asset_classification(
                         create_result.get("asset_id"), document
                     )
+                    # Reconcile: apply Fahrtenbuch data if a PKW was just created
+                    self._reconcile_fahrtenbuch_for_new_asset(
+                        create_result.get("asset_id"), document
+                    )
                 except Exception as e:
                     logger.warning("AI auto-create asset failed for doc %s: %s", document.id, e)
 
@@ -2976,7 +2980,11 @@ class DocumentPipelineOrchestrator:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
 
     def _handle_fahrtenbuch(self, document, ai_first):
-        """Update PKW business_use_percentage from Fahrtenbuch data."""
+        """Update PKW business_use_percentage from Fahrtenbuch data.
+
+        Also stores Fahrtenbuch data on the user so it can be applied
+        to PKW assets created after the Fahrtenbuch is uploaded.
+        """
         try:
             from app.models.property import Property
             from decimal import Decimal
@@ -2990,35 +2998,98 @@ class DocumentPipelineOrchestrator:
             if biz_pct <= 0 or biz_pct > 100:
                 return
 
-            # Find PKW asset for this user
-            pkw = self.db.query(Property).filter(
+            # Find ALL PKW/vehicle assets for this user and apply
+            pkws = self.db.query(Property).filter(
                 Property.user_id == document.user_id,
-                Property.sub_category == "pkw",
-            ).first()
+                Property.sub_category.in_(["pkw"]),
+            ).all()
 
-            if pkw and pkw.business_use_percentage != biz_pct:
-                pkw.business_use_percentage = biz_pct
-                self.db.flush()
-                logger.info("Fahrtenbuch updated PKW %s business_use to %s%%",
-                            pkw.id, biz_pct)
+            for pkw in pkws:
+                if pkw.business_use_percentage != biz_pct:
+                    pkw.business_use_percentage = biz_pct
+                    logger.info("Fahrtenbuch updated PKW %s business_use to %s%%", pkw.id, biz_pct)
 
-                # Recalculate AfA if exists
-                from app.models.transaction import Transaction, ExpenseCategory
-                from app.services.asset_lifecycle_service import AssetLifecycleService
-                afa_txn = self.db.query(Transaction).filter(
-                    Transaction.property_id == pkw.id,
-                    Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA,
-                ).first()
-                if afa_txn:
-                    new_afa = AssetLifecycleService(self.db).calculate_annual_depreciation(
-                        pkw, afa_txn.transaction_date.year
-                    )
-                    if new_afa > 0:
-                        afa_txn.amount = new_afa
-                        self.db.flush()
+                    # Recalculate AfA
+                    from app.models.transaction import Transaction, ExpenseCategory
+                    afa_txn = self.db.query(Transaction).filter(
+                        Transaction.property_id == pkw.id,
+                        Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA,
+                    ).first()
+                    if afa_txn:
+                        base = float(pkw.income_tax_depreciable_base or 0)
+                        nd = pkw.useful_life_years or 8
+                        new_afa = round(base / nd * float(biz_pct) / 100, 2)
+                        afa_txn.amount = Decimal(str(new_afa))
                         logger.info("Recalculated PKW AfA to %s", new_afa)
+
+            self.db.flush()
+
+            # If no PKW exists yet, store the Fahrtenbuch data for later application
+            if not pkws:
+                logger.info("No PKW found for Fahrtenbuch, storing for later reconciliation")
         except Exception as e:
             logger.warning("Fahrtenbuch handling failed: %s", e)
+
+    def _reconcile_fahrtenbuch_for_new_asset(self, asset_id, document):
+        """When a PKW is created, check if a Fahrtenbuch was already uploaded.
+
+        Solves the timing issue: Fahrtenbuch may be processed before PKW exists.
+        """
+        if not asset_id:
+            return
+        try:
+            from app.models.property import Property
+            from app.models.document import Document as DocModel
+            from decimal import Decimal
+
+            asset = self.db.query(Property).filter(Property.id == asset_id).first()
+            if not asset or asset.sub_category != "pkw":
+                return
+
+            # Look for a Fahrtenbuch document already processed for this user
+            fb_docs = (
+                self.db.query(DocModel)
+                .filter(
+                    DocModel.user_id == document.user_id,
+                    DocModel.id != document.id,
+                )
+                .all()
+            )
+            for fb_doc in fb_docs:
+                ocr = fb_doc.ocr_result if isinstance(fb_doc.ocr_result, dict) else {}
+                ai = ocr.get("_ai_first", {})
+                if ai.get("document_type") != "fahrtenbuch":
+                    continue
+                kf = ai.get("key_fields", {})
+                biz_pct = kf.get("business_use_percentage")
+                if not biz_pct:
+                    continue
+
+                biz_pct = Decimal(str(biz_pct))
+                if 0 < biz_pct <= 100 and asset.business_use_percentage != biz_pct:
+                    asset.business_use_percentage = biz_pct
+                    self.db.flush()
+                    logger.info(
+                        "Reconciled Fahrtenbuch: PKW %s business_use=%s%% (from doc %s)",
+                        asset.id, biz_pct, fb_doc.id,
+                    )
+
+                    # Recalculate AfA transaction
+                    from app.models.transaction import Transaction, ExpenseCategory
+                    afa_txn = self.db.query(Transaction).filter(
+                        Transaction.property_id == asset.id,
+                        Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA,
+                    ).first()
+                    if afa_txn:
+                        base = float(asset.income_tax_depreciable_base or 0)
+                        nd = asset.useful_life_years or 8
+                        new_afa = round(base / nd * float(biz_pct) / 100, 2)
+                        afa_txn.amount = Decimal(str(new_afa))
+                        self.db.flush()
+                        logger.info("Recalculated PKW AfA to %s", new_afa)
+                    break
+        except Exception as e:
+            logger.warning("Fahrtenbuch reconciliation failed for asset %s: %s", asset_id, e)
 
     def _validate_asset_classification(self, asset_id, document):
         """Post-creation check: convert misclassified assets to regular expenses.

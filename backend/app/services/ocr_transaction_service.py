@@ -1075,7 +1075,7 @@ class OCRTransactionService:
         key_fields = ai_first.get("key_fields") or {}
         tax = ai_first.get("tax_treatment") or {}
 
-        # Determine amount
+        # Determine amount (AI returns brutto = total on invoice)
         amount = (
             amounts.get("total_amount")
             or amounts.get("annual_amount")
@@ -1090,6 +1090,8 @@ class OCRTransactionService:
         if not amount or float(amount) <= 0:
             logger.info("No amount for doc %s (type=%s)", document.id, ai_type)
             return None
+
+        vat_amount = None
 
         # Date
         date_str = key_fields.get("date") or key_fields.get("purchase_date") or ocr_data.get("date")
@@ -1113,13 +1115,16 @@ class OCRTransactionService:
         logger.info("AI extraction doc %s: type=%s amt=%.2f desc=%s",
                      document.id, ai_type, float(amount), description[:60])
 
-        return {
+        result = {
             "amount": float(amount),
             "date": date_str,
             "description": description,
             "_ai_extracted": True,
             "_ai_doc_type": ai_type,
         }
+        if vat_amount is not None:
+            result["vat_amount"] = vat_amount
+        return result
 
 
     # Legacy extraction methods removed — AI two-step classifier handles all types.

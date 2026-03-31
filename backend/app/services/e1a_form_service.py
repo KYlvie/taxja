@@ -251,10 +251,44 @@ def generate_e1a_form_data(
         for t in other_txns
     )
 
+    # IFB (Investitionsfreibetrag §11 EStG) — calculated from qualifying assets
+    ifb_total = Decimal("0")
+    try:
+        from app.services.ifb_calculator import calculate_ifb, IFBAssetType
+        from app.models.property import Property
+        ifb_investments = []
+        if db:
+            props = db.query(Property).filter(
+                Property.user_id == user.id,
+                Property.ifb_candidate == True,
+            ).all()
+            for p in props:
+                # Determine IFB asset type
+                sub = p.sub_category
+                if hasattr(sub, "value"):
+                    sub = sub.value
+                if sub in ("electric_pkw",):
+                    ifb_type = "eco_vehicle"
+                elif sub in ("pkw", "fiscal_truck", "truck", "motorcycle"):
+                    continue  # KFZ excluded from IFB (§11 Abs.3)
+                else:
+                    ifb_type = "standard"
+                ifb_investments.append({
+                    "description": p.name or sub,
+                    "asset_type": ifb_type,
+                    "acquisition_cost": float(p.income_tax_depreciable_base or 0),
+                    "acquisition_date": str(p.purchase_date) if p.purchase_date else None,
+                })
+        if ifb_investments:
+            ifb_result = calculate_ifb(ifb_investments, tax_year=year)
+            ifb_total = ifb_result.total_ifb
+    except Exception as e:
+        logger.warning("IFB calculation failed: %s", e)
+
     total_expenses = (
         material + personnel + afa + rent + travel + telecom + marketing
         + insurance + professional + bank_fees + interest + svs + utilities
-        + maintenance + other
+        + maintenance + other + ifb_total
     )
 
     profit = business_income - total_expenses
@@ -313,6 +347,15 @@ def generate_e1a_form_data(
             "value": float(afa),
             "section": "ausgaben",
             "editable": True,
+        },
+        {
+            "kz": "9160",
+            "label_de": "Investitionsfreibetrag (IFB §11)",
+            "label_en": "Investment allowance (IFB §11)",
+            "label_zh": "投资免税额 (IFB §11)",
+            "value": float(ifb_total),
+            "section": "ausgaben",
+            "editable": False,
         },
         {
             "kz": "9080",
@@ -456,6 +499,8 @@ def generate_e1a_form_data(
         "summary": {
             "business_income": float(business_income),
             "total_expenses": float(total_expenses),
+            "afa": float(afa),
+            "ifb": float(ifb_total),
             "profit": float(profit),
             "grundfreibetrag": float(gfb["grundfreibetrag"]),
             "investitions_gfb": float(gfb["investitions_gfb"]),
