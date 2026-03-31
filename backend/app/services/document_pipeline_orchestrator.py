@@ -2399,6 +2399,25 @@ class DocumentPipelineOrchestrator:
         """Run a single explicit Phase-2 action and append/log any outcomes."""
         del ocr_result  # Phase-2 actions consume persisted result state via helpers.
 
+        # AI creates override: when AI says this is an asset (not real estate),
+        # skip the kaufvertrag/property path and let ASSET_SUGGESTION handle it.
+        _ai_first = (document.ocr_result or {}).get("_ai_first", {})
+        _ai_creates = _ai_first.get("creates", [])
+        if isinstance(_ai_creates, str):
+            _ai_creates = [_ai_creates]
+        _ai_type = _ai_first.get("document_type", "")
+
+        if action == ProcessingAction.PURCHASE_CONTRACT and "asset" in _ai_creates:
+            # AI says asset purchase (vehicle/equipment), not real estate Kaufvertrag.
+            # Skip kaufvertrag handler, let ASSET_SUGGESTION (secondary action) handle it.
+            if _ai_type not in ("kaufvertrag",) or \
+               (_ai_first.get("key_fields") or {}).get("asset_type") is not None:
+                logger.info(
+                    "Skipping PURCHASE_CONTRACT for doc %s — AI says asset, not real estate (type=%s)",
+                    document.id, _ai_type,
+                )
+                return
+
         if action == ProcessingAction.PURCHASE_CONTRACT:
             # TODO(v1.4-followup): property persistence still bypasses the asset-path
             # quality gate. Whole-pipeline gate unification is not done yet.
