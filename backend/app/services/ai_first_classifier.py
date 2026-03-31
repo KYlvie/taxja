@@ -560,6 +560,31 @@ class AIFirstClassifier:
 
     # ── Step 2: Extract fields ─────────────────────────────────────
 
+    def _step2_generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 2048) -> str:
+        """Step 2 uses llama-3.3-70b for stable JSON extraction (not reasoning model)."""
+        load_dotenv()
+        groq_keys = [k for k in [os.getenv("GROQ_API_KEY"), os.getenv("GROQ_API_KEY_2")] if k]
+        for key in groq_keys:
+            try:
+                from groq import Groq
+                client = Groq(api_key=key, timeout=60.0)
+                resp = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=0,
+                )
+                content = resp.choices[0].message.content
+                if content and content.strip():
+                    return content
+            except Exception as e:
+                logger.info("Step 2 llama failed: %s", e)
+        # Fallback to default (gpt-oss-20b)
+        return self._generate(system_prompt, user_prompt, max_tokens)
+
     def extract_fields(self, raw_text: str, document_type: str,
                        max_chars: int = 6000,
                        user_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -587,7 +612,7 @@ class AIFirstClassifier:
                 "- Wenn der Benutzer-Name als Aussteller/Lieferant im Dokument steht → income\n"
                 "- Wenn der Benutzer-Name als Empfänger/Kunde steht → expense"
             )
-            response = self._generate(
+            response = self._step2_generate(
                 step2_system,
                 prompt + "\n\nDokument:\n" + text + context_str,
                 max_tokens=800,
