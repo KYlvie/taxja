@@ -1279,6 +1279,6 @@ class OCRTransactionService:
             "is_deductible": bool(is_deductible),
             "deduction_reason": ai_ded_cat or None,
             "confidence": confidence,
-            "classification_method": "ai_two_step_with_rules",
+            "classification_method": "ai_3step_rules",
             "requires_review": confidence < 0.7,
         }
