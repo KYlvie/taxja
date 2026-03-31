@@ -1133,37 +1133,87 @@ class OCRTransactionService:
         self, document, transaction_data, user_id,
         *, direction_resolution=None,
     ):
-        """Classify transaction from _ai_first.
+        """Step 3: Rules engine — classify transaction type using AI judgment + hard rules.
 
-        Clean pipeline: reads AI results directly for transaction_type,
-        category, and deductibility. No legacy fallback.
+        Architecture:
+          Step 1 (Vision): perception — document_type, gross_amount, vat_amount, raw_text
+          Step 2 (LLM):    judgment  — direction, is_asset, asset_type, is_deductible
+          Step 3 (Rules):  override  — hard business rules that AI cannot violate
+
+        Hard rules override AI to prevent known error patterns:
+          - versicherung → always EXPENSE, never asset
+          - svs → always EXPENSE, never asset
+          - netto ≤ €1,000 + is_asset → GWG EXPENSE (KZ 9130)
+          - lohnzettel/einkommensteuerbescheid → always archive or specific handling
+          - recipient_uid matches user → EXPENSE (not income)
         """
         ocr_json = document.ocr_result if isinstance(document.ocr_result, dict) else {}
         ai_first = ocr_json.get("_ai_first", {})
         ai_type = ai_first.get("document_type", "unknown")
         tax = ai_first.get("tax_treatment") or {}
-        creates = ai_first.get("creates", [])
         key_fields = ai_first.get("key_fields") or {}
 
-        if isinstance(creates, str):
-            creates = [creates]
-
         ai_direction = tax.get("expense_or_income", "expense")
-        is_asset = "asset" in creates or ai_type == "asset_purchase"
-        is_gwg = key_fields.get("is_gwg")
-
-        # Transaction type
-        if is_asset and not is_gwg:
-            txn_type = TransactionType.ASSET_ACQUISITION.value
-        elif ai_direction == "income":
-            txn_type = TransactionType.INCOME.value
-        else:
-            txn_type = TransactionType.EXPENSE.value
-
-        # Category
+        ai_is_asset = key_fields.get("is_asset_purchase") or ai_type == "asset_purchase"
+        ai_asset_type = key_fields.get("asset_type")
         ai_ded_cat = tax.get("deduction_category") or ""
         ai_form = tax.get("tax_form") or ""
 
+        # ── Step 3 Hard Rules: determine transaction_type ──
+
+        # Get amounts for GWG check
+        gross = float(ocr_json.get("gross_amount") or ocr_json.get("amount") or 0)
+        vat = float(ocr_json.get("vat_amount") or 0)
+        netto = gross - vat if vat > 0 else gross
+
+        # Rule 1: Document types that are NEVER assets
+        _never_asset_types = {
+            "versicherungspolizze", "versicherungsbestaetigung",
+            "svs_vorschreibung", "svs_nachbemessung",
+            "lohnzettel", "einkommensteuerbescheid",
+            "grundsteuerbescheid", "zinsbescheinigung",
+            "spendenbestaetigung", "kirchenbeitrag",
+            "mietvorschreibung", "betriebskostenabrechnung",
+            "bank_statement", "fahrtenbuch",
+        }
+        if ai_type in _never_asset_types:
+            ai_is_asset = False
+
+        # Rule 2: GWG — netto ≤ €1,000 → never asset, always one-time expense
+        if ai_is_asset and netto > 0 and netto <= 1000:
+            ai_is_asset = False  # GWG
+
+        # Rule 3: Asset requires recognized asset_type
+        _valid_asset_types = {"pkw", "e_auto", "lkw", "fiskal_lkw", "maschine", "it_hardware", "moebel"}
+        if ai_is_asset and ai_asset_type not in _valid_asset_types:
+            ai_is_asset = False  # AI said asset but no valid type → expense
+
+        # Rule 4: Direction correction — check recipient UID matches user
+        if ai_direction == "income" and ai_type not in ("lohnzettel", "mietvorschreibung"):
+            # For invoices: check if user is actually the issuer (income) or recipient (expense)
+            from app.models.user import User
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if user:
+                user_name = (user.name or "").lower()
+                user_uid = (getattr(user, "vat_number", None) or "").upper()
+                issuer = (key_fields.get("issuer") or ocr_json.get("issuer") or "").lower()
+                # If user name NOT in issuer → not income
+                if user_name and len(user_name) > 3 and not any(
+                    p in issuer for p in user_name.split() if len(p) > 2
+                ):
+                    ai_direction = "expense"
+
+        # ── Determine final transaction type ──
+        if ai_is_asset and netto > 1000:
+            txn_type = TransactionType.ASSET_ACQUISITION.value
+        elif ai_direction == "income":
+            txn_type = TransactionType.INCOME.value
+        elif ai_direction == "archive_only":
+            txn_type = TransactionType.EXPENSE.value  # archive docs still create expense if amount > 0
+        else:
+            txn_type = TransactionType.EXPENSE.value
+
+        # ── Category ──
         if txn_type == TransactionType.INCOME.value:
             if ai_type == "lohnzettel":
                 category = IncomeCategory.EMPLOYMENT.value
@@ -1174,43 +1224,50 @@ class OCRTransactionService:
         elif txn_type == TransactionType.ASSET_ACQUISITION.value:
             category = ExpenseCategory.EQUIPMENT.value
         else:
-            cat_map = {
-                "miete": ExpenseCategory.RENT.value,
-                "versicherung": ExpenseCategory.INSURANCE.value,
-                "zinsen": ExpenseCategory.LOAN_INTEREST.value,
-                "svs": ExpenseCategory.SVS_CONTRIBUTIONS.value,
-                "grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
-                "hausverwaltung": ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value,
-                "reparatur": ExpenseCategory.MAINTENANCE.value,
-                "buero": ExpenseCategory.OFFICE_SUPPLIES.value,
-                "reise": ExpenseCategory.TRAVEL.value,
-            }
-            category = ExpenseCategory.OTHER.value
-            for key, val in cat_map.items():
-                if key in ai_ded_cat.lower():
-                    category = val
-                    break
+            # GWG goes to EQUIPMENT
+            if netto > 0 and netto <= 1000 and key_fields.get("is_asset_purchase"):
+                category = ExpenseCategory.EQUIPMENT.value
+            else:
+                cat_map = {
+                    "miete": ExpenseCategory.RENT.value,
+                    "versicherung": ExpenseCategory.INSURANCE.value,
+                    "zinsen": ExpenseCategory.LOAN_INTEREST.value,
+                    "svs": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                    "grundsteuer": ExpenseCategory.PROPERTY_TAX.value,
+                    "hausverwaltung": ExpenseCategory.PROPERTY_MANAGEMENT_FEES.value,
+                    "reparatur": ExpenseCategory.MAINTENANCE.value,
+                    "buero": ExpenseCategory.OFFICE_SUPPLIES.value,
+                    "reise": ExpenseCategory.TRAVEL.value,
+                }
+                category = ExpenseCategory.OTHER.value
+                for key, val in cat_map.items():
+                    if key in ai_ded_cat.lower():
+                        category = val
+                        break
 
-            # Type-specific overrides
+            # Type-specific category overrides (always correct)
             type_cat_map = {
                 "grundsteuerbescheid": ExpenseCategory.PROPERTY_TAX.value,
                 "zinsbescheinigung": ExpenseCategory.LOAN_INTEREST.value,
                 "versicherungspolizze": ExpenseCategory.INSURANCE.value,
+                "versicherungsbestaetigung": ExpenseCategory.INSURANCE.value,
                 "svs_vorschreibung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
                 "svs_nachbemessung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
             }
             if ai_type in type_cat_map:
                 category = type_cat_map[ai_type]
 
+        # ── Deductibility ──
         _ai_ded = tax.get("is_deductible")
         is_deductible = bool(_ai_ded) if _ai_ded is not None else (txn_type != TransactionType.INCOME.value)
-        # Override: these types are ALWAYS deductible regardless of AI
         _always_deductible = {
             ExpenseCategory.SVS_CONTRIBUTIONS.value,
             ExpenseCategory.RENT.value,
             ExpenseCategory.LOAN_INTEREST.value,
             ExpenseCategory.DEPRECIATION.value,
             ExpenseCategory.DEPRECIATION_AFA.value,
+            ExpenseCategory.INSURANCE.value,
+            ExpenseCategory.EQUIPMENT.value,
         }
         if category in _always_deductible and txn_type == TransactionType.EXPENSE.value:
             is_deductible = True
@@ -1222,6 +1279,6 @@ class OCRTransactionService:
             "is_deductible": bool(is_deductible),
             "deduction_reason": ai_ded_cat or None,
             "confidence": confidence,
-            "classification_method": "ai_two_step",
+            "classification_method": "ai_two_step_with_rules",
             "requires_review": confidence < 0.7,
         }

@@ -48,17 +48,21 @@ class BatchOCRResult:
     failed: int
 
 
-# Step 1 prompt — lightweight, just classify + transcribe
+# Step 1 prompt — PERCEPTION ONLY: classify + extract numbers + transcribe
+# No business judgment (direction, creates, is_asset) — that's Step 2 + Step 3
 STEP1_VISION_PROMPT = """\
-Analysiere dieses Dokument-Bild. Antworte NUR als JSON:
+Analysiere dieses Dokument-Bild. Antworte NUR als JSON.
+
+AUFGABE: Nur LESEN und ABTIPPEN. Keine steuerliche Bewertung!
+
 {
   "document_type": "invoice|asset_purchase|svs_vorschreibung|versicherungspolizze|grundsteuerbescheid|lohnzettel|einkommensteuerbescheid|mietvertrag|mietvorschreibung|betriebskostenabrechnung|loan_contract|zinsbescheinigung|spendenbestaetigung|kirchenbeitrag|bank_statement|fahrtenbuch|receipt|other",
   "confidence": 0.0-1.0,
-  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"],
-  "amount": Hauptbetrag als Zahl oder null,
+  "gross_amount": Rechnungsbetrag brutto (der grosse Endbetrag) als Zahl oder null,
+  "vat_amount": USt-Betrag als Zahl oder null,
   "date": "YYYY-MM-DD oder null",
-  "issuer": "Aussteller/Absender",
-  "recipient": "Empfaenger",
+  "issuer": "Aussteller/Absender (wer hat das Dokument erstellt)",
+  "recipient": "Empfaenger/Kunde (an wen ist es gerichtet)",
   "raw_text": "Vollstaendiger Text des Dokuments (alles abtippen was lesbar ist)"
 }"""
 
@@ -93,20 +97,11 @@ class OCREngine:
 
             raw_text = step1.get("raw_text", "")
             doc_type_str = step1.get("document_type", "other")
-            creates = self._normalize_creates(step1.get("creates", []))
 
-            # Fix direction: if issuer matches user name → income
-            direction = step1.get("expense_or_income", "expense")
-            issuer = (step1.get("issuer") or "").lower()
-            if user_identity and direction != "income" and issuer:
-                for line in (user_identity or "").split("\n"):
-                    if line.startswith("Name:") or line.startswith("Firma:"):
-                        name = line.split(":", 1)[-1].strip().lower()
-                        if any(p in issuer for p in name.split() if len(p) > 2):
-                            direction = "income"
-                            break
+            # Step 1 = perception only: gross_amount, vat_amount, issuer, recipient
+            # NO creates, NO direction — those come from Step 2 + Step 3
 
-            # Step 2: Detailed extraction via gpt-oss-120b
+            # Step 2: Detailed extraction + business judgment via gpt-oss-120b
             step2 = {}
             if raw_text and len(raw_text.strip()) > 20:
                 from app.services.ai_first_classifier import AIFirstClassifier
@@ -131,14 +126,18 @@ class OCREngine:
                     user_context=user_ctx,
                 )
 
-            # Merge Step 1 + Step 2 into _ai_first
+            # Merge Step 1 (perception) + Step 2 (judgment) into _ai_first
+            # Amounts: prefer Step 2 gross_amount, fallback to Step 1 gross_amount
             amounts = {
-                "total_amount": step2.get("amount_brutto") or step1.get("amount"),
-                "annual_amount": step2.get("amount_netto") or step2.get("praemie_jaehrlich")
-                                or step2.get("annual_interest_paid") or step2.get("annual_tax"),
+                "total_amount": step2.get("gross_amount") or step2.get("amount_brutto")
+                               or step2.get("gesamtbetrag") or step2.get("amount")
+                               or step1.get("gross_amount") or step1.get("amount")
+                               or step2.get("brutto_jahresgehalt") or step2.get("settlement_amount"),
+                "annual_amount": step2.get("praemie_jaehrlich")
+                                or step2.get("annual_tax") or step2.get("annual_interest_paid")
+                                or step2.get("annual_amount"),
                 "monthly_amount": step2.get("gesamtmiete") or step2.get("monthly_amount"),
                 "settlement_amount": step2.get("settlement_amount"),
-                "new_amount": None,
             }
 
             key_fields = {}
@@ -153,17 +152,19 @@ class OCREngine:
                 if val is not None:
                     key_fields[k] = val
 
+            # Direction: Step 2 judgment only (Step 1 no longer provides this)
             tax_treatment = {
                 "is_deductible": step2.get("is_deductible"),
                 "deduction_category": step2.get("deduction_category"),
                 "tax_form": step2.get("tax_form"),
-                "expense_or_income": step2.get("expense_or_income") or direction,
+                "expense_or_income": step2.get("expense_or_income"),
             }
 
             ai_first = {
                 "document_type": doc_type_str,
                 "confidence": float(step1.get("confidence", 0.8)),
-                "creates": creates,
+                # creates: NO LONGER from Step 1. Pipeline Step 3 rules engine decides.
+                "creates": [],
                 "document_subtype": step2.get("insurance_subtype") or step2.get("asset_type")
                                    or step2.get("settlement_type") or step2.get("loan_type"),
                 "role_detection": {
@@ -177,12 +178,20 @@ class OCREngine:
             }
 
             extracted_data = {"_ai_first": ai_first}
-            # Promote top-level fields for backward compat
-            for k in ["amount", "date", "description", "issuer", "recipient",
+            # Promote top-level fields for backward compat + pipeline access
+            for k in ["date", "description", "issuer", "recipient",
                        "vat_amount", "vat_rate"]:
                 val = step2.get(k) or step1.get(k)
                 if val is not None:
                     extracted_data[k] = val
+            # gross_amount from Step 1 perception (most reliable)
+            ga = step1.get("gross_amount") or step2.get("gross_amount") or step1.get("amount")
+            if ga is not None:
+                extracted_data["amount"] = ga
+                extracted_data["gross_amount"] = ga
+            va = step1.get("vat_amount") or step2.get("vat_amount")
+            if va is not None:
+                extracted_data["vat_amount"] = va
 
             doc_type = self._map_document_type(doc_type_str)
             confidence = float(step1.get("confidence", 0.8))
