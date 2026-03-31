@@ -108,8 +108,12 @@ Analysiere diese Rechnung. Antworte NUR als JSON.
 ZAHLENFORMAT: Europäisch! "10.800,00" = 10800.00, "1.234,56" = 1234.56.
 Gib Beträge mit Punkt als Dezimaltrenner aus.
 
-Bestimme zuerst: Ist der BENUTZER der Rechnungssteller (= Ausgangsrechnung = income)
-oder der Empfänger (= Eingangsrechnung = expense)?
+WICHTIG — Prüfe den BENUTZER-KONTEXT am Ende dieser Nachricht!
+Wenn der Benutzer-Name im Dokument als Rechnungssteller/Aussteller/Absender erscheint
+→ Das ist eine AUSGANGSRECHNUNG → expense_or_income = "income" (Benutzer bekommt Geld)
+Wenn der Benutzer-Name als Empfänger/Kunde/Auftraggeber erscheint
+→ Das ist eine EINGANGSRECHNUNG → expense_or_income = "expense" (Benutzer zahlt)
+Hinweise: "AR", "Ausgangsrechnung", "Honorarnote" im Titel → immer income.
 
 {
   "expense_or_income": "income wenn Benutzer = Aussteller, expense wenn Benutzer = Empfänger",
