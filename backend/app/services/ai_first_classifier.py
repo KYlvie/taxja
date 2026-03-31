@@ -92,7 +92,7 @@ Hinweise: "AR", "Ausgangsrechnung", "Honorarnote" im Titel → immer income.
   "date": "YYYY-MM-DD",
   "description": "Kurzbeschreibung der Leistung/Ware",
   "property_address": "Immobilienadresse falls erwähnt, sonst null",
-  "is_asset_purchase": true wenn Anlagegut (Fahrzeug/Maschine/IT >EUR 1000) gekauft wurde,
+  "is_asset_purchase": true NUR wenn der BENUTZER ein Anlagegut KAUFT (expense). false wenn der Benutzer VERKAUFT (income/Ausgangsrechnung)!,
   "asset_type": "pkw|e_auto|lkw|fiskal_lkw|maschine|it_hardware|moebel|null — WICHTIG: pkw=Benzin/Diesel, e_auto=Elektro/BEV/PHEV/Hybrid (unterschiedliche VSt-Behandlung!), lkw/fiskal_lkw=Nutzfahrzeug",
   "is_deductible": true/false,
   "deduction_category": "Betriebsausgabe|Werbungskosten|Sonderausgaben|null",
@@ -577,11 +577,21 @@ class AIFirstClassifier:
                 "- Wenn der Benutzer-Name als Aussteller/Lieferant im Dokument steht → income\n"
                 "- Wenn der Benutzer-Name als Empfänger/Kunde steht → expense"
             )
+            full_user_prompt = prompt + "\n\nDokument:\n" + text + context_str
             response = self._generate(
                 step2_system,
-                prompt + "\n\nDokument:\n" + text + context_str,
+                full_user_prompt,
                 max_tokens=800,
             )
+            # Log full prompt+response to file for debugging
+            try:
+                with open("/tmp/ai_step2_debug.log", "a", encoding="utf-8") as _f:
+                    _f.write(f"\n{'='*80}\n[STEP2] doc_type={document_type}\n")
+                    _f.write(f"[SYSTEM] {step2_system}\n")
+                    _f.write(f"[USER] {full_user_prompt}\n")
+                    _f.write(f"[RESPONSE] {response}\n")
+            except Exception:
+                pass
             return self._parse_json(response)
         except Exception as e:
             logger.warning("Step 2 extract failed for %s: %s", document_type, e)
