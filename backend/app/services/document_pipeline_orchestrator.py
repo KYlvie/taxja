@@ -2867,6 +2867,10 @@ class DocumentPipelineOrchestrator:
                     self._fix_asset_depreciable_base(
                         create_result.get("asset_id"), document
                     )
+                    # Validate: convert misclassified assets to expenses
+                    self._validate_asset_classification(
+                        create_result.get("asset_id"), document
+                    )
                 except Exception as e:
                     logger.warning("AI auto-create asset failed for doc %s: %s", document.id, e)
 
@@ -2959,6 +2963,73 @@ class DocumentPipelineOrchestrator:
             logger.info("Fixed asset %s depreciable_base: sub=%s base=%s", asset_id, sub, asset.income_tax_depreciable_base)
         except Exception as e:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
+
+    def _validate_asset_classification(self, asset_id, document):
+        """Post-creation check: convert misclassified assets to regular expenses.
+
+        Insurance, GWG items (≤€1,000 netto), and non-durable items should NOT
+        be assets. If wrongly classified, delete the Property and convert the
+        ASSET_ACQUISITION transaction to EXPENSE.
+        """
+        if not asset_id:
+            return
+        try:
+            from app.models.property import Property
+            from app.models.transaction import Transaction, TransactionType, ExpenseCategory
+            from decimal import Decimal
+
+            asset = self.db.query(Property).filter(Property.id == asset_id).first()
+            if not asset:
+                return
+
+            ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+            ai = ocr.get("_ai_first", {})
+            ai_type = ai.get("document_type", "")
+
+            should_convert = False
+            new_category = ExpenseCategory.OTHER
+
+            # Insurance should never be an asset
+            if ai_type == "versicherungspolizze":
+                should_convert = True
+                new_category = ExpenseCategory.INSURANCE
+
+            # GWG: netto ≤ €1,000 → sofort absetzbar, not asset
+            netto = float(asset.income_tax_depreciable_base or 0)
+            if netto > 0 and netto <= 1000:
+                should_convert = True
+                new_category = ExpenseCategory.EQUIPMENT
+
+            if not should_convert:
+                return
+
+            # Convert: delete property, change transaction type
+            txn = self.db.query(Transaction).filter(
+                Transaction.document_id == document.id,
+                Transaction.type == TransactionType.ASSET_ACQUISITION,
+            ).first()
+
+            if txn:
+                txn.type = TransactionType.EXPENSE
+                txn.expense_category = new_category
+                txn.is_deductible = True
+                txn.property_id = None
+
+            # Delete AfA transactions for this property
+            self.db.query(Transaction).filter(
+                Transaction.property_id == asset_id,
+                Transaction.expense_category == ExpenseCategory.DEPRECIATION_AFA,
+            ).delete()
+
+            # Delete property
+            self.db.query(Property).filter(Property.id == asset_id).delete()
+            self.db.flush()
+
+            logger.info("Converted misclassified asset %s to expense (type=%s netto=%s)",
+                        asset_id, ai_type, netto)
+
+        except Exception as e:
+            logger.warning("Asset validation failed for %s: %s", asset_id, e)
 
     def _extract_structured_import_data(self, ocr_result: Dict[str, Any]) -> Dict[str, Any]:
         """Collect persisted structured fields for import suggestions."""
