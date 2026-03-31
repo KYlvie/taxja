@@ -3714,8 +3714,25 @@ class DocumentPipelineOrchestrator:
 
                 # Extract direction resolution from the suggestion itself
                 # (set by _annotate_suggestion_with_direction in the service)
+                # Fallback: use _ai_first._rule_engine.direction if no resolution
                 direction_resolution = None
                 dir_payload = s.get("transaction_direction_resolution")
+                if not dir_payload:
+                    # Synthesize from rule engine direction
+                    _rule = ((document.ocr_result or {}).get("_ai_first") or {}).get("_rule_engine") or {}
+                    _rule_dir = _rule.get("direction")
+                    if _rule_dir in ("income", "expense"):
+                        dir_payload = {
+                            "candidate": _rule_dir,
+                            "confidence": 0.90,
+                            "source": "rule_engine",
+                            "evidence": [f"rule: {_rule.get('rule_applied', '?')}"],
+                            "semantics": _rule_dir,
+                            "is_reversal": False,
+                            "mode": "shadow",
+                            "gate_enabled": True,
+                        }
+                        s["transaction_direction_resolution"] = dir_payload
                 if dir_payload:
                     from app.services.contract_role_service import TransactionDirectionResolution
                     try:
