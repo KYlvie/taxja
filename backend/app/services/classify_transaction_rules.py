@@ -103,6 +103,25 @@ def classify_transaction(
             "rule_applied": f"archive_only:{doc_type}",
         }
 
+    # ── Rule 1.5: Kaufvertrag override — vehicle/equipment purchases ─
+    # AI may classify vehicle purchase contracts as "kaufvertrag" (real estate).
+    # If Step 2 detected a vehicle/equipment asset_type, it's an asset purchase.
+    ai_asset_type_early = (step2.get("asset_type") or "").lower() if step2.get("asset_type") else None
+    _VEHICLE_ASSET_TYPES = {"pkw", "e_auto", "lkw", "fiskal_lkw", "maschine", "it_hardware", "moebel"}
+    if doc_type == "kaufvertrag" and ai_asset_type_early in _VEHICLE_ASSET_TYPES:
+        gross = _to_decimal(step1.get("gross_amount") or step2.get("gross_amount"))
+        vat = _to_decimal(step1.get("vat_amount") or step2.get("vat_amount"))
+        netto = gross - vat if gross and vat else gross
+        if netto and netto > GWG_NETTO_THRESHOLD:
+            return {
+                "transaction_type": TRANSACTION_TYPE_ASSET_ACQUISITION,
+                "direction": "expense",
+                "asset_type": ai_asset_type_early,
+                "is_gwg": False,
+                "creates": ["asset"],
+                "rule_applied": f"kaufvertrag_override:{ai_asset_type_early},netto={netto}",
+            }
+
     # ── Rule 2: Special document types (contracts) ──────────────────
     if doc_type in _SPECIAL_DOC_TYPES:
         special_type = _SPECIAL_DOC_TYPES[doc_type]
