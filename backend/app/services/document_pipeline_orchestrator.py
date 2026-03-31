@@ -3038,12 +3038,25 @@ class DocumentPipelineOrchestrator:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
 
     def _get_user_context_for_rules(self, document) -> dict:
-        """Build minimal user context for the Step 3 rule engine."""
+        """Build user context for the Step 3 rule engine."""
         try:
             from app.models.user import User as _User
             user = self.db.query(_User).filter(_User.id == document.user_id).first() if document.user_id else None
             if user:
-                return {"name": user.name or ""}
+                ctx = {"name": user.name or "", "role_hints": []}
+                bt = getattr(user, "business_type", None)
+                if bt:
+                    ctx["role_hints"].append(bt.value if hasattr(bt, "value") else str(bt))
+                ut = getattr(user, "user_type", None)
+                if ut:
+                    ctx["role_hints"].append(ut.value if hasattr(ut, "value") else str(ut))
+                roles = getattr(user, "user_roles", None)
+                if roles:
+                    for r in roles:
+                        rv = r.value if hasattr(r, "value") else str(r)
+                        if rv not in ctx["role_hints"]:
+                            ctx["role_hints"].append(rv)
+                return ctx
         except Exception:
             pass
         return {}

@@ -182,6 +182,19 @@ def classify_transaction(
     # ── Rule 6: Mietvorschreibung / BK-Abrechnung ──────────────────
     if doc_type in ("mietvorschreibung", "betriebskostenabrechnung"):
         direction = _resolve_direction(step1, step2, user_context, doc_type)
+        # Safety: if AI is unsure about direction, check user context
+        # Selbständige (self-employed) receiving a Mietvorschreibung are tenants (expense)
+        # Only landlords (Vermieter) have rental income
+        if direction == "income" and user_context:
+            user_roles = user_context.get("role_hints", [])
+            # If user is self-employed and NOT explicitly a landlord for this address,
+            # Mietvorschreibung is most likely their office/workshop rent (expense)
+            is_selbstaendig = any("selbst" in r.lower() or "gewerbe" in r.lower()
+                                  or "freiberuf" in r.lower() for r in user_roles)
+            is_vermieter = any("vermieter" in r.lower() or "landlord" in r.lower()
+                               for r in user_roles)
+            if is_selbstaendig and not is_vermieter:
+                direction = "expense"
         return {
             "transaction_type": TRANSACTION_TYPE_INCOME if direction == "income" else TRANSACTION_TYPE_EXPENSE,
             "direction": direction,
@@ -205,6 +218,12 @@ def classify_transaction(
 
     # Direction
     direction = _resolve_direction(step1, step2, user_context, doc_type)
+
+    # ── Rule 6.5: Income direction → NEVER asset ──────────────────
+    # An outgoing invoice (Ausgangsrechnung) is income — user is selling, not buying.
+    # AI sometimes wrongly sets is_asset_purchase on AR invoices. Override.
+    if direction == "income":
+        ai_is_asset = False
 
     # ── Rule 7: GWG check (§13 EStG) ───────────────────────────────
     # If netto ≤ €1,000 AND AI thinks it's an asset → GWG (sofort absetzbar)

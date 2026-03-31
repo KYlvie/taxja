@@ -47,33 +47,28 @@ def main():
     token = r.json()["access_token"]
     h = {"Authorization": f"Bearer {token}"}
 
-    # Upload all 44 PDFs
+    # Upload PDFs one at a time — wait for each to finish before next
+    # This avoids Groq API rate limits and ensures stable AI classification
     pdfs = sorted(glob.glob(os.path.join(PDF_DIR, "*.pdf")))
-    print(f"\nUploading {len(pdfs)} PDFs...")
-    for pdf in pdfs:
+    print(f"\nUploading {len(pdfs)} PDFs (sequential, wait for each)...")
+    conn2 = db()
+    cur2 = conn2.cursor()
+    for i, pdf in enumerate(pdfs):
         fname = os.path.basename(pdf)
         with open(pdf, "rb") as f:
             r = requests.post(f"{BASE}/documents/upload",
                 files={"file": (fname, f, "application/pdf")},
                 data={"tax_year": "2025"}, headers=h)
-        s = "OK" if r.status_code in (200, 201) else f"FAIL({r.status_code})"
-        if s != "OK":
-            print(f"  {s} {fname}")
-    print(f"  Done ({len(pdfs)} uploaded)")
-    # Wait for ALL documents to be fully processed by Celery
-    # Solo pool processes one at a time, ~15-25s each
-    print("  Waiting for processing...", end="", flush=True)
-    conn2 = db()
-    cur2 = conn2.cursor()
-    for _ in range(120):  # max 20 min wait
-        time.sleep(10)
-        cur2.execute("SELECT count(*) FROM documents WHERE user_id=%s AND processed_at IS NULL", (UID,))
-        unprocessed = cur2.fetchone()[0]
-        print(f" {unprocessed}", end="", flush=True)
-        if unprocessed == 0:
-            break
+        status = "OK" if r.status_code in (200, 201) else f"FAIL({r.status_code})"
+        # Wait for this doc to be processed
+        for _ in range(60):  # max 60s per doc
+            time.sleep(2)
+            cur2.execute("SELECT count(*) FROM documents WHERE user_id=%s AND processed_at IS NULL", (UID,))
+            if cur2.fetchone()[0] == 0:
+                break
+        print(f"  [{i+1:2d}/{len(pdfs)}] {status} {fname}")
     conn2.close()
-    print(" Done")
+    print(f"  Done ({len(pdfs)} uploaded and processed)")
 
     # Check classification
     conn = db()

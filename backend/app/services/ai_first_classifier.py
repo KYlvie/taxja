@@ -126,8 +126,13 @@ Bestimme: Ist der BENUTZER Vermieter oder Mieter?
 Analysiere diese Mietvorschreibung. Antworte NUR als JSON.
 ZAHLENFORMAT: "1.234,56" = 1234.56.
 
+WICHTIG — Bestimme die Rolle des BENUTZERS (siehe BENUTZER-KONTEXT unten):
+- Wenn der Benutzer-Name als MIETER im Dokument steht → expense (Benutzer ZAHLT Miete)
+- Wenn der Benutzer-Name als VERMIETER im Dokument steht → income (Benutzer BEKOMMT Miete)
+- Wenn der Benutzer Gewerbetreibender/Selbständiger ist und das Objekt KEIN Mietobjekt das er vermietet → expense (Werkstatt/Büro-Miete)
+
 {
-  "expense_or_income": "income wenn Benutzer=Vermieter, expense wenn Benutzer=Mieter",
+  "expense_or_income": "expense wenn Benutzer=Mieter/Gewerbetreibender, income NUR wenn Benutzer=Vermieter",
   "user_is": "landlord oder tenant",
   "property_address": "Objekt-Adresse",
   "month": Monat 1-12,
