@@ -59,8 +59,7 @@ Typen:
 {
   "document_type": "typ",
   "confidence": 0.0-1.0,
-  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"],
-  "expense_or_income": "income wenn Benutzer=Aussteller/Lieferant, expense wenn Benutzer=Empfänger/Kunde, archive_only wenn kein Geldfluss"
+  "creates": ["transaction", "asset", "recurring", "loan", "property", "archive_only"]
 }
 
 "creates" bestimmt, was in unserem Steuerverwaltungssystem angelegt werden soll:
@@ -687,11 +686,33 @@ class AIFirstClassifier:
                 "is_deductible": step2.get("is_deductible"),
                 "deduction_category": step2.get("deduction_category"),
                 "tax_form": step2.get("tax_form"),
-                "expense_or_income": step2.get("expense_or_income") or step1.get("expense_or_income"),
+                "expense_or_income": (
+                    step2.get("expense_or_income")
+                    or self._infer_direction_from_context(step2, user_context)
+                    or step1.get("expense_or_income")
+                ),
             },
         }
 
         return result
+
+    @staticmethod
+    def _infer_direction_from_context(step2: Dict, user_context: Optional[Dict]) -> Optional[str]:
+        """Infer expense_or_income from issuer/recipient vs user name."""
+        if not user_context or not user_context.get("name"):
+            return None
+        user_name = user_context["name"].lower()
+        # Split into significant tokens (last name, first name)
+        tokens = [t for t in user_name.split() if len(t) > 2]
+
+        issuer = (step2.get("issuer") or "").lower()
+        recipient = (step2.get("recipient") or "").lower()
+
+        if issuer and any(t in issuer for t in tokens):
+            return "income"  # User is the issuer → Ausgangsrechnung
+        if recipient and any(t in recipient for t in tokens):
+            return "expense"  # User is the recipient → Eingangsrechnung
+        return None
 
     # ── Backward compatibility ─────────────────────────────────────
 
