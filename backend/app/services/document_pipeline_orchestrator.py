@@ -770,9 +770,28 @@ class DocumentPipelineOrchestrator:
                 )
                 return db_type
 
-        # -- AI-first classification (mega-prompt) --
-        # Run AIFirstClassifier on the raw text and store results in _ai_first
-        # for downstream use by ai_context_resolver and transaction creation.
+        # -- AI-first classification --
+        # If vision AI already classified (new OCR engine stores _ai_first in extracted_data),
+        # skip the text-based re-classification entirely.
+        _existing_ai = (result.extracted_data or {}).get("_ai_first")
+        if _existing_ai and _existing_ai.get("document_type") not in (None, "unknown", "?", ""):
+            # Vision AI result is authoritative — persist to ocr_result
+            ocr_json = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
+            ocr_json["_ai_first"] = _existing_ai
+            document.ocr_result = ocr_json
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(document, "ocr_result")
+            self.db.flush()
+            logger.info("Vision AI classified doc %s: type=%s creates=%s",
+                        document.id, _existing_ai.get("document_type"), _existing_ai.get("creates"))
+            # Map AI type to DB type and return — skip text classifier
+            ai_type_str = _existing_ai.get("document_type", "other")
+            db_type = self._map_ai_type_to_db_type(ai_type_str)
+            document.document_type = db_type
+            self.db.flush()
+            return db_type
+
+        # Legacy path: text-based AIFirstClassifier (when vision not available)
         try:
             from app.services.ai_first_classifier import AIFirstClassifier
             raw_text = ocr_result.raw_text or ""
