@@ -2859,6 +2859,32 @@ def create_asset_from_suggestion(
 
     _enforce_contract_role_gate(db, document, expected_role="buyer", flow_label="Asset creation")
 
+    # ── Dedup: skip if this document already created a property ──
+    from app.models.property import Property
+    existing = db.query(Property).filter(
+        Property.kaufvertrag_document_id == document.id
+    ).first()
+    if existing:
+        logger.info("Asset already exists for doc %s → %s, skipping", document.id, existing.id)
+        return {"property_id": str(existing.id), "status": "already_exists"}
+    # Also check by user + similar purchase_price + sub_category + date
+    data_pre = suggestion_data or {}
+    _price = data_pre.get("purchase_price") or data_pre.get("amount_gross")
+    _sub = data_pre.get("sub_category")
+    _pdate = data_pre.get("purchase_date")
+    if _price and _sub:
+        from decimal import Decimal
+        _price_d = Decimal(str(_price))
+        dup_q = db.query(Property).filter(
+            Property.user_id == document.user_id,
+            Property.sub_category == _sub,
+            Property.purchase_price.between(_price_d * Decimal("0.95"), _price_d * Decimal("1.05")),
+        )
+        if dup_q.first():
+            logger.info("Similar asset already exists for user %s (sub=%s, price=%s), skipping",
+                        document.user_id, _sub, _price)
+            return {"property_id": str(dup_q.first().id), "status": "already_exists"}
+
     data = _merge_asset_confirmation_overrides(suggestion_data or {}, confirmation_overrides)
     user, _ = _get_user_and_tax_profile_context(db, document.user_id)
     if not user:
