@@ -764,11 +764,26 @@ def _build_asset_suggestion(db, document, result) -> dict:
     surfacing an asset suggestion for later confirmation.
     """
     # Rule 6.5 sync: income-direction documents are NEVER assets.
-    # AI sometimes sets is_asset_purchase=true on outgoing invoices (ARs).
-    # The rule engine correctly overrides direction to "income", but
-    # AssetRecognitionService doesn't know about this. Skip asset recognition entirely.
-    _rule = ((document.ocr_result or {}).get("_ai_first") or {}).get("_rule_engine") or {}
-    if _rule.get("direction") == "income":
+    # Check multiple sources for income direction.
+    _ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+    _ai = _ocr.get("_ai_first") or {}
+    _rule = _ai.get("_rule_engine") or {}
+    _is_income = _rule.get("direction") == "income"
+    # Also check AI tax_treatment
+    if not _is_income:
+        _is_income = (_ai.get("tax_treatment") or {}).get("expense_or_income") == "income"
+    # Also check issuer vs user name (Ausgangsrechnung = income)
+    if not _is_income and _ai.get("document_type") in ("invoice", "receipt"):
+        _issuer = (_ocr.get("issuer") or (_ai.get("key_fields") or {}).get("issuer") or
+                   (result.extracted_data or {}).get("issuer") or "").lower()
+        if _issuer and document.user_id:
+            from app.models.user import User as _User
+            _user = db.query(_User).filter(_User.id == document.user_id).first()
+            if _user and _user.name:
+                _tokens = [t for t in _user.name.lower().split() if len(t) > 2]
+                if _tokens and any(t in _issuer for t in _tokens):
+                    _is_income = True
+    if _is_income:
         return {
             "asset_recognition": None,
             "asset_outcome": None,
