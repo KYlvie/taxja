@@ -99,10 +99,12 @@ def main():
     print(f"  Expense: {expense_count} docs  |  Asset: {asset_count} docs")
 
     # Confirm pending asset suggestions (user action: click "Create Asset" button)
+    # Only confirm actual asset documents (PKW, LKW, Kreissäge, Laptop, E-Auto) — NOT ARs
     h2 = {**h, "Content-Type": "application/json"}
     cur.execute("""SELECT d.id, d.file_name FROM documents d
         WHERE d.user_id=%s AND d.ocr_result->'import_suggestion'->>'status' = 'pending'
-        AND d.ocr_result->'import_suggestion'->>'type' = 'create_asset'""", (UID,))
+        AND d.ocr_result->'import_suggestion'->>'type' = 'create_asset'
+        AND d.ocr_result->'_ai_first'->'_rule_engine'->>'direction' != 'income'""", (UID,))
     pending_assets = cur.fetchall()
     for doc_id, fn in pending_assets:
         r = requests.post(f"{BASE}/documents/{doc_id}/confirm-asset", headers=h2)
