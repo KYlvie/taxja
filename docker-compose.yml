@@ -60,8 +60,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      SECRET_KEY: dev-secret-key-change-in-production
-      ENCRYPTION_KEY: dev-encryption-key-change-in-production
+      # SECRET_KEY and ENCRYPTION_KEY come from env_file (backend/.env)
       POSTGRES_SERVER: postgres
       POSTGRES_USER: taxja
       POSTGRES_PASSWORD: taxja_password
@@ -95,8 +94,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      SECRET_KEY: dev-secret-key-change-in-production
-      ENCRYPTION_KEY: dev-encryption-key-change-in-production
+      # SECRET_KEY and ENCRYPTION_KEY come from env_file (backend/.env)
       POSTGRES_SERVER: postgres
       POSTGRES_USER: taxja
       POSTGRES_PASSWORD: taxja_password
