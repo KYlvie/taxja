@@ -3062,6 +3062,9 @@ class DocumentPipelineOrchestrator:
                         if rv not in ctx["role_hints"]:
                             ctx["role_hints"].append(rv)
                 return ctx
+            return {}
+        except Exception:
+            return {}
 
     def _ensure_rule_engine_on_document(self, document: Document, result: PipelineResult) -> None:
         """Ensure _ai_first._rule_engine exists on document.ocr_result before gate.
@@ -3114,9 +3117,6 @@ class DocumentPipelineOrchestrator:
         except Exception:
             pass
         logger.info("Pre-gate rule engine for doc %s: %s", document.id, _rr["rule_applied"])
-        except Exception:
-            pass
-        return {}
 
     def _handle_fahrtenbuch(self, document, ai_first):
         """Update PKW business_use_percentage from Fahrtenbuch data.
