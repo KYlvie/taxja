@@ -3081,20 +3081,25 @@ class DocumentPipelineOrchestrator:
             return  # already has rule engine data
 
         from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+        # Resolve issuer/recipient from multiple sources (ocr top-level may be empty at this point)
+        _kf = _ai.get("key_fields") or {}
+        _ed = result.extracted_data or {}
+        _issuer = ocr.get("issuer") or _kf.get("issuer") or _ed.get("issuer") or ""
+        _recipient = ocr.get("recipient") or _kf.get("recipient") or _ed.get("recipient") or ""
         _s1 = {
             "document_type": _ai.get("document_type"),
             "gross_amount": ocr.get("gross_amount") or (_ai.get("amounts") or {}).get("total_amount"),
             "vat_amount": ocr.get("vat_amount"),
-            "issuer": ocr.get("issuer"),
-            "recipient": ocr.get("recipient"),
+            "issuer": _issuer,
+            "recipient": _recipient,
         }
         _s2 = {
             "expense_or_income": (_ai.get("tax_treatment") or {}).get("expense_or_income"),
-            "is_asset_purchase": (_ai.get("key_fields") or {}).get("is_asset_purchase"),
-            "is_gwg": (_ai.get("key_fields") or {}).get("is_gwg"),
-            "asset_type": (_ai.get("key_fields") or {}).get("asset_type") or _ai.get("document_subtype"),
-            "issuer": ocr.get("issuer"),
-            "recipient": ocr.get("recipient"),
+            "is_asset_purchase": _kf.get("is_asset_purchase"),
+            "is_gwg": _kf.get("is_gwg"),
+            "asset_type": _kf.get("asset_type") or _ai.get("document_subtype"),
+            "issuer": _issuer,
+            "recipient": _recipient,
         }
         _uc = self._get_user_context_for_rules(document)
         _rr = _classify_txn(_s1, _s2, _uc)
@@ -4520,15 +4525,19 @@ class DocumentPipelineOrchestrator:
                                document.id, list(ocr_result.keys())[:10])
             if _ai_f and _ai_f.get("document_type"):
                 from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+                _kff = _ai_f.get("key_fields") or {}
+                _edf = result.extracted_data or {}
+                _issuer_f = ocr_result.get("issuer") or _kff.get("issuer") or _edf.get("issuer") or ""
+                _recipient_f = ocr_result.get("recipient") or _kff.get("recipient") or _edf.get("recipient") or ""
                 _s1f = {"document_type": _ai_f.get("document_type"),
                         "gross_amount": ocr_result.get("gross_amount") or (_ai_f.get("amounts") or {}).get("total_amount"),
                         "vat_amount": ocr_result.get("vat_amount"),
-                        "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+                        "issuer": _issuer_f, "recipient": _recipient_f}
                 _s2f = {"expense_or_income": (_ai_f.get("tax_treatment") or {}).get("expense_or_income"),
-                        "is_asset_purchase": (_ai_f.get("key_fields") or {}).get("is_asset_purchase"),
-                        "is_gwg": (_ai_f.get("key_fields") or {}).get("is_gwg"),
-                        "asset_type": (_ai_f.get("key_fields") or {}).get("asset_type") or _ai_f.get("document_subtype"),
-                        "issuer": ocr_result.get("issuer"), "recipient": ocr_result.get("recipient")}
+                        "is_asset_purchase": _kff.get("is_asset_purchase"),
+                        "is_gwg": _kff.get("is_gwg"),
+                        "asset_type": _kff.get("asset_type") or _ai_f.get("document_subtype"),
+                        "issuer": _issuer_f, "recipient": _recipient_f}
                 _ucf = self._get_user_context_for_rules(document)
                 _rrf = _classify_txn(_s1f, _s2f, _ucf)
                 _ai_f["creates"] = _rrf["creates"]

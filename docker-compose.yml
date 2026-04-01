@@ -57,6 +57,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: taxja-backend
+    env_file:
+      - ./backend/.env
     environment:
       SECRET_KEY: dev-secret-key-change-in-production
       ENCRYPTION_KEY: dev-encryption-key-change-in-production
@@ -90,6 +92,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: taxja-celery-worker
+    env_file:
+      - ./backend/.env
     environment:
       SECRET_KEY: dev-secret-key-change-in-production
       ENCRYPTION_KEY: dev-encryption-key-change-in-production
@@ -108,7 +112,7 @@ services:
       - minio
     volumes:
       - ./backend:/app
-    command: celery -A app.celery_app worker --loglevel=info
+    command: celery -A app.celery_app worker --pool=solo --loglevel=info
 
   # Frontend
   frontend:
