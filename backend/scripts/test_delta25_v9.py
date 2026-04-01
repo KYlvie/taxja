@@ -98,6 +98,22 @@ def main():
     print(f"  Income: {income_count} docs, total={income_total:,.0f} (target 216,000 brutto / 180,000 netto)")
     print(f"  Expense: {expense_count} docs  |  Asset: {asset_count} docs")
 
+    # Confirm pending asset suggestions (user action: click "Create Asset" button)
+    h2 = {**h, "Content-Type": "application/json"}
+    cur.execute("""SELECT d.id, d.file_name FROM documents d
+        WHERE d.user_id=%s AND d.ocr_result->'import_suggestion'->>'status' = 'pending'
+        AND d.ocr_result->'import_suggestion'->>'type' = 'create_asset'""", (UID,))
+    pending_assets = cur.fetchall()
+    for doc_id, fn in pending_assets:
+        r = requests.post(f"{BASE}/documents/{doc_id}/confirm-asset", headers=h2)
+        if r.status_code == 200:
+            print(f"  Confirmed asset: {fn}")
+        else:
+            print(f"  WARN: confirm-asset failed for {fn}: {r.status_code} {r.text[:100]}")
+    if pending_assets:
+        conn.commit()
+        time.sleep(2)  # Let DB settle
+
     # Check assets
     cur.execute("SELECT id, sub_category, purchase_price, income_tax_depreciable_base, useful_life_years FROM properties WHERE user_id=%s ORDER BY purchase_price DESC", (UID,))
     assets = cur.fetchall()
