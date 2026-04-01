@@ -763,6 +763,19 @@ def _build_asset_suggestion(db, document, result) -> dict:
     This is additive: the document can still auto-create transactions while also
     surfacing an asset suggestion for later confirmation.
     """
+    # Rule 6.5 sync: income-direction documents are NEVER assets.
+    # AI sometimes sets is_asset_purchase=true on outgoing invoices (ARs).
+    # The rule engine correctly overrides direction to "income", but
+    # AssetRecognitionService doesn't know about this. Skip asset recognition entirely.
+    _rule = ((document.ocr_result or {}).get("_ai_first") or {}).get("_rule_engine") or {}
+    if _rule.get("direction") == "income":
+        return {
+            "asset_recognition": None,
+            "asset_outcome": None,
+            "import_suggestion": None,
+            "auto_create_payload": None,
+        }
+
     from sqlalchemy.orm.attributes import flag_modified
 
     from app.schemas.asset_recognition import (
