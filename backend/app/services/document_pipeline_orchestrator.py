@@ -3080,8 +3080,8 @@ class DocumentPipelineOrchestrator:
                 ocr["_ai_first"] = _ai
         if not _ai or not _ai.get("document_type"):
             return
-        if _ai.get("_rule_engine"):
-            return  # already has rule engine data
+        # ALWAYS re-run rule engine here — classification may have run it
+        # before issuer/recipient were extracted, leading to wrong direction.
 
         from app.services.classify_transaction_rules import classify_transaction as _classify_txn
         # Resolve issuer/recipient from multiple sources (ocr top-level may be empty at this point)
