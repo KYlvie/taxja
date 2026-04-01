@@ -594,6 +594,11 @@ class DocumentPipelineOrchestrator:
             # Stage 4.5: AI-driven duplicate entity check
             self._check_duplicate_entity(document, db_type, result, decision=decision)
 
+            # Stage 4.6: Ensure rule engine ran on _ai_first before gate evaluation.
+            # The gate needs direction data, but classification may have lost _rule_engine
+            # during checkpoint overwrites. Re-run here so _stage_suggest has it.
+            self._ensure_rule_engine_on_document(document, result)
+
             # Stage 5: Build suggestions AND auto-create
             self._stage_suggest(document, db_type, ocr_result, result, decision=decision)
 
@@ -3057,6 +3062,53 @@ class DocumentPipelineOrchestrator:
                         if rv not in ctx["role_hints"]:
                             ctx["role_hints"].append(rv)
                 return ctx
+
+    def _ensure_rule_engine_on_document(self, document: Document, result: PipelineResult) -> None:
+        """Ensure _ai_first._rule_engine exists on document.ocr_result before gate.
+
+        If the rule engine didn't run during classification (or was lost during
+        checkpoint overwrites), re-run it now so the transaction gate has direction data.
+        """
+        ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+        _ai = ocr.get("_ai_first")
+        if not _ai:
+            _ai = (result.extracted_data or {}).get("_ai_first")
+            if _ai:
+                ocr["_ai_first"] = _ai
+        if not _ai or not _ai.get("document_type"):
+            return
+        if _ai.get("_rule_engine"):
+            return  # already has rule engine data
+
+        from app.services.classify_transaction_rules import classify_transaction as _classify_txn
+        _s1 = {
+            "document_type": _ai.get("document_type"),
+            "gross_amount": ocr.get("gross_amount") or (_ai.get("amounts") or {}).get("total_amount"),
+            "vat_amount": ocr.get("vat_amount"),
+            "issuer": ocr.get("issuer"),
+            "recipient": ocr.get("recipient"),
+        }
+        _s2 = {
+            "expense_or_income": (_ai.get("tax_treatment") or {}).get("expense_or_income"),
+            "is_asset_purchase": (_ai.get("key_fields") or {}).get("is_asset_purchase"),
+            "is_gwg": (_ai.get("key_fields") or {}).get("is_gwg"),
+            "asset_type": (_ai.get("key_fields") or {}).get("asset_type") or _ai.get("document_subtype"),
+            "issuer": ocr.get("issuer"),
+            "recipient": ocr.get("recipient"),
+        }
+        _uc = self._get_user_context_for_rules(document)
+        _rr = _classify_txn(_s1, _s2, _uc)
+        _ai["creates"] = _rr["creates"]
+        _ai["_rule_engine"] = _rr
+        ocr["_ai_first"] = _ai
+        document.ocr_result = self._make_json_safe(ocr)
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(document, "ocr_result")
+        try:
+            self.db.flush()
+        except Exception:
+            pass
+        logger.info("Pre-gate rule engine for doc %s: %s", document.id, _rr["rule_applied"])
         except Exception:
             pass
         return {}
@@ -3718,9 +3770,15 @@ class DocumentPipelineOrchestrator:
                 direction_resolution = None
                 dir_payload = s.get("transaction_direction_resolution")
                 if not dir_payload:
-                    # Synthesize from rule engine direction
+                    # Synthesize from rule engine direction (check multiple sources)
                     _rule = ((document.ocr_result or {}).get("_ai_first") or {}).get("_rule_engine") or {}
+                    if not _rule:
+                        _rule = ((result.extracted_data or {}).get("_ai_first") or {}).get("_rule_engine") or {}
                     _rule_dir = _rule.get("direction")
+                    # Also check AI tax_treatment as last resort
+                    if not _rule_dir:
+                        _ai = (document.ocr_result or {}).get("_ai_first") or (result.extracted_data or {}).get("_ai_first") or {}
+                        _rule_dir = (_ai.get("tax_treatment") or {}).get("expense_or_income")
                     if _rule_dir in ("income", "expense"):
                         dir_payload = {
                             "candidate": _rule_dir,
