@@ -3009,7 +3009,12 @@ def create_asset_from_suggestion(
         sub_category=data.get("sub_category"),
         name=data.get("name", "Unknown Asset"),
         purchase_date=purchase_date,
-        purchase_price=Decimal(str(data.get("purchase_price", 0))),
+        purchase_price=Decimal(str(
+            data.get("purchase_price")
+            or recognition_input.extracted_amount
+            or (document.ocr_result or {}).get("amount")
+            or 0
+        )),
         supplier=data.get("supplier"),
         business_use_percentage=recognition_input.business_use_percentage or Decimal("100"),
         useful_life_years=useful_life_years,
