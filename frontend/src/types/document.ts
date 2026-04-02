@@ -30,6 +30,7 @@ export enum DocumentType {
   BETRIEBSKOSTENABRECHNUNG = 'betriebskostenabrechnung',
   GEWERBESCHEIN = 'gewerbeschein',
   KONTOAUSZUG = 'kontoauszug',
+  ASSET_PURCHASE = 'asset_purchase',
   OTHER = 'other',
   UNKNOWN = 'unknown',
 }

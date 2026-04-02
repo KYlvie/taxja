@@ -12,6 +12,7 @@ export const TYPE_ALIAS_MAP: Record<string, PresentationDocumentKind> = {
   rental_contract: 'rental_contract',
   mietvertrag: 'rental_contract',
   purchase_contract: 'purchase_contract',
+  asset_purchase: 'asset_purchase',
   loan_contract: 'loan_contract',
   kreditvertrag: 'loan_contract',
   versicherungsbestaetigung: 'insurance_confirmation',

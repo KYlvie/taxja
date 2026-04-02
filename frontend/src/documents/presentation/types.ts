@@ -3,6 +3,7 @@ export type PresentationDocumentKind =
   | 'invoice'
   | 'rental_contract'
   | 'purchase_contract'
+  | 'asset_purchase'
   | 'loan_contract'
   | 'insurance_confirmation'
   | 'tax_form'
