@@ -2867,6 +2867,40 @@ def _ensure_asset_acquisition_transaction(
     return transaction, True
 
 
+def _resolve_asset_name(data: dict, document) -> str:
+    """Resolve asset name from multiple sources."""
+    # 1. Explicit name in suggestion data
+    name = data.get("name")
+    if name and name != "Unknown Asset":
+        return name
+
+    ocr = document.ocr_result if isinstance(document.ocr_result, dict) else {}
+    ai = ocr.get("_ai_first") or {}
+    kf = ai.get("key_fields") or {}
+
+    # 2. AI key_fields description (most specific)
+    name = kf.get("description")
+    if name:
+        return name
+
+    # 3. Top-level OCR description
+    name = ocr.get("description")
+    if name and name != "Unbekannt":
+        return name
+
+    # 4. Suggestion data description
+    name = data.get("description")
+    if name and name != "Unbekannt":
+        return name
+
+    # 5. Merchant/issuer as last resort
+    name = ocr.get("merchant") or ocr.get("issuer") or kf.get("issuer")
+    if name and name != "Unbekannt":
+        return name
+
+    return "Unknown Asset"
+
+
 def create_asset_from_suggestion(
     db,
     document,
@@ -3023,11 +3057,7 @@ def create_asset_from_suggestion(
     asset_data = AssetCreate(
         asset_type=data.get("asset_type", "other_equipment"),
         sub_category=data.get("sub_category"),
-        name=(data.get("name")
-              or (document.ocr_result or {}).get("description")
-              or (document.ocr_result or {}).get("merchant")
-              or ((document.ocr_result or {}).get("_ai_first") or {}).get("key_fields", {}).get("description")
-              or "Unknown Asset"),
+        name=_resolve_asset_name(data, document),
         purchase_date=purchase_date,
         purchase_price=Decimal(str(
             data.get("purchase_price")

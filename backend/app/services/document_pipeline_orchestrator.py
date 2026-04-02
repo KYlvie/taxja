@@ -3048,6 +3048,13 @@ class DocumentPipelineOrchestrator:
                 logger.info("Fixed asset txn %s amount: %s → %s (brutto)", acq_txn.id, acq_txn.amount, brutto)
                 acq_txn.amount = brutto
 
+            # Fix asset name if still "Unknown Asset"
+            if asset.name in (None, "", "Unknown Asset"):
+                desc = ocr.get("description") or (ai.get("key_fields") or {}).get("description") or ""
+                if desc and desc != "Unbekannt":
+                    asset.name = desc
+                    logger.info("Fixed asset %s name: %s", asset_id, desc)
+
             self.db.flush()
             logger.info("Fixed asset %s depreciable_base: sub=%s base=%s price=%s", asset_id, sub, asset.income_tax_depreciable_base, asset.purchase_price)
         except Exception as e:
