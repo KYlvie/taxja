@@ -3089,6 +3089,9 @@ class DocumentPipelineOrchestrator:
         _ed = result.extracted_data or {}
         _issuer = ocr.get("issuer") or _kf.get("issuer") or _ed.get("issuer") or ""
         _recipient = ocr.get("recipient") or _kf.get("recipient") or _ed.get("recipient") or ""
+        logger.info("Pre-gate rule inputs doc %s: issuer=%s recipient=%s ai_dir=%s",
+                     document.id, _issuer[:30] if _issuer else "EMPTY", _recipient[:30] if _recipient else "EMPTY",
+                     (_ai.get("tax_treatment") or {}).get("expense_or_income"))
         _s1 = {
             "document_type": _ai.get("document_type"),
             "gross_amount": ocr.get("gross_amount") or (_ai.get("amounts") or {}).get("total_amount"),
