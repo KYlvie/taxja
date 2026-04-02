@@ -15,6 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./docker/postgres/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+      - ./docker/init-db/init.sql:/docker-entrypoint-initdb.d/02-init.sql:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     deploy:
       resources:
