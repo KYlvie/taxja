@@ -1098,10 +1098,10 @@ class OCRTransactionService:
 
         # Description
         desc_parts = []
-        for field in ["issuer", "employer_name", "lender_name", "insurer_name",
+        for field in ["issuer", "landlord_name", "employer_name", "lender_name", "insurer_name",
                        "recipient_org", "parish", "supplier"]:
             val = key_fields.get(field)
-            if val:
+            if val and val != "Unbekannt":
                 desc_parts.append(str(val))
                 break
         desc_ai = key_fields.get("description") or ""
@@ -1253,6 +1253,8 @@ class OCRTransactionService:
                 "versicherungsbestaetigung": ExpenseCategory.INSURANCE.value,
                 "svs_vorschreibung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
                 "svs_nachbemessung": ExpenseCategory.SVS_CONTRIBUTIONS.value,
+                "mietvorschreibung": ExpenseCategory.RENT.value,
+                "betriebskostenabrechnung": ExpenseCategory.RENT.value,
             }
             if ai_type in type_cat_map:
                 category = type_cat_map[ai_type]

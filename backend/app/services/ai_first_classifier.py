@@ -134,13 +134,20 @@ WICHTIG — Bestimme die Rolle des BENUTZERS (siehe BENUTZER-KONTEXT unten):
 {
   "expense_or_income": "expense wenn Benutzer=Mieter/Gewerbetreibender, income NUR wenn Benutzer=Vermieter",
   "user_is": "landlord oder tenant",
+  "landlord_name": "Name des Vermieters / der Hausverwaltung",
+  "tenant_name": "Name des Mieters",
   "property_address": "Objekt-Adresse",
+  "description": "Kurzbeschreibung z.B. 'Werkstattmiete Juli 2025' oder 'Büromiete März 2025'",
   "month": Monat 1-12,
   "year": Jahr,
   "hauptmietzins": HM als Zahl oder null,
   "betriebskosten": BK als Zahl oder null,
+  "umsatzsteuer": USt-Betrag oder null,
   "gesamtbetrag": Gesamtbetrag als Zahl,
-  "date": "YYYY-MM-DD"
+  "date": "YYYY-MM-DD",
+  "is_deductible": true,
+  "deduction_category": "Betriebsausgabe",
+  "tax_form": "E1a"
 }""",
 
     "betriebskostenabrechnung": """\
