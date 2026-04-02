@@ -1,7 +1,7 @@
 """add insurance metadata to recurring transactions
 
 Revision ID: 076_add_insurance_metadata_to_recurring_transactions
-Revises: 075_add_rent_adjustment_document_type
+Revises: 075_add_arbeitszimmer_fields
 Create Date: 2026-03-28
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "076_add_insurance_metadata_to_recurring_transactions"
-down_revision = "075_add_rent_adjustment_document_type"
+down_revision = "075_add_arbeitszimmer_fields"
 branch_labels = None
 depends_on = None
 

@@ -134,6 +134,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: taxja-backend
+    env_file:
+      - .env.prod
     environment:
       POSTGRES_SERVER: pgbouncer
       POSTGRES_PORT: 5432
@@ -189,6 +191,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: taxja-celery-worker
+    env_file:
+      - .env.prod
     environment:
       POSTGRES_SERVER: pgbouncer
       POSTGRES_PORT: 5432

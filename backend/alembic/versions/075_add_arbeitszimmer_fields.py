@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "075_add_arbeitszimmer_fields"
-down_revision = "074_add_semi_annual_frequency"
+down_revision = "075_add_rent_adjustment_document_type"
 branch_labels = None
 depends_on = None
 
