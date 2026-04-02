@@ -1572,15 +1572,34 @@ class DocumentPipelineOrchestrator:
                     field=date_field, issue=f"No date found, auto-set to {today}", severity="info",
                 ))
 
-        # Missing merchant → "Unbekannt"
+        # Missing merchant → try AI fields, then "Unbekannt"
         if db_type in (DBDocumentType.RECEIPT, DBDocumentType.INVOICE):
-            if not data.get("merchant") and not data.get("supplier"):
-                validation.corrected_fields["merchant"] = "Unbekannt"
-                validation.issues.append(ValidationIssue(
-                    field="merchant",
-                    issue="No merchant found, auto-set to 'Unbekannt'",
-                    severity="info",
-                ))
+            if not data.get("merchant") or data.get("merchant") == "Unbekannt":
+                # Try to recover from AI key_fields
+                _ai = data.get("_ai_first") or {}
+                _kf = _ai.get("key_fields") or {}
+                _recovered_merchant = (
+                    _kf.get("landlord_name")  # Mietvorschreibung
+                    or _kf.get("insurer_name")  # Versicherung
+                    or _kf.get("employer_name")  # Lohnzettel
+                    or _kf.get("lender_name")  # Zinsbescheinigung
+                    or data.get("issuer")  # General fallback
+                    or data.get("supplier")
+                )
+                if _recovered_merchant and _recovered_merchant != "Unbekannt":
+                    validation.corrected_fields["merchant"] = _recovered_merchant
+                    validation.issues.append(ValidationIssue(
+                        field="merchant",
+                        issue=f"Merchant recovered from AI: {_recovered_merchant}",
+                        severity="info",
+                    ))
+                elif not data.get("merchant"):
+                    validation.corrected_fields["merchant"] = "Unbekannt"
+                    validation.issues.append(ValidationIssue(
+                        field="merchant",
+                        issue="No merchant found, auto-set to 'Unbekannt'",
+                        severity="info",
+                    ))
 
         # Kaufvertrag: missing address → "Adresse nicht erkannt"
         if db_type == DBDocumentType.PURCHASE_CONTRACT and purchase_contract_kind != "asset":
