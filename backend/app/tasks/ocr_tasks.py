@@ -40,7 +40,7 @@ class OCRTask(Task):
         document_id = args[0] if args else kwargs.get("document_id")
         if document_id is not None:
             try:
-                from app.db.base import SessionLocal
+                from app.db.session import SessionLocal
                 from app.models.document import Document
 
                 db = SessionLocal()
@@ -1079,7 +1079,7 @@ def run_ocr_pipeline(document_id: int, db=None) -> Dict[str, Any]:
     properties, recurring income) for ALL document types. User sees results
     in dashboard, can edit/undo if needed.
     """
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     from app.services.document_pipeline_orchestrator import DocumentPipelineOrchestrator
     from app.models.document import Document
 
@@ -1155,7 +1155,7 @@ def run_ocr_sync(document_id: int, db=None) -> Dict[str, Any]:
     Run OCR processing synchronously (used as fallback when Celery is unavailable).
     Can also be called from the Celery task.
     """
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     from app.models.document import Document
 
     own_session = db is None
@@ -4978,7 +4978,7 @@ def reprocess_low_confidence_documents(self, threshold: float = 0.6) -> Dict[str
     Returns:
         Dictionary with reprocessing results
     """
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     from app.models.document import Document
 
     db = SessionLocal()
@@ -5982,7 +5982,7 @@ def process_historical_import_ocr(self, upload_id: str) -> Dict[str, Any]:
     Returns:
         Dictionary with OCR and extraction results
     """
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     from app.models.historical_import import (
         HistoricalImportUpload,
         ImportStatus,

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def _get_session():
     """Create a new sync DB session. Extracted for testability."""
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     return SessionLocal()
 
 

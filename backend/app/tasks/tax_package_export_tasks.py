@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from app.celery_app import celery_app
-from app.db.base import SessionLocal
+from app.db.session import SessionLocal
 from app.models.user import User
 from app.services.tax_package_export_service import (
     TaxPackageExportService,

@@ -26,7 +26,7 @@ def async_export_user_data(self, user_id: int, encryption_password: str) -> Dict
         Dict with ``status``, ``download_url``, and metadata on success,
         or ``status="failed"`` with an ``error`` message on failure.
     """
-    from app.db.base import SessionLocal
+    from app.db.session import SessionLocal
     from app.services.data_export_service import DataExportService
 
     db = SessionLocal()
