@@ -20,10 +20,10 @@ services:
       resources:
         limits:
           memory: 16G
-          cpus: "8"
+          cpus: "2"
         reservations:
           memory: 8G
-          cpus: "4"
+          cpus: "2"
     shm_size: '4g'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U taxja"]
@@ -161,10 +161,10 @@ services:
       resources:
         limits:
           memory: 8G
-          cpus: "8"
+          cpus: "2"
         reservations:
           memory: 4G
-          cpus: "4"
+          cpus: "2"
     command: >
       gunicorn app.main:app
       --worker-class uvicorn.workers.UvicornWorker
@@ -207,7 +207,7 @@ services:
       resources:
         limits:
           memory: 4G
-          cpus: "4"
+          cpus: "2"
     command: >
       celery -A app.celery_app worker
       --loglevel=info
