@@ -280,16 +280,41 @@ ZAHLENFORMAT: "1.234,56" = 1234.56.
 }""",
 
     "einkommensteuerbescheid": """\
-Analysiere diesen Einkommensteuerbescheid. Antworte NUR als JSON.
-ZAHLENFORMAT: "1.234,56" = 1234.56.
+Analysiere diesen Einkommensteuerbescheid (ESt-Bescheid) VOLLSTÄNDIG. Antworte NUR als JSON.
+ZAHLENFORMAT: Europäisch! "95.000,00" = 95000.00, "1.234,56" = 1234.56.
+
+WICHTIG: Alle Beträge als positive Zahlen. Abzüge (Gewinnfreibetrag, Sonderausgaben) als positive Zahlen.
 
 {
-  "tax_year": Steuerjahr als Zahl,
-  "festgesetzte_est": Festgesetzte ESt als Zahl,
-  "verlustvortrag": Verlustvortrag als Zahl oder null,
-  "nachzahlung": Nachzahlung als Zahl oder null,
-  "gutschrift": Gutschrift als Zahl oder null,
-  "date": "YYYY-MM-DD",
+  "tax_year": Steuerjahr (das Jahr FÜR das der Bescheid gilt, z.B. 2024),
+  "date": "YYYY-MM-DD des Bescheiddatums",
+  "steuernummer": "Steuernummer des Steuerpflichtigen",
+  "finanzamt": "Name des Finanzamts",
+
+  "einkuenfte_gewerbebetrieb": Einkünfte aus Gewerbebetrieb §23 oder null,
+  "einkuenfte_selbstaendig": Einkünfte aus selbständiger Arbeit §22 oder null,
+  "einkuenfte_nichtselbstaendig": Einkünfte aus nichtselbständiger Arbeit §25 oder null,
+  "einkuenfte_vermietung": Einkünfte aus Vermietung und Verpachtung §28 oder null,
+  "einkuenfte_kapital": Einkünfte aus Kapitalvermögen §27 oder null,
+  "sonstige_einkuenfte": Sonstige Einkünfte §29 oder null,
+  "gesamtbetrag_einkuenfte": Gesamtbetrag der Einkünfte oder null,
+
+  "gewinnfreibetrag": Gewinnfreibetrag (als positive Zahl) oder null,
+  "sonderausgaben": Sonderausgaben(pauschale) (als positive Zahl) oder null,
+  "werbungskosten": Werbungskosten oder null,
+  "aussergewoehnliche_belastungen": Außergewöhnliche Belastungen oder null,
+
+  "einkommen": Einkommen (nach allen Abzügen, Basis für Tarif),
+  "festgesetzte_est": Festgesetzte Einkommensteuer lt. Tarif,
+  "anrechenbare_lohnsteuer": Anrechenbare Lohnsteuer oder null,
+  "nachzahlung": Nachzahlung (Abgabennachforderung) oder null,
+  "gutschrift": Gutschrift (Abgabengutschrift) oder null,
+
+  "verlustvortrag_aus_vorjahren": Verlustvortrag aus Vorjahren (Gesamtbetrag) oder null,
+  "verlustvortrag_verrechnet": Im aktuellen Jahr verrechneter Verlustvortrag oder null,
+  "verlustvortrag_verbleibend": Verbleibender Verlustvortrag für Folgejahr oder null,
+
+  "bescheid_rechtskraeftig_seit": "YYYY-MM-DD der Rechtskraft" oder null,
   "expense_or_income": "archive_only"
 }""",
 
@@ -578,10 +603,13 @@ class AIFirstClassifier:
                 "- Wenn der Benutzer-Name als Empfänger/Kunde steht → expense"
             )
             full_user_prompt = prompt + "\n\nDokument:\n" + text + context_str
+            # Use higher max_tokens for complex document types (ESt-Bescheid has 25+ fields)
+            _complex_types = {"einkommensteuerbescheid", "lohnzettel", "jahresabschluss"}
+            _max_tokens = 2048 if document_type in _complex_types else 800
             response = self._generate(
                 step2_system,
                 full_user_prompt,
-                max_tokens=800,
+                max_tokens=_max_tokens,
             )
             # Log full prompt+response to file for debugging
             try:
@@ -673,6 +701,29 @@ class AIFirstClassifier:
                 "brutto_jahresgehalt": step2.get("brutto_jahresgehalt"),
                 "lohnsteuer": step2.get("lohnsteuer"),
                 "verlustvortrag": step2.get("verlustvortrag"),
+                # Einkommensteuerbescheid fields
+                "steuernummer": step2.get("steuernummer"),
+                "finanzamt": step2.get("finanzamt"),
+                "einkuenfte_gewerbebetrieb": step2.get("einkuenfte_gewerbebetrieb"),
+                "einkuenfte_selbstaendig": step2.get("einkuenfte_selbstaendig"),
+                "einkuenfte_nichtselbstaendig": step2.get("einkuenfte_nichtselbstaendig"),
+                "einkuenfte_vermietung": step2.get("einkuenfte_vermietung"),
+                "einkuenfte_kapital": step2.get("einkuenfte_kapital"),
+                "sonstige_einkuenfte": step2.get("sonstige_einkuenfte"),
+                "gesamtbetrag_einkuenfte": step2.get("gesamtbetrag_einkuenfte"),
+                "gewinnfreibetrag": step2.get("gewinnfreibetrag"),
+                "sonderausgaben": step2.get("sonderausgaben"),
+                "werbungskosten": step2.get("werbungskosten"),
+                "aussergewoehnliche_belastungen": step2.get("aussergewoehnliche_belastungen"),
+                "einkommen": step2.get("einkommen"),
+                "festgesetzte_est": step2.get("festgesetzte_est"),
+                "anrechenbare_lohnsteuer": step2.get("anrechenbare_lohnsteuer"),
+                "nachzahlung": step2.get("nachzahlung"),
+                "gutschrift": step2.get("gutschrift"),
+                "verlustvortrag_aus_vorjahren": step2.get("verlustvortrag_aus_vorjahren"),
+                "verlustvortrag_verrechnet": step2.get("verlustvortrag_verrechnet"),
+                "verlustvortrag_verbleibend": step2.get("verlustvortrag_verbleibend"),
+                "bescheid_rechtskraeftig_seit": step2.get("bescheid_rechtskraeftig_seit"),
                 "is_asset_purchase": step2.get("is_asset_purchase"),
                 "asset_type": step2.get("asset_type"),
                 "is_gwg": step2.get("is_gwg"),

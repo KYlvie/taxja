@@ -322,6 +322,7 @@ class DocumentPipelineOrchestrator:
         DBDocumentType.JAHRESABSCHLUSS: "import_jahresabschluss",
         DBDocumentType.SVS_NOTICE: "import_svs",
         DBDocumentType.PROPERTY_TAX: "import_grundsteuer",
+        DBDocumentType.EINKOMMENSTEUERBESCHEID: "import_einkommensteuerbescheid",
     }
     BANK_STATEMENT_SUGGESTION_TYPE = "import_bank_statement"
 
