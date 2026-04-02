@@ -1287,6 +1287,7 @@
       "receipt": "Receipt",
       "invoice": "Invoice",
       "purchase_contract": "Purchase Contract",
+      "asset_purchase": "Asset Purchase Contract",
       "rental_contract": "Rental Contract",
       "loan_contract": "Loan Contract",
       "bank_statement": "Bank Statement",
@@ -1323,6 +1324,7 @@
       "contract": "Contract",
       "statement": "Statement",
       "purchase_contract": "Purchase Contract",
+      "asset_purchase": "Asset Purchase Contract",
       "rental_contract": "Rental Contract",
       "loan_contract": "Loan Contract",
       "bank_statement": "Bank Statement",
@@ -2688,6 +2690,7 @@
       "e1_form": "E1 tax return",
       "svs_notice": "SVS notice",
       "purchase_contract": "purchase contract",
+      "asset_purchase": "Asset Purchase Contract",
       "rental_contract": "rental contract"
     },
     "templates": {

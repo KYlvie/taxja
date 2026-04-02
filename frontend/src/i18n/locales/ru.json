@@ -1278,6 +1278,7 @@
       "receipt": "Чек",
       "invoice": "Счёт-фактура",
       "purchase_contract": "Договор купли-продажи (Kaufvertrag)",
+      "asset_purchase": "Договор покупки актива",
       "rental_contract": "Договор аренды (Mietvertrag)",
       "loan_contract": "Кредитный договор",
       "bank_statement": "Выписка из банка",
@@ -1314,6 +1315,7 @@
       "contract": "Договор",
       "statement": "Выписка",
       "purchase_contract": "Договор купли-продажи (Kaufvertrag)",
+      "asset_purchase": "Договор покупки актива",
       "rental_contract": "Договор аренды (Mietvertrag)",
       "loan_contract": "Кредитный договор",
       "bank_statement": "Выписка из банка",
@@ -2672,6 +2674,7 @@
       "e1_form": "налоговая декларация E1",
       "svs_notice": "уведомление SVS",
       "purchase_contract": "договор купли-продажи (Kaufvertrag)",
+      "asset_purchase": "Договор покупки актива",
       "rental_contract": "договор аренды (Mietvertrag)"
     },
     "templates": {

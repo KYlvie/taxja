@@ -66,6 +66,7 @@ class DocumentType(str, Enum):
     BETRIEBSKOSTENABRECHNUNG = "betriebskostenabrechnung"  # Operating cost statement
     GEWERBESCHEIN = "gewerbeschein"  # Trade license
     KONTOAUSZUG = "kontoauszug"  # Bank account statement (Kontoauszug)
+    ASSET_PURCHASE = "asset_purchase"  # Asset purchase contract (KFZ-Kaufvertrag, Maschinenkauf, etc.)
     OTHER = "other"
 
 

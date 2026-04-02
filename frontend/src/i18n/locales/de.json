@@ -1281,6 +1281,7 @@
       "receipt": "Beleg",
       "invoice": "Rechnung",
       "purchase_contract": "Kaufvertrag",
+      "asset_purchase": "Anlagegut-Kaufvertrag",
       "rental_contract": "Mietvertrag",
       "loan_contract": "Kreditvertrag",
       "bank_statement": "Kontoauszug",
@@ -1317,6 +1318,7 @@
       "contract": "Vertrag",
       "statement": "Kontoauszug",
       "purchase_contract": "Kaufvertrag",
+      "asset_purchase": "Anlagegut-Kaufvertrag",
       "rental_contract": "Mietvertrag",
       "loan_contract": "Kreditvertrag",
       "bank_statement": "Kontoauszug",
@@ -2678,6 +2680,7 @@
       "e1_form": "E1-Steuererklärung",
       "svs_notice": "SVS-Bescheid",
       "purchase_contract": "Kaufvertrag",
+      "asset_purchase": "Anlagegut-Kaufvertrag",
       "rental_contract": "Mietvertrag"
     },
     "templates": {

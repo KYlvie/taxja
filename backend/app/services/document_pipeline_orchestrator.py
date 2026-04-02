@@ -1220,7 +1220,7 @@ class DocumentPipelineOrchestrator:
         "sepa_lastschrift": DBDocumentType.OTHER,
         "spendenbestaetigung": DBDocumentType.INVOICE,
         "kirchenbeitrag": DBDocumentType.INVOICE,
-        "asset_purchase": DBDocumentType.PURCHASE_CONTRACT,
+        "asset_purchase": DBDocumentType.ASSET_PURCHASE,
     }
 
     def _map_ai_type_to_db_type(self, ai_type: str) -> Optional[DBDocumentType]:

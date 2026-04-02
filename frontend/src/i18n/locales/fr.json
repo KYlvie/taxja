@@ -1272,6 +1272,7 @@
       "receipt": "Reçu",
       "invoice": "Facture",
       "purchase_contract": "Contrat d'achat",
+      "asset_purchase": "Contrat d'achat d'actif",
       "rental_contract": "Contrat de location",
       "loan_contract": "Contrat de prêt",
       "bank_statement": "Relevé bancaire",
@@ -1308,6 +1309,7 @@
       "contract": "Contrat",
       "statement": "Relevé",
       "purchase_contract": "Contrat d'achat",
+      "asset_purchase": "Contrat d'achat d'actif",
       "rental_contract": "Contrat de location",
       "loan_contract": "Contrat de prêt",
       "bank_statement": "Relevé bancaire",
@@ -2666,6 +2668,7 @@
       "e1_form": "Déclaration d'impôt E1",
       "svs_notice": "Avis SVS",
       "purchase_contract": "Contrat d'achat (Kaufvertrag)",
+      "asset_purchase": "Contrat d'achat d'actif",
       "rental_contract": "Contrat de location (Mietvertrag)"
     },
     "templates": {
