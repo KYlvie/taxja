@@ -1220,6 +1220,7 @@ class DocumentPipelineOrchestrator:
         "sepa_lastschrift": DBDocumentType.OTHER,
         "spendenbestaetigung": DBDocumentType.INVOICE,
         "kirchenbeitrag": DBDocumentType.INVOICE,
+        "asset_purchase": DBDocumentType.PURCHASE_CONTRACT,
     }
 
     def _map_ai_type_to_db_type(self, ai_type: str) -> Optional[DBDocumentType]:
@@ -3010,13 +3011,10 @@ class DocumentPipelineOrchestrator:
                 asset.purchase_price = brutto
                 asset.income_tax_cost_cap = cap
                 asset.income_tax_depreciable_base = base
+                asset.building_value = base
                 asset.comparison_amount = brutto
             elif sub == "electric_pkw":
                 # E-Auto: partial VSt recovery capped at brutto EUR 40,000
-                # Total VSt = brutto / 6 (for 20% rate)
-                # Recoverable ratio = min(40k / brutto, 1)
-                # Recoverable VSt = total_vst × ratio
-                # Base = brutto - recoverable VSt
                 cap = Decimal("40000")
                 total_vst = (brutto / Decimal("6")).quantize(Decimal("0.01"))
                 ratio = min(cap / brutto, Decimal("1")) if brutto > 0 else Decimal("0")
@@ -3025,20 +3023,33 @@ class DocumentPipelineOrchestrator:
                 asset.purchase_price = brutto
                 asset.income_tax_cost_cap = None
                 asset.income_tax_depreciable_base = base
+                asset.building_value = base
                 asset.comparison_amount = brutto
             elif sub in ("fiscal_truck", "truck"):
                 # LKW: full VSt → base = netto
                 asset.purchase_price = brutto
                 asset.income_tax_depreciable_base = netto
+                asset.building_value = netto
                 asset.comparison_amount = netto
             else:
                 # Equipment, machinery: full VSt → base = netto
                 asset.purchase_price = brutto if vat > 0 else netto
                 asset.income_tax_depreciable_base = netto
+                asset.building_value = netto
                 asset.comparison_amount = netto
 
+            # Also fix the acquisition transaction amount to match brutto (actual cash outflow)
+            from app.models.transaction import Transaction as _Txn, TransactionType as _TT
+            acq_txn = self.db.query(_Txn).filter(
+                _Txn.property_id == asset.id,
+                _Txn.type == _TT.ASSET_ACQUISITION,
+            ).first()
+            if acq_txn and acq_txn.amount != brutto:
+                logger.info("Fixed asset txn %s amount: %s → %s (brutto)", acq_txn.id, acq_txn.amount, brutto)
+                acq_txn.amount = brutto
+
             self.db.flush()
-            logger.info("Fixed asset %s depreciable_base: sub=%s base=%s", asset_id, sub, asset.income_tax_depreciable_base)
+            logger.info("Fixed asset %s depreciable_base: sub=%s base=%s price=%s", asset_id, sub, asset.income_tax_depreciable_base, asset.purchase_price)
         except Exception as e:
             logger.warning("Failed to fix asset base for %s: %s", asset_id, e)
 
