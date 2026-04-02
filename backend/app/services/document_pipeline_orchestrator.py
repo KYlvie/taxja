@@ -3702,7 +3702,7 @@ class DocumentPipelineOrchestrator:
                                 override_source = "issuer_name_match"
                                 break
                             if recipient and token in recipient:
-                                confirmed_direction = "income"
+                                confirmed_direction = "expense"
                                 override_source = "recipient_name_match"
                                 break
 
@@ -3722,6 +3722,15 @@ class DocumentPipelineOrchestrator:
                             "Direction override (%s): %s -> %s for doc %d",
                             override_source, old_type, confirmed_direction, document.id,
                         )
+
+            # Recovery: if create_split_suggestions returned empty but the service
+            # wrote a needs_review suggestion directly to ocr_result, pull it in
+            # so the gate loop can process it.
+            if not suggestions:
+                _persisted_sugg = (document.ocr_result or {}).get("transaction_suggestion")
+                if isinstance(_persisted_sugg, dict) and _persisted_sugg.get("status") == "needs_review":
+                    suggestions = [_persisted_sugg]
+                    logger.info("Recovered needs_review suggestion from ocr_result for doc %s", document.id)
 
             # OCR-level confidence must come from the current OCR pass, not the
             # persisted document row (which may still hold a stale earlier run
