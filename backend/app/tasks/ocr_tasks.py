@@ -859,8 +859,24 @@ def _build_asset_suggestion(db, document, result) -> dict:
     auto_create_payload = None
     asset_outcome = updated_ocr.get("asset_outcome")
     existing_import_suggestion = updated_ocr.get("import_suggestion")
+
+    # GWG (≤€1,000 netto): treat as immediate expense, NOT as an asset.
+    # The transaction pipeline handles GWG as a regular expense (sofort absetzbar).
+    # No asset suggestion needed — user shouldn't be asked to "create asset" for GWG.
+    if recognition_result.decision == AssetRecognitionDecision.GWG_SUGGESTION:
+        updated_ocr["asset_recognition"] = recognition_payload
+        updated_ocr["asset_quality_gate"] = _make_json_safe(quality_gate.model_dump(mode="json"))
+        document.ocr_result = _make_json_safe(updated_ocr)
+        flag_modified(document, "ocr_result")
+        db.flush()
+        return {
+            "asset_recognition": recognition_payload,
+            "asset_outcome": None,
+            "import_suggestion": None,
+            "auto_create_payload": None,
+        }
+
     if recognition_result.decision in (
-        AssetRecognitionDecision.GWG_SUGGESTION,
         AssetRecognitionDecision.CREATE_ASSET_SUGGESTION,
         AssetRecognitionDecision.CREATE_ASSET_AUTO,
     ):
