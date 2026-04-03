@@ -650,12 +650,28 @@ const OCRReview: React.FC<OCRReviewProps> = ({
               aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
             }
           } else if (
-            importSuggestion?.type === 'create_recurring_expense'
+            (importSuggestion?.type === 'create_recurring_expense'
+              || importSuggestion?.type === 'create_recurring_income')
             && importSuggestion?.status === 'pending'
           ) {
             try {
-              await documentService.confirmRecurringExpense(documentId);
+              // Rental income uses confirm-recurring, expenses use confirm-recurring-expense
+              if (importSuggestion.type === 'create_recurring_income') {
+                await documentService.confirmRecurring(documentId);
+              } else {
+                await documentService.confirmRecurringExpense(documentId);
+              }
               aiToast(t('documents.suggestion.recurringCreated', 'Recurring payment created'), 'success');
+            } catch {
+              aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
+            }
+          } else if (
+            importSuggestion?.type === 'create_property'
+            && importSuggestion?.status === 'pending'
+          ) {
+            try {
+              await documentService.confirmProperty(documentId);
+              aiToast(t('documents.suggestion.propertyCreated', 'Property created'), 'success');
             } catch {
               aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
             }
