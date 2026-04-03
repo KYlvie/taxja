@@ -3731,6 +3731,16 @@ def review_ocr_results(
 
         ocr_data = ocr_data["extracted_data"]
 
+    # Merge AI-extracted key_fields into ocr_data for all document types.
+    # Round 2 deep extraction stores detailed fields (address, rent, tenant, etc.)
+    # in _ai_first.key_fields, but the review page reads from extracted_data.
+    _ai_first = (document.ocr_result or {}).get("_ai_first") or {}
+    _ai_key_fields = _ai_first.get("key_fields") or {}
+    if _ai_key_fields and isinstance(ocr_data, dict):
+        for k, v in _ai_key_fields.items():
+            if v is not None and not isinstance(v, (dict, list)) and (k not in ocr_data or not ocr_data.get(k)):
+                ocr_data[k] = v
+
     # Build confidence map from *_confidence keys or field_confidence dict
 
     field_confidences = ocr_data.get("confidence", {})
