@@ -3339,8 +3339,25 @@ class DocumentPipelineOrchestrator:
             logger.warning("Asset validation failed for %s: %s", asset_id, e)
 
     def _extract_structured_import_data(self, ocr_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Collect persisted structured fields for import suggestions."""
+        """Collect persisted structured fields for import suggestions.
+
+        Merges top-level OCR fields with AI-extracted key_fields so that
+        the import suggestion has all data available for the frontend.
+        """
         extracted_data = ocr_result.get("extracted_data", {})
+
+        # Promote _ai_first.key_fields to top level so frontend can display them
+        ai_first = ocr_result.get("_ai_first") or {}
+        key_fields = ai_first.get("key_fields") or {}
+        for k, v in key_fields.items():
+            if v is not None and k not in extracted_data:
+                extracted_data[k] = v
+
+        # Also promote tax_treatment fields
+        tax_treatment = ai_first.get("tax_treatment") or {}
+        for k, v in tax_treatment.items():
+            if v is not None and k not in extracted_data:
+                extracted_data[k] = v
 
         # Fallback: some OCR extractors store fields at top level of ocr_result
         # instead of nesting under "extracted_data". Collect non-internal fields.
