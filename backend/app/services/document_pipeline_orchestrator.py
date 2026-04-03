@@ -934,11 +934,22 @@ class DocumentPipelineOrchestrator:
                     # Round 2: deep extraction for types that need it
                     ai_doc_type = ai_result.get("document_type", "")
                     ai_amounts = ai_result.get("amounts") or {}
+                    # Types that ALWAYS need Round 2 (tax forms with many fields)
+                    _always_round2 = {
+                        "einkommensteuerbescheid", "grundsteuerbescheid",
+                    }
+                    # Types that need Round 2 only when amounts are missing
+                    _conditional_round2 = {
+                        "zinsbescheinigung", "svs_vorschreibung", "svs_nachbemessung",
+                        "betriebskostenabrechnung", "loan_contract",
+                        "versicherungspolizze", "versicherungsbestaetigung",
+                    }
                     needs_round2 = (
-                        ai_doc_type in ("zinsbescheinigung", "svs_vorschreibung", "svs_nachbemessung",
-                                        "betriebskostenabrechnung", "loan_contract",
-                                        "versicherungspolizze", "versicherungsbestaetigung")
-                        and not ai_amounts.get("total_amount") and not ai_amounts.get("annual_amount")
+                        ai_doc_type in _always_round2
+                        or (
+                            ai_doc_type in _conditional_round2
+                            and not ai_amounts.get("total_amount") and not ai_amounts.get("annual_amount")
+                        )
                     )
                     if needs_round2:
                         try:
@@ -955,6 +966,13 @@ class DocumentPipelineOrchestrator:
                                     ai_result["amounts"]["total_amount"] = r2["praemie_jaehrlich"]
                                 if r2.get("remaining_balance"):
                                     ai_result.setdefault("key_fields", {})["remaining_balance"] = r2["remaining_balance"]
+                                # Promote all Round 2 scalar fields to key_fields
+                                # so they reach import_suggestion.data for the frontend
+                                if ai_doc_type in _always_round2:
+                                    kf = ai_result.setdefault("key_fields", {})
+                                    for _r2k, _r2v in r2.items():
+                                        if _r2v is not None and not isinstance(_r2v, (dict, list)):
+                                            kf.setdefault(_r2k, _r2v)
                                 logger.info("AI Round 2 for %s: extracted %d fields", ai_doc_type, len(r2))
                         except Exception as e2:
                             logger.debug("AI Round 2 failed for %s: %s", ai_doc_type, e2)
