@@ -148,14 +148,21 @@ class AITriage:
                         params = data.get("params", {})
                         logger.info("AI triage: tax intent=%s params=%s", intent, params)
                         return {"type": "tax", "intent": intent, "params": params}
-                # Fallback: find JSON embedded in text
-                json_match = re.search(r'\{[^{}]*"intent"[^{}]*\}', content)
+                # Fallback: find JSON embedded in text (supports nested braces like params:{})
+                json_match = re.search(r'\{[^{}]*"intent"[^{}]*(?:\{[^{}]*\}[^{}]*)?\}', content)
+                if not json_match:
+                    # Even more permissive: grab everything between first { and last }
+                    json_match = re.search(r'(\{.*"intent".*\})', content, re.DOTALL)
                 if json_match:
-                    data = json.loads(json_match.group())
-                    intent = data.get("intent", "tax_qa")
-                    params = data.get("params", {})
-                    logger.info("AI triage: tax intent=%s params=%s", intent, params)
-                    return {"type": "tax", "intent": intent, "params": params}
+                    try:
+                        data = json.loads(json_match.group())
+                        if "intent" in data:
+                            intent = data.get("intent", "tax_qa")
+                            params = data.get("params", {})
+                            logger.info("AI triage: tax intent=%s params=%s", intent, params)
+                            return {"type": "tax", "intent": intent, "params": params}
+                    except json.JSONDecodeError:
+                        pass
             except (json.JSONDecodeError, AttributeError):
                 pass
 
@@ -172,10 +179,15 @@ class AITriage:
                 return {"type": "system_help", "answer": answer}
 
             # If we can't parse as JSON, treat any non-empty text as general chat
-            # (covers casual chat, short answers, and long responses alike)
+            # But strip any leaked JSON fragments before showing to users
             if content:
-                logger.info("AI triage: treating as general_chat (unparsed, %d chars)", len(content))
-                return {"type": "general_chat", "answer": content}
+                clean = re.sub(r'\{[^{}]*"intent"[^{}]*(?:\{[^{}]*\}[^{}]*)?\}', '', content).strip()
+                if clean:
+                    logger.info("AI triage: treating as general_chat (unparsed, %d chars)", len(clean))
+                    return {"type": "general_chat", "answer": clean}
+                # Only JSON with no readable text → treat as tax fallback
+                logger.info("AI triage: only JSON found, routing to tax_qa")
+                return {"type": "tax", "intent": "tax_qa", "params": {}}
 
             return {"type": "fallback"}
 

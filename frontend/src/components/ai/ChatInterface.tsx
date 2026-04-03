@@ -123,7 +123,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ contextData, enableFileUp
           role: msg.role,
           content: msg.content,
           timestamp: new Date(msg.timestamp),
-        }))
+        })).sort((a: Message, b: Message) => a.timestamp.getTime() - b.timestamp.getTime())
       );
     } catch (err) {
       console.error('Failed to load chat history:', err);
