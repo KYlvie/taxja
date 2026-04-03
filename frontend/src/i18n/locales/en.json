@@ -3099,6 +3099,30 @@
       "endDateHint": "Leave empty for indefinite recurring transactions.",
       "notesPlaceholder": "Additional notes..."
     },
+    "types": {
+      "rental_income": "Rental Income",
+      "loan_interest": "Loan Interest",
+      "depreciation": "Depreciation",
+      "other_income": "Other Income",
+      "other_expense": "Other Expense",
+      "manual": "Manual"
+    },
+    "frequencies": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "yearly": "Yearly"
+    },
+    "statusActive": "Active",
+    "statusPaused": "Paused",
+    "statusStopped": "Stopped",
+    "pause": "Pause",
+    "resume": "Resume",
+    "edit": "Edit",
+    "delete": "Delete",
+    "viewContract": "View Contract",
+    "lastGenerated": "Last Generated",
     "confirmPause": "Are you sure you want to pause this recurring transaction?",
     "confirmStop": "Are you sure you want to stop this recurring transaction? Future auto-generated transactions will be deleted.",
     "confirmDelete": "Are you sure you want to delete this recurring transaction?",

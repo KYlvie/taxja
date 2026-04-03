@@ -19,31 +19,14 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
   onEdit,
   onDelete,
 }) => {
-  const { t: _t } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const getTypeLabel = (type: string) => {
-    const typeMap: Record<string, string> = {
-      'rental_income': '租金收入',
-      'loan_interest': '贷款利息',
-      'depreciation': '折旧',
-      'other_income': '其他收入',
-      'other_expense': '其他支出',
-      'manual': '自定义'
-    };
-    return typeMap[type] || type;
-  };
+  const getTypeLabel = (type: string) =>
+    t(`recurring.types.${type}`, type);
 
-  const getFrequencyLabel = (frequency: string) => {
-    const freqMap: Record<string, string> = {
-      'daily': '每日',
-      'weekly': '每周',
-      'monthly': '每月',
-      'quarterly': '每季度',
-      'yearly': '每年'
-    };
-    return freqMap[frequency] || frequency;
-  };
+  const getFrequencyLabel = (frequency: string) =>
+    t(`recurring.frequencies.${frequency}`, frequency);
 
   return (
     <div className="recurring-card">
@@ -52,40 +35,40 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
           <div className="card-title-row">
             <h3 className="card-title">{transaction.description}</h3>
             <span className={`status-badge ${
-              transaction.is_active ? 'status-active' : 
+              transaction.is_active ? 'status-active' :
               (transaction.end_date && new Date(transaction.end_date) < new Date()) ? 'status-stopped' : 'status-paused'
             }`}>
-              {transaction.is_active ? '活跃' : 
-               (transaction.end_date && new Date(transaction.end_date) < new Date()) ? '已停止' : '已暂停'}
+              {transaction.is_active ? t('recurring.statusActive', 'Active') :
+               (transaction.end_date && new Date(transaction.end_date) < new Date()) ? t('recurring.statusStopped', 'Stopped') : t('recurring.statusPaused', 'Paused')}
             </span>
           </div>
           
           <div className="card-details">
             <div className="detail-item">
-              <span className="detail-label">类型:</span>
+              <span className="detail-label">{t('recurring.type', 'Type')}:</span>
               <span className="detail-value">{getTypeLabel(transaction.recurring_type)}</span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">金额:</span>
+              <span className="detail-label">{t('recurring.amount', 'Amount')}:</span>
               <span className="amount-value">€{Number(transaction.amount).toFixed(2)}</span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">频率:</span>
+              <span className="detail-label">{t('recurring.frequency', 'Frequency')}:</span>
               <span className="detail-value">{getFrequencyLabel(transaction.frequency)}</span>
             </div>
             {transaction.next_generation_date && (
               <div className="detail-item">
-                <span className="detail-label">下次生成:</span>
+                <span className="detail-label">{t('recurring.nextGeneration', 'Next')}:</span>
                 <span className="detail-value">
-                  {new Date(transaction.next_generation_date).toLocaleDateString('zh-CN')}
+                  {new Date(transaction.next_generation_date).toLocaleDateString()}
                 </span>
               </div>
             )}
             {transaction.last_generated_date && (
               <div className="detail-item">
-                <span className="detail-label">上次生成:</span>
+                <span className="detail-label">{t('recurring.lastGenerated', 'Last')}:</span>
                 <span className="detail-value">
-                  {new Date(transaction.last_generated_date).toLocaleDateString('zh-CN')}
+                  {new Date(transaction.last_generated_date).toLocaleDateString()}
                 </span>
               </div>
             )}
@@ -93,48 +76,32 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
         </div>
 
         <div className="card-actions">
-          {/* Contract-linked recurrings: pause/resume controlled by contract end_date, not manual */}
-          {transaction.source_document_id ? null : transaction.is_active ? (
-            <button
-              onClick={() => onPause(transaction.id)}
-              className="action-btn btn-pause"
-            >
-              ⏸️ 暂停
+          {transaction.is_active ? (
+            <button onClick={() => onPause(transaction.id)} className="action-btn btn-pause">
+              {t('recurring.pause', 'Pause')}
             </button>
-          ) : transaction.end_date && new Date(transaction.end_date) < new Date() ? (
-            /* Stopped (end_date in past): no resume button */
-            null
-          ) : (
-            <button
-              onClick={() => onResume(transaction.id)}
-              className="action-btn btn-resume"
-            >
-              ▶️ 恢复
+          ) : transaction.end_date && new Date(transaction.end_date) < new Date() ? null : (
+            <button onClick={() => onResume(transaction.id)} className="action-btn btn-resume">
+              {t('recurring.resume', 'Resume')}
             </button>
           )}
-          
+
           {transaction.source_document_id ? (
             <button
               onClick={() => navigate(`/documents/${transaction.source_document_id}`)}
               className="action-btn btn-edit"
-              title="如需修改请前往关联合同"
+              title={t('recurring.viewContract', 'View contract')}
             >
-              📄 查看合同
+              {t('recurring.viewContract', 'View Contract')}
             </button>
           ) : (
-            <button
-              onClick={() => onEdit(transaction)}
-              className="action-btn btn-edit"
-            >
-              ✏️ 编辑
+            <button onClick={() => onEdit(transaction)} className="action-btn btn-edit">
+              {t('recurring.edit', 'Edit')}
             </button>
           )}
-          
-          <button
-            onClick={() => onDelete(transaction.id)}
-            className="action-btn btn-delete"
-          >
-            🗑️ 删除
+
+          <button onClick={() => onDelete(transaction.id)} className="action-btn btn-delete">
+            {t('recurring.delete', 'Delete')}
           </button>
         </div>
       </div>

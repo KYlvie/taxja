@@ -2633,6 +2633,30 @@
   "recurring": {
     "title": "定期交易",
     "noTransactions": "暂无定期交易",
+    "types": {
+      "rental_income": "租金收入",
+      "loan_interest": "贷款利息",
+      "depreciation": "折旧",
+      "other_income": "其他收入",
+      "other_expense": "其他支出",
+      "manual": "自定义"
+    },
+    "frequencies": {
+      "daily": "每日",
+      "weekly": "每周",
+      "monthly": "每月",
+      "quarterly": "每季度",
+      "yearly": "每年"
+    },
+    "statusActive": "活跃",
+    "statusPaused": "已暂停",
+    "statusStopped": "已停止",
+    "pause": "暂停",
+    "resume": "恢复",
+    "edit": "编辑",
+    "delete": "删除",
+    "viewContract": "查看合同",
+    "lastGenerated": "上次生成",
     "confirmPause": "确定要暂停这个定期交易吗？",
     "confirmDelete": "确定要删除这个定期交易吗？",
     "create": {

@@ -1129,13 +1129,15 @@ const OCRReview: React.FC<OCRReviewProps> = ({
         const ocrP = typeof ocrRaw2 === 'string' ? JSON.parse(ocrRaw2) : ocrRaw2;
         const sug = ocrP?.import_suggestion;
         const entities: { type: string; id: string | number; label: string }[] = [];
-        if ((document as any).transaction_id) {
-          entities.push({ type: 'transaction', id: (document as any).transaction_id, label: t('documents.linkedEntity.transaction') });
-        }
+        const hasRecurring = sug && (sug.status === 'confirmed' || sug.status === 'auto-created') && sug.recurring_id;
         if (sug && (sug.status === 'confirmed' || sug.status === 'auto-created')) {
           if (sug.recurring_id) entities.push({ type: 'recurring', id: sug.recurring_id, label: t('documents.linkedEntity.recurring') });
           if (sug.data?.matched_property_id) entities.push({ type: 'property', id: sug.data.matched_property_id, label: t('documents.linkedEntity.property') });
           if (sug.asset_id) entities.push({ type: 'asset', id: sug.asset_id, label: t('documents.linkedEntity.asset') });
+        }
+        // Only show single transaction link when no recurring exists (recurring generates its own transactions)
+        if ((document as any).transaction_id && !hasRecurring) {
+          entities.push({ type: 'transaction', id: (document as any).transaction_id, label: t('documents.linkedEntity.transaction') });
         }
         if (entities.length === 0) return null;
         return (
