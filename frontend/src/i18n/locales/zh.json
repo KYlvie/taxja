@@ -1220,7 +1220,8 @@
       "nutzflaecheM2": "使用面积 (m²)",
       "kaution": "押金",
       "purchasePrice": "购买价格",
-      "buildingPercentage": "建筑物占比 (%)"
+      "buildingPercentage": "建筑物占比 (%)",
+      "userIs": "您的角色"
     },
     "e1": {
       "title": "导入所得税申报表 (E1)",

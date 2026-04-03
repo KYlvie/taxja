@@ -1492,7 +1492,8 @@
       "nutzflaecheM2": "Usable Area (m²)",
       "kaution": "Security Deposit",
       "purchasePrice": "Purchase Price",
-      "buildingPercentage": "Building Share (%)"
+      "buildingPercentage": "Building Share (%)",
+      "userIs": "Your Role"
     },
     "e1": {
       "title": "Import Income Tax Declaration (E1)",

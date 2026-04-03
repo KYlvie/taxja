@@ -1948,9 +1948,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
             const displayedKeys = new Set([
               'date', 'amount', 'merchant', 'gross_income', 'net_income', 'withheld_tax',
               'employer', 'invoice_number', 'vat_amount', 'vat_rate', 'payment_method',
-              // rental contract
+              // rental contract (form fields + AI Round 2 aliases)
               'property_address', 'monthly_rent', 'start_date', 'end_date', 'tenant_name',
               'landlord_name', 'contract_type', 'betriebskosten', 'heating_costs', 'deposit_amount',
+              'hauptmietzins', 'gesamtmiete', 'umsatzsteuer', 'nutzflaeche_m2', 'kaution',
+              'building_percentage', 'user_is', 'gross_amount',
               // purchase contract
               'purchase_price', 'purchase_date', 'buyer_name', 'seller_name', 'building_value',
               'land_value', 'grunderwerbsteuer', 'notary_name', 'notary_fees', 'registry_fees',

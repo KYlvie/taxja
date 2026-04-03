@@ -1486,7 +1486,8 @@
       "nutzflaecheM2": "Nutzfläche (m²)",
       "kaution": "Kaution",
       "purchasePrice": "Kaufpreis",
-      "buildingPercentage": "Gebäudeanteil (%)"
+      "buildingPercentage": "Gebäudeanteil (%)",
+      "userIs": "Ihre Rolle"
     },
     "e1": {
       "title": "Einkommensteuererklärung (E1) importieren",

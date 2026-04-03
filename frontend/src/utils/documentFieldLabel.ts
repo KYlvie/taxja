@@ -104,6 +104,8 @@ const DOCUMENT_FIELD_LABEL_ALIASES: Record<string, string[]> = {
   kaution: ['documents.mietvertrag.kaution'],
   purchase_price: ['documents.mietvertrag.purchasePrice'],
   building_percentage: ['documents.mietvertrag.buildingPercentage'],
+  user_is: ['documents.mietvertrag.userIs'],
+  gross_amount: ['documents.review.fields.amount'],
 };
 
 export const normalizeDocumentFieldKey = (fieldName: string): string => {
