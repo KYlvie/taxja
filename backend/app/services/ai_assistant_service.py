@@ -1,15 +1,16 @@
 """
 AI Tax Assistant service with LLM integration.
-Supports OpenAI GPT-4, Anthropic Claude, and configurable LLM providers.
+Uses the shared LLMService (Groq > OpenAI > Anthropic fallback chain).
 """
 import os
+import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-import openai
-import anthropic
 
 from app.services.rag_retrieval_service import get_rag_retrieval_service
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class AIAssistantService:
@@ -30,17 +31,9 @@ class AIAssistantService:
     
     def __init__(self):
         self.rag_service = get_rag_retrieval_service()
-        self.llm_provider = os.getenv("LLM_PROVIDER", "openai")  # openai, anthropic, or local
-        
-        # Initialize LLM clients
-        if self.llm_provider == "openai":
-            openai.api_key = os.getenv("OPENAI_API_KEY")
-            self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
-        elif self.llm_provider == "anthropic":
-            self.anthropic_client = anthropic.Anthropic(
-                api_key=os.getenv("ANTHROPIC_API_KEY")
-            )
-            self.model = os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+        # Use the shared LLMService which has Groq > OpenAI > Anthropic fallback
+        from app.services.llm_service import LLMService
+        self._llm = LLMService()
     
     def generate_response(
         self,
@@ -78,21 +71,23 @@ class AIAssistantService:
         # Build user prompt with context
         user_prompt = self._build_user_prompt(user_message, context_str, language)
         
-        # Generate response using LLM
-        if self.llm_provider == "openai":
-            response = self._generate_openai_response(
-                system_prompt,
-                user_prompt,
-                conversation_history
+        # Generate response via OpenAI (supports multilingual including Chinese)
+        extra_messages = [
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in conversation_history[-10:]
+        ] if conversation_history else None
+        try:
+            response = self._llm.generate_simple(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7,
+                max_tokens=1000,
+                extra_messages=extra_messages,
+                provider_preference="openai",
             )
-        elif self.llm_provider == "anthropic":
-            response = self._generate_anthropic_response(
-                system_prompt,
-                user_prompt,
-                conversation_history
-            )
-        else:
-            response = "LLM provider not configured. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY."
+        except Exception as e:
+            logger.error("AI assistant LLM call failed: %s", e)
+            response = f"Error generating response: {e}"
         
         # Append disclaimer
         disclaimer = self.DISCLAIMERS.get(language, self.DISCLAIMERS["de"])
@@ -305,69 +300,6 @@ Molimo odgovorite na pitanje na osnovu pruzenog konteksta."""
         }
         
         return prompt_templates.get(language, prompt_templates["de"])
-    
-    def _generate_openai_response(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        conversation_history: List[Dict[str, str]]
-    ) -> str:
-        """Generate response using OpenAI API"""
-        messages = [{"role": "system", "content": system_prompt}]
-        
-        # Add conversation history (limit to last 10 messages)
-        for msg in conversation_history[-10:]:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # Add current user message
-        messages.append({"role": "user", "content": user_prompt})
-        
-        try:
-            response = openai.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"Error generating response: {str(e)}"
-    
-    def _generate_anthropic_response(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        conversation_history: List[Dict[str, str]]
-    ) -> str:
-        """Generate response using Anthropic Claude API"""
-        messages = []
-        
-        # Add conversation history (limit to last 10 messages)
-        for msg in conversation_history[-10:]:
-            if msg["role"] != "system":
-                messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-        
-        # Add current user message
-        messages.append({"role": "user", "content": user_prompt})
-        
-        try:
-            response = self.anthropic_client.messages.create(
-                model=self.model,
-                max_tokens=1000,
-                system=system_prompt,
-                messages=messages
-            )
-            
-            return response.content[0].text
-        except Exception as e:
-            return f"Error generating response: {str(e)}"
     
     def explain_ocr_result(
         self,

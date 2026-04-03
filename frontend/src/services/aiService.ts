@@ -55,7 +55,7 @@ class AIService {
       language: this.getLanguage(),
       context: contextData,
     }, {
-      timeout: 120000,  // 120s — Ollama on CPU can be slow
+      timeout: 120000,  // 120s
     });
     // Backend returns { message, message_id, timestamp, intent, data, suggestions, show_disclaimer, source_tier }
     return {

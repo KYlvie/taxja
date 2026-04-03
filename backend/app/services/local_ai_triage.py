@@ -121,6 +121,7 @@ class AITriage:
                 temperature=0.2,
                 max_tokens=800,
                 extra_messages=extra_messages or None,
+                provider_preference="openai",
             )
 
             if not content or not content.strip():
