@@ -1998,7 +1998,14 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
     role_resolution = _resolve_contract_role_for_document(db, document, updated_ocr)
     _apply_contract_role_resolution(updated_ocr, role_resolution)
 
-    monthly_rent = ocr_data.get("monthly_rent")
+    # monthly_rent may come from OCR extractor, AI Round 2 key_fields, or top-level amount
+    _ai_kf = (ocr_data.get("_ai_first") or {}).get("key_fields") or {}
+    monthly_rent = (
+        ocr_data.get("monthly_rent")
+        or _ai_kf.get("gesamtmiete")
+        or ocr_data.get("amount")
+        or ocr_data.get("gross_amount")
+    )
     if not monthly_rent:
         _clear_import_suggestion_types(updated_ocr, {"create_recurring_income"})
         document.ocr_result = updated_ocr
@@ -2006,7 +2013,7 @@ def _build_mietvertrag_suggestion(db, document, result) -> dict:
         return {"import_suggestion": None}
 
     monthly_rent = Decimal(str(monthly_rent))
-    address = ocr_data.get("property_address", "")
+    address = ocr_data.get("property_address") or _ai_kf.get("property_address") or ""
 
     # Check for upload context with property_id (from PropertyDetailPage navigation)
     upload_context = ocr_data.get("_upload_context", {}) or {}
