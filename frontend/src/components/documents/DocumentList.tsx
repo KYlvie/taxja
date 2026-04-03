@@ -876,12 +876,12 @@ const DocumentList: React.FC<DocumentListProps> = ({ onDocumentSelect, onSummary
   useEffect(() => {
     const visibleDocIds = yearFilteredDocuments.map((d) => d.id);
     onSummaryChange?.({
-      totalCount: yearFilteredDocuments.length,
+      totalCount: total,
       reviewCount,
       confirmableIds,
       visibleDocIds,
     });
-  }, [confirmableIdSignature, onSummaryChange, reviewCount, yearFilteredDocuments]);
+  }, [confirmableIdSignature, onSummaryChange, reviewCount, total, yearFilteredDocuments]);
 
   const renderGridItem = (document: Document) => (
     <div

@@ -3374,17 +3374,19 @@ class DocumentPipelineOrchestrator:
             }
 
         # Promote _ai_first.key_fields to extracted_data so frontend can display them.
-        # This runs AFTER fallback so it adds to (not replaces) the collected data.
+        # Override existing keys when their current value is falsy (None, "", 0, []),
+        # because the fallback branch may have collected empty placeholders from
+        # top-level OCR fields that shadow the AI-extracted values.
         ai_first = ocr_result.get("_ai_first") or {}
         key_fields = ai_first.get("key_fields") or {}
         for k, v in key_fields.items():
-            if v is not None and k not in extracted_data:
+            if v is not None and (k not in extracted_data or not extracted_data.get(k)):
                 extracted_data[k] = v
 
         # Also promote tax_treatment fields
         tax_treatment = ai_first.get("tax_treatment") or {}
         for k, v in tax_treatment.items():
-            if v is not None and k not in extracted_data:
+            if v is not None and (k not in extracted_data or not extracted_data.get(k)):
                 extracted_data[k] = v
 
         return extracted_data or {}

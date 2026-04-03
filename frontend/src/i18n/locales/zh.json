@@ -87,7 +87,9 @@
     "generateReports": "生成报告",
     "generateReportsDesc": "查看税务报告",
     "aiAssistant": "AI 助手",
-    "aiAssistantDesc": "询问税务问题"
+    "aiAssistantDesc": "询问税务问题",
+    "exportCsv": "导出 CSV",
+    "exportPdf": "导出 PDF"
   },
   "auth": {
     "login": "登录",
@@ -337,7 +339,9 @@
       "description": "先上传一份文件，或记录第一笔收入/支出。系统有数据后，仪表盘才会开始给出有用的提醒。",
       "addTransaction": "添加交易",
       "uploadDocument": "上传凭证",
-      "setupProfile": "设置个人资料"
+      "setupProfile": "设置个人资料",
+      "exportCsv": "导出 CSV",
+      "exportPdf": "导出 PDF"
     },
     "employerArchived": "已归档",
     "employerAttentionBody": "您有与雇主相关的项目等待确认或归档审核。",
@@ -361,6 +365,8 @@
   "transactions": {
     "title": "交易记录",
     "addTransaction": "添加交易",
+    "exportCsv": "导出 CSV",
+    "exportPdf": "导出 PDF",
     "editTransaction": "编辑交易",
     "type": "类型",
     "amount": "金额",
@@ -724,6 +730,7 @@
       },
       "assetPurchaseContract": "资产购买合同",
       "assetPurchaseContractHint": "该文件被识别为资产购买合同，将作为资产信息而非房产信息进行确认。",
+      "documentTypeLocked": "系统识别的文档类型已锁定。如果识别有误，请重新处理文档，而不是手动更改类型。",
       "readonlyMode": "只读",
       "verifyFieldSuggestion": "请核实「{{field}}」字段。",
       "templateSwitchAfterSave": "保存后将切换模板。",
@@ -973,6 +980,7 @@
       "contract": "合同",
       "statement": "对账单",
       "purchase_contract": "购置合同",
+      "asset_purchase": "资产购买合同",
       "rental_contract": "租赁合同",
       "loan_contract": "贷款合同",
       "bank_statement": "银行对账单",
@@ -1675,7 +1683,9 @@
       "categoryReadonlyHint": "点击编辑以解锁此收据的类别和可扣除性更改。",
       "selectIncomeCategory": "保存此收入文档前，请先选择一个收入类别。",
       "expandDetails": "展开详情",
-      "hideDetails": "收起详情"
+      "hideDetails": "收起详情",
+      "editing": "编辑中",
+      "linkedTransactionShort": "关联交易"
     },
     "prev": "上一个",
     "next": "下一个",
@@ -3670,7 +3680,9 @@
     "reasonConflicted": "该描述存在相互矛盾的修正",
     "reasonStrict": "保存自您的手动分类修正。",
     "reasonAdaptive": "通过反复确认自适应学习。",
-    "ruleTypeOverride": "覆盖"
+    "ruleTypeOverride": "覆盖",
+    "searchPlaceholder": "按描述或类别搜索...",
+    "searchDeductPlaceholder": "按描述搜索..."
   },
   "savingsSuggestions": {
     "intro": "这里显示的是目前最值得优先处理的税务待办。每张卡都会告诉你为什么出现、你下一步该做什么。",
@@ -3718,6 +3730,7 @@
       "e1_form": "E1 税表",
       "svs_notice": "SVS 缴费通知",
       "purchase_contract": "购置合同",
+      "asset_purchase": "资产购买合同",
       "rental_contract": "租赁合同"
     },
     "templates": {
@@ -3822,6 +3835,8 @@
     "newUser": "欢迎！请先上传您的第一份文档或添加一笔交易",
     "gettingStarted": {
       "addTransaction": "请先添加您的第一笔收入或支出交易",
+      "exportCsv": "导出 CSV",
+      "exportPdf": "导出 PDF",
       "uploadDocument": "上传一份文档（工资单、收据、合同）开始使用",
       "addProperty": "添加您的出租房产以跟踪折旧和租金收入"
     }
@@ -4173,7 +4188,9 @@
     "addTransaction": "添加交易",
     "askAI": "咨询AI",
     "generateReport": "生成报告",
-    "scanReceipt": "扫描收据"
+    "scanReceipt": "扫描收据",
+    "exportCsv": "导出 CSV",
+    "exportPdf": "导出 PDF"
   },
   "credits": {
     "history_title": "积分历史",
