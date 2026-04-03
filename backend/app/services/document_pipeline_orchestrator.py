@@ -3346,19 +3346,6 @@ class DocumentPipelineOrchestrator:
         """
         extracted_data = ocr_result.get("extracted_data", {})
 
-        # Promote _ai_first.key_fields to top level so frontend can display them
-        ai_first = ocr_result.get("_ai_first") or {}
-        key_fields = ai_first.get("key_fields") or {}
-        for k, v in key_fields.items():
-            if v is not None and k not in extracted_data:
-                extracted_data[k] = v
-
-        # Also promote tax_treatment fields
-        tax_treatment = ai_first.get("tax_treatment") or {}
-        for k, v in tax_treatment.items():
-            if v is not None and k not in extracted_data:
-                extracted_data[k] = v
-
         # Fallback: some OCR extractors store fields at top level of ocr_result
         # instead of nesting under "extracted_data". Collect non-internal fields.
         if not extracted_data:
@@ -3385,6 +3372,20 @@ class DocumentPipelineOrchestrator:
             extracted_data = {
                 k: v for k, v in ocr_result.items() if k not in _internal_keys and not k.startswith("_")
             }
+
+        # Promote _ai_first.key_fields to extracted_data so frontend can display them.
+        # This runs AFTER fallback so it adds to (not replaces) the collected data.
+        ai_first = ocr_result.get("_ai_first") or {}
+        key_fields = ai_first.get("key_fields") or {}
+        for k, v in key_fields.items():
+            if v is not None and k not in extracted_data:
+                extracted_data[k] = v
+
+        # Also promote tax_treatment fields
+        tax_treatment = ai_first.get("tax_treatment") or {}
+        for k, v in tax_treatment.items():
+            if v is not None and k not in extracted_data:
+                extracted_data[k] = v
 
         return extracted_data or {}
 
