@@ -3758,6 +3758,19 @@ def review_ocr_results(
                 if existing is None or existing in _placeholder_values or k not in ocr_data:
                     ocr_data[k] = v
 
+    # Clean up finanzamt if it contains the full document header
+    if isinstance(ocr_data, dict) and isinstance(ocr_data.get("finanzamt"), str):
+        fa = ocr_data["finanzamt"]
+        if len(fa) > 60 or "EINKOMMENSTEUERBESCHEID" in fa.upper():
+            # Extract just the Finanzamt name from the header
+            import re as _re
+            fa_match = _re.match(r"(Finanzamt\s+\S+(?:\s+\S+)?)", fa)
+            if fa_match:
+                ocr_data["finanzamt"] = fa_match.group(1).strip()
+            else:
+                # Truncate to first meaningful part
+                ocr_data["finanzamt"] = fa.split("EINKOM")[0].strip().rstrip(",.")
+
     # Build confidence map from *_confidence keys or field_confidence dict
 
     field_confidences = ocr_data.get("confidence", {})
@@ -3791,7 +3804,12 @@ def review_ocr_results(
 
                  "_unsupported_type", "multiple_receipts",
 
-                 "transaction_suggestion", "vermietung_details", "all_kz_values"}
+                 "transaction_suggestion", "vermietung_details", "all_kz_values",
+
+                 "expense_or_income", "is_deductible", "deduction_category",
+                 "tax_form", "is_asset_purchase", "is_gwg", "asset_type",
+                 "commercial_document_semantics", "is_reversal",
+                 "user_is", "user_contract_role_source"}
 
     for field_name, value in ocr_data.items():
 

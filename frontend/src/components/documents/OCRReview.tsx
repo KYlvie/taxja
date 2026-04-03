@@ -1418,10 +1418,7 @@ const OCRReview: React.FC<OCRReviewProps> = ({
                           {(fieldConfidence * 100).toFixed(0)}%
                         </span>
                       )}
-                      {formattedDisplayValue &&
-                        String(currentValue).trim() !== formattedDisplayValue && (
-                          <div className="field-display-hint">{formattedDisplayValue}</div>
-                        )}
+                      {/* Currency hint removed — redundant below editable input */}
                     </div>
                   );
                 })
