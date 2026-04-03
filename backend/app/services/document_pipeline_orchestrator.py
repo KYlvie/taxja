@@ -937,6 +937,7 @@ class DocumentPipelineOrchestrator:
                     # Types that ALWAYS need Round 2 (tax forms with many fields)
                     _always_round2 = {
                         "einkommensteuerbescheid", "grundsteuerbescheid",
+                        "mietvertrag", "kaufvertrag",
                     }
                     # Types that need Round 2 only when amounts are missing
                     _conditional_round2 = {
