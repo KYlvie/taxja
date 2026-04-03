@@ -6910,15 +6910,18 @@ def _extract_tax_import_data(document: Document) -> Dict[str, Any]:
             for key, value in suggestion["data"].items()
             if not isinstance(value, (dict, list))
         }
+        # Always try specialized extractor to recover tax-specific fields
+        # (BescheidExtractor, E1FormExtractor, etc.) regardless of whether
+        # import_suggestion already has meaningful fields.
+        recovered = _extract_specialized_tax_import_data(document)
+        if recovered:
+            recovered_tax_year = _resolve_tax_import_year(
+                document=document, data=recovered, source=recovered
+            )
+            if recovered_tax_year is not None:
+                recovered["tax_year"] = recovered_tax_year
+            return _merge_missing_tax_import_fields(suggestion_data, recovered)
         if _has_meaningful_tax_import_fields(suggestion_data):
-            recovered = _extract_specialized_tax_import_data(document)
-            if recovered:
-                recovered_tax_year = _resolve_tax_import_year(
-                    document=document, data=recovered, source=recovered
-                )
-                if recovered_tax_year is not None:
-                    recovered["tax_year"] = recovered_tax_year
-                return _merge_missing_tax_import_fields(suggestion_data, recovered)
             return suggestion_data
 
     source = ocr_result.get("extracted_data")
