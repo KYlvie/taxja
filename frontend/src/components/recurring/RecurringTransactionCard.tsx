@@ -45,7 +45,7 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
           
           <div className="card-details">
             <div className="detail-item">
-              <span className="detail-label">{t('recurring.type', 'Type')}:</span>
+              <span className="detail-label">{t('recurring.typeLabel', 'Type')}:</span>
               <span className="detail-value">{getTypeLabel(transaction.recurring_type)}</span>
             </div>
             <div className="detail-item">
@@ -53,7 +53,7 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
               <span className="amount-value">€{Number(transaction.amount).toFixed(2)}</span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">{t('recurring.frequency', 'Frequency')}:</span>
+              <span className="detail-label">{t('recurring.frequencyLabel', 'Frequency')}:</span>
               <span className="detail-value">{getFrequencyLabel(transaction.frequency)}</span>
             </div>
             {transaction.next_generation_date && (
@@ -86,19 +86,17 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
             </button>
           )}
 
-          {transaction.source_document_id ? (
+          {transaction.source_document_id && (
             <button
               onClick={() => navigate(`/documents/${transaction.source_document_id}`)}
-              className="action-btn btn-edit"
-              title={t('recurring.viewContract', 'View contract')}
+              className="action-btn btn-view"
             >
               {t('recurring.viewContract', 'View Contract')}
             </button>
-          ) : (
-            <button onClick={() => onEdit(transaction)} className="action-btn btn-edit">
-              {t('recurring.edit', 'Edit')}
-            </button>
           )}
+          <button onClick={() => onEdit(transaction)} className="action-btn btn-edit">
+            {t('recurring.edit', 'Edit')}
+          </button>
 
           <button onClick={() => onDelete(transaction.id)} className="action-btn btn-delete">
             {t('recurring.delete', 'Delete')}

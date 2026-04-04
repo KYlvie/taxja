@@ -3142,6 +3142,8 @@
       "endDateHint": "Leave empty for indefinite recurring transactions.",
       "notesPlaceholder": "Additional notes..."
     },
+    "typeLabel": "Type",
+    "frequencyLabel": "Frequency",
     "types": {
       "rental_income": "Rental Income",
       "loan_interest": "Loan Interest",
