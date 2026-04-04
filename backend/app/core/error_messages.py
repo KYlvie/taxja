@@ -2011,6 +2011,123 @@ OCR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
         "fr": "Supplément LLM", "ru": "Дополнение LLM", "hu": "LLM kiegészítés",
         "pl": "Uzupełnienie LLM", "tr": "LLM takviyesi", "bs": "LLM dopuna",
     },
+    # ── Bescheid AI Round 2 fields ──
+    "einkuenfte_gewerbebetrieb": {
+        "de": "Einkünfte aus Gewerbebetrieb (§23)", "en": "Business Income (§23)", "zh": "经营所得 (§23)",
+        "fr": "Revenus commerciaux (§23)", "ru": "Доход от предпринимательства (§23)", "hu": "Vállalkozói jövedelem (§23)",
+        "pl": "Dochód z działalności (§23)", "tr": "Ticari gelir (§23)", "bs": "Prihod od poslovanja (§23)",
+    },
+    "einkuenfte_selbstaendig": {
+        "de": "Einkünfte aus selbständiger Arbeit (§22)", "en": "Self-Employment Income (§22)", "zh": "自由职业所得 (§22)",
+        "fr": "Revenus indépendants (§22)", "ru": "Доход от самозанятости (§22)", "hu": "Önálló tevékenység (§22)",
+        "pl": "Dochód z pracy na własny rachunek (§22)", "tr": "Serbest meslek geliri (§22)", "bs": "Prihod od samostalne djelatnosti (§22)",
+    },
+    "gesamtbetrag_einkuenfte": {
+        "de": "Gesamtbetrag der Einkünfte", "en": "Total Income", "zh": "总收入",
+        "fr": "Total des revenus", "ru": "Общий доход", "hu": "Összes jövedelem",
+        "pl": "Łączny dochód", "tr": "Toplam gelir", "bs": "Ukupni prihod",
+    },
+    "gewinnfreibetrag": {
+        "de": "Gewinnfreibetrag", "en": "Profit Allowance", "zh": "利润免税额",
+        "fr": "Abattement sur bénéfices", "ru": "Вычет на прибыль", "hu": "Nyereségadó-mentesség",
+        "pl": "Ulga od zysku", "tr": "Kar muafiyeti", "bs": "Oslobođenje od poreza na dobit",
+    },
+    "sonderausgaben": {
+        "de": "Sonderausgaben", "en": "Special Expenses", "zh": "特殊支出",
+        "fr": "Dépenses spéciales", "ru": "Особые расходы", "hu": "Különleges kiadások",
+        "pl": "Wydatki specjalne", "tr": "Özel giderler", "bs": "Posebni troškovi",
+    },
+    "festgesetzte_est": {
+        "de": "Festgesetzte Einkommensteuer", "en": "Assessed Income Tax", "zh": "应缴所得税",
+        "fr": "Impôt fixé", "ru": "Начисленный налог", "hu": "Megállapított adó",
+        "pl": "Ustalony podatek", "tr": "Belirlenen vergi", "bs": "Utvrđeni porez",
+    },
+    "anrechenbare_lohnsteuer": {
+        "de": "Anrechenbare Lohnsteuer", "en": "Creditable Wage Tax", "zh": "可抵扣工资税",
+        "fr": "Retenue imputable", "ru": "Зачитываемый налог", "hu": "Beszámítható bérjárulék",
+        "pl": "Zaliczany podatek", "tr": "Mahsup edilebilir vergi", "bs": "Uračunljivi porez",
+    },
+    "nachzahlung": {
+        "de": "Abgabennachforderung", "en": "Additional Tax Due", "zh": "补缴金额",
+        "fr": "Impôt supplémentaire", "ru": "Доплата налога", "hu": "Pótlólagos adó",
+        "pl": "Dopłata podatku", "tr": "Ek vergi", "bs": "Doplata poreza",
+    },
+    "gutschrift": {
+        "de": "Abgabengutschrift", "en": "Tax Refund", "zh": "退税金额",
+        "fr": "Remboursement", "ru": "Возврат налога", "hu": "Adó-visszatérítés",
+        "pl": "Zwrot podatku", "tr": "Vergi iadesi", "bs": "Povrat poreza",
+    },
+    "verlustvortrag_aus_vorjahren": {
+        "de": "Verlustvortrag aus Vorjahren", "en": "Loss Carryforward", "zh": "往年亏损结转",
+        "fr": "Report de pertes", "ru": "Перенос убытков", "hu": "Veszteség-átvitel",
+        "pl": "Przeniesienie strat", "tr": "Zarar devri", "bs": "Prijenos gubitaka",
+    },
+    "verlustvortrag_verrechnet": {
+        "de": "Verrechneter Verlustvortrag", "en": "Loss Applied", "zh": "本年已抵扣亏损",
+        "fr": "Pertes compensées", "ru": "Зачтённые убытки", "hu": "Felhasznált veszteség",
+        "pl": "Rozliczone straty", "tr": "Mahsup edilen zarar", "bs": "Izravnani gubici",
+    },
+    "verlustvortrag_verbleibend": {
+        "de": "Verbleibender Verlustvortrag", "en": "Remaining Loss", "zh": "剩余亏损结转",
+        "fr": "Pertes restantes", "ru": "Остаток убытков", "hu": "Fennmaradó veszteség",
+        "pl": "Pozostałe straty", "tr": "Kalan zarar", "bs": "Preostali gubici",
+    },
+    "bescheid_rechtskraeftig_seit": {
+        "de": "Rechtskräftig seit", "en": "Legally Binding Since", "zh": "生效日期",
+        "fr": "Exécutoire depuis", "ru": "Вступило в силу", "hu": "Jogerős",
+        "pl": "Prawomocne od", "tr": "Kesinleştirme tarihi", "bs": "Pravomoćno od",
+    },
+    "einkuenfte_kapital": {
+        "de": "Einkünfte aus Kapitalvermögen (§27)", "en": "Capital Income (§27)", "zh": "资本收益 (§27)",
+        "fr": "Revenus de capitaux (§27)", "ru": "Доход от капитала (§27)", "hu": "Tőkejövedelem (§27)",
+        "pl": "Dochód z kapitału (§27)", "tr": "Sermaye geliri (§27)", "bs": "Prihod od kapitala (§27)",
+    },
+    "sonstige_einkuenfte": {
+        "de": "Sonstige Einkünfte (§29)", "en": "Other Income (§29)", "zh": "其他所得 (§29)",
+        "fr": "Autres revenus (§29)", "ru": "Прочие доходы (§29)", "hu": "Egyéb jövedelem (§29)",
+        "pl": "Inne dochody (§29)", "tr": "Diğer gelirler (§29)", "bs": "Ostali prihodi (§29)",
+    },
+    "aussergewoehnliche_belastungen": {
+        "de": "Außergewöhnliche Belastungen", "en": "Extraordinary Expenses", "zh": "特殊负担",
+        "fr": "Charges extraordinaires", "ru": "Чрезвычайные расходы", "hu": "Rendkívüli terhek",
+        "pl": "Obciążenia nadzwyczajne", "tr": "Olağanüstü yükler", "bs": "Vanredna opterećenja",
+    },
+    # ── Mietvertrag AI Round 2 fields ──
+    "hauptmietzins": {
+        "de": "Hauptmietzins", "en": "Base Rent", "zh": "基本租金",
+        "fr": "Loyer de base", "ru": "Базовая арендная плата", "hu": "Alapbérleti díj",
+        "pl": "Czynsz podstawowy", "tr": "Temel kira", "bs": "Osnovna najamnina",
+    },
+    "gesamtmiete": {
+        "de": "Gesamtmiete", "en": "Total Rent", "zh": "总租金",
+        "fr": "Loyer total", "ru": "Общая арендная плата", "hu": "Teljes bérleti díj",
+        "pl": "Czynsz całkowity", "tr": "Toplam kira", "bs": "Ukupna najamnina",
+    },
+    "nutzflaeche_m2": {
+        "de": "Nutzfläche (m²)", "en": "Usable Area (m²)", "zh": "使用面积 (m²)",
+        "fr": "Surface utile (m²)", "ru": "Полезная площадь (м²)", "hu": "Hasznos terület (m²)",
+        "pl": "Powierzchnia użytkowa (m²)", "tr": "Kullanım alanı (m²)", "bs": "Korisna površina (m²)",
+    },
+    "building_percentage": {
+        "de": "Gebäudeanteil (%)", "en": "Building Share (%)", "zh": "建筑物占比 (%)",
+        "fr": "Part du bâtiment (%)", "ru": "Доля здания (%)", "hu": "Épület aránya (%)",
+        "pl": "Udział budynku (%)", "tr": "Bina payı (%)", "bs": "Udio zgrade (%)",
+    },
+    "gross_amount": {
+        "de": "Bruttobetrag", "en": "Gross Amount", "zh": "总金额",
+        "fr": "Montant brut", "ru": "Сумма брутто", "hu": "Bruttó összeg",
+        "pl": "Kwota brutto", "tr": "Brüt tutar", "bs": "Bruto iznos",
+    },
+    "umsatzsteuer": {
+        "de": "Umsatzsteuer", "en": "VAT", "zh": "增值税",
+        "fr": "TVA", "ru": "НДС", "hu": "ÁFA",
+        "pl": "VAT", "tr": "KDV", "bs": "PDV",
+    },
+    "purchase_price": {
+        "de": "Kaufpreis", "en": "Purchase Price", "zh": "购买价格",
+        "fr": "Prix d'achat", "ru": "Цена покупки", "hu": "Vételár",
+        "pl": "Cena zakupu", "tr": "Satış fiyatı", "bs": "Kupovna cijena",
+    },
 }
 
 
