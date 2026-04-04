@@ -626,11 +626,16 @@ const OCRReview: React.FC<OCRReviewProps> = ({
 
       await documentService.correctOCR(documentId, dataToSend);
 
-      // If not yet confirmed, also call confirm endpoint
+      // Call confirm endpoint (first time or re-confirm to update recurring)
       const isConfirmed =
         Boolean(extracted_data?.confirmed ?? reviewData?.document?.ocr_result?.confirmed)
         || Boolean(reviewData?.document?.transaction_id);
-      if (!isConfirmed) {
+      const importSuggestionForReconfirm = reviewData?.document?.ocr_result?.import_suggestion;
+      const isRecurringReconfirm = isConfirmed
+        && importSuggestionForReconfirm?.type === 'create_recurring_income'
+        && importSuggestionForReconfirm?.status === 'confirmed'
+        && importSuggestionForReconfirm?.recurring_id;
+      if (!isConfirmed || isRecurringReconfirm) {
         try {
           await documentService.confirmOCR(documentId);
 
@@ -652,16 +657,21 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           } else if (
             (importSuggestion?.type === 'create_recurring_expense'
               || importSuggestion?.type === 'create_recurring_income')
-            && importSuggestion?.status === 'pending'
+            && (importSuggestion?.status === 'pending' || importSuggestion?.status === 'confirmed')
           ) {
             try {
-              // Rental income uses confirm-recurring, expenses use confirm-recurring-expense
               if (importSuggestion.type === 'create_recurring_income') {
                 await documentService.confirmRecurring(documentId);
               } else {
                 await documentService.confirmRecurringExpense(documentId);
               }
-              aiToast(t('documents.suggestion.recurringCreated', 'Recurring payment created'), 'success');
+              const isUpdate = importSuggestion.status === 'confirmed';
+              aiToast(
+                isUpdate
+                  ? t('documents.suggestion.recurringUpdated', 'Recurring transaction updated')
+                  : t('documents.suggestion.recurringCreated', 'Recurring payment created'),
+                'success'
+              );
             } catch {
               aiToast(t('documents.reviewActionSuccess', 'Document reviewed'), 'success');
             }

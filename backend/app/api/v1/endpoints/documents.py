@@ -3758,19 +3758,6 @@ def review_ocr_results(
                 if existing is None or existing in _placeholder_values or k not in ocr_data:
                     ocr_data[k] = v
 
-    # Clean up finanzamt if it contains the full document header
-    if isinstance(ocr_data, dict) and isinstance(ocr_data.get("finanzamt"), str):
-        fa = ocr_data["finanzamt"]
-        if len(fa) > 60 or "EINKOMMENSTEUERBESCHEID" in fa.upper():
-            # Extract just the Finanzamt name from the header
-            import re as _re
-            fa_match = _re.match(r"(Finanzamt\s+\S+(?:\s+\S+)?)", fa)
-            if fa_match:
-                ocr_data["finanzamt"] = fa_match.group(1).strip()
-            else:
-                # Truncate to first meaningful part
-                ocr_data["finanzamt"] = fa.split("EINKOM")[0].strip().rstrip(",.")
-
     # Build confidence map from *_confidence keys or field_confidence dict
 
     field_confidences = ocr_data.get("confidence", {})
@@ -5925,17 +5912,69 @@ def confirm_recurring_from_ocr(
 
         )
 
-    if suggestion.get("status") == "confirmed":
+    if suggestion.get("status") == "confirmed" and suggestion.get("recurring_id"):
+        # Re-confirm: update existing recurring transaction with current contract data
+        try:
+            from app.models.recurring_transaction import RecurringTransaction
+            from app.services.recurring_transaction_service import RecurringTransactionService
+            from decimal import Decimal
 
-        return {
+            recurring_id = suggestion["recurring_id"]
+            recurring = db.query(RecurringTransaction).filter(
+                RecurringTransaction.id == recurring_id,
+                RecurringTransaction.user_id == current_user.id,
+            ).first()
 
-            "message": get_error_message("recurring_income_already_created", _get_lang(request, current_user)),
+            if not recurring:
+                raise HTTPException(status_code=404, detail="Recurring transaction not found")
 
-            "recurring_id": suggestion.get("recurring_id"),
+            sug_data = suggestion.get("data", {})
+            # Also check current ocr_result for user-edited values
+            _ai_kf = (ocr_result.get("_ai_first") or {}).get("key_fields") or {}
+            new_amount = (
+                ocr_result.get("monthly_rent")
+                or _ai_kf.get("gesamtmiete")
+                or sug_data.get("monthly_rent")
+                or ocr_result.get("amount")
+            )
+            update_fields = {}
+            if new_amount and Decimal(str(new_amount)) != recurring.amount:
+                update_fields["amount"] = Decimal(str(new_amount))
+            new_address = (
+                ocr_result.get("property_address")
+                or _ai_kf.get("property_address")
+                or sug_data.get("address")
+            )
+            if new_address and new_address not in ("Adresse nicht erkannt", ""):
+                full_desc = f"RENTAL INCOME - {new_address}".upper()
+                if full_desc != recurring.description:
+                    update_fields["description"] = full_desc
 
-            "already_confirmed": True,
+            if update_fields:
+                service = RecurringTransactionService(db)
+                service.update_and_regenerate(
+                    recurring_id=recurring_id,
+                    user_id=current_user.id,
+                    update_data=update_fields,
+                )
+                logger.info("Updated recurring %s from re-confirmed contract doc %s: %s",
+                            recurring_id, document_id, update_fields)
 
-        }
+            return {
+                "message": get_error_message("recurring_income_updated", _get_lang(request, current_user)),
+                "recurring_id": recurring_id,
+                "updated": bool(update_fields),
+                "updated_fields": list(update_fields.keys()),
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning("Re-confirm recurring update failed for doc %s: %s", document_id, e)
+            return {
+                "message": get_error_message("recurring_income_already_created", _get_lang(request, current_user)),
+                "recurring_id": suggestion.get("recurring_id"),
+                "already_confirmed": True,
+            }
 
     try:
 
