@@ -2050,8 +2050,17 @@ const OCRReview: React.FC<OCRReviewProps> = ({
           {saving
             ? t('common.saving')
             : isConfirmed
-              ? t('common.save', 'Save')
-              : t('common.confirm', 'Confirm')
+              ? (isRecurringReconfirm
+                ? t('documents.suggestion.updateRecurring', 'Update Recurring')
+                : t('common.save', 'Save'))
+              : (() => {
+                const sug = reviewData?.document?.ocr_result?.import_suggestion;
+                if (sug?.type === 'create_recurring_income' && sug?.status === 'pending')
+                  return t('documents.suggestion.confirmRecurring', 'Confirm & Create Recurring');
+                if (sug?.type === 'create_property' && sug?.status === 'pending')
+                  return t('documents.suggestion.confirmProperty', 'Confirm & Create Property');
+                return t('common.confirm', 'Confirm');
+              })()
           }
         </button>
       </div>

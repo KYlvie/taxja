@@ -2920,26 +2920,15 @@ class DocumentPipelineOrchestrator:
     def _build_kaufvertrag_suggestion(
         self, document: Document, result: PipelineResult
     ) -> Optional[Dict[str, Any]]:
-        """Build AND auto-create property from Kaufvertrag."""
+        """Build property suggestion from Kaufvertrag (pending, user confirms)."""
         from app.tasks.ocr_tasks import _build_kaufvertrag_suggestion
         try:
             suggestion_dict = _build_kaufvertrag_suggestion(self.db, document, result)
             suggestion = suggestion_dict.get("import_suggestion")
             if not suggestion:
                 return None
-
-            # Auto-confirm: create the property immediately
-            try:
-                from app.tasks.ocr_tasks import create_property_from_suggestion
-                create_result = create_property_from_suggestion(
-                    self.db, document, suggestion.get("data", {})
-                )
-                suggestion["status"] = "auto-created"
-                suggestion["property_id"] = create_result.get("property_id")
-            except Exception as e:
-                logger.warning(f"Auto-create property failed, keeping as suggestion: {e}")
-                suggestion["status"] = "pending"
-
+            # Keep as pending — user confirms on review page
+            suggestion["status"] = "pending"
             return suggestion
         except Exception as e:
             logger.warning(f"Kaufvertrag suggestion failed: {e}")
@@ -2948,35 +2937,15 @@ class DocumentPipelineOrchestrator:
     def _build_mietvertrag_suggestion(
         self, document: Document, result: PipelineResult
     ) -> Optional[Dict[str, Any]]:
-        """Build AND auto-create recurring income from Mietvertrag."""
+        """Build recurring income suggestion from Mietvertrag (pending, user confirms)."""
         from app.tasks.ocr_tasks import _build_mietvertrag_suggestion
         try:
             suggestion_dict = _build_mietvertrag_suggestion(self.db, document, result)
             suggestion = suggestion_dict.get("import_suggestion")
             if not suggestion:
                 return None
-
-            data = suggestion.get("data", {})
-
-            # If no property matched, keep as pending — user needs to create/link property first
-            if data.get("no_property_match"):
-                suggestion["status"] = "pending"
-                return suggestion
-
-            # Auto-confirm: create the recurring income immediately
-            try:
-                from app.tasks.ocr_tasks import create_recurring_from_suggestion
-                create_result = create_recurring_from_suggestion(
-                    self.db, document, suggestion.get("data", {})
-                )
-                suggestion["status"] = "auto-created"
-                suggestion["recurring_id"] = create_result.get("recurring_id")
-                suggestion["is_partial_match"] = create_result.get("is_partial_match", False)
-                suggestion["unit_percentage"] = create_result.get("unit_percentage")
-            except Exception as e:
-                logger.warning(f"Auto-create recurring failed, keeping as suggestion: {e}")
-                suggestion["status"] = "pending"
-
+            # Keep as pending — user confirms on review page
+            suggestion["status"] = "pending"
             return suggestion
         except Exception as e:
             logger.warning(f"Mietvertrag suggestion failed: {e}")
