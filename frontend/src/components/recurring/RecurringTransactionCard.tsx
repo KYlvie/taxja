@@ -86,17 +86,18 @@ export const RecurringTransactionCard: React.FC<RecurringTransactionCardProps> =
             </button>
           )}
 
-          {transaction.source_document_id && (
+          {transaction.source_document_id ? (
             <button
               onClick={() => navigate(`/documents/${transaction.source_document_id}`)}
-              className="action-btn btn-view"
+              className="action-btn btn-edit"
             >
-              {t('recurring.viewContract', 'View Contract')}
+              {t('recurring.editContract', 'Edit Contract')}
+            </button>
+          ) : (
+            <button onClick={() => onEdit(transaction)} className="action-btn btn-edit">
+              {t('recurring.edit', 'Edit')}
             </button>
           )}
-          <button onClick={() => onEdit(transaction)} className="action-btn btn-edit">
-            {t('recurring.edit', 'Edit')}
-          </button>
 
           <button onClick={() => onDelete(transaction.id)} className="action-btn btn-delete">
             {t('recurring.delete', 'Delete')}

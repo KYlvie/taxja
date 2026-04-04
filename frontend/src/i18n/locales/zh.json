@@ -2658,6 +2658,7 @@
     "edit": "编辑",
     "delete": "删除",
     "viewContract": "查看合同",
+    "editContract": "修改合同",
     "lastGenerated": "上次生成",
     "confirmPause": "确定要暂停这个定期交易吗？",
     "confirmDelete": "确定要删除这个定期交易吗？",

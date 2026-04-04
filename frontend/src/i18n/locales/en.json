@@ -3166,6 +3166,7 @@
     "resume": "Resume",
     "delete": "Delete",
     "viewContract": "View Contract",
+    "editContract": "Edit Contract",
     "lastGenerated": "Last Generated",
     "confirmPause": "Are you sure you want to pause this recurring transaction?",
     "confirmStop": "Are you sure you want to stop this recurring transaction? Future auto-generated transactions will be deleted.",
