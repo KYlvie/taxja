@@ -948,6 +948,16 @@
         "message": "Актив можно создать сразу, но договор покупки или подтверждение сделают карточку актива полной."
       },
       "uploadDocument": "Загрузить документ"
+    },
+    "businessUseWarning": "По умолчанию 100 % = полностью коммерческое использование. Уменьшите при частном использовании (напр. 70 %).",
+    "putIntoUseDateHint": "Дата первого использования актива в бизнесе. По умолчанию дата покупки. Измените, если дата ввода в эксплуатацию отличается.",
+    "pendingDocuments": {
+      "title": "Документы активов на рассмотрении",
+      "hint": "Активы, обнаруженные в договорах купли-продажи, счетах или квитанциях, отображаются здесь. После подтверждения запись актива создаётся автоматически.",
+      "needsInput": "Требуется информация",
+      "missingFields": "Отсутствует: {{fields}}",
+      "awaitingConfirmation": "Ожидает подтверждения",
+      "openSourceDocument": "Открыть исходный документ"
     }
   },
   "documents": {
@@ -955,7 +965,8 @@
     "sortMode": {
       "label": "Сортировка",
       "uploadDate": "Дата загрузки",
-      "documentDate": "Дата документа"
+      "documentDate": "Дата документа",
+      "fileName": "Имя файла"
     },
     "description": "Загрузка и управление налоговыми документами с автоматическим распознаванием",
     "uploadDocument": "Загрузить документ",
@@ -1207,7 +1218,30 @@
         "confirmed": "Подтверждено",
         "confirmed_at": "Подтверждено в",
         "confirmed_by": "Подтвердил",
-        "transaction_type": "Тип транзакции"
+        "transaction_type": "Тип транзакции",
+        "document_date": "Дата документа",
+        "document_year": "Налоговый год",
+        "year_basis": "Основание года",
+        "year_confidence": "Достоверность года",
+        "bescheid_datum": "Дата уведомления (Bescheiddatum)",
+        "aktenzahl": "Номер дела (Aktenzahl)",
+        "faellig_am": "Срок оплаты",
+        "issuer": "Отправитель",
+        "recipient": "Получатель",
+        "finanzamt": "Налоговая инспекция (Finanzamt)",
+        "einkommen": "Доход",
+        "einkuenfte_nichtselbstaendig": "Доходы от наёмного труда",
+        "einkuenfte_vermietung": "Доходы от аренды",
+        "festgesetzte_einkommensteuer": "Начисленный подоходный налог",
+        "abgabengutschrift": "Налоговый возврат",
+        "abgabennachforderung": "Доначисление налога",
+        "werbungskosten_pauschale": "Стандартный вычет (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Пенсионное обеспечение самозанятых (SVS)",
+        "beitrag_gesamt": "Общий взнос",
+        "beitragsgrundlage": "База для расчёта взносов",
+        "versicherungsnummer": "Страховой номер",
+        "quarter": "Квартал",
+        "nachzahlung": "Доплата"
       },
       "additionalFields": "Дополнительные извлечённые поля",
       "contractRoleConfidenceLabel": "Уверенность",
@@ -1242,7 +1276,8 @@
       "confirmedSuccess": "Документ подтверждён",
       "confirmed": "Подтверждено",
       "openReview": "Проверить и подтвердить результаты OCR",
-      "moreSuggestions": "Ещё {{count}} рекомендаций"
+      "moreSuggestions": "Ещё {{count}} рекомендаций",
+      "documentTypeLocked": "Тип документа, определённый системой, заблокирован. При ошибке переобработайте документ, а не меняйте тип вручную."
     },
     "reviewSuccess": "Документ проверен",
     "reviewFailed": "Проверка не удалась",
@@ -1394,7 +1429,8 @@
       "startDate": "С даты",
       "endDate": "По дату",
       "needsReview": "Требует проверки",
-      "clear": "Сбросить фильтры"
+      "clear": "Сбросить фильтры",
+      "apply": "Применить"
     },
     "groups": {
       "all": "Все документы",
@@ -2003,7 +2039,12 @@
       "incomeTitle": "Данные о доходе",
       "categoryEditHint": "Используйте селектор выше, чтобы применить одну категорию ко всему чеку, или настройте каждую позицию ниже.",
       "categoryReadonlyHint": "Нажмите «Редактировать», чтобы разблокировать изменения категории и вычитаемости для этого чека.",
-      "selectIncomeCategory": "Выберите категорию дохода перед сохранением этого документа."
+      "selectIncomeCategory": "Выберите категорию дохода перед сохранением этого документа.",
+      "extractedDetails": "Извлечённые данные",
+      "expandDetails": "Показать подробности",
+      "hideDetails": "Скрыть подробности",
+      "editing": "Редактирование",
+      "linkedTransactionShort": "Связанная операция"
     },
     "linkedTransaction": {
       "title": "Привязанная транзакция",
@@ -2081,7 +2122,25 @@
     "prevDocument": "Предыдущий документ",
     "nextDocument": "Следующий документ",
     "fields": {
-      "type": "Тип"
+      "type": "Тип",
+      "einkuenfte_gewerbebetrieb": "Доходы от предпринимательства (§23)",
+      "einkuenfte_selbstaendig": "Доходы самозанятых (§22)",
+      "einkuenfte_nichtselbstaendig": "Доходы от наёмного труда (§25)",
+      "einkuenfte_vermietung": "Доходы от аренды (§28)",
+      "einkuenfte_kapital": "Доходы от капитала (§27)",
+      "sonstige_einkuenfte": "Прочие доходы (§29)",
+      "gesamtbetrag_einkuenfte": "Общая сумма доходов",
+      "gewinnfreibetrag": "Налоговый вычет на прибыль (Gewinnfreibetrag)",
+      "sonderausgaben": "Особые расходы (Sonderausgaben)",
+      "werbungskosten": "Профессиональные расходы (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Чрезвычайные расходы",
+      "einkommen": "Налогооблагаемый доход",
+      "festgesetzte_est": "Начисленный подоходный налог",
+      "anrechenbare_lohnsteuer": "Зачётный налог на зарплату",
+      "verlustvortrag_aus_vorjahren": "Перенос убытков из прошлых лет",
+      "verlustvortrag_verrechnet": "Зачтённые убытки в этом году",
+      "verlustvortrag_verbleibend": "Оставшийся перенос убытков",
+      "bescheid_rechtskraeftig_seit": "Вступило в силу"
     },
     "preview": "Предпросмотр документа",
     "reviewAction": "Проверить",
@@ -2116,7 +2175,10 @@
       "actions": {
         "create": "Создать транзакцию",
         "match": "Сопоставить с существующей",
-        "ignore": "Игнорировать дубликат"
+        "ignore": "Игнорировать дубликат",
+        "undoCreate": "Отменить создание",
+        "unmatch": "Отменить сопоставление",
+        "viewUnavailable": "Нет операции для предпросмотра"
       },
       "emptyPending": "Сейчас нет строк банковской выписки, требующих подтверждения.",
       "emptyResolved": "Пока нет автоматически обработанных строк выписки.",
@@ -3152,7 +3214,30 @@
       "createFromTemplate": "Создать из шаблона"
     },
     "endDate": "Дата окончания",
-    "startDate": "Дата начала"
+    "startDate": "Дата начала",
+    "types": {
+      "rental_income": "Арендный доход",
+      "loan_interest": "Проценты по кредиту",
+      "depreciation": "Амортизация",
+      "other_income": "Прочие доходы",
+      "other_expense": "Прочие расходы",
+      "manual": "Вручную"
+    },
+    "frequencies": {
+      "daily": "Ежедневно",
+      "weekly": "Еженедельно",
+      "monthly": "Ежемесячно",
+      "quarterly": "Ежеквартально",
+      "yearly": "Ежегодно"
+    },
+    "statusActive": "Активна",
+    "statusPaused": "Приостановлена",
+    "statusStopped": "Остановлена",
+    "pause": "Приостановить",
+    "resume": "Возобновить",
+    "delete": "Удалить",
+    "viewContract": "Показать договор",
+    "lastGenerated": "Последнее создание"
   },
   "pricing": {
     "manageSubscription": "Нажмите для управления подпиской",
@@ -4258,7 +4343,8 @@
       "taxFilter": "Налоговый фильтр",
       "taxFilterHint": "Только налогово значимые обязательства включаются в процессы налоговых вычетов. Все данные остаются доступными для полной отчётности.",
       "empty": "Сводка пока недоступна. Добавьте обязательства или недвижимость для заполнения обзора.",
-      "assetsVsLiabilitiesHint": "Этот вид объединяет текущую балансовую стоимость ваших активов со всеми отслеживаемыми обязательствами."
+      "assetsVsLiabilitiesHint": "Этот вид объединяет текущую балансовую стоимость ваших активов со всеми отслеживаемыми обязательствами.",
+      "pageTitle": "Обзор обязательств"
     },
     "tabs": {
       "overview": "Обзор активов и обязательств",
@@ -4409,7 +4495,20 @@
     "totalLiabilities": "Итого обязательства",
     "netWorth": "Чистая стоимость",
     "monthlyDebtService": "Ежемесячное обслуживание долга",
-    "noSummary": "Сводка пока недоступна. Добавьте активы или обязательства для заполнения обзора."
+    "noSummary": "Сводка пока недоступна. Добавьте активы или обязательства для заполнения обзора.",
+    "summaryTitle": "Обзор активов",
+    "totalAssetsNote": "Балансовая стоимость всех зарегистрированных активов",
+    "totalLiabilitiesNote": "Остаток по всем активным обязательствам",
+    "netWorthNote": "Активы минус обязательства",
+    "propertyCount": "Недвижимость",
+    "propertyCountNote": "Количество активных объектов недвижимости",
+    "otherAssetCount": "Прочие активы",
+    "otherAssetCountNote": "Оборудование, транспорт и инструменты",
+    "monthlyDebtServiceNote": "Текущие зарегистрированные плановые платежи",
+    "balanceSnapshot": "Снимок баланса",
+    "balanceSnapshotHint": "Сводный обзор балансовой стоимости активов и всех отслеживаемых обязательств.",
+    "annualDepreciation": "Годовая амортизация",
+    "annualDepreciationHint": "Общая амортизация всех объектов и прочих активов за текущий год."
   },
   "taxTools": {
     "refund": {
@@ -4460,7 +4559,11 @@
       "auditChecklist": "Контрольный список",
       "auditSelectYear": "Выбрать год",
       "flatRateNotApplicable": "Сравнение ставок только для самозанятых.",
-      "noDataAvailable": "Нет данных. Загрузите документы."
+      "noDataAvailable": "Нет данных. Загрузите документы.",
+      "transactionsSummary": "Операции",
+      "txnIncome": "Доходы",
+      "txnExpense": "Расходы",
+      "txnDeductible": "Вычитаемые"
     }
   }
 }

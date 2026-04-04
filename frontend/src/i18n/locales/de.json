@@ -87,7 +87,9 @@
     "generateReports": "Berichte erstellen",
     "generateReportsDesc": "Steuerberichte anzeigen",
     "aiAssistant": "AI-Assistent",
-    "aiAssistantDesc": "Steuerfragen stellen"
+    "aiAssistantDesc": "Steuerfragen stellen",
+    "exportCsv": "CSV exportieren",
+    "exportPdf": "PDF exportieren"
   },
   "auth": {
     "login": "Anmelden",
@@ -332,7 +334,9 @@
       "description": "Laden Sie zuerst ein Dokument hoch oder erfassen Sie Ihre erste Einnahme oder Ausgabe. Sobald Taxja Daten hat, wird das Dashboard deutlich hilfreicher.",
       "addTransaction": "Transaktion hinzufügen",
       "uploadDocument": "Beleg hochladen",
-      "setupProfile": "Profil einrichten"
+      "setupProfile": "Profil einrichten",
+      "exportCsv": "CSV exportieren",
+      "exportPdf": "PDF exportieren"
     },
     "flatRateNeedsData": "Fügen Sie Einnahmen und Ausgaben hinzu, um den Vergleich zu berechnen.",
     "taxYear": "Steuerjahr",
@@ -552,7 +556,9 @@
       "date": "Datum",
       "amount": "Betrag",
       "description": "Beschreibung"
-    }
+    },
+    "exportCsv": "CSV exportieren",
+    "exportPdf": "PDF exportieren"
   },
   "properties": {
     "title": "Immobilien",
@@ -950,7 +956,9 @@
         "message": "Sie können die Anlage zuerst anlegen. Mit Kaufvertrag oder Nachweis bleibt der Datensatz jedoch vollständig."
       },
       "uploadDocument": "Dokument hochladen"
-    }
+    },
+    "businessUseWarning": "Standard 100 % = rein gewerbliche Nutzung. Bei privater Mitbenutzung entsprechend reduzieren (z. B. 70 %).",
+    "putIntoUseDateHint": "Datum der erstmaligen betrieblichen Nutzung. Standardmäßig das Kaufdatum. Ändern Sie es, falls das Datum der Inbetriebnahme abweicht."
   },
   "documents": {
     "title": "Dokumente",
@@ -1214,7 +1222,27 @@
         "confirmed": "Bestätigt",
         "confirmed_at": "Bestätigt am",
         "confirmed_by": "Bestätigt von",
-        "transaction_type": "Transaktionstyp"
+        "transaction_type": "Transaktionstyp",
+        "document_date": "Dokumentdatum",
+        "document_year": "Zuordnungsjahr",
+        "year_basis": "Jahresgrundlage",
+        "year_confidence": "Jahres-Konfidenz",
+        "issuer": "Aussteller",
+        "recipient": "Empfänger",
+        "finanzamt": "Finanzamt",
+        "einkommen": "Einkommen",
+        "einkuenfte_nichtselbstaendig": "Einkünfte aus nichtselbständiger Arbeit",
+        "einkuenfte_vermietung": "Einkünfte aus Vermietung",
+        "festgesetzte_einkommensteuer": "Festgesetzte Einkommensteuer",
+        "abgabengutschrift": "Abgabengutschrift",
+        "abgabennachforderung": "Abgabennachforderung",
+        "werbungskosten_pauschale": "Werbungskostenpauschale",
+        "selbstaendigenvorsorge": "Selbständigenvorsorge",
+        "beitrag_gesamt": "Beitrag gesamt",
+        "beitragsgrundlage": "Beitragsgrundlage",
+        "versicherungsnummer": "Versicherungsnummer",
+        "quarter": "Quartal",
+        "nachzahlung": "Nachzahlung"
       },
       "additionalFields": "Weitere extrahierte Felder",
       "contractRoleConfidenceLabel": "Konfidenz",
@@ -1245,7 +1273,8 @@
         "standard_invoice": "Standardrechnung"
       },
       "openReview": "OCR-Ergebnisse prüfen und bestätigen",
-      "moreSuggestions": "Noch {{count}} weitere Hinweise"
+      "moreSuggestions": "Noch {{count}} weitere Hinweise",
+      "documentTypeLocked": "Der vom System erkannte Dokumenttyp ist gesperrt. Falls die Erkennung fehlerhaft ist, verarbeiten Sie das Dokument erneut, anstatt den Typ manuell zu ändern."
     },
     "reviewSuccess": "Dokument geprüft",
     "reviewFailed": "Prüfung fehlgeschlagen",
@@ -2007,7 +2036,12 @@
       "incomeTitle": "Einnahmendetails",
       "categoryEditHint": "Verwenden Sie die Auswahl oben, um eine Kategorie auf den gesamten Beleg anzuwenden, oder passen Sie jede Position unten einzeln an.",
       "categoryReadonlyHint": "Klicken Sie auf Bearbeiten, um Kategorie- und Abzugsfähigkeitsänderungen für diesen Beleg freizuschalten.",
-      "selectIncomeCategory": "Bitte waehlen Sie eine Einnahmekategorie, bevor Sie dieses Einnahmedokument speichern."
+      "selectIncomeCategory": "Bitte waehlen Sie eine Einnahmekategorie, bevor Sie dieses Einnahmedokument speichern.",
+      "extractedDetails": "Extrahierte Details",
+      "expandDetails": "Details einblenden",
+      "hideDetails": "Details ausblenden",
+      "editing": "Bearbeitung",
+      "linkedTransactionShort": "Verknüpfte Transaktion"
     },
     "linkedTransaction": {
       "title": "Verknüpfte Transaktion",
@@ -2085,7 +2119,25 @@
     "prevDocument": "Vorheriges Dokument",
     "nextDocument": "Nächstes Dokument",
     "fields": {
-      "type": "Typ"
+      "type": "Typ",
+      "einkuenfte_gewerbebetrieb": "Einkünfte aus Gewerbebetrieb (§23)",
+      "einkuenfte_selbstaendig": "Einkünfte aus selbständiger Arbeit (§22)",
+      "einkuenfte_nichtselbstaendig": "Einkünfte aus nichtselbständiger Arbeit (§25)",
+      "einkuenfte_vermietung": "Einkünfte aus Vermietung und Verpachtung (§28)",
+      "einkuenfte_kapital": "Einkünfte aus Kapitalvermögen (§27)",
+      "sonstige_einkuenfte": "Sonstige Einkünfte (§29)",
+      "gesamtbetrag_einkuenfte": "Gesamtbetrag der Einkünfte",
+      "gewinnfreibetrag": "Gewinnfreibetrag",
+      "sonderausgaben": "Sonderausgaben",
+      "werbungskosten": "Werbungskosten",
+      "aussergewoehnliche_belastungen": "Außergewöhnliche Belastungen",
+      "einkommen": "Einkommen",
+      "festgesetzte_est": "Festgesetzte Einkommensteuer",
+      "anrechenbare_lohnsteuer": "Anrechenbare Lohnsteuer",
+      "verlustvortrag_aus_vorjahren": "Verlustvortrag aus Vorjahren",
+      "verlustvortrag_verrechnet": "Verlustvortrag verrechnet",
+      "verlustvortrag_verbleibend": "Verbleibender Verlustvortrag",
+      "bescheid_rechtskraeftig_seit": "Rechtskräftig seit"
     },
     "preview": "Dokumentvorschau",
     "reviewAction": "Prüfen",
@@ -2122,7 +2174,8 @@
         "match": "Bestehende zuordnen",
         "ignore": "Duplikat ignorieren",
         "undoCreate": "Erstellung rueckgaengig",
-        "unmatch": "Zuordnung aufheben"
+        "unmatch": "Zuordnung aufheben",
+        "viewUnavailable": "Keine Transaktion zur Vorschau"
       },
       "emptyPending": "Aktuell muessen keine Kontozeilen bestaetigt werden.",
       "emptyResolved": "Noch keine automatisch verarbeiteten Zeilen.",
@@ -3158,7 +3211,30 @@
     "viewDocument": "Vertrag/Beleg anzeigen",
     "uploadDocument": "Vertrag/Beleg hochladen",
     "endDate": "Enddatum",
-    "startDate": "Startdatum"
+    "startDate": "Startdatum",
+    "types": {
+      "rental_income": "Mieteinnahmen",
+      "loan_interest": "Darlehenszinsen",
+      "depreciation": "Abschreibung",
+      "other_income": "Sonstige Einnahmen",
+      "other_expense": "Sonstige Ausgaben",
+      "manual": "Manuell"
+    },
+    "frequencies": {
+      "daily": "Täglich",
+      "weekly": "Wöchentlich",
+      "monthly": "Monatlich",
+      "quarterly": "Vierteljährlich",
+      "yearly": "Jährlich"
+    },
+    "statusActive": "Aktiv",
+    "statusPaused": "Pausiert",
+    "statusStopped": "Gestoppt",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "delete": "Löschen",
+    "viewContract": "Vertrag anzeigen",
+    "lastGenerated": "Zuletzt generiert"
   },
   "pricing": {
     "manageSubscription": "Klicken zum Abo verwalten",
@@ -3740,7 +3816,9 @@
     "reasonConflicted": "Für diese Beschreibung wurden widersprüchliche Korrekturen erkannt",
     "reasonStrict": "Gespeichert aus Ihrer manuellen Kategoriekorrektur.",
     "reasonAdaptive": "Adaptiv gelernt aus wiederholten Bestätigungen.",
-    "ruleTypeOverride": "Überschreibung"
+    "ruleTypeOverride": "Überschreibung",
+    "searchPlaceholder": "Nach Beschreibung oder Kategorie suchen...",
+    "searchDeductPlaceholder": "Nach Beschreibung suchen..."
   },
   "healthCheck": {
     "title": "Steuer-Gesundheitscheck",
@@ -3794,7 +3872,9 @@
     "gettingStarted": {
       "addTransaction": "Beginnen Sie mit Ihrer ersten Einnahme- oder Ausgabebuchung.",
       "uploadDocument": "Laden Sie ein Dokument hoch (Lohnzettel, Beleg, Vertrag).",
-      "addProperty": "Fügen Sie Ihre Mietimmobilie hinzu, um AfA und Mieteinnahmen zu verwalten."
+      "addProperty": "Fügen Sie Ihre Mietimmobilie hinzu, um AfA und Mieteinnahmen zu verwalten.",
+      "exportCsv": "CSV exportieren",
+      "exportPdf": "PDF exportieren"
     }
   },
   "chat": {
@@ -4223,7 +4303,9 @@
     "addTransaction": "Buchung hinzufuegen",
     "askAI": "KI fragen",
     "generateReport": "Bericht erstellen",
-    "scanReceipt": "Beleg scannen"
+    "scanReceipt": "Beleg scannen",
+    "exportCsv": "CSV exportieren",
+    "exportPdf": "PDF exportieren"
   },
   "deadline": {
     "inDays": "In {{days}} Tagen",

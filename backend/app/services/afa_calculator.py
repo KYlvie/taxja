@@ -583,61 +583,166 @@ class AfACalculator:
             months_since_purchase += date(year, 12, 31).month - ownership_start.month + 1
             
             # Add appropriate warning based on vacancy duration
-            if months_since_purchase <= 6:
+            addr = property.address
+            mo = months_since_purchase
+
+            if mo <= 6:
                 warning_level = "info"
-                message_de = (
-                    f"Keine Mieteinnahmen für {property.address} im Jahr {year}. "
-                    f"Leerstandsphase: {months_since_purchase} Monate. "
-                    f"Dokumentieren Sie Ihre Vermietungsbemühungen (Inserate, Besichtigungen)."
-                )
-                message_en = (
-                    f"No rental income for {property.address} in {year}. "
-                    f"Vacancy period: {months_since_purchase} months. "
-                    f"Document your rental efforts (listings, viewings)."
-                )
-                message_zh = (
-                    f"{property.address} 在 {year} 年无租金收入。"
-                    f"空置期：{months_since_purchase} 个月。"
-                    f"请记录您的出租努力（广告、看房）。"
-                )
-            elif months_since_purchase <= 12:
+                messages = {
+                    "de": (
+                        f"Keine Mieteinnahmen fuer {addr} im Jahr {year}. "
+                        f"Leerstandsphase: {mo} Monate. "
+                        f"Dokumentieren Sie Ihre Vermietungsbemuehungen (Inserate, Besichtigungen)."
+                    ),
+                    "en": (
+                        f"No rental income for {addr} in {year}. "
+                        f"Vacancy period: {mo} months. "
+                        f"Document your rental efforts (listings, viewings)."
+                    ),
+                    "zh": (
+                        f"{addr} 在 {year} 年无租金收入。"
+                        f"空置期：{mo} 个月。"
+                        f"请记录您的出租努力（广告、看房）。"
+                    ),
+                    "fr": (
+                        f"Aucun revenu locatif pour {addr} en {year}. "
+                        f"Periode de vacance : {mo} mois. "
+                        f"Documentez vos efforts de location (annonces, visites)."
+                    ),
+                    "ru": (
+                        f"Нет арендного дохода для {addr} за {year} год. "
+                        f"Период простоя: {mo} месяцев. "
+                        f"Документируйте ваши усилия по сдаче в аренду (объявления, показы)."
+                    ),
+                    "hu": (
+                        f"Nincs berletidij-bevetel a(z) {addr} cimre {year}-ben. "
+                        f"Uresedesi idoszak: {mo} honap. "
+                        f"Dokumentalja berbeadasi erofesziteseit (hirdetesek, megtekintesek)."
+                    ),
+                    "pl": (
+                        f"Brak dochodu z wynajmu dla {addr} w {year}. "
+                        f"Okres pustostanu: {mo} miesiecy. "
+                        f"Udokumentuj swoje starania o wynajem (ogloszenia, ogl. nieruchomosci)."
+                    ),
+                    "tr": (
+                        f"{addr} icin {year} yilinda kira geliri yok. "
+                        f"Bos kalma suresi: {mo} ay. "
+                        f"Kiralama cabanizi belgeleyin (ilanlar, gosterimler)."
+                    ),
+                    "bs": (
+                        f"Nema prihoda od najma za {addr} u {year}. "
+                        f"Period praznog stanja: {mo} mjeseci. "
+                        f"Dokumentujte vase napore za iznajmljivanje (oglasi, razgledanja)."
+                    ),
+                }
+            elif mo <= 12:
                 warning_level = "warning"
-                message_de = (
-                    f"⚠️ Längere Leerstandsphase für {property.address}: {months_since_purchase} Monate ohne Mieteinnahmen. "
-                    f"Das Finanzamt könnte die Vermietungsabsicht anzweifeln. "
-                    f"Dokumentieren Sie: Inserate, Besichtigungen, Ablehnungsgründe."
-                )
-                message_en = (
-                    f"⚠️ Extended vacancy for {property.address}: {months_since_purchase} months without rental income. "
-                    f"Tax office may question rental intent. "
-                    f"Document: Listings, viewings, rejection reasons."
-                )
-                message_zh = (
-                    f"⚠️ {property.address} 长期空置：{months_since_purchase} 个月无租金收入。"
-                    f"税务局可能质疑出租意图。"
-                    f"请记录：广告、看房、拒绝原因。"
-                )
+                messages = {
+                    "de": (
+                        f"Laengere Leerstandsphase fuer {addr}: {mo} Monate ohne Mieteinnahmen. "
+                        f"Das Finanzamt koennte die Vermietungsabsicht anzweifeln. "
+                        f"Dokumentieren Sie: Inserate, Besichtigungen, Ablehnungsgruende."
+                    ),
+                    "en": (
+                        f"Extended vacancy for {addr}: {mo} months without rental income. "
+                        f"Tax office may question rental intent. "
+                        f"Document: Listings, viewings, rejection reasons."
+                    ),
+                    "zh": (
+                        f"{addr} 长期空置：{mo} 个月无租金收入。"
+                        f"税务局可能质疑出租意图。"
+                        f"请记录：广告、看房、拒绝原因。"
+                    ),
+                    "fr": (
+                        f"Vacance prolongee pour {addr} : {mo} mois sans revenu locatif. "
+                        f"Le fisc pourrait remettre en question l'intention de location. "
+                        f"Documentez : annonces, visites, motifs de refus."
+                    ),
+                    "ru": (
+                        f"Длительный простой для {addr}: {mo} месяцев без арендного дохода. "
+                        f"Налоговая может поставить под сомнение намерение сдавать в аренду. "
+                        f"Документируйте: объявления, показы, причины отказов."
+                    ),
+                    "hu": (
+                        f"Hosszabb uresedesi idoszak a(z) {addr} cimnel: {mo} honap berletidij-bevetel nelkul. "
+                        f"Az adohivatal megkerdojelezheti a berbeadasi szandekot. "
+                        f"Dokumentalja: hirdetesek, megtekintesek, elutasitasi okok."
+                    ),
+                    "pl": (
+                        f"Dlugi okres pustostanu dla {addr}: {mo} miesiecy bez dochodu z wynajmu. "
+                        f"Urzad skarbowy moze zakwestionowac zamiar wynajmu. "
+                        f"Udokumentuj: ogloszenia, prezentacje, powody odmow."
+                    ),
+                    "tr": (
+                        f"{addr} icin uzun sureli bos kalma: {mo} ay kira geliri yok. "
+                        f"Vergi dairesi kiralama niyetini sorgulayabilir. "
+                        f"Belgeleyin: ilanlar, gosterimler, ret nedenleri."
+                    ),
+                    "bs": (
+                        f"Produzeni period praznog stanja za {addr}: {mo} mjeseci bez prihoda od najma. "
+                        f"Porezna uprava moze dovesti u pitanje namjeru iznajmljivanja. "
+                        f"Dokumentujte: oglase, razgledanja, razloge odbijanja."
+                    ),
+                }
             else:
                 warning_level = "error"
-                message_de = (
-                    f"🚨 ACHTUNG: {property.address} hat seit über 12 Monaten keine Mieteinnahmen! "
-                    f"Das Finanzamt wird die Vermietungsabsicht stark anzweifeln. "
-                    f"Ihr AfA-Abzug ist gefährdet! "
-                    f"Erwägen Sie, die Immobilie als 'Eigengenutzt' umzuklassifizieren."
-                )
-                message_en = (
-                    f"🚨 WARNING: {property.address} has no rental income for over 12 months! "
-                    f"Tax office will strongly question rental intent. "
-                    f"Your depreciation deduction is at risk! "
-                    f"Consider reclassifying the property as 'Owner-Occupied'."
-                )
-                message_zh = (
-                    f"🚨 警告：{property.address} 超过12个月无租金收入！"
-                    f"税务局将强烈质疑出租意图。"
-                    f"您的折旧抵扣有风险！"
-                    f"考虑将房产重新分类为'自住'。"
-                )
-            
+                messages = {
+                    "de": (
+                        f"ACHTUNG: {addr} hat seit ueber 12 Monaten keine Mieteinnahmen! "
+                        f"Das Finanzamt wird die Vermietungsabsicht stark anzweifeln. "
+                        f"Ihr AfA-Abzug ist gefaehrdet! "
+                        f"Erwaegen Sie, die Immobilie als 'Eigengenutzt' umzuklassifizieren."
+                    ),
+                    "en": (
+                        f"WARNING: {addr} has no rental income for over 12 months! "
+                        f"Tax office will strongly question rental intent. "
+                        f"Your depreciation deduction is at risk! "
+                        f"Consider reclassifying the property as 'Owner-Occupied'."
+                    ),
+                    "zh": (
+                        f"警告：{addr} 超过12个月无租金收入！"
+                        f"税务局将强烈质疑出租意图。"
+                        f"您的折旧抵扣有风险！"
+                        f"考虑将房产重新分类为'自住'。"
+                    ),
+                    "fr": (
+                        f"ATTENTION : {addr} n'a aucun revenu locatif depuis plus de 12 mois ! "
+                        f"Le fisc remettra fortement en question l'intention de location. "
+                        f"Votre deduction d'amortissement est en danger ! "
+                        f"Envisagez de reclasser le bien comme 'Usage personnel'."
+                    ),
+                    "ru": (
+                        f"ВНИМАНИЕ: {addr} не имеет арендного дохода более 12 месяцев! "
+                        f"Налоговая будет серьезно сомневаться в намерении сдавать в аренду. "
+                        f"Ваш вычет на амортизацию под угрозой! "
+                        f"Рассмотрите переклассификацию недвижимости как 'Для собственного использования'."
+                    ),
+                    "hu": (
+                        f"FIGYELEM: A(z) {addr} cimnek tobb mint 12 honapja nincs berletidij-bevetele! "
+                        f"Az adohivatal erossen megkerdojelezi a berbeadasi szandekot. "
+                        f"Az ertekcsokkenesi levonasa veszelyben van! "
+                        f"Fontolja meg az ingatlan 'Sajat hasznalatu'-kent valo atkategorizalasat."
+                    ),
+                    "pl": (
+                        f"UWAGA: {addr} nie ma dochodu z wynajmu od ponad 12 miesiecy! "
+                        f"Urzad skarbowy bedzie mocno kwestionowal zamiar wynajmu. "
+                        f"Twoje odliczenie amortyzacyjne jest zagrozone! "
+                        f"Rozwaz przeklasyfikowanie nieruchomosci jako 'Do uzytku wlasnego'."
+                    ),
+                    "tr": (
+                        f"DIKKAT: {addr} 12 aydan fazla suredir kira geliri yok! "
+                        f"Vergi dairesi kiralama niyetini ciddi sekilde sorgulayacaktir. "
+                        f"Amortisman kesintiniz risk altinda! "
+                        f"Mulku 'Sahsi kullanim' olarak yeniden siniflandirmayi dusunun."
+                    ),
+                    "bs": (
+                        f"UPOZORENJE: {addr} nema prihoda od najma vise od 12 mjeseci! "
+                        f"Porezna uprava ce ozbiljno dovesti u pitanje namjeru iznajmljivanja. "
+                        f"Vas odbitak za amortizaciju je u opasnosti! "
+                        f"Razmotrite preklasifikaciju nekretnine kao 'Za vlastitu upotrebu'."
+                    ),
+                }
+
             self.warnings.append({
                 "property_id": str(property.id),
                 "property_address": property.address,
@@ -645,9 +750,7 @@ class AfACalculator:
                 "level": warning_level,
                 "type": "NO_RENTAL_INCOME",
                 "months_vacant": months_since_purchase,
-                "message_de": message_de,
-                "message_en": message_en,
-                "message_zh": message_zh,
+                **{f"message_{lang}": msg for lang, msg in messages.items()},
             })
             
             logger.warning(

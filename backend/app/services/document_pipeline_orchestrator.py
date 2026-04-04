@@ -104,6 +104,114 @@ class PipelineStage(str, Enum):
     SUGGEST = "suggest"
 
 
+# ---------------------------------------------------------------------------
+# Localized pipeline user messages (9 languages)
+# ---------------------------------------------------------------------------
+
+PIPELINE_MESSAGES: Dict[str, Dict[str, str]] = {
+    "processing_failed": {
+        "de": "Dokument konnte nicht verarbeitet werden. Bitte erneut hochladen.",
+        "en": "Document could not be processed. Please upload again.",
+        "zh": "文档无法处理。请重新上传。",
+        "fr": "Le document n'a pas pu être traité. Veuillez le télécharger à nouveau.",
+        "ru": "Документ не удалось обработать. Пожалуйста, загрузите снова.",
+        "hu": "A dokumentum feldolgozása nem sikerült. Kérjük, töltse fel újra.",
+        "pl": "Nie udało się przetworzyć dokumentu. Proszę przesłać ponownie.",
+        "tr": "Belge işlenemedi. Lütfen tekrar yükleyin.",
+        "bs": "Dokument nije mogao biti obrađen. Molimo ponovo ga učitajte.",
+    },
+    "processed_review": {
+        "de": "Dokument verarbeitet. Bitte überprüfen.",
+        "en": "Document processed. Please review.",
+        "zh": "文档已处理。请检查。",
+        "fr": "Document traité. Veuillez vérifier.",
+        "ru": "Документ обработан. Пожалуйста, проверьте.",
+        "hu": "Dokumentum feldolgozva. Kérjük, ellenőrizze.",
+        "pl": "Dokument przetworzony. Proszę sprawdzić.",
+        "tr": "Belge işlendi. Lütfen kontrol edin.",
+        "bs": "Dokument obrađen. Molimo pregledajte.",
+    },
+    "processed": {
+        "de": "Dokument verarbeitet.",
+        "en": "Document processed.",
+        "zh": "文档已处理。",
+        "fr": "Document traité.",
+        "ru": "Документ обработан.",
+        "hu": "Dokumentum feldolgozva.",
+        "pl": "Dokument przetworzony.",
+        "tr": "Belge işlendi.",
+        "bs": "Dokument obrađen.",
+    },
+    "property_created": {
+        "de": "Immobilie angelegt",
+        "en": "Property created",
+        "zh": "房产已创建",
+        "fr": "Bien immobilier créé",
+        "ru": "Недвижимость создана",
+        "hu": "Ingatlan létrehozva",
+        "pl": "Nieruchomość utworzona",
+        "tr": "Mülk oluşturuldu",
+        "bs": "Nekretnina kreirana",
+    },
+    "rental_income_created": {
+        "de": "Mieteinnahme angelegt",
+        "en": "Rental income created",
+        "zh": "租金收入已创建",
+        "fr": "Revenu locatif créé",
+        "ru": "Арендный доход создан",
+        "hu": "Bérleti bevétel létrehozva",
+        "pl": "Dochód z wynajmu utworzony",
+        "tr": "Kira geliri oluşturuldu",
+        "bs": "Prihod od najma kreiran",
+    },
+    "asset_created": {
+        "de": "Anlagegut angelegt: {asset_name}",
+        "en": "Asset created: {asset_name}",
+        "zh": "资产已创建：{asset_name}",
+        "fr": "Immobilisation créée : {asset_name}",
+        "ru": "Актив создан: {asset_name}",
+        "hu": "Eszköz létrehozva: {asset_name}",
+        "pl": "Środek trwały utworzony: {asset_name}",
+        "tr": "Varlık oluşturuldu: {asset_name}",
+        "bs": "Imovina kreirana: {asset_name}",
+    },
+    "auto_created_prefix": {
+        "de": "Automatisch erstellt: ",
+        "en": "Auto-created: ",
+        "zh": "自动创建：",
+        "fr": "Créé automatiquement : ",
+        "ru": "Автоматически создано: ",
+        "hu": "Automatikusan létrehozva: ",
+        "pl": "Utworzono automatycznie: ",
+        "tr": "Otomatik oluşturuldu: ",
+        "bs": "Automatski kreirano: ",
+    },
+    "deductible": {
+        "de": " (absetzbar)",
+        "en": " (deductible)",
+        "zh": "（可抵扣）",
+        "fr": " (déductible)",
+        "ru": " (вычитаемый)",
+        "hu": " (levonható)",
+        "pl": " (odliczalne)",
+        "tr": " (indirilebilir)",
+        "bs": " (odbitno)",
+    },
+}
+
+
+def _pipeline_msg(key: str, lang: str = "de", **kwargs) -> str:
+    """Look up a localized pipeline message with German fallback."""
+    msgs = PIPELINE_MESSAGES.get(key, {})
+    text = msgs.get(lang) or msgs.get("de", key)
+    if kwargs:
+        try:
+            text = text.format(**kwargs)
+        except (KeyError, IndexError):
+            pass
+    return text
+
+
 class ConfidenceLevel(str, Enum):
     HIGH = "high"        # >= 0.8 — auto-proceed
     MEDIUM = "medium"    # 0.5–0.8 — proceed but flag for review
@@ -168,37 +276,40 @@ class PipelineResult:
     reprocess_requested_at: Optional[str] = None
     ocr_provider_override: Optional[str] = None
     error: Optional[str] = None
+    language: str = "de"
 
     @property
     def user_message(self) -> str:
-        """Generate a user-friendly notification message."""
+        """Generate a user-friendly localized notification message."""
+        lang = self.language or "de"
+
         if self.error:
-            return "Dokument konnte nicht verarbeitet werden. Bitte erneut hochladen."
+            return _pipeline_msg("processing_failed", lang)
 
         auto_created = [s for s in self.suggestions if s.get("status") == "auto-created"]
         if not auto_created:
             if self.needs_review:
-                return "Dokument verarbeitet. Bitte überprüfen."
-            return "Dokument verarbeitet."
+                return _pipeline_msg("processed_review", lang)
+            return _pipeline_msg("processed", lang)
 
         parts = []
         for s in auto_created:
             if s.get("type") == "create_property":
-                parts.append("Immobilie angelegt")
+                parts.append(_pipeline_msg("property_created", lang))
             elif s.get("type") == "create_recurring_income":
-                parts.append("Mieteinnahme angelegt")
+                parts.append(_pipeline_msg("rental_income_created", lang))
             elif s.get("type") == "create_asset":
                 asset_name = s.get("data", {}).get("name") or "Asset"
-                parts.append(f"Anlagegut angelegt: {asset_name}")
+                parts.append(_pipeline_msg("asset_created", lang, asset_name=asset_name))
             elif s.get("transaction_id"):
                 amt = s.get("amount", "?")
                 desc = s.get("description", "")
-                deductible = " (absetzbar)" if s.get("is_deductible") else ""
+                deductible = _pipeline_msg("deductible", lang) if s.get("is_deductible") else ""
                 parts.append(f"€{amt} {desc}{deductible}")
 
         if parts:
-            return "Automatisch erstellt: " + "; ".join(parts)
-        return "Dokument verarbeitet."
+            return _pipeline_msg("auto_created_prefix", lang) + "; ".join(parts)
+        return _pipeline_msg("processed", lang)
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -524,6 +635,17 @@ class DocumentPipelineOrchestrator:
                     )
                 )
                 return result
+
+            # Resolve user language for localized messages
+            try:
+                from app.models.user import User as _User
+                _owner = self.db.query(_User.language).filter(
+                    _User.id == document.user_id
+                ).first()
+                if _owner and _owner.language:
+                    result.language = _owner.language
+            except Exception:
+                pass  # fallback to "de"
 
             # Stage 1: OCR + Classification
             ocr_result = self._stage_ocr(document, result)

@@ -87,7 +87,9 @@
     "generateReports": "Rapor Olustur",
     "generateReportsDesc": "Vergi raporlarini goruntuleyin",
     "aiAssistant": "Yapay Zeka Asistan",
-    "aiAssistantDesc": "Vergi sorulari sorun"
+    "aiAssistantDesc": "Vergi sorulari sorun",
+    "exportCsv": "CSV dışa aktar",
+    "exportPdf": "PDF dışa aktar"
   },
   "auth": {
     "login": "Giris Yap",
@@ -332,7 +334,9 @@
       "description": "Ilk belgenizi yukleyin veya ilk gelirinizi ya da giderinizi kaydedin. Taxja veriye sahip oldugunda, pano cok daha kullanisli hale gelir.",
       "addTransaction": "Islem Ekle",
       "uploadDocument": "Makbuz Yukle",
-      "setupProfile": "Profili Ayarla"
+      "setupProfile": "Profili Ayarla",
+      "exportCsv": "CSV dışa aktar",
+      "exportPdf": "PDF dışa aktar"
     },
     "flatRateNeedsData": "Karsilastirmayi hesaplamak icin gelir ve gider ekleyin.",
     "taxYear": "Vergi Yili",
@@ -552,7 +556,9 @@
       "date": "Tarih",
       "amount": "Tutar",
       "description": "Açıklama"
-    }
+    },
+    "exportCsv": "CSV dışa aktar",
+    "exportPdf": "PDF dışa aktar"
   },
   "properties": {
     "title": "Mulkler",
@@ -942,6 +948,16 @@
         "message": "Varlığı önce oluşturabilirsiniz; ancak satın alma sözleşmesi veya destekleyici belge kaydı tamamlar."
       },
       "uploadDocument": "Belge yükle"
+    },
+    "businessUseWarning": "Varsayılan %100 = tamamen ticari kullanım. Özel kullanım için uygun şekilde azaltın (örn. %70).",
+    "putIntoUseDateHint": "Varlığın iş amacıyla ilk kullanıldığı tarih. Varsayılan olarak satın alma tarihidir. Kullanıma alma tarihi farklıysa değiştirin.",
+    "pendingDocuments": {
+      "title": "Bekleyen varlık belgeleri",
+      "hint": "Satın alma sözleşmesi, fatura veya makbuzlardan tanımlanan varlıklar burada görüntülenir. Onaydan sonra varlık kaydı otomatik oluşturulur.",
+      "needsInput": "Bilgi gerekli",
+      "missingFields": "Eksik: {{fields}}",
+      "awaitingConfirmation": "Onay bekliyor",
+      "openSourceDocument": "Kaynak belgeyi aç"
     }
   },
   "documents": {
@@ -949,7 +965,8 @@
     "sortMode": {
       "label": "Sıralama",
       "uploadDate": "Yükleme tarihi",
-      "documentDate": "Belge tarihi"
+      "documentDate": "Belge tarihi",
+      "fileName": "Dosya adı"
     },
     "description": "Otomatik tanima ile vergi belgelerinizi yukleyin ve yonetin",
     "uploadDocument": "Belge Yukle",
@@ -1201,7 +1218,30 @@
         "confirmed": "Onaylandı",
         "confirmed_at": "Onaylanma zamanı",
         "confirmed_by": "Onaylayan",
-        "transaction_type": "İşlem türü"
+        "transaction_type": "İşlem türü",
+        "document_date": "Belge tarihi",
+        "document_year": "Vergi yılı",
+        "year_basis": "Yıl dayanağı",
+        "year_confidence": "Yıl güvenilirliği",
+        "bescheid_datum": "Karar tarihi (Bescheiddatum)",
+        "aktenzahl": "Dosya numarası (Aktenzahl)",
+        "faellig_am": "Vade tarihi",
+        "issuer": "Düzenleyen",
+        "recipient": "Alıcı",
+        "finanzamt": "Vergi dairesi (Finanzamt)",
+        "einkommen": "Gelir",
+        "einkuenfte_nichtselbstaendig": "Ücretli çalışma geliri",
+        "einkuenfte_vermietung": "Kira geliri",
+        "festgesetzte_einkommensteuer": "Tahakkuk eden gelir vergisi",
+        "abgabengutschrift": "Vergi iadesi",
+        "abgabennachforderung": "Ek vergi talebi",
+        "werbungskosten_pauschale": "Götürü mesleki gider (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Serbest meslek emekliliği (SVS)",
+        "beitrag_gesamt": "Toplam prim",
+        "beitragsgrundlage": "Prim matrahı",
+        "versicherungsnummer": "Sigorta numarası",
+        "quarter": "Çeyrek",
+        "nachzahlung": "Ek ödeme"
       },
       "additionalFields": "Ek cikarilan alanlar",
       "contractRoleConfidenceLabel": "Güven",
@@ -1236,7 +1276,8 @@
       "confirmedSuccess": "Belge onaylandı",
       "confirmed": "Onaylandı",
       "openReview": "OCR sonuçlarını incele ve onayla",
-      "moreSuggestions": "{{count}} ek öneri"
+      "moreSuggestions": "{{count}} ek öneri",
+      "documentTypeLocked": "Sistem tarafından tanımlanan belge türü kilitlenmiştir. Hatalıysa, belgeyi yeniden işleyin, türü elle değiştirmeyin."
     },
     "reviewSuccess": "Belge incelendi",
     "reviewFailed": "Inceleme basarisiz",
@@ -1300,7 +1341,8 @@
       "gewerbeschein": "Ticaret Belgesi",
       "kontoauszug": "Hesap Ozeti",
       "other": "Diger",
-      "unknown": "Bilinmiyor"
+      "unknown": "Bilinmiyor",
+      "asset_purchase": "Varlık satın alma sözleşmesi"
     },
     "documentTypes": {
       "receipt": "Makbuz",
@@ -1336,7 +1378,8 @@
       "gewerbeschein": "Ticaret Belgesi",
       "kontoauszug": "Hesap Ozeti",
       "other": "Diger",
-      "unknown": "Bilinmiyor"
+      "unknown": "Bilinmiyor",
+      "asset_purchase": "Varlık satın alma sözleşmesi"
     },
     "upload": {
       "title": "Belge Yukle",
@@ -1386,7 +1429,8 @@
       "startDate": "Baslangic Tarihi",
       "endDate": "Bitis Tarihi",
       "needsReview": "İnceleme Gerekiyor",
-      "clear": "Filtreleri Temizle"
+      "clear": "Filtreleri Temizle",
+      "apply": "Uygula"
     },
     "groups": {
       "all": "Tum Belgeler",
@@ -1995,7 +2039,12 @@
       "incomeTitle": "Gelir ayrintilari",
       "categoryEditHint": "Tum fise tek bir kategori uygulamak icin yukaridaki seciciyi kullanin veya asagida her bir satiri ayri ayri ayarlayin.",
       "categoryReadonlyHint": "Bu fis icin kategori ve indirilebilirlik degisikliklerinin kilidini acmak icin Duzenle'ye tiklayin.",
-      "selectIncomeCategory": "Bu gelir belgesini kaydetmeden once bir gelir kategorisi secin."
+      "selectIncomeCategory": "Bu gelir belgesini kaydetmeden once bir gelir kategorisi secin.",
+      "extractedDetails": "Çıkarılan veriler",
+      "expandDetails": "Ayrıntıları göster",
+      "hideDetails": "Ayrıntıları gizle",
+      "editing": "Düzenleniyor",
+      "linkedTransactionShort": "Bağlı işlem"
     },
     "linkedTransaction": {
       "title": "Bagli islem",
@@ -2073,7 +2122,25 @@
     "prevDocument": "Önceki belge",
     "nextDocument": "Sonraki belge",
     "fields": {
-      "type": "Tür"
+      "type": "Tür",
+      "einkuenfte_gewerbebetrieb": "Ticari işletme geliri (§23)",
+      "einkuenfte_selbstaendig": "Serbest meslek geliri (§22)",
+      "einkuenfte_nichtselbstaendig": "Ücretli çalışma geliri (§25)",
+      "einkuenfte_vermietung": "Kira geliri (§28)",
+      "einkuenfte_kapital": "Sermaye geliri (§27)",
+      "sonstige_einkuenfte": "Diğer gelirler (§29)",
+      "gesamtbetrag_einkuenfte": "Toplam gelir",
+      "gewinnfreibetrag": "Kâr muafiyeti (Gewinnfreibetrag)",
+      "sonderausgaben": "Özel giderler (Sonderausgaben)",
+      "werbungskosten": "Mesleki giderler (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Olağanüstü yükler",
+      "einkommen": "Vergiye tabi gelir",
+      "festgesetzte_est": "Tahakkuk eden gelir vergisi",
+      "anrechenbare_lohnsteuer": "Mahsup edilebilir ücret vergisi",
+      "verlustvortrag_aus_vorjahren": "Önceki yıllardan zarar devri",
+      "verlustvortrag_verrechnet": "Bu yıl mahsup edilen zarar",
+      "verlustvortrag_verbleibend": "Kalan zarar devri",
+      "bescheid_rechtskraeftig_seit": "Kesinleştiği tarih"
     },
     "preview": "Belge önizlemesi",
     "reviewAction": "İncele",
@@ -2108,7 +2175,10 @@
       "actions": {
         "create": "Islem olustur",
         "match": "Mevcut islemle eslestir",
-        "ignore": "Cift kaydi yoksay"
+        "ignore": "Cift kaydi yoksay",
+        "undoCreate": "Oluşturmayı geri al",
+        "unmatch": "Eşleştirmeyi geri al",
+        "viewUnavailable": "Önizlenecek işlem yok"
       },
       "emptyPending": "Su anda onay bekleyen banka hesap ozeti satiri yok.",
       "emptyResolved": "Henuz otomatik islenmis hesap ozeti satiri yok.",
@@ -2693,7 +2763,8 @@
       "e1_form": "E1 vergi beyannamesi",
       "svs_notice": "SVS bildirimi",
       "purchase_contract": "satin alma sozlesmesi",
-      "rental_contract": "kira sozlesmesi"
+      "rental_contract": "kira sozlesmesi",
+      "asset_purchase": "Varlık satın alma sözleşmesi"
     },
     "templates": {
       "homeOffice": {
@@ -3143,7 +3214,30 @@
       "createFromTemplate": "Sablondan Olustur"
     },
     "endDate": "Bitis tarihi",
-    "startDate": "Baslangic tarihi"
+    "startDate": "Baslangic tarihi",
+    "types": {
+      "rental_income": "Kira geliri",
+      "loan_interest": "Kredi faizi",
+      "depreciation": "Amortisman",
+      "other_income": "Diğer gelir",
+      "other_expense": "Diğer gider",
+      "manual": "Manuel"
+    },
+    "frequencies": {
+      "daily": "Günlük",
+      "weekly": "Haftalık",
+      "monthly": "Aylık",
+      "quarterly": "Üç aylık",
+      "yearly": "Yıllık"
+    },
+    "statusActive": "Aktif",
+    "statusPaused": "Duraklatılmış",
+    "statusStopped": "Durdurulmuş",
+    "pause": "Duraklat",
+    "resume": "Devam et",
+    "delete": "Sil",
+    "viewContract": "Sözleşmeyi görüntüle",
+    "lastGenerated": "Son oluşturulma"
   },
   "pricing": {
     "manageSubscription": "Aboneligi yonetmek icin tiklayin",
@@ -3658,7 +3752,9 @@
     "reasonConflicted": "Bu açıklama için çelişkili düzeltmeler tespit edildi",
     "reasonStrict": "Manuel kategori düzeltmenizden kaydedildi.",
     "reasonAdaptive": "Tekrarlanan onaylardan uyarlanabilir şekilde öğrenildi.",
-    "ruleTypeOverride": "Geçersiz kılma"
+    "ruleTypeOverride": "Geçersiz kılma",
+    "searchPlaceholder": "Açıklamaya veya kategoriye göre ara...",
+    "searchDeductPlaceholder": "Açıklamaya göre ara..."
   },
   "healthCheck": {
     "title": "Vergi Saglik Kontrolu",
@@ -3712,7 +3808,9 @@
     "gettingStarted": {
       "addTransaction": "Ilk gelir veya gider isleminizi ekleyerek baslayin.",
       "uploadDocument": "Baslamak icin bir belge (maas bordrosu, makbuz, sozlesme) yukleyin.",
-      "addProperty": "Amortisman ve kira gelirini takip etmek icin kiralik mulkunuzu ekleyin."
+      "addProperty": "Amortisman ve kira gelirini takip etmek icin kiralik mulkunuzu ekleyin.",
+      "exportCsv": "CSV dışa aktar",
+      "exportPdf": "PDF dışa aktar"
     }
   },
   "chat": {
@@ -4208,7 +4306,9 @@
     "addTransaction": "Islem Ekle",
     "askAI": "AI'ya Sor",
     "generateReport": "Rapor Olustur",
-    "scanReceipt": "Makbuz Tara"
+    "scanReceipt": "Makbuz Tara",
+    "exportCsv": "CSV dışa aktar",
+    "exportPdf": "PDF dışa aktar"
   },
   "deadline": {
     "inDays": "{{days}} gun icinde",
@@ -4243,7 +4343,8 @@
       "taxFilter": "Vergi filtresi",
       "taxFilterHint": "Yalnızca vergi açısından ilgili yükümlülükler vergi indirimi iş akışlarına dahil edilir. Tüm veriler tam raporlama için kullanılabilir durumda kalır.",
       "empty": "Henüz özet mevcut değil. Genel bakışı doldurmak için yükümlülük veya mülk ekleyin.",
-      "assetsVsLiabilitiesHint": "Bu gorunum mevcut varlik kayit degerlerinizi takip edilen tum yukumluluklerle birlestirir."
+      "assetsVsLiabilitiesHint": "Bu gorunum mevcut varlik kayit degerlerinizi takip edilen tum yukumluluklerle birlestirir.",
+      "pageTitle": "Yükümlülükler genel bakış"
     },
     "tabs": {
       "overview": "Varlık-yükümlülük genel bakış",
@@ -4394,7 +4495,20 @@
     "totalLiabilities": "Toplam Yükümlülükler",
     "netWorth": "Net Değer",
     "monthlyDebtService": "Aylık Borç Servisi",
-    "noSummary": "Henüz özet mevcut değil. Genel bakışı doldurmak için varlık veya yükümlülük ekleyin."
+    "noSummary": "Henüz özet mevcut değil. Genel bakışı doldurmak için varlık veya yükümlülük ekleyin.",
+    "summaryTitle": "Varlık genel bakışı",
+    "totalAssetsNote": "Tüm kayıtlı varlıkların defter değeri",
+    "totalLiabilitiesNote": "Tüm aktif yükümlülüklerin kalan bakiyesi",
+    "netWorthNote": "Varlıklar eksi yükümlülükler",
+    "propertyCount": "Gayrimenkuller",
+    "propertyCountNote": "Aktif gayrimenkul sayısı",
+    "otherAssetCount": "Diğer varlıklar",
+    "otherAssetCountNote": "Ekipman, araçlar ve aletler",
+    "monthlyDebtServiceNote": "Halihazırda kayıtlı planlı geri ödemeler",
+    "balanceSnapshot": "Bakiye anlık görüntüsü",
+    "balanceSnapshotHint": "Varlık defter değerleri ve tüm izlenen borçların birleşik görünümü.",
+    "annualDepreciation": "Yıllık amortisman",
+    "annualDepreciationHint": "Mevcut yıl için tüm gayrimenkul ve diğer varlıkların toplam amortisманı."
   },
   "taxTools": {
     "refund": {
@@ -4445,7 +4559,11 @@
       "auditChecklist": "Denetim kontrol listesi",
       "auditSelectYear": "Vergi yılını seçin",
       "flatRateNotApplicable": "Sabit oran karşılaştırması yalnızca serbest meslek için.",
-      "noDataAvailable": "Henüz veri yok. Belge yükleyin."
+      "noDataAvailable": "Henüz veri yok. Belge yükleyin.",
+      "transactionsSummary": "İşlemler",
+      "txnIncome": "Gelir",
+      "txnExpense": "Gider",
+      "txnDeductible": "İndirilebilir"
     }
   }
 }

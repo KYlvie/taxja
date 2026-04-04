@@ -948,6 +948,16 @@
         "message": "Sredstvo možete prvo kreirati, ali kupoprodajni ugovor ili drugi dokaz će upotpuniti evidenciju."
       },
       "uploadDocument": "Učitaj dokument"
+    },
+    "businessUseWarning": "Zadano 100% = potpuno poslovna upotreba. Smanjite u skladu s privatnom upotrebom (npr. 70%).",
+    "putIntoUseDateHint": "Datum prvog korištenja imovine u poslovne svrhe. Zadano je datum kupovine. Promijenite ako se datum puštanja u rad razlikuje.",
+    "pendingDocuments": {
+      "title": "Dokumenti imovine na čekanju",
+      "hint": "Imovina prepoznata iz ugovora o kupovini, faktura ili računa prikazuje se ovdje. Nakon potvrde automatski se kreira zapis imovine.",
+      "needsInput": "Potrebne su informacije",
+      "missingFields": "Nedostaje: {{fields}}",
+      "awaitingConfirmation": "Čeka potvrdu",
+      "openSourceDocument": "Otvori izvorni dokument"
     }
   },
   "documents": {
@@ -955,7 +965,8 @@
     "sortMode": {
       "label": "Sortiraj po",
       "uploadDate": "Datum učitavanja",
-      "documentDate": "Datum dokumenta"
+      "documentDate": "Datum dokumenta",
+      "fileName": "Naziv datoteke"
     },
     "description": "Otpremite i upravljajte vasim poreskim dokumentima s automatskim prepoznavanjem",
     "uploadDocument": "Otpremi dokument",
@@ -1207,7 +1218,30 @@
         "confirmed": "Potvrđeno",
         "confirmed_at": "Potvrđeno",
         "confirmed_by": "Potvrdio",
-        "transaction_type": "Tip transakcije"
+        "transaction_type": "Tip transakcije",
+        "document_date": "Datum dokumenta",
+        "document_year": "Porezna godina",
+        "year_basis": "Osnova godine",
+        "year_confidence": "Pouzdanost godine",
+        "bescheid_datum": "Datum rješenja (Bescheiddatum)",
+        "aktenzahl": "Broj spisa (Aktenzahl)",
+        "faellig_am": "Rok dospijeća",
+        "issuer": "Izdavač",
+        "recipient": "Primalac",
+        "finanzamt": "Porezna uprava (Finanzamt)",
+        "einkommen": "Prihod",
+        "einkuenfte_nichtselbstaendig": "Prihod iz radnog odnosa",
+        "einkuenfte_vermietung": "Prihod od najma",
+        "festgesetzte_einkommensteuer": "Utvrđeni porez na dohodak",
+        "abgabengutschrift": "Porezni povrat",
+        "abgabennachforderung": "Dodatna porezna obaveza",
+        "werbungskosten_pauschale": "Paušalni odbitak troškova (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Penzijsko osiguranje samozaposlenih (SVS)",
+        "beitrag_gesamt": "Ukupni doprinos",
+        "beitragsgrundlage": "Osnovica doprinosa",
+        "versicherungsnummer": "Broj osiguranja",
+        "quarter": "Kvartal",
+        "nachzahlung": "Doplata"
       },
       "additionalFields": "Dodatna izdvojena polja",
       "contractRoleConfidenceLabel": "Pouzdanost",
@@ -1242,7 +1276,8 @@
       "confirmedSuccess": "Dokument potvrđen",
       "confirmed": "Potvrđeno",
       "openReview": "Pregledaj i potvrdi OCR rezultate",
-      "moreSuggestions": "Još {{count}} prijedloga"
+      "moreSuggestions": "Još {{count}} prijedloga",
+      "documentTypeLocked": "Tip dokumenta koji je sistem prepoznao je zaključan. Ako je pogrešan, ponovo obradite dokument umjesto ručne promjene tipa."
     },
     "reviewSuccess": "Dokument pregledan",
     "reviewFailed": "Pregled nije uspio",
@@ -1306,7 +1341,8 @@
       "gewerbeschein": "Obrtnica",
       "kontoauszug": "Izvod sa racuna",
       "other": "Ostalo",
-      "unknown": "Nepoznato"
+      "unknown": "Nepoznato",
+      "asset_purchase": "Ugovor o kupovini imovine"
     },
     "documentTypes": {
       "receipt": "Racun",
@@ -1342,7 +1378,8 @@
       "gewerbeschein": "Obrtnica",
       "kontoauszug": "Izvod sa racuna",
       "other": "Ostalo",
-      "unknown": "Nepoznato"
+      "unknown": "Nepoznato",
+      "asset_purchase": "Ugovor o kupovini imovine"
     },
     "upload": {
       "title": "Otpremi dokumente",
@@ -1392,7 +1429,8 @@
       "startDate": "Od datuma",
       "endDate": "Do datuma",
       "needsReview": "Potreban pregled",
-      "clear": "Obrisi filtere"
+      "clear": "Obrisi filtere",
+      "apply": "Primijeni"
     },
     "groups": {
       "all": "Svi dokumenti",
@@ -2001,7 +2039,12 @@
       "incomeTitle": "Detalji prihoda",
       "categoryEditHint": "Koristite selektor iznad da primijenite jednu kategoriju na cijeli racun, ili prilagodite svaku stavku ispod.",
       "categoryReadonlyHint": "Kliknite Uredi da otključate promjene kategorije i priznavanja rashoda za ovaj racun.",
-      "selectIncomeCategory": "Odaberite kategoriju prihoda prije cuvanja ovog dokumenta."
+      "selectIncomeCategory": "Odaberite kategoriju prihoda prije cuvanja ovog dokumenta.",
+      "extractedDetails": "Izdvojeni podaci",
+      "expandDetails": "Prikaži detalje",
+      "hideDetails": "Sakrij detalje",
+      "editing": "Uređivanje",
+      "linkedTransactionShort": "Povezana transakcija"
     },
     "linkedTransaction": {
       "title": "Povezana transakcija",
@@ -2079,7 +2122,25 @@
     "prevDocument": "Prethodni dokument",
     "nextDocument": "Sljedeći dokument",
     "fields": {
-      "type": "Tip"
+      "type": "Tip",
+      "einkuenfte_gewerbebetrieb": "Poslovni prihod (§23)",
+      "einkuenfte_selbstaendig": "Prihod samozaposlenih (§22)",
+      "einkuenfte_nichtselbstaendig": "Prihod iz radnog odnosa (§25)",
+      "einkuenfte_vermietung": "Prihod od najma (§28)",
+      "einkuenfte_kapital": "Prihod od kapitala (§27)",
+      "sonstige_einkuenfte": "Ostali prihodi (§29)",
+      "gesamtbetrag_einkuenfte": "Ukupni prihod",
+      "gewinnfreibetrag": "Oslobođeni iznos dobiti (Gewinnfreibetrag)",
+      "sonderausgaben": "Posebni troškovi (Sonderausgaben)",
+      "werbungskosten": "Profesionalni troškovi (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Vanredna opterećenja",
+      "einkommen": "Oporezivi dohodak",
+      "festgesetzte_est": "Utvrđeni porez na dohodak",
+      "anrechenbare_lohnsteuer": "Uračunljivi porez na platu",
+      "verlustvortrag_aus_vorjahren": "Prenos gubitaka iz prethodnih godina",
+      "verlustvortrag_verrechnet": "Gubici prebijeni ove godine",
+      "verlustvortrag_verbleibend": "Preostali prenos gubitaka",
+      "bescheid_rechtskraeftig_seit": "Pravomoćno od"
     },
     "preview": "Pregled dokumenta",
     "reviewAction": "Pregledaj",
@@ -2114,7 +2175,10 @@
       "actions": {
         "create": "Kreiraj transakciju",
         "match": "Povezi s postojecom",
-        "ignore": "Ignorisi duplikat"
+        "ignore": "Ignorisi duplikat",
+        "undoCreate": "Poništi kreiranje",
+        "unmatch": "Poništi uparivanje",
+        "viewUnavailable": "Nema transakcije za pregled"
       },
       "emptyPending": "Trenutno nema stavki bankovnog izvoda koje cekaju potvrdu.",
       "emptyResolved": "Jos nema automatski obradenih stavki izvoda.",
@@ -2699,7 +2763,8 @@
       "e1_form": "Poreska prijava E1",
       "svs_notice": "Obavijest SVS",
       "purchase_contract": "Kupoprodajni ugovor",
-      "rental_contract": "Ugovor o najmu"
+      "rental_contract": "Ugovor o najmu",
+      "asset_purchase": "Ugovor o kupovini imovine"
     },
     "templates": {
       "homeOffice": {
@@ -3149,7 +3214,30 @@
       "createFromTemplate": "Kreiraj iz sablona"
     },
     "endDate": "Datum zavrsetka",
-    "startDate": "Datum pocetka"
+    "startDate": "Datum pocetka",
+    "types": {
+      "rental_income": "Prihod od najma",
+      "loan_interest": "Kamata na kredit",
+      "depreciation": "Amortizacija",
+      "other_income": "Ostali prihod",
+      "other_expense": "Ostali rashod",
+      "manual": "Ručno"
+    },
+    "frequencies": {
+      "daily": "Dnevno",
+      "weekly": "Sedmično",
+      "monthly": "Mjesečno",
+      "quarterly": "Kvartalno",
+      "yearly": "Godišnje"
+    },
+    "statusActive": "Aktivna",
+    "statusPaused": "Pauzirana",
+    "statusStopped": "Zaustavljena",
+    "pause": "Pauziraj",
+    "resume": "Nastavi",
+    "delete": "Obriši",
+    "viewContract": "Pogledaj ugovor",
+    "lastGenerated": "Zadnje generisano"
   },
   "pricing": {
     "manageSubscription": "Kliknite za upravljanje pretplatom",
@@ -4255,7 +4343,8 @@
       "taxFilter": "Porezni filter",
       "taxFilterHint": "Samo porezno relevantne obaveze ulaze u procese poreznih odbitaka. Svi podaci ostaju dostupni za potpuno izvještavanje.",
       "empty": "Sažetak još nije dostupan. Dodajte obaveze ili nekretnine za popunjavanje pregleda.",
-      "assetsVsLiabilitiesHint": "Ovaj prikaz kombinuje trenutne knjigovodstvene vrijednosti vase imovine sa svim pracenim obavezama."
+      "assetsVsLiabilitiesHint": "Ovaj prikaz kombinuje trenutne knjigovodstvene vrijednosti vase imovine sa svim pracenim obavezama.",
+      "pageTitle": "Pregled obaveza"
     },
     "tabs": {
       "overview": "Pregled imovine i obaveza",
@@ -4406,7 +4495,20 @@
     "totalLiabilities": "Ukupne obaveze",
     "netWorth": "Neto vrijednost",
     "monthlyDebtService": "Mjesečno servisiranje duga",
-    "noSummary": "Sažetak još nije dostupan. Dodajte imovinu ili obaveze za popunjavanje pregleda."
+    "noSummary": "Sažetak još nije dostupan. Dodajte imovinu ili obaveze za popunjavanje pregleda.",
+    "summaryTitle": "Pregled imovine",
+    "totalAssetsNote": "Knjigovodstvena vrijednost sve registrovane imovine",
+    "totalLiabilitiesNote": "Preostali saldo svih aktivnih obaveza",
+    "netWorthNote": "Imovina minus obaveze",
+    "propertyCount": "Nekretnine",
+    "propertyCountNote": "Broj aktivnih nekretnina",
+    "otherAssetCount": "Ostala imovina",
+    "otherAssetCountNote": "Oprema, vozila i alati",
+    "monthlyDebtServiceNote": "Trenutno registrovane planirane otplate",
+    "balanceSnapshot": "Pregled stanja",
+    "balanceSnapshotHint": "Konsolidovani pregled knjigovodstvene vrijednosti imovine i svih praćenih obaveza.",
+    "annualDepreciation": "Godišnja amortizacija",
+    "annualDepreciationHint": "Ukupna amortizacija svih nekretnina i ostale imovine za tekuću godinu."
   },
   "taxTools": {
     "refund": {
@@ -4457,7 +4559,11 @@
       "auditChecklist": "Kontrolna lista revizije",
       "auditSelectYear": "Odaberite poreznu godinu",
       "flatRateNotApplicable": "Paušalno poređenje samo za samozaposlene.",
-      "noDataAvailable": "Nema podataka. Učitajte dokumente."
+      "noDataAvailable": "Nema podataka. Učitajte dokumente.",
+      "transactionsSummary": "Transakcije",
+      "txnIncome": "Prihod",
+      "txnExpense": "Rashod",
+      "txnDeductible": "Odbitno"
     }
   }
 }

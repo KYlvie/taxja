@@ -948,6 +948,16 @@
         "message": "Az eszköz először létrehozható, de a vásárlási szerződés vagy más igazolás teljessé teszi a nyilvántartást."
       },
       "uploadDocument": "Dokumentum feltöltése"
+    },
+    "businessUseWarning": "Alapértelmezetten 100% = teljes üzleti használat. Csökkentse magánhasználatnál (pl. 70%).",
+    "putIntoUseDateHint": "Az eszköz első üzleti használatának dátuma. Alapértelmezetten a vásárlási dátum. Módosítsa, ha az üzembe helyezés dátuma eltér.",
+    "pendingDocuments": {
+      "title": "Függő eszközdokumentumok",
+      "hint": "A vásárlási szerződésekből, számlákból vagy nyugtákból felismert eszközök itt jelennek meg. Megerősítés után automatikusan eszközrekord jön létre.",
+      "needsInput": "Információ szükséges",
+      "missingFields": "Hiányzik: {{fields}}",
+      "awaitingConfirmation": "Megerősítésre vár",
+      "openSourceDocument": "Forrásdokumentum megnyitása"
     }
   },
   "documents": {
@@ -955,7 +965,8 @@
     "sortMode": {
       "label": "Rendezés",
       "uploadDate": "Feltöltés dátuma",
-      "documentDate": "Dokumentum dátuma"
+      "documentDate": "Dokumentum dátuma",
+      "fileName": "Fájlnév"
     },
     "description": "Adódokumentumok feltöltése és kezelése automatikus felismeréssel",
     "uploadDocument": "Dokumentum feltöltése",
@@ -1207,7 +1218,30 @@
         "confirmed": "Megerősítve",
         "confirmed_at": "Megerősítve ekkor",
         "confirmed_by": "Megerősítette",
-        "transaction_type": "Tranzakció típusa"
+        "transaction_type": "Tranzakció típusa",
+        "document_date": "Dokumentum dátuma",
+        "document_year": "Adóév",
+        "year_basis": "Év alapja",
+        "year_confidence": "Év megbízhatósága",
+        "bescheid_datum": "Határozat dátuma (Bescheiddatum)",
+        "aktenzahl": "Ügyszám (Aktenzahl)",
+        "faellig_am": "Esedékesség",
+        "issuer": "Kibocsátó",
+        "recipient": "Címzett",
+        "finanzamt": "Adóhivatal (Finanzamt)",
+        "einkommen": "Jövedelem",
+        "einkuenfte_nichtselbstaendig": "Alkalmazotti jövedelem",
+        "einkuenfte_vermietung": "Bérleti jövedelem",
+        "festgesetzte_einkommensteuer": "Megállapított jövedelemadó",
+        "abgabengutschrift": "Adó-visszatérítés",
+        "abgabennachforderung": "Adópótlék",
+        "werbungskosten_pauschale": "Átalányköltség (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Önálló vállalkozó nyugdíj (SVS)",
+        "beitrag_gesamt": "Összjárulék",
+        "beitragsgrundlage": "Járulékalap",
+        "versicherungsnummer": "Biztosítási szám",
+        "quarter": "Negyedév",
+        "nachzahlung": "Utólagos fizetés"
       },
       "additionalFields": "További kinyert mezok",
       "contractRoleConfidenceLabel": "Megbízhatóság",
@@ -1242,7 +1276,8 @@
       "confirmedSuccess": "Dokumentum megerősítve",
       "confirmed": "Megerősítve",
       "openReview": "OCR eredmények áttekintése és megerősítése",
-      "moreSuggestions": "Még {{count}} javaslat"
+      "moreSuggestions": "Még {{count}} javaslat",
+      "documentTypeLocked": "A rendszer által felismert dokumentumtípus zárolt. Hiba esetén dolgozza újra a dokumentumot ahelyett, hogy kézzel változtatná a típust."
     },
     "reviewSuccess": "Dokumentum ellenőrizve",
     "reviewFailed": "Ellenőrzés sikertelen",
@@ -1306,7 +1341,8 @@
       "gewerbeschein": "Vállalkozói engedély",
       "kontoauszug": "Számlakivonat",
       "other": "Egyéb",
-      "unknown": "Ismeretlen"
+      "unknown": "Ismeretlen",
+      "asset_purchase": "Eszközvásárlási szerződés"
     },
     "documentTypes": {
       "receipt": "Nyugta",
@@ -1342,7 +1378,8 @@
       "gewerbeschein": "Vállalkozói engedély",
       "kontoauszug": "Számlakivonat",
       "other": "Egyéb",
-      "unknown": "Ismeretlen"
+      "unknown": "Ismeretlen",
+      "asset_purchase": "Eszközvásárlási szerződés"
     },
     "upload": {
       "title": "Dokumentumok feltöltése",
@@ -1392,7 +1429,8 @@
       "startDate": "Dátumtól",
       "endDate": "Dátumig",
       "needsReview": "Felülvizsgálat szükséges",
-      "clear": "Szűrők törlése"
+      "clear": "Szűrők törlése",
+      "apply": "Alkalmaz"
     },
     "groups": {
       "all": "Összes dokumentum",
@@ -2001,7 +2039,12 @@
       "incomeTitle": "Bevételi adatok",
       "categoryEditHint": "Használja a fenti választót, hogy egy kategóriát alkalmazzon az egész bizonylatra, vagy állítsa be az egyes tételeket alább.",
       "categoryReadonlyHint": "Kattintson a Szerkesztés gombra a kategória- és levonhatósági módosítások feloldásához ennél a bizonylattól.",
-      "selectIncomeCategory": "Valasszon beveteli kategoriat a dokumentum mentese elott."
+      "selectIncomeCategory": "Valasszon beveteli kategoriat a dokumentum mentese elott.",
+      "extractedDetails": "Kinyert részletek",
+      "expandDetails": "Részletek megjelenítése",
+      "hideDetails": "Részletek elrejtése",
+      "editing": "Szerkesztés",
+      "linkedTransactionShort": "Kapcsolt tranzakció"
     },
     "linkedTransaction": {
       "title": "Kapcsolt tranzakció",
@@ -2079,7 +2122,25 @@
     "prevDocument": "Előző dokumentum",
     "nextDocument": "Következő dokumentum",
     "fields": {
-      "type": "Típus"
+      "type": "Típus",
+      "einkuenfte_gewerbebetrieb": "Üzleti jövedelem (§23)",
+      "einkuenfte_selbstaendig": "Önálló vállalkozói jövedelem (§22)",
+      "einkuenfte_nichtselbstaendig": "Alkalmazotti jövedelem (§25)",
+      "einkuenfte_vermietung": "Bérleti jövedelem (§28)",
+      "einkuenfte_kapital": "Tőkejövedelem (§27)",
+      "sonstige_einkuenfte": "Egyéb jövedelem (§29)",
+      "gesamtbetrag_einkuenfte": "Összes jövedelem",
+      "gewinnfreibetrag": "Nyereség-adómentesség (Gewinnfreibetrag)",
+      "sonderausgaben": "Különleges kiadások (Sonderausgaben)",
+      "werbungskosten": "Szakmai költségek (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Rendkívüli terhek",
+      "einkommen": "Adóköteles jövedelem",
+      "festgesetzte_est": "Megállapított jövedelemadó",
+      "anrechenbare_lohnsteuer": "Beszámítható béradó",
+      "verlustvortrag_aus_vorjahren": "Veszteségátvitel előző évekből",
+      "verlustvortrag_verrechnet": "Idén elszámolt veszteség",
+      "verlustvortrag_verbleibend": "Maradék veszteségátvitel",
+      "bescheid_rechtskraeftig_seit": "Jogerősség dátuma"
     },
     "preview": "Dokumentum előnézet",
     "reviewAction": "Ellenőrzés",
@@ -2114,7 +2175,10 @@
       "actions": {
         "create": "Tranzakcio letrehozasa",
         "match": "Meglevohoz parositas",
-        "ignore": "Duplikatum kihagyasa"
+        "ignore": "Duplikatum kihagyasa",
+        "undoCreate": "Létrehozás visszavonása",
+        "unmatch": "Párosítás visszavonása",
+        "viewUnavailable": "Nincs megtekinthető tranzakció"
       },
       "emptyPending": "Jelenleg nincs megerositesre varo bankszamlakivonat-sor.",
       "emptyResolved": "Meg nincsenek automatikusan feldolgozott kivonatsorok.",
@@ -2699,7 +2763,8 @@
       "e1_form": "E1 adóbevallás",
       "svs_notice": "SVS értesítés",
       "purchase_contract": "adásvételi szerződés",
-      "rental_contract": "bérleti szerződés"
+      "rental_contract": "bérleti szerződés",
+      "asset_purchase": "Eszközvásárlási szerződés"
     },
     "templates": {
       "homeOffice": {
@@ -3149,7 +3214,30 @@
       "createFromTemplate": "Létrehozás sablonból"
     },
     "endDate": "Befejezés dátuma",
-    "startDate": "Kezdés dátuma"
+    "startDate": "Kezdés dátuma",
+    "types": {
+      "rental_income": "Bérleti díj",
+      "loan_interest": "Hitelkamat",
+      "depreciation": "Értékcsökkenés",
+      "other_income": "Egyéb bevétel",
+      "other_expense": "Egyéb kiadás",
+      "manual": "Kézzel megadott"
+    },
+    "frequencies": {
+      "daily": "Naponta",
+      "weekly": "Hetente",
+      "monthly": "Havonta",
+      "quarterly": "Negyedévente",
+      "yearly": "Évente"
+    },
+    "statusActive": "Aktív",
+    "statusPaused": "Szüneteltetve",
+    "statusStopped": "Leállítva",
+    "pause": "Szüneteltetés",
+    "resume": "Folytatás",
+    "delete": "Törlés",
+    "viewContract": "Szerződés megtekintése",
+    "lastGenerated": "Utolsó generálás"
   },
   "pricing": {
     "manageSubscription": "Kattintson az előfizetés kezeléséhez",
@@ -4255,7 +4343,8 @@
       "taxFilter": "Adószűrő",
       "taxFilterHint": "Csak az adóügyi szempontból releváns kötelezettségek kerülnek be az adólevonási folyamatokba. Minden adat elérhető marad a teljes jelentéskészítéshez.",
       "empty": "Még nincs elérhető összefoglaló. Adjon hozzá kötelezettségeket vagy ingatlanokat az áttekintés kitöltéséhez.",
-      "assetsVsLiabilitiesHint": "Ez a nezet az eszkozok jelenlegi konyv szerinti erteket egyesiti az osszes nyilvantartott kotelezettseggel."
+      "assetsVsLiabilitiesHint": "Ez a nezet az eszkozok jelenlegi konyv szerinti erteket egyesiti az osszes nyilvantartott kotelezettseggel.",
+      "pageTitle": "Kötelezettségek áttekintése"
     },
     "tabs": {
       "overview": "Eszköz-forrás áttekintés",
@@ -4406,7 +4495,20 @@
     "totalLiabilities": "Összes kötelezettség",
     "netWorth": "Nettó vagyon",
     "monthlyDebtService": "Havi adósságszolgálat",
-    "noSummary": "Még nincs elérhető összefoglaló. Adjon hozzá eszközöket vagy kötelezettségeket az áttekintés kitöltéséhez."
+    "noSummary": "Még nincs elérhető összefoglaló. Adjon hozzá eszközöket vagy kötelezettségeket az áttekintés kitöltéséhez.",
+    "summaryTitle": "Eszközök áttekintése",
+    "totalAssetsNote": "Minden nyilvántartott eszköz könyv szerinti értéke",
+    "totalLiabilitiesNote": "Minden aktív kötelezettség fennálló egyenlege",
+    "netWorthNote": "Eszközök mínusz kötelezettségek",
+    "propertyCount": "Ingatlanok",
+    "propertyCountNote": "Aktív ingatlanok száma",
+    "otherAssetCount": "Egyéb eszközök",
+    "otherAssetCountNote": "Berendezések, járművek és szerszámok",
+    "monthlyDebtServiceNote": "Jelenleg nyilvántartott tervezett törlesztések",
+    "balanceSnapshot": "Egyenleg pillanatkép",
+    "balanceSnapshotHint": "Konszolidált nézet az eszközök könyv szerinti értékéről és az összes követett kötelezettségről.",
+    "annualDepreciation": "Éves értékcsökkenés",
+    "annualDepreciationHint": "Az összes ingatlan és egyéb eszköz éves értékcsökkenése."
   },
   "taxTools": {
     "refund": {
@@ -4457,7 +4559,11 @@
       "auditChecklist": "Audit ellenőrzési lista",
       "auditSelectYear": "Adóév kiválasztása",
       "flatRateNotApplicable": "Az átalány-összehasonlítás csak önfoglalkoztatóknak érhető el.",
-      "noDataAvailable": "Még nincsenek adatok. Töltsön fel dokumentumokat."
+      "noDataAvailable": "Még nincsenek adatok. Töltsön fel dokumentumokat.",
+      "transactionsSummary": "Tranzakciók",
+      "txnIncome": "Bevétel",
+      "txnExpense": "Kiadás",
+      "txnDeductible": "Levonható"
     }
   }
 }

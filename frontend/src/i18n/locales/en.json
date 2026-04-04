@@ -956,7 +956,9 @@
         "message": "You can create the asset first, but uploading the purchase contract or a supporting document keeps the asset record complete."
       },
       "uploadDocument": "Upload document"
-    }
+    },
+    "businessUseWarning": "Default 100% = fully business use. Reduce accordingly for private use (e.g. 70%).",
+    "putIntoUseDateHint": "Date the asset was first used for business. Defaults to purchase date. Change if actual put-into-use date differs."
   },
   "documents": {
     "title": "Documents",
@@ -1220,7 +1222,27 @@
         "confirmed": "Confirmed",
         "confirmed_at": "Confirmed at",
         "confirmed_by": "Confirmed by",
-        "transaction_type": "Transaction type"
+        "transaction_type": "Transaction type",
+        "document_date": "Document date",
+        "document_year": "Tax year",
+        "year_basis": "Year basis",
+        "year_confidence": "Year confidence",
+        "issuer": "Issuer",
+        "recipient": "Recipient",
+        "finanzamt": "Tax office (Finanzamt)",
+        "einkommen": "Income",
+        "einkuenfte_nichtselbstaendig": "Employment income",
+        "einkuenfte_vermietung": "Rental income",
+        "festgesetzte_einkommensteuer": "Assessed income tax",
+        "abgabengutschrift": "Tax refund",
+        "abgabennachforderung": "Additional tax due",
+        "werbungskosten_pauschale": "Flat-rate deduction (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Self-employed pension (SVS)",
+        "beitrag_gesamt": "Total contribution",
+        "beitragsgrundlage": "Contribution base",
+        "versicherungsnummer": "Insurance number",
+        "quarter": "Quarter",
+        "nachzahlung": "Additional payment"
       },
       "additionalFields": "Additional extracted fields",
       "contractRoleConfidenceLabel": "Confidence",
@@ -1251,7 +1273,8 @@
         "standard_invoice": "Standard invoice"
       },
       "openReview": "Review & Confirm OCR Results",
-      "moreSuggestions": "{{count}} more suggestions"
+      "moreSuggestions": "{{count}} more suggestions",
+      "documentTypeLocked": "The system-detected document type is locked. If incorrect, reprocess the document instead of manually changing the type."
     },
     "reviewSuccess": "Document reviewed",
     "reviewFailed": "Review failed",
@@ -2017,7 +2040,8 @@
       "incomeTitle": "Income details",
       "categoryEditHint": "Use the selector above to apply one category to the whole receipt, or adjust each line item below.",
       "categoryReadonlyHint": "Click Edit to unlock category and deductibility changes for this receipt.",
-      "selectIncomeCategory": "Choose an income category before saving this income document."
+      "selectIncomeCategory": "Choose an income category before saving this income document.",
+      "extractedDetails": "Extracted details"
     },
     "linkedTransaction": {
       "title": "Linked transaction",
@@ -2095,7 +2119,25 @@
     "prevDocument": "Previous document",
     "nextDocument": "Next document",
     "fields": {
-      "type": "Type"
+      "type": "Type",
+      "einkuenfte_gewerbebetrieb": "Business income (§23)",
+      "einkuenfte_selbstaendig": "Self-employed income (§22)",
+      "einkuenfte_nichtselbstaendig": "Employment income (§25)",
+      "einkuenfte_vermietung": "Rental income (§28)",
+      "einkuenfte_kapital": "Capital income (§27)",
+      "sonstige_einkuenfte": "Other income (§29)",
+      "gesamtbetrag_einkuenfte": "Total income",
+      "gewinnfreibetrag": "Profit allowance (Gewinnfreibetrag)",
+      "sonderausgaben": "Special expenses (Sonderausgaben)",
+      "werbungskosten": "Income-related expenses (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Extraordinary burdens",
+      "einkommen": "Taxable income",
+      "festgesetzte_est": "Assessed income tax",
+      "anrechenbare_lohnsteuer": "Creditable wage tax",
+      "verlustvortrag_aus_vorjahren": "Loss carryforward from prior years",
+      "verlustvortrag_verrechnet": "Losses offset this year",
+      "verlustvortrag_verbleibend": "Remaining loss carryforward",
+      "bescheid_rechtskraeftig_seit": "Legally binding since"
     },
     "preview": "Document preview",
     "reviewAction": "Review",
@@ -2132,7 +2174,8 @@
         "match": "Match existing",
         "ignore": "Ignore duplicate",
         "undoCreate": "Undo create",
-        "unmatch": "Unmatch"
+        "unmatch": "Unmatch",
+        "viewUnavailable": "No transaction to preview"
       },
       "emptyPending": "No bank statement lines need confirmation right now.",
       "emptyResolved": "No automatically processed statement lines yet.",
@@ -3073,15 +3116,15 @@
       "goToDocuments": "Go to Documents to upload"
     },
     "edit": {
-      "title": "Edit Recurring Transaction",
+      "title": "Edit recurring transaction",
       "templateId": "Template ID",
       "applyFrom": "Apply from",
-      "applyFromHint": "Auto-generated transactions from this date onward will be regenerated",
-      "saveAndRegenerate": "Save & Regenerate",
+      "applyFromHint": "Auto-generated transactions after this date will be regenerated with the new settings",
+      "saveAndRegenerate": "Save and regenerate",
       "loadError": "Failed to load recurring transaction",
       "saveError": "Save failed, please try again",
       "notFound": "Recurring transaction not found",
-      "generatedHint": "This transaction was auto-generated from a recurring template. To make changes, please edit the recurring template."
+      "generatedHint": "This transaction was auto-generated from a recurring template. To modify, edit the recurring transaction template."
     },
     "form": {
       "property": "Property",
@@ -3119,7 +3162,6 @@
     "statusStopped": "Stopped",
     "pause": "Pause",
     "resume": "Resume",
-    "edit": "Edit",
     "delete": "Delete",
     "viewContract": "View Contract",
     "lastGenerated": "Last Generated",

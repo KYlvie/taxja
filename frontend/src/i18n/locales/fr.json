@@ -87,7 +87,9 @@
     "generateReports": "Generer des rapports",
     "generateReportsDesc": "Consulter les rapports fiscaux",
     "aiAssistant": "Assistant IA",
-    "aiAssistantDesc": "Poser des questions fiscales"
+    "aiAssistantDesc": "Poser des questions fiscales",
+    "exportCsv": "Exporter en CSV",
+    "exportPdf": "Exporter en PDF"
   },
   "auth": {
     "login": "Connexion",
@@ -332,7 +334,9 @@
       "description": "Telechargez votre premier document ou enregistrez votre premier revenu ou depense. Une fois que Taxja dispose de donnees, le Dashboard devient beaucoup plus utile.",
       "addTransaction": "Ajouter une transaction",
       "uploadDocument": "Telecharger un recu",
-      "setupProfile": "Configurer le profil"
+      "setupProfile": "Configurer le profil",
+      "exportCsv": "Exporter en CSV",
+      "exportPdf": "Exporter en PDF"
     },
     "flatRateNeedsData": "Ajoutez des revenus et des depenses pour calculer la comparaison.",
     "taxYear": "Annee fiscale",
@@ -552,7 +556,9 @@
       "date": "Date",
       "amount": "Montant",
       "description": "Description"
-    }
+    },
+    "exportCsv": "Exporter en CSV",
+    "exportPdf": "Exporter en PDF"
   },
   "properties": {
     "title": "Biens immobiliers",
@@ -942,6 +948,16 @@
         "message": "Vous pouvez d’abord créer l’actif, mais le contrat d’achat ou un justificatif rendra sa fiche complète."
       },
       "uploadDocument": "Téléverser le document"
+    },
+    "businessUseWarning": "Par défaut 100 % = usage entièrement professionnel. Réduisez en conséquence pour usage privé (ex. 70 %).",
+    "putIntoUseDateHint": "Date de première utilisation professionnelle. Par défaut, la date d’achat. Modifiez si la date de mise en service diffère.",
+    "pendingDocuments": {
+      "title": "Documents d’actifs en attente",
+      "hint": "Les actifs identifiés dans les contrats d’achat, factures ou reçus apparaissent ici. Après confirmation, un enregistrement d’actif est créé automatiquement.",
+      "needsInput": "Informations requises",
+      "missingFields": "Manquant : {{fields}}",
+      "awaitingConfirmation": "En attente de confirmation",
+      "openSourceDocument": "Ouvrir le document source"
     }
   },
   "documents": {
@@ -949,7 +965,8 @@
     "sortMode": {
       "label": "Trier par",
       "uploadDate": "Date de téléchargement",
-      "documentDate": "Date du document"
+      "documentDate": "Date du document",
+      "fileName": "Nom du fichier"
     },
     "description": "Téléchargez et gérez vos documents fiscaux avec reconnaissance automatique",
     "uploadDocument": "Télécharger un document",
@@ -1201,7 +1218,30 @@
         "confirmed": "Confirmé",
         "confirmed_at": "Confirmé le",
         "confirmed_by": "Confirmé par",
-        "transaction_type": "Type de transaction"
+        "transaction_type": "Type de transaction",
+        "document_date": "Date du document",
+        "document_year": "Année fiscale",
+        "year_basis": "Base de l’année",
+        "year_confidence": "Fiabilité de l’année",
+        "bescheid_datum": "Date de l’avis (Bescheiddatum)",
+        "aktenzahl": "Numéro de dossier (Aktenzahl)",
+        "faellig_am": "Date d’échéance",
+        "issuer": "Émetteur",
+        "recipient": "Destinataire",
+        "finanzamt": "Administration fiscale (Finanzamt)",
+        "einkommen": "Revenu",
+        "einkuenfte_nichtselbstaendig": "Revenus salariés",
+        "einkuenfte_vermietung": "Revenus locatifs",
+        "festgesetzte_einkommensteuer": "Impôt sur le revenu fixé",
+        "abgabengutschrift": "Crédit d’impôt",
+        "abgabennachforderung": "Complément d’impôt dû",
+        "werbungskosten_pauschale": "Forfait frais professionnels (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Prévoyance indépendants (SVS)",
+        "beitrag_gesamt": "Cotisation totale",
+        "beitragsgrundlage": "Base de cotisation",
+        "versicherungsnummer": "Numéro d’assurance",
+        "quarter": "Trimestre",
+        "nachzahlung": "Paiement supplémentaire"
       },
       "additionalFields": "Champs supplementaires extraits",
       "contractRoleConfidenceLabel": "Confiance",
@@ -1236,7 +1276,8 @@
       "confirmedSuccess": "Document confirmé",
       "confirmed": "Confirmé",
       "openReview": "Vérifier et confirmer les résultats OCR",
-      "moreSuggestions": "{{count}} suggestions supplémentaires"
+      "moreSuggestions": "{{count}} suggestions supplémentaires",
+      "documentTypeLocked": "Le type de document détecté par le système est verrouillé. En cas d’erreur, retraitez le document au lieu de modifier le type manuellement."
     },
     "reviewSuccess": "Document vérifié",
     "reviewFailed": "Vérification échouée",
@@ -1388,7 +1429,8 @@
       "startDate": "À partir du",
       "endDate": "Jusqu'au",
       "needsReview": "Vérification nécessaire",
-      "clear": "Effacer les filtres"
+      "clear": "Effacer les filtres",
+      "apply": "Appliquer"
     },
     "groups": {
       "all": "Tous les documents",
@@ -1997,7 +2039,12 @@
       "incomeTitle": "Détails des revenus",
       "categoryEditHint": "Utilisez le sélecteur ci-dessus pour appliquer une catégorie à l'ensemble du reçu, ou ajustez chaque ligne ci-dessous.",
       "categoryReadonlyHint": "Cliquez sur Modifier pour débloquer les changements de catégorie et de déductibilité pour ce reçu.",
-      "selectIncomeCategory": "Choisissez une categorie de revenu avant d'enregistrer ce document de revenu."
+      "selectIncomeCategory": "Choisissez une categorie de revenu avant d'enregistrer ce document de revenu.",
+      "extractedDetails": "Détails extraits",
+      "expandDetails": "Afficher les détails",
+      "hideDetails": "Masquer les détails",
+      "editing": "Modification",
+      "linkedTransactionShort": "Transaction liée"
     },
     "linkedTransaction": {
       "title": "Transaction liée",
@@ -2075,7 +2122,25 @@
     "prevDocument": "Document précédent",
     "nextDocument": "Document suivant",
     "fields": {
-      "type": "Type"
+      "type": "Type",
+      "einkuenfte_gewerbebetrieb": "Revenus commerciaux (§23)",
+      "einkuenfte_selbstaendig": "Revenus indépendants (§22)",
+      "einkuenfte_nichtselbstaendig": "Revenus salariés (§25)",
+      "einkuenfte_vermietung": "Revenus locatifs (§28)",
+      "einkuenfte_kapital": "Revenus de capitaux (§27)",
+      "sonstige_einkuenfte": "Autres revenus (§29)",
+      "gesamtbetrag_einkuenfte": "Montant total des revenus",
+      "gewinnfreibetrag": "Abattement sur bénéfices (Gewinnfreibetrag)",
+      "sonderausgaben": "Dépenses spéciales (Sonderausgaben)",
+      "werbungskosten": "Frais professionnels (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Charges exceptionnelles",
+      "einkommen": "Revenu imposable",
+      "festgesetzte_est": "Impôt sur le revenu fixé",
+      "anrechenbare_lohnsteuer": "Impôt sur salaire imputable",
+      "verlustvortrag_aus_vorjahren": "Report de pertes des années précédentes",
+      "verlustvortrag_verrechnet": "Pertes compensées cette année",
+      "verlustvortrag_verbleibend": "Report de pertes restant",
+      "bescheid_rechtskraeftig_seit": "Force de chose jugée depuis"
     },
     "preview": "Aperçu du document",
     "reviewAction": "Vérifier",
@@ -2110,7 +2175,10 @@
       "actions": {
         "create": "Creer la transaction",
         "match": "Associer a l existant",
-        "ignore": "Ignorer le doublon"
+        "ignore": "Ignorer le doublon",
+        "undoCreate": "Annuler la création",
+        "unmatch": "Annuler le rapprochement",
+        "viewUnavailable": "Aucune transaction à afficher"
       },
       "emptyPending": "Aucune ligne de releve bancaire ne necessite de confirmation pour le moment.",
       "emptyResolved": "Aucune ligne traitee automatiquement pour le moment.",
@@ -3146,7 +3214,30 @@
       "createFromTemplate": "Créer à partir du modèle"
     },
     "endDate": "Date de fin",
-    "startDate": "Date de début"
+    "startDate": "Date de début",
+    "types": {
+      "rental_income": "Revenus locatifs",
+      "loan_interest": "Intérêts d’emprunt",
+      "depreciation": "Amortissement",
+      "other_income": "Autres revenus",
+      "other_expense": "Autres dépenses",
+      "manual": "Manuel"
+    },
+    "frequencies": {
+      "daily": "Quotidien",
+      "weekly": "Hebdomadaire",
+      "monthly": "Mensuel",
+      "quarterly": "Trimestriel",
+      "yearly": "Annuel"
+    },
+    "statusActive": "Actif",
+    "statusPaused": "En pause",
+    "statusStopped": "Arrêté",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "delete": "Supprimer",
+    "viewContract": "Voir le contrat",
+    "lastGenerated": "Dernière génération"
   },
   "pricing": {
     "manageSubscription": "Cliquez pour gérer l'abonnement",
@@ -3661,7 +3752,9 @@
     "reasonConflicted": "Des corrections contradictoires ont été détectées pour cette description",
     "reasonStrict": "Enregistrée à partir de votre correction manuelle de catégorie.",
     "reasonAdaptive": "Apprise de manière adaptative à partir de confirmations répétées.",
-    "ruleTypeOverride": "Modification"
+    "ruleTypeOverride": "Modification",
+    "searchPlaceholder": "Rechercher par description ou catégorie...",
+    "searchDeductPlaceholder": "Rechercher par description..."
   },
   "healthCheck": {
     "title": "Bilan de santé fiscale",
@@ -3715,7 +3808,9 @@
     "gettingStarted": {
       "addTransaction": "Commencez par ajouter votre première transaction de revenu ou de dépense.",
       "uploadDocument": "Téléchargez un document (fiche de paie, reçu, contrat) pour commencer.",
-      "addProperty": "Ajoutez votre propriété locative pour suivre l'amortissement et les revenus locatifs."
+      "addProperty": "Ajoutez votre propriété locative pour suivre l'amortissement et les revenus locatifs.",
+      "exportCsv": "Exporter en CSV",
+      "exportPdf": "Exporter en PDF"
     }
   },
   "chat": {
@@ -4211,7 +4306,9 @@
     "addTransaction": "Ajouter une transaction",
     "askAI": "Demander à l'IA",
     "generateReport": "Générer un rapport",
-    "scanReceipt": "Numériser un reçu"
+    "scanReceipt": "Numériser un reçu",
+    "exportCsv": "Exporter en CSV",
+    "exportPdf": "Exporter en PDF"
   },
   "deadline": {
     "inDays": "Dans {{days}} jours",
@@ -4246,7 +4343,8 @@
       "taxFilter": "Filtre fiscal",
       "taxFilterHint": "Seuls les passifs fiscalement pertinents sont intégrés aux workflows de déduction fiscale. Toutes les données restent disponibles pour les rapports complets.",
       "empty": "Aucun résumé disponible. Ajoutez des passifs ou des biens pour remplir l'aperçu.",
-      "assetsVsLiabilitiesHint": "Cette vue combine la valeur comptable actuelle de vos actifs avec l ensemble des dettes suivies."
+      "assetsVsLiabilitiesHint": "Cette vue combine la valeur comptable actuelle de vos actifs avec l ensemble des dettes suivies.",
+      "pageTitle": "Vue d’ensemble des dettes"
     },
     "tabs": {
       "overview": "Aperçu actifs-passifs",
@@ -4397,7 +4495,20 @@
     "totalLiabilities": "Total des passifs",
     "netWorth": "Valeur nette",
     "monthlyDebtService": "Service de la dette mensuel",
-    "noSummary": "Aucun resume disponible. Ajoutez des actifs ou des passifs pour remplir l'apercu."
+    "noSummary": "Aucun resume disponible. Ajoutez des actifs ou des passifs pour remplir l'apercu.",
+    "summaryTitle": "Vue d’ensemble des actifs",
+    "totalAssetsNote": "Valeur comptable de tous les actifs enregistrés",
+    "totalLiabilitiesNote": "Solde restant de toutes les dettes actives",
+    "netWorthNote": "Actifs moins dettes",
+    "propertyCount": "Biens immobiliers",
+    "propertyCountNote": "Nombre de biens immobiliers actifs",
+    "otherAssetCount": "Autres actifs",
+    "otherAssetCountNote": "Équipements, véhicules et outils",
+    "monthlyDebtServiceNote": "Remboursements prévus actuellement enregistrés",
+    "balanceSnapshot": "Aperçu du solde",
+    "balanceSnapshotHint": "Vue consolidée de la valeur comptable des actifs et de toutes les dettes suivies.",
+    "annualDepreciation": "Amortissement annuel",
+    "annualDepreciationHint": "Amortissement total de tous les biens et autres actifs pour l’année en cours."
   },
   "taxTools": {
     "refund": {
@@ -4448,7 +4559,11 @@
       "auditChecklist": "Liste de contrôle d'audit",
       "auditSelectYear": "Sélectionner l'année fiscale",
       "flatRateNotApplicable": "La comparaison forfaitaire n'est disponible que pour les indépendants.",
-      "noDataAvailable": "Aucune donnée. Téléchargez des documents."
+      "noDataAvailable": "Aucune donnée. Téléchargez des documents.",
+      "transactionsSummary": "Transactions",
+      "txnIncome": "Revenus",
+      "txnExpense": "Dépenses",
+      "txnDeductible": "Déductible"
     }
   }
 }

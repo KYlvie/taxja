@@ -87,7 +87,9 @@
     "generateReports": "Generuj raporty",
     "generateReportsDesc": "Zobacz raporty podatkowe",
     "aiAssistant": "Asystent AI",
-    "aiAssistantDesc": "Zadaj pytania podatkowe"
+    "aiAssistantDesc": "Zadaj pytania podatkowe",
+    "exportCsv": "Eksportuj CSV",
+    "exportPdf": "Eksportuj PDF"
   },
   "auth": {
     "login": "Zaloguj się",
@@ -332,7 +334,9 @@
       "description": "Prześlij swój pierwszy dokument lub zarejestruj pierwszy przychód lub wydatek. Gdy Taxja będzie miała dane, panel stanie się znacznie bardziej przydatny.",
       "addTransaction": "Dodaj transakcję",
       "uploadDocument": "Prześlij paragon",
-      "setupProfile": "Skonfiguruj profil"
+      "setupProfile": "Skonfiguruj profil",
+      "exportCsv": "Eksportuj CSV",
+      "exportPdf": "Eksportuj PDF"
     },
     "flatRateNeedsData": "Dodaj przychody i wydatki, aby obliczyć porównanie.",
     "taxYear": "Rok podatkowy",
@@ -552,7 +556,9 @@
       "date": "Data",
       "amount": "Kwota",
       "description": "Opis"
-    }
+    },
+    "exportCsv": "Eksportuj CSV",
+    "exportPdf": "Eksportuj PDF"
   },
   "properties": {
     "title": "Nieruchomości",
@@ -942,6 +948,16 @@
         "message": "Środdek trwały możesz utworzyć od razu, ale umowa zakupu lub inny dokument uzupełni jego kartę."
       },
       "uploadDocument": "Prześlij dokument"
+    },
+    "businessUseWarning": "Domyślnie 100% = wyłącznie użytkowe. Zmniejsz odpowiednio przy użyciu prywatnym (np. 70%).",
+    "putIntoUseDateHint": "Data pierwszego użycia aktywa w działalności. Domyślnie data zakupu. Zmień, jeśli data oddania do użytku jest inna.",
+    "pendingDocuments": {
+      "title": "Oczekujące dokumenty aktywów",
+      "hint": "Aktywa rozpoznane z umów zakupu, faktur lub paragonów wyświetlają się tutaj. Po potwierdzeniu wpis aktywa tworzy się automatycznie.",
+      "needsInput": "Wymaga uzupełnienia",
+      "missingFields": "Brakuje: {{fields}}",
+      "awaitingConfirmation": "Oczekuje na potwierdzenie",
+      "openSourceDocument": "Otwórz dokument źródłowy"
     }
   },
   "documents": {
@@ -949,7 +965,8 @@
     "sortMode": {
       "label": "Sortuj według",
       "uploadDate": "Data przesłania",
-      "documentDate": "Data dokumentu"
+      "documentDate": "Data dokumentu",
+      "fileName": "Nazwa pliku"
     },
     "description": "Przesyłaj i zarządzaj dokumentami podatkowymi z automatycznym rozpoznawaniem",
     "uploadDocument": "Prześlij dokument",
@@ -1201,7 +1218,30 @@
         "confirmed": "Potwierdzone",
         "confirmed_at": "Potwierdzono",
         "confirmed_by": "Potwierdzone przez",
-        "transaction_type": "Typ transakcji"
+        "transaction_type": "Typ transakcji",
+        "document_date": "Data dokumentu",
+        "document_year": "Rok podatkowy",
+        "year_basis": "Podstawa roku",
+        "year_confidence": "Pewność roku",
+        "bescheid_datum": "Data decyzji (Bescheiddatum)",
+        "aktenzahl": "Numer sprawy (Aktenzahl)",
+        "faellig_am": "Termin płatności",
+        "issuer": "Wystawca",
+        "recipient": "Odbiorca",
+        "finanzamt": "Urząd skarbowy (Finanzamt)",
+        "einkommen": "Dochód",
+        "einkuenfte_nichtselbstaendig": "Dochody z pracy najemnej",
+        "einkuenfte_vermietung": "Dochody z najmu",
+        "festgesetzte_einkommensteuer": "Ustalony podatek dochodowy",
+        "abgabengutschrift": "Zwrot podatku",
+        "abgabennachforderung": "Dopłata podatku",
+        "werbungskosten_pauschale": "Ryczałt kosztów zawodowych (Werbungskostenpauschale)",
+        "selbstaendigenvorsorge": "Ubezpieczenie samozatrudnionych (SVS)",
+        "beitrag_gesamt": "Składka łącznie",
+        "beitragsgrundlage": "Podstawa składek",
+        "versicherungsnummer": "Numer ubezpieczenia",
+        "quarter": "Kwartał",
+        "nachzahlung": "Dopłata"
       },
       "additionalFields": "Dodatkowe wyodrebnione pola",
       "contractRoleConfidenceLabel": "Pewność",
@@ -1236,7 +1276,8 @@
       "confirmedSuccess": "Dokument potwierdzony",
       "confirmed": "Potwierdzone",
       "openReview": "Sprawdź i potwierdź wyniki OCR",
-      "moreSuggestions": "Jeszcze {{count}} sugestii"
+      "moreSuggestions": "Jeszcze {{count}} sugestii",
+      "documentTypeLocked": "Typ dokumentu rozpoznany przez system jest zablokowany. W razie błędu przetwarzaj dokument ponownie zamiast ręcznej zmiany typu."
     },
     "reviewSuccess": "Dokument sprawdzony",
     "reviewFailed": "Sprawdzenie nie powiodło się",
@@ -1300,7 +1341,8 @@
       "gewerbeschein": "Licencja handlowa",
       "kontoauszug": "Wyciąg z konta",
       "other": "Inne",
-      "unknown": "Nieznany"
+      "unknown": "Nieznany",
+      "asset_purchase": "Umowa zakupu aktywów"
     },
     "documentTypes": {
       "receipt": "Paragon",
@@ -1336,7 +1378,8 @@
       "gewerbeschein": "Licencja handlowa",
       "kontoauszug": "Wyciąg z konta",
       "other": "Inne",
-      "unknown": "Nieznany"
+      "unknown": "Nieznany",
+      "asset_purchase": "Umowa zakupu aktywów"
     },
     "upload": {
       "title": "Prześlij dokumenty",
@@ -1386,7 +1429,8 @@
       "startDate": "Od daty",
       "endDate": "Do daty",
       "needsReview": "Wymaga przeglądu",
-      "clear": "Wyczyść filtry"
+      "clear": "Wyczyść filtry",
+      "apply": "Zastosuj"
     },
     "groups": {
       "all": "Wszystkie dokumenty",
@@ -1995,7 +2039,12 @@
       "incomeTitle": "Szczegóły przychodu",
       "categoryEditHint": "Użyj selektora powyżej, aby zastosować jedną kategorię do całego paragonu, lub dostosuj każdą pozycję poniżej.",
       "categoryReadonlyHint": "Kliknij Edytuj, aby odblokować zmiany kategorii i odliczeń dla tego paragonu.",
-      "selectIncomeCategory": "Wybierz kategorie przychodu przed zapisaniem tego dokumentu."
+      "selectIncomeCategory": "Wybierz kategorie przychodu przed zapisaniem tego dokumentu.",
+      "extractedDetails": "Wyodrębnione dane",
+      "expandDetails": "Pokaż szczegóły",
+      "hideDetails": "Ukryj szczegóły",
+      "editing": "Edycja",
+      "linkedTransactionShort": "Powiązana transakcja"
     },
     "linkedTransaction": {
       "title": "Powiązana transakcja",
@@ -2073,7 +2122,25 @@
     "prevDocument": "Poprzedni dokument",
     "nextDocument": "Następny dokument",
     "fields": {
-      "type": "Typ"
+      "type": "Typ",
+      "einkuenfte_gewerbebetrieb": "Dochody z działalności gospodarczej (§23)",
+      "einkuenfte_selbstaendig": "Dochody z wolnego zawodu (§22)",
+      "einkuenfte_nichtselbstaendig": "Dochody z pracy najemnej (§25)",
+      "einkuenfte_vermietung": "Dochody z najmu (§28)",
+      "einkuenfte_kapital": "Dochody kapitałowe (§27)",
+      "sonstige_einkuenfte": "Pozostałe dochody (§29)",
+      "gesamtbetrag_einkuenfte": "Suma dochodów",
+      "gewinnfreibetrag": "Kwota wolna z zysku (Gewinnfreibetrag)",
+      "sonderausgaben": "Wydatki specjalne (Sonderausgaben)",
+      "werbungskosten": "Koszty uzyskania przychodu (Werbungskosten)",
+      "aussergewoehnliche_belastungen": "Obciążenia nadzwyczajne",
+      "einkommen": "Dochód do opodatkowania",
+      "festgesetzte_est": "Ustalony podatek dochodowy",
+      "anrechenbare_lohnsteuer": "Zaliczalny podatek od wynagrodzenia",
+      "verlustvortrag_aus_vorjahren": "Przeniesienie strat z lat ubiegłych",
+      "verlustvortrag_verrechnet": "Straty rozliczone w tym roku",
+      "verlustvortrag_verbleibend": "Pozostałe przeniesienie strat",
+      "bescheid_rechtskraeftig_seit": "Prawomocna od"
     },
     "preview": "Podgląd dokumentu",
     "reviewAction": "Sprawdź",
@@ -2108,7 +2175,10 @@
       "actions": {
         "create": "Utworz transakcje",
         "match": "Dopasuj do istniejacej",
-        "ignore": "Ignoruj duplikat"
+        "ignore": "Ignoruj duplikat",
+        "undoCreate": "Cofnij utworzenie",
+        "unmatch": "Cofnij dopasowanie",
+        "viewUnavailable": "Brak transakcji do podglądu"
       },
       "emptyPending": "Obecnie nie ma pozycji wyciagu wymagajacych potwierdzenia.",
       "emptyResolved": "Nie ma jeszcze automatycznie przetworzonych pozycji wyciagu.",
@@ -2693,7 +2763,8 @@
       "e1_form": "zeznanie podatkowe E1",
       "svs_notice": "decyzja SVS",
       "purchase_contract": "umowa zakupu",
-      "rental_contract": "umowa najmu"
+      "rental_contract": "umowa najmu",
+      "asset_purchase": "Umowa zakupu aktywów"
     },
     "templates": {
       "homeOffice": {
@@ -3143,7 +3214,30 @@
       "createFromTemplate": "Utwórz z szablonu"
     },
     "endDate": "Data zakończenia",
-    "startDate": "Data rozpoczęcia"
+    "startDate": "Data rozpoczęcia",
+    "types": {
+      "rental_income": "Dochód z najmu",
+      "loan_interest": "Odsetki od kredytu",
+      "depreciation": "Amortyzacja",
+      "other_income": "Pozostałe przychody",
+      "other_expense": "Pozostałe wydatki",
+      "manual": "Ręczne"
+    },
+    "frequencies": {
+      "daily": "Codziennie",
+      "weekly": "Co tydzień",
+      "monthly": "Co miesiąc",
+      "quarterly": "Co kwartał",
+      "yearly": "Co rok"
+    },
+    "statusActive": "Aktywna",
+    "statusPaused": "Wstrzymana",
+    "statusStopped": "Zatrzymana",
+    "pause": "Wstrzymaj",
+    "resume": "Wznów",
+    "delete": "Usuń",
+    "viewContract": "Pokaż umowę",
+    "lastGenerated": "Ostatnio wygenerowano"
   },
   "pricing": {
     "manageSubscription": "Kliknij, aby zarządzać subskrypcją",
@@ -3658,7 +3752,9 @@
     "reasonConflicted": "Wykryto sprzeczne korekty dla tego opisu",
     "reasonStrict": "Zapisane z ręcznej korekty kategorii.",
     "reasonAdaptive": "Nauczone adaptacyjnie z powtarzanych potwierdzeń.",
-    "ruleTypeOverride": "Nadpisanie"
+    "ruleTypeOverride": "Nadpisanie",
+    "searchPlaceholder": "Szukaj po opisie lub kategorii...",
+    "searchDeductPlaceholder": "Szukaj po opisie..."
   },
   "healthCheck": {
     "title": "Kontrola kondycji podatkowej",
@@ -3712,7 +3808,9 @@
     "gettingStarted": {
       "addTransaction": "Zacznij od dodania pierwszej transakcji przychodu lub wydatku.",
       "uploadDocument": "Prześlij dokument (pasek wypłaty, paragon, umowę), aby rozpocząć.",
-      "addProperty": "Dodaj swoją nieruchomość na wynajem, aby śledzić amortyzację i dochody z najmu."
+      "addProperty": "Dodaj swoją nieruchomość na wynajem, aby śledzić amortyzację i dochody z najmu.",
+      "exportCsv": "Eksportuj CSV",
+      "exportPdf": "Eksportuj PDF"
     }
   },
   "chat": {
@@ -4208,7 +4306,9 @@
     "addTransaction": "Dodaj transakcję",
     "askAI": "Zapytaj AI",
     "generateReport": "Generuj raport",
-    "scanReceipt": "Skanuj paragon"
+    "scanReceipt": "Skanuj paragon",
+    "exportCsv": "Eksportuj CSV",
+    "exportPdf": "Eksportuj PDF"
   },
   "deadline": {
     "inDays": "Za {{days}} dni",
@@ -4243,7 +4343,8 @@
       "taxFilter": "Filtr podatkowy",
       "taxFilterHint": "Tylko zobowiązania istotne podatkowo są uwzględniane w procesach odliczeń podatkowych. Wszystkie dane pozostają dostępne w pełnym raportowaniu.",
       "empty": "Podsumowanie nie jest jeszcze dostępne. Dodaj zobowiązania lub nieruchomości, aby wypełnić przegląd.",
-      "assetsVsLiabilitiesHint": "Ten widok laczy biezace wartosci bilansowe Twoich aktywow ze wszystkimi sledzonymi zobowiazaniami."
+      "assetsVsLiabilitiesHint": "Ten widok laczy biezace wartosci bilansowe Twoich aktywow ze wszystkimi sledzonymi zobowiazaniami.",
+      "pageTitle": "Przegląd zobowiązań"
     },
     "tabs": {
       "overview": "Przegląd aktywów i zobowiązań",
@@ -4394,7 +4495,20 @@
     "totalLiabilities": "Zobowiązania ogółem",
     "netWorth": "Wartość netto",
     "monthlyDebtService": "Miesięczna obsługa zadłużenia",
-    "noSummary": "Podsumowanie nie jest jeszcze dostępne. Dodaj aktywa lub zobowiązania, aby wypełnić przegląd."
+    "noSummary": "Podsumowanie nie jest jeszcze dostępne. Dodaj aktywa lub zobowiązania, aby wypełnić przegląd.",
+    "summaryTitle": "Przegląd aktywów",
+    "totalAssetsNote": "Wartość księgowa wszystkich zarejestrowanych aktywów",
+    "totalLiabilitiesNote": "Pozostałe saldo wszystkich aktywnych zobowiązań",
+    "netWorthNote": "Aktywa minus zobowiązania",
+    "propertyCount": "Nieruchomości",
+    "propertyCountNote": "Liczba aktywnych nieruchomości",
+    "otherAssetCount": "Inne aktywa",
+    "otherAssetCountNote": "Sprzęt, pojazdy i narzędzia",
+    "monthlyDebtServiceNote": "Aktualnie zarejestrowane planowe spłaty",
+    "balanceSnapshot": "Migawka salda",
+    "balanceSnapshotHint": "Zbiorczy widok wartości księgowej aktywów i wszystkich śledzonych zobowiązań.",
+    "annualDepreciation": "Roczna amortyzacja",
+    "annualDepreciationHint": "Łączna amortyzacja wszystkich nieruchomości i pozostałych aktywów za bieżący rok."
   },
   "taxTools": {
     "refund": {
@@ -4445,7 +4559,11 @@
       "auditChecklist": "Lista kontrolna audytu",
       "auditSelectYear": "Wybierz rok podatkowy",
       "flatRateNotApplicable": "Porównanie ryczałtu tylko dla samozatrudnionych.",
-      "noDataAvailable": "Brak danych. Prześlij dokumenty."
+      "noDataAvailable": "Brak danych. Prześlij dokumenty.",
+      "transactionsSummary": "Transakcje",
+      "txnIncome": "Przychody",
+      "txnExpense": "Wydatki",
+      "txnDeductible": "Odliczalne"
     }
   }
 }
