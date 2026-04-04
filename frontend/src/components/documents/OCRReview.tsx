@@ -627,14 +627,6 @@ const OCRReview: React.FC<OCRReviewProps> = ({
       await documentService.correctOCR(documentId, dataToSend);
 
       // Call confirm endpoint (first time or re-confirm to update recurring)
-      const isConfirmed =
-        Boolean(extracted_data?.confirmed ?? reviewData?.document?.ocr_result?.confirmed)
-        || Boolean(reviewData?.document?.transaction_id);
-      const importSuggestionForReconfirm = reviewData?.document?.ocr_result?.import_suggestion;
-      const isRecurringReconfirm = isConfirmed
-        && importSuggestionForReconfirm?.type === 'create_recurring_income'
-        && importSuggestionForReconfirm?.status === 'confirmed'
-        && importSuggestionForReconfirm?.recurring_id;
       if (!isConfirmed || isRecurringReconfirm) {
         try {
           await documentService.confirmOCR(documentId);
@@ -774,6 +766,11 @@ const OCRReview: React.FC<OCRReviewProps> = ({
   const isConfirmed =
     Boolean(extracted_data?.confirmed ?? document.ocr_result?.confirmed)
     || Boolean(document.transaction_id);
+  const _importSug = document.ocr_result?.import_suggestion;
+  const isRecurringReconfirm = isConfirmed
+    && _importSug?.type === 'create_recurring_income'
+    && _importSug?.status === 'confirmed'
+    && _importSug?.recurring_id;
   const normalizedSuggestions = isTaxReviewDocumentType(activeDocType)
     ? (suggestions ?? []).filter(shouldDisplayTaxSuggestion)
     : (suggestions ?? []);
