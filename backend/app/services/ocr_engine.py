@@ -193,7 +193,58 @@ class OCREngine:
             if va is not None:
                 extracted_data["vat_amount"] = va
 
+            # ── Multi-receipt detection + line item extraction ──
+            # For receipts/invoices: split multi-receipt documents and extract line items
             doc_type = self._map_document_type(doc_type_str)
+            if raw_text and doc_type in (DocumentType.RECEIPT, DocumentType.INVOICE):
+                try:
+                    from app.services.field_extractor import FieldExtractor
+                    fe = FieldExtractor()
+
+                    # Multi-receipt splitting
+                    multi_results = fe.extract_multi_receipt_fields(raw_text, doc_type)
+                    if len(multi_results) > 1:
+                        logger.info("Detected %d receipts in document", len(multi_results))
+                        primary = multi_results[0]
+                        extracted_data["_receipt_count"] = len(multi_results)
+                        extracted_data["_additional_receipts"] = multi_results[1:]
+                        # Use primary receipt amount if AI didn't find one
+                        if not extracted_data.get("amount") and primary.get("amount"):
+                            extracted_data["amount"] = float(primary["amount"])
+                            extracted_data["gross_amount"] = float(primary["amount"])
+                        # Promote primary merchant/issuer if missing
+                        if not extracted_data.get("issuer") and primary.get("merchant"):
+                            extracted_data["issuer"] = primary["merchant"]
+
+                    # Line item extraction (always, even for single receipts)
+                    line_items = fe.extract_line_items(raw_text)
+                    if line_items:
+                        # Convert Decimal to float for JSON serialization
+                        extracted_data["line_items"] = [
+                            {"name": li["name"], "price": float(li["price"])}
+                            for li in line_items
+                        ]
+                        logger.info("Extracted %d line items", len(line_items))
+                        # If amount is still missing, sum line items
+                        if not extracted_data.get("amount") and line_items:
+                            total = sum(float(li["price"]) for li in line_items)
+                            if total > 0:
+                                extracted_data["amount"] = total
+                                extracted_data["gross_amount"] = total
+
+                    # VAT extraction
+                    vat_amounts = fe.extract_vat_amounts(raw_text)
+                    if vat_amounts:
+                        extracted_data["vat_breakdown"] = {
+                            rate: float(amt) for rate, amt in vat_amounts.items()
+                        }
+                        if not extracted_data.get("vat_amount"):
+                            extracted_data["vat_amount"] = sum(
+                                float(v) for v in vat_amounts.values()
+                            )
+                except Exception as e:
+                    logger.warning("Multi-receipt/line-item extraction failed: %s", e)
+
             confidence = float(step1.get("confidence", 0.8))
             pt = (datetime.now() - start_time).total_seconds() * 1000
 
