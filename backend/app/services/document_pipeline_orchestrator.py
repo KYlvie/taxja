@@ -913,7 +913,7 @@ class DocumentPipelineOrchestrator:
         # -- AI-first classification --
         # If vision AI already classified (new OCR engine stores _ai_first in extracted_data),
         # skip the text-based re-classification entirely.
-        _existing_ai = (result.extracted_data or {}).get("_ai_first")
+        _existing_ai = (result.extracted_data or {}).get("_ai_first") or (ocr_result.extracted_data or {}).get("_ai_first")
         if _existing_ai and _existing_ai.get("document_type") not in (None, "unknown", "?", ""):
             # Vision AI result is authoritative — persist to ocr_result
             ocr_json = document.ocr_result.copy() if isinstance(document.ocr_result, dict) else {}
@@ -947,7 +947,57 @@ class DocumentPipelineOrchestrator:
             logger.info("Vision AI + Rule Engine doc %s: type=%s creates=%s rule=%s",
                         document.id, ai_type_str, _rule_result["creates"], _rule_result["rule_applied"])
 
-            # Persist updated _ai_first with rule engine results — single flush point
+            # Round 2: deep extraction for complex types (same logic as Legacy path)
+            _always_round2 = {
+                "einkommensteuerbescheid", "grundsteuerbescheid",
+                "mietvertrag", "kaufvertrag",
+            }
+            _conditional_round2 = {
+                "zinsbescheinigung", "svs_vorschreibung", "svs_nachbemessung",
+                "betriebskostenabrechnung", "loan_contract",
+                "versicherungspolizze", "versicherungsbestaetigung",
+            }
+            _ai_amounts = _existing_ai.get("amounts") or {}
+            _needs_round2 = (
+                ai_type_str in _always_round2
+                or (
+                    ai_type_str in _conditional_round2
+                    and not _ai_amounts.get("total_amount") and not _ai_amounts.get("annual_amount")
+                )
+            )
+            if _needs_round2 and ocr_result.raw_text and len(ocr_result.raw_text.strip()) > 20:
+                try:
+                    from app.services.ai_first_classifier import AIFirstClassifier as _AIC
+                    _classifier = _AIC()
+                    r2 = _classifier.deep_extract(ocr_result.raw_text, ai_type_str)
+                    if r2:
+                        _existing_ai["_round2"] = r2
+                        if r2.get("annual_interest_paid") and not _ai_amounts.get("annual_amount"):
+                            _existing_ai.setdefault("amounts", {})["annual_amount"] = r2["annual_interest_paid"]
+                            _existing_ai["amounts"]["total_amount"] = r2["annual_interest_paid"]
+                        if r2.get("praemie_jaehrlich") and not _ai_amounts.get("annual_amount"):
+                            _existing_ai.setdefault("amounts", {})["annual_amount"] = r2["praemie_jaehrlich"]
+                            _existing_ai["amounts"]["total_amount"] = r2["praemie_jaehrlich"]
+                        if r2.get("remaining_balance"):
+                            _existing_ai.setdefault("key_fields", {})["remaining_balance"] = r2["remaining_balance"]
+                        if ai_type_str in _always_round2:
+                            kf = _existing_ai.setdefault("key_fields", {})
+                            for _r2k, _r2v in r2.items():
+                                if _r2v is not None and not isinstance(_r2v, (dict, list)):
+                                    kf.setdefault(_r2k, _r2v)
+                        logger.info("Vision fast-path Round 2 for %s: extracted %d fields", ai_type_str, len(r2))
+                except Exception as e2:
+                    logger.debug("Vision fast-path Round 2 failed for %s: %s", ai_type_str, e2)
+
+            # Set classification result so confidence propagates to document.confidence_score
+            result.classification = ClassificationResult(
+                document_type=ai_type_str,
+                confidence=float(_existing_ai.get("confidence", 0.8)),
+                method="vision_ai_fast_path",
+            )
+            result.stage_reached = PipelineStage.CLASSIFY
+
+            # Persist updated _ai_first with rule engine + round2 results
             ocr_json["_ai_first"] = _existing_ai
             document.ocr_result = ocr_json
             flag_modified(document, "ocr_result")

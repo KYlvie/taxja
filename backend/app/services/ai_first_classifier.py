@@ -409,9 +409,35 @@ Analysiere dieses Fahrtenbuch. Antworte NUR als JSON.
   "expense_or_income": "archive_only"
 }"""
 
+STEP2_PROMPTS["receipt"] = """\
+Analysiere diesen Kassenbon/Beleg. Antworte NUR als JSON.
+ZAHLENFORMAT: "1.234,56" = 1234.56.
+
+WICHTIG — Prüfe den BENUTZER-KONTEXT am Ende dieser Nachricht!
+
+{
+  "issuer": "Name des Geschäfts/Supermarkts",
+  "gross_amount": Endbetrag/Summe als Zahl,
+  "vat_amount": MwSt-Betrag oder null,
+  "date": "YYYY-MM-DD",
+  "description": "Einkauf bei [Geschäft]",
+  "expense_or_income": "expense",
+  "is_deductible": false (Lebensmittel/Supermarkt = nicht absetzbar fuer IT/Buero),
+  "deduction_category": "Betriebsausgabe|Werbungskosten|nicht_absetzbar",
+  "line_items": [
+    {"name": "Artikelname", "price": 1.23, "is_deductible": false},
+    ...JEDEN Artikel mit Name und Preis auflisten
+  ]
+}
+
+REGELN fuer line_items:
+- JEDEN Artikel einzeln auflisten mit korrektem Preis
+- Rabatte/Preiskorrekturen direkt vom Artikelpreis abziehen
+- is_deductible pro Artikel bewerten (Bueroartikel=true, Lebensmittel=false)"""
+
 for _t in ["homeoffice_nachweis", "studienbescheinigung",
            "pendlerrechner", "pensionsbescheid", "crypto_report",
-           "kest_bescheinigung", "bank_statement", "tilgungsplan", "receipt"]:
+           "kest_bescheinigung", "bank_statement", "tilgungsplan"]:
     if _t not in STEP2_PROMPTS:
         STEP2_PROMPTS[_t] = STEP2_PROMPTS["other"]
 

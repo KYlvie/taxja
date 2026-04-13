@@ -4603,9 +4603,23 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
         if _ocr.get("import_suggestion"):
             _ocr["import_suggestion"]["status"] = "confirmed"
             _ocr["import_suggestion"]["recurring_id"] = existing_from_doc.id
+            # Also write property_id back for the "view linked property" button
+            if existing_from_doc.property_id is not None:
+                _ocr["import_suggestion"].setdefault("data", {})
+                _ocr["import_suggestion"]["data"]["matched_property_id"] = str(existing_from_doc.property_id)
+                _ocr["import_suggestion"]["data"]["no_property_match"] = False
             document.ocr_result = _ocr
+            from sqlalchemy.orm.attributes import flag_modified as _fm_dup
+            _fm_dup(document, "ocr_result")
             db.commit()
-        return {"recurring_id": existing_from_doc.id, "reused": True}
+        return {
+            "recurring_id": existing_from_doc.id,
+            "reused": True,
+            "property_id": str(existing_from_doc.property_id) if existing_from_doc.property_id else None,
+            "property_address": None,
+            "property_auto_created": False,
+            "generated_count": 0,
+        }
 
     data = suggestion_data
     monthly_rent = Decimal(str(data["monthly_rent"]))
@@ -4843,8 +4857,24 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
     if ocr_result.get("import_suggestion"):
         ocr_result["import_suggestion"]["status"] = "confirmed"
         ocr_result["import_suggestion"]["recurring_id"] = recurring.id
+        if property_id is not None:
+            ocr_result["import_suggestion"].setdefault("data", {})
+            ocr_result["import_suggestion"]["data"]["matched_property_id"] = str(property_id)
+            ocr_result["import_suggestion"]["data"]["no_property_match"] = False
         document.ocr_result = ocr_result
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(document, "ocr_result")
         db.commit()
+        # Belt-and-suspenders: also write via raw SQL to guarantee persistence
+        if property_id is not None:
+            from sqlalchemy import text as _sql_text
+            db.execute(_sql_text(
+                "UPDATE documents SET ocr_result = jsonb_set(jsonb_set("
+                "ocr_result::jsonb, '{import_suggestion,data,matched_property_id}', :pid::jsonb"
+                "), '{import_suggestion,data,no_property_match}', 'false'::jsonb) WHERE id = :did"
+            ), {"pid": _json.dumps(str(property_id)), "did": document.id})
+            db.commit()
+            logger.info("Wrote matched_property_id=%s to doc %s via raw SQL", property_id, document.id)
 
     # Track whether property was auto-created (for frontend messaging)
     property_auto_created = prop and prop.purchase_price is not None and prop.purchase_price <= Decimal("0.01")
@@ -4859,6 +4889,7 @@ def create_recurring_from_suggestion(db, document, suggestion_data: dict) -> dic
         "contract_expired": bool(contract_expired),
         "property_auto_created": property_auto_created,
         "property_address": prop.address if prop else None,
+        "generated_count": len(generated) if generated else 0,
     }
 
 

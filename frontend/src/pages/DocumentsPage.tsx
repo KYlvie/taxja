@@ -491,6 +491,7 @@ const normalizeReceiptDraftItem = (item: any, fallback: any = {}): ReceiptDraftI
     item?.total,
     item?.total_price,
     item?.amount,
+    item?.price,
     fallback?.amount,
   ];
   const amount = amountCandidates
