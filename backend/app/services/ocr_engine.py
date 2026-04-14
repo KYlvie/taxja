@@ -67,7 +67,8 @@ WICHTIG: Pruefe ob das Bild MEHRERE separate Dokumente/Kassenbons enthaelt.
   "date": "YYYY-MM-DD oder null",
   "issuer": "Aussteller/Absender (wer hat das Dokument erstellt)",
   "recipient": "Empfaenger/Kunde (an wen ist es gerichtet)",
-  "raw_text": "Vollstaendiger Text des Dokuments (ALLES abtippen was lesbar ist, JEDE Zeile, NICHTS auslassen oder abkuerzen)"
+  "raw_text": "Vollstaendiger Text des Dokuments (ALLES abtippen was lesbar ist, JEDE Zeile, NICHTS auslassen oder abkuerzen)",
+  "line_items": [{"name": "Artikelname", "price": 1.23}] (NUR bei receipt/invoice: JEDEN Artikel mit Name und Preis auflisten)
 }"""
 
 
@@ -205,18 +206,26 @@ class OCREngine:
             if va is not None:
                 extracted_data["vat_amount"] = va
 
-            # ── Line items from Step 2 AI (preferred over regex) ──
-            ai_line_items = self._normalize_line_items(step2.get("line_items"))
-            expected_line_item_names = [li["name"] for li in ai_line_items]
-            if ai_line_items:
-                if self._has_meaningful_line_item_prices(ai_line_items):
+            # ── Line items: Step 1 Vision (best) > Step 2 AI > regex fallback ──
+            # Step 1 Vision sees the image directly, so line_items are most accurate
+            step1_line_items = step1.get("line_items")
+            if step1_line_items and isinstance(step1_line_items, list) and len(step1_line_items) > 0:
+                extracted_data["line_items"] = [
+                    {"name": li.get("name", ""), "price": float(li["price"]) if li.get("price") is not None else 0.0}
+                    for li in step1_line_items if li.get("name")
+                ]
+                logger.info("Step 1 Vision returned %d line items (skipping Step 2 for line_items)", len(extracted_data["line_items"]))
+            else:
+                # Fallback to Step 2 AI line items
+                ai_line_items = self._normalize_line_items(step2.get("line_items")) if hasattr(self, '_normalize_line_items') else []
+                if not ai_line_items and step2.get("line_items") and isinstance(step2["line_items"], list):
+                    ai_line_items = [
+                        {"name": li.get("name", ""), "price": float(li["price"]) if li.get("price") is not None else 0.0}
+                        for li in step2["line_items"] if li.get("name")
+                    ]
+                if ai_line_items:
                     extracted_data["line_items"] = ai_line_items
-                    logger.info("Step 2 AI returned %d usable line items", len(ai_line_items))
-                else:
-                    logger.info(
-                        "Step 2 AI returned %d line items but no meaningful prices; trying fallback recovery",
-                        len(ai_line_items),
-                    )
+                    logger.info("Step 2 AI returned %d line items", len(ai_line_items))
 
             # ── Fallback: Multi-receipt detection + regex line item extraction ──
             doc_type = self._map_document_type(doc_type_str)

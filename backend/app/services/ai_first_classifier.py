@@ -637,7 +637,7 @@ class AIFirstClassifier:
             )
             full_user_prompt = prompt + "\n\nDokument:\n" + text + context_str
             # Use higher max_tokens for complex document types (ESt-Bescheid has 25+ fields)
-            _complex_types = {"einkommensteuerbescheid", "lohnzettel", "jahresabschluss"}
+            _complex_types = {"einkommensteuerbescheid", "lohnzettel", "jahresabschluss", "receipt", "invoice"}
             _max_tokens = 2048 if document_type in _complex_types else 800
             response = self._generate(
                 step2_system,
